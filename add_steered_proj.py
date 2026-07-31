@@ -24,25 +24,110 @@ from sklearn.cross_decomposition import PLSRegression
 from sklearn.model_selection import KFold
 from scipy.stats import spearmanr
 from plot_artifact import SHORT_PROJECTIONS, build_plot_artifact, encode_plot_artifact
+from project_environment import env_value
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 def env(k):
-    v = os.environ.get(k)
-    if v: return v
-    for ln in open(os.path.join(HERE, '.env')):
-        if ln.strip().startswith(k + '='): return ln.split('=', 1)[1].strip().strip('"').strip("'")
+    return env_value(k, HERE)
 BUCKET = env('R2_BUCKET_NAME') or 'business-world-videos'
 s3 = boto3.client('s3', endpoint_url=f"https://{env('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
                   aws_access_key_id=env('R2_ACCESS_KEY_ID'), aws_secret_access_key=env('R2_SECRET_ACCESS_KEY'), region_name='auto')
 def r2_get(k):
     try: return s3.get_object(Bucket=BUCKET, Key=k)['Body'].read()
     except Exception: return None
-def r2_put(k, d, ct): s3.put_object(Bucket=BUCKET, Key=k, Body=d, ContentType=ct)
+def r2_put(k, d, ct, metadata=None):
+    return s3.put_object(
+        Bucket=BUCKET,
+        Key=k,
+        Body=d,
+        ContentType=ct,
+        Metadata=metadata or {},
+    )
 def r2_delete(k):
     try: s3.delete_object(Bucket=BUCKET, Key=k)
     except Exception: pass
 def norm(X): return X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
 def sha256_bytes(data): return hashlib.sha256(data).hexdigest()
+def r2_head(k):
+    try:
+        return s3.head_object(Bucket=BUCKET, Key=k)
+    except Exception:
+        return None
+def put_immutable(key, data, content_type):
+    expected = key.rsplit('/', 1)[-1].split('.', 1)[0]
+    actual = sha256_bytes(data)
+    if expected != actual:
+        raise RuntimeError(
+            f'content-addressed key mismatch for {key}: '
+            f'expected {expected}, got {actual}'
+        )
+    existing = r2_head(key)
+    if existing:
+        metadata = existing.get('Metadata') or {}
+        recorded = metadata.get('sha256')
+        if recorded and recorded != actual:
+            raise RuntimeError(
+                f'immutable object metadata mismatch for {key}'
+            )
+        content_length = existing.get('ContentLength')
+        if content_length not in (None, len(data)):
+            raise RuntimeError(
+                f'immutable object length mismatch for {key}'
+            )
+        if not recorded:
+            existing_bytes = r2_get(key)
+            if (
+                existing_bytes is None
+                or sha256_bytes(existing_bytes) != actual
+            ):
+                raise RuntimeError(
+                    f'immutable object content mismatch for {key}'
+                )
+        return existing
+    return r2_put(
+        key,
+        data,
+        content_type,
+        {'sha256': actual, 'immutable': 'true'},
+    )
+def put_immutable_release_manifest(
+    key,
+    data,
+    release_sha256,
+):
+    expected = key.rsplit('/', 1)[-1].split('.', 1)[0]
+    if expected != release_sha256:
+        raise RuntimeError(
+            f'release-manifest key mismatch for {key}'
+        )
+    actual = sha256_bytes(data)
+    existing = r2_head(key)
+    if existing:
+        metadata = existing.get('Metadata') or {}
+        recorded = metadata.get('sha256')
+        if recorded and recorded != actual:
+            raise RuntimeError(
+                f'immutable release manifest differs for {key}'
+            )
+        existing_bytes = r2_get(key)
+        if (
+            existing_bytes is None
+            or sha256_bytes(existing_bytes) != actual
+        ):
+            raise RuntimeError(
+                f'immutable release manifest content mismatch for {key}'
+            )
+        return existing
+    return r2_put(
+        key,
+        data,
+        'application/json',
+        {
+            'sha256': actual,
+            'release-sha256': release_sha256,
+            'immutable': 'true',
+        },
+    )
 def population_snapshot(values):
     rows = [str(value) for value in values if str(value)]
     unique = sorted(set(rows))
@@ -80,7 +165,7 @@ if not any(c.get('id') == 'tyler' for c in chans):
     chans = [{'id': 'tyler', 'owner': True, 'name': 'Main'}] + chans
 ACC = {}                       # acct_id → {keep,ret5,dur,views,name}
 for c in chans:
-    t = load_table(c); K = {}; R = {}; D = {}; Vw = {}; Sw = {}
+    t = load_table(c); K = {}; R = {}; D = {}; Vw = {}
     for v in t.get('videos', []):
         vid = str(v.get('id') or v.get('videoId') or '')
         if not vid: continue
@@ -94,20 +179,17 @@ for c in chans:
         ret5_value = finite_value('ret5')
         duration_value = finite_value('duration_s')
         views_value = finite_value('views')
-        swiped_value = finite_value('swiped')
         if keep_value is not None: K[vid] = keep_value
         if ret5_value is not None: R[vid] = ret5_value
         if duration_value is not None: D[vid] = duration_value
         if views_value is not None: Vw[vid] = views_value
-        if swiped_value is not None: Sw[vid] = swiped_value
-        elif keep_value is not None: Sw[vid] = 100.0 - keep_value
-    ACC[c['id']] = {'keep': K, 'ret5': R, 'dur': D, 'views': Vw, 'swipe': Sw, 'name': c.get('name', c['id'])}
+    ACC[c['id']] = {'keep': K, 'ret5': R, 'dur': D, 'views': Vw, 'name': c.get('name', c['id'])}
     print(f"  account {c['id']} ({c.get('name')}): keep={len(K)} ret5={len(R)}", flush=True)
 # pooled 'all' = union of every account
-aK = {}; aR = {}; aD = {}; aVw = {}; aSw = {}
+aK = {}; aR = {}; aD = {}; aVw = {}
 for cid, a in ACC.items():
-    aK.update(a['keep']); aR.update(a['ret5']); aD.update(a['dur']); aVw.update(a['views']); aSw.update(a['swipe'])
-ACC['all'] = {'keep': aK, 'ret5': aR, 'dur': aD, 'views': aVw, 'swipe': aSw, 'name': 'All pooled'}
+    aK.update(a['keep']); aR.update(a['ret5']); aD.update(a['dur']); aVw.update(a['views'])
+ACC['all'] = {'keep': aK, 'ret5': aR, 'dur': aD, 'views': aVw, 'name': 'All pooled'}
 SOURCE_REVISIONS['all'] = {
     'source': 'deterministic union of account retention tables',
     'members': {
@@ -187,8 +269,19 @@ def steer_metric(Vm, mids, lab):
     yo_sorted = np.sort(yo)
     est = yo_sorted[np.clip((ranks * (len(yo_sorted) - 1)).round().astype(int), 0, len(yo_sorted) - 1)]
     actual = [None if mids[i] not in lab else round(float(lab[mids[i]]), 2) for i in range(len(mids))]
-    return {'x': grid(XY[:, 0]), 'y': grid(XY[:, 1]), 'cv': round(cv, 3), 'co': 0.0, 'owned_only_label': True,
-            'est': [round(float(x), 2) for x in est], 'actual': actual}, len(oi)
+    return {
+        'x': grid(XY[:, 0]),
+        'y': grid(XY[:, 1]),
+        'cv': round(cv, 3),
+        'co': 0.0,
+        'owned_only_label': True,
+        'est': [round(float(x), 2) for x in est],
+        'actual': actual,
+        'geometry_fit_scope': 'full_fit_descriptive_all_eligible_labels',
+        'estimate_fit_scope': 'full_fit_quantile_calibrated_descriptive',
+        'validation_metric_scope': '5_fold_out_of_fold_spearman_only',
+        'scalar_score_use': 'forbidden',
+    }, len(oi)
 
 STEER = {}
 LINEAGE = {
@@ -222,6 +315,13 @@ for ch in ['visual', 'text', 'together']:
         raise RuntimeError(f'{map_key} is missing; refusing to replace the last complete map')
     mp = json.loads(map_bytes)
     mids = [str(x) for x in mp['id']]; epos = {v: i for i, v in enumerate(ids)}
+    # Swipe-away is exactly 100 - keep by contract. Remove historical fitted
+    # swipe planes so one semantic quantity cannot drift across two models.
+    for projection_key in [
+        key for key in list(mp.get('proj', {}))
+        if key == 'swipe' or key.startswith('swipe__')
+    ]:
+        del mp['proj'][projection_key]
     modality_lineage = {
         'embeddingStore': {
             'source': f'raw/{ch}/embeddings.npz',
@@ -245,8 +345,8 @@ for ch in ['visual', 'text', 'together']:
 
     # ── PER-ACCOUNT keep / ret5 / realviews ──
     for acct in ACCTS:
-        KEEP, RET5, SWIPE = ACC[acct]['keep'], ACC[acct]['ret5'], ACC[acct]['swipe']
-        for tgt, lab in [('keep', KEEP), ('ret5', RET5), ('swipe', SWIPE)]:
+        KEEP, RET5 = ACC[acct]['keep'], ACC[acct]['ret5']
+        for tgt, lab in [('keep', KEEP), ('ret5', RET5)]:
             pj, nown = steer_metric(Vm, mids, lab)
             if pj is None:
                 print(f'  {ch}/{tgt}__{acct}: too few owned ({nown})', flush=True); continue
@@ -259,7 +359,7 @@ for ch in ['visual', 'text', 'together']:
                 'projectionPopulation': population_snapshot(mids),
                 'labelSourceRevision': SOURCE_REVISIONS.get(acct),
             }
-            print(f'  {ch}/{tgt}__{acct}: held-out align {pj["cv"]:.3f} (owned {nown})', flush=True)
+            print(f'  {ch}/{tgt}__{acct}: OOF rank validation {pj["cv"]:.3f} (owned {nown}); displayed geometry is full-fit', flush=True)
         eq = VIEW_EQ[acct]
         if eq and f'keep__{acct}' in mp['proj'] and f'ret5__{acct}' in mp['proj']:
             ke = np.array(mp['proj'][f'keep__{acct}']['est'], float)
@@ -273,11 +373,21 @@ for ch in ['visual', 'text', 'together']:
             cvr = abs(float(spearmanr(oofr, rvk)[0]))
             XYr = PLSRegression(2).fit(Vmk, rvk).transform(Vm)
             if spearmanr(XYr[mask, 0], rvk)[0] < 0: XYr[:, 0] = -XYr[:, 0]
-            mp['proj'][f'realviews__{acct}'] = {'x': grid(XYr[:, 0]), 'y': grid(XYr[:, 1]), 'cv': round(cvr, 3), 'co': 0.0,
-                                                'est': [round(float(x)) for x in rv], 'predscope': True}
-            print(f'  {ch}/realviews__{acct}: held-out r={cvr:.3f} · median {np.median(rv):,.0f}', flush=True)
+            mp['proj'][f'realviews__{acct}'] = {
+                'x': grid(XYr[:, 0]),
+                'y': grid(XYr[:, 1]),
+                'cv': round(cvr, 3),
+                'co': 0.0,
+                'est': [round(float(x)) for x in rv],
+                'predscope': True,
+                'geometry_fit_scope': 'full_fit_descriptive_all_eligible_pseudo_labels',
+                'estimate_fit_scope': 'derived_from_full_fit_keep_ret5_and_private_view_equation',
+                'validation_metric_scope': '5_fold_out_of_fold_spearman_on_pseudo_label_only',
+                'scalar_score_use': 'forbidden',
+            }
+            print(f'  {ch}/realviews__{acct}: OOF pseudo-label rank validation r={cvr:.3f} · median {np.median(rv):,.0f}; displayed geometry is full-fit', flush=True)
     # base keys alias Main so the existing UI keeps working if not account-aware
-    for b in ['keep', 'ret5', 'realviews', 'swipe']:
+    for b in ['keep', 'ret5', 'realviews']:
         if f'{b}__tyler' in mp['proj']: mp['proj'][b] = mp['proj'][f'{b}__tyler']
 
     # ── GLOBAL library-driven metrics (single, unchanged): steer models for views/outlier/>10M ──
@@ -347,8 +457,38 @@ for ch in ['visual', 'text', 'together']:
         cvv = abs(float(spearmanr(oofv, vmap)[0])); ch10 = abs(float(spearmanr(oofv, (vmap > 1e7).astype(float))[0]))
         XYv = PLSRegression(2).fit(Vm, vmap).transform(Vm)
         if spearmanr(XYv[:, 0], vmap)[0] < 0: XYv[:, 0] = -XYv[:, 0]
-        mp['proj']['rawviews'] = {'x': grid(XYv[:, 0]), 'y': grid(XYv[:, 1]), 'cv': round(cvv, 3), 'co': round(ch10, 3)}
+        mp['proj']['rawviews'] = {
+            'x': grid(XYv[:, 0]),
+            'y': grid(XYv[:, 1]),
+            'cv': round(cvv, 3),
+            'co': round(ch10, 3),
+            'geometry_fit_scope': 'full_fit_descriptive_all_eligible_public_labels',
+            'validation_metric_scope': '5_fold_out_of_fold_spearman_only',
+            'scalar_score_use': 'forbidden',
+        }
 
+    release_inputs = {
+        'producerSourceSha256':
+            LINEAGE['producerSourceSha256'],
+        'embeddingModel': LINEAGE['embeddingModel'],
+        'embeddingDimensions':
+            LINEAGE['embeddingDimensions'],
+        'runtime': LINEAGE['runtime'],
+        'sourceRevisions': LINEAGE['sourceRevisions'],
+        'modalityLineage': modality_lineage,
+    }
+    mp['_release_provenance'] = {
+        'schemaVersion': 1,
+        'inputLineageSha256': sha256_bytes(
+            json.dumps(
+                release_inputs,
+                sort_keys=True,
+                separators=(',', ':'),
+            ).encode()
+        ),
+        'producerSourceSha256':
+            LINEAGE['producerSourceSha256'],
+    }
     plot = encode_plot_artifact(build_plot_artifact(mp, ch, SHORT_PROJECTIONS))
     final_map_bytes = json.dumps(mp, separators=(',', ':'), allow_nan=False).encode()
     final_map_sha256 = sha256_bytes(final_map_bytes)
@@ -371,19 +511,32 @@ for ch in ['visual', 'text', 'together']:
         'schemaVersion': 1,
         'producer': 'add_steered_proj.py',
         'producerSourceSha256': LINEAGE['producerSourceSha256'],
-        'generatedAt': LINEAGE['generatedAt'],
         'modality': ch,
         'embeddingModel': LINEAGE['embeddingModel'],
         'embeddingDimensions': LINEAGE['embeddingDimensions'],
         'runtime': LINEAGE['runtime'],
         **modality_lineage,
     }, sort_keys=True, separators=(',', ':')).encode()
-    r2_put(f'raw/{ch}/plot.json', plot, 'application/json')
-    r2_put(plot_archive_key, plot, 'application/json')
+    manifest_archive_key = (
+        f'raw/{ch}/maps/by-sha256/'
+        f'{final_map_sha256}.manifest.json'
+    )
+    # The mutable manifest is the commit pointer. Every object it names must be
+    # durable before that pointer advances.
+    put_immutable(map_archive_key, final_map_bytes, 'application/json')
+    put_immutable(plot_archive_key, plot, 'application/json')
+    put_immutable_release_manifest(
+        manifest_archive_key,
+        map_manifest_bytes,
+        final_map_sha256,
+    )
     r2_put(f'raw/{ch}/map.json', final_map_bytes, 'application/json')
-    r2_put(map_archive_key, final_map_bytes, 'application/json')
-    r2_put(f'raw/{ch}/map.manifest.json', map_manifest_bytes, 'application/json')
-    r2_put(f'raw/{ch}/maps/by-sha256/{final_map_sha256}.manifest.json', map_manifest_bytes, 'application/json')
+    r2_put(f'raw/{ch}/plot.json', plot, 'application/json')
+    r2_put(
+        f'raw/{ch}/map.manifest.json',
+        map_manifest_bytes,
+        'application/json',
+    )
     if USE_PENDING: PENDING_KEYS.append(f'raw/{ch}/map.pending.json')
     print(f'  saved raw/{ch}/map.json + plot.json ({len(plot):,} bytes; proj keys: {len(mp["proj"])})', flush=True)
 
@@ -412,10 +565,30 @@ manifest = {
     'archiveKey': archive_key,
 }
 manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
-r2_put('raw/steer_models.npz', artifact_bytes, 'application/octet-stream')
-r2_put(archive_key, artifact_bytes, 'application/octet-stream')
-r2_put('raw/steer_manifest.json', manifest_bytes, 'application/json')
-r2_put(f'raw/steer_models/by-sha256/{artifact_sha256}.manifest.json', manifest_bytes, 'application/json')
+manifest_archive_key = (
+    f'raw/steer_models/by-sha256/'
+    f'{artifact_sha256}.manifest.json'
+)
+put_immutable(
+    archive_key,
+    artifact_bytes,
+    'application/octet-stream',
+)
+put_immutable_release_manifest(
+    manifest_archive_key,
+    manifest_bytes,
+    artifact_sha256,
+)
+r2_put(
+    'raw/steer_models.npz',
+    artifact_bytes,
+    'application/octet-stream',
+)
+r2_put(
+    'raw/steer_manifest.json',
+    manifest_bytes,
+    'application/json',
+)
 # Preserve every staged input if any channel or scorer-model upload fails, so a
 # retry can complete the same publication set.
 for pending_key in PENDING_KEYS: r2_delete(pending_key)

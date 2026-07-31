@@ -16,6 +16,10 @@ import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from shorts_score_ledger import GOVERNANCE  # noqa: E402
+
 BENCHMARK_PATH = ROOT / 'scripts/benchmark-causal-keep-mixture.py'
 SCORER_PATH = ROOT / 'creator_adaptive_keep.py'
 MODEL_PATH = (
@@ -37,7 +41,9 @@ CANONICAL_KEY = (
 MANIFEST_KEY = (
     'raw/predictor-lab/creator-adaptive-keep-serving-v1.manifest.json'
 )
-COORDINATE_ID = 'shorts.creator-adaptive-keep.v1'
+COORDINATE_ID = GOVERNANCE['coordinates'][
+    'creatorAdaptiveKeepForecast'
+]['id']
 
 
 def load_module(name: str, path: Path):

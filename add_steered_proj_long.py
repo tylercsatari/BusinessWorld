@@ -17,13 +17,11 @@ from sklearn.cross_decomposition import PLSRegression
 from sklearn.model_selection import KFold
 from scipy.stats import spearmanr
 from plot_artifact import LONG_PROJECTIONS, build_plot_artifact, encode_plot_artifact
+from project_environment import env_value
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 def env(k):
-    v = os.environ.get(k)
-    if v: return v
-    for ln in open(os.path.join(HERE, '.env')):
-        if ln.strip().startswith(k + '='): return ln.split('=', 1)[1].strip().strip('"').strip("'")
+    return env_value(k, HERE)
 BUCKET = env('R2_BUCKET_NAME') or 'business-world-videos'
 s3 = boto3.client('s3', endpoint_url=f"https://{env('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
                   aws_access_key_id=env('R2_ACCESS_KEY_ID'), aws_secret_access_key=env('R2_SECRET_ACCESS_KEY'), region_name='auto')
@@ -288,8 +286,19 @@ def steer_metric(Vm, mids, lab):
     yo_sorted = np.sort(yo)
     est = yo_sorted[np.clip((ranks * (len(yo_sorted) - 1)).round().astype(int), 0, len(yo_sorted) - 1)]
     actual = [None if mids[i] not in lab else round(float(lab[mids[i]]), 2) for i in range(len(mids))]
-    return {'x': grid(XY[:, 0]), 'y': grid(XY[:, 1]), 'cv': round(cv, 3), 'co': 0.0, 'owned_only_label': True,
-            'est': [round(float(x), 2) for x in est], 'actual': actual}, len(oi)
+    return {
+        'x': grid(XY[:, 0]),
+        'y': grid(XY[:, 1]),
+        'cv': round(cv, 3),
+        'co': 0.0,
+        'owned_only_label': True,
+        'est': [round(float(x), 2) for x in est],
+        'actual': actual,
+        'geometry_fit_scope': 'full_fit_descriptive_all_eligible_labels',
+        'estimate_fit_scope': 'full_fit_quantile_calibrated_descriptive',
+        'validation_metric_scope': '5_fold_out_of_fold_spearman_only',
+        'scalar_score_use': 'forbidden',
+    }, len(oi)
 
 STEER = {}
 for a in ACCTS:
@@ -390,7 +399,7 @@ for ch in ['visual', 'text', 'together']:
             if pj is None:
                 print(f'  {ch}/{tgt}__{acct}: too few owned ({nown})', flush=True); continue
             mp['proj'][f'{tgt}__{acct}'] = pj
-            print(f'  {ch}/{tgt}__{acct}: held-out align {pj["cv"]:.3f} (owned {nown})', flush=True)
+            print(f'  {ch}/{tgt}__{acct}: OOF rank validation {pj["cv"]:.3f} (owned {nown}); displayed geometry is full-fit', flush=True)
         eq = VIEW_EQ[acct]
         if eq and f'ctr__{acct}' in mp['proj'] and f'ret30__{acct}' in mp['proj']:
             ce = np.array(mp['proj'][f'ctr__{acct}']['est'], float)
@@ -404,9 +413,19 @@ for ch in ['visual', 'text', 'together']:
             cvr = abs(float(spearmanr(oofr, rvk)[0]))
             XYr = PLSRegression(2).fit(Vmk, rvk).transform(Vm)
             if spearmanr(XYr[mask, 0], rvk)[0] < 0: XYr[:, 0] = -XYr[:, 0]
-            mp['proj'][f'realviews__{acct}'] = {'x': grid(XYr[:, 0]), 'y': grid(XYr[:, 1]), 'cv': round(cvr, 3), 'co': 0.0,
-                                                'est': [round(float(x)) for x in rv], 'predscope': True}
-            print(f'  {ch}/realviews__{acct}: held-out r={cvr:.3f} · median {np.median(rv):,.0f}', flush=True)
+            mp['proj'][f'realviews__{acct}'] = {
+                'x': grid(XYr[:, 0]),
+                'y': grid(XYr[:, 1]),
+                'cv': round(cvr, 3),
+                'co': 0.0,
+                'est': [round(float(x)) for x in rv],
+                'predscope': True,
+                'geometry_fit_scope': 'full_fit_descriptive_all_eligible_pseudo_labels',
+                'estimate_fit_scope': 'derived_from_full_fit_ctr_ret30_and_private_view_equation',
+                'validation_metric_scope': '5_fold_out_of_fold_spearman_on_pseudo_label_only',
+                'scalar_score_use': 'forbidden',
+            }
+            print(f'  {ch}/realviews__{acct}: OOF pseudo-label rank validation r={cvr:.3f} · median {np.median(rv):,.0f}; displayed geometry is full-fit', flush=True)
         # JOINT CTR+views axis (from exp_ctr_views_long.py) — a blend aligned with BOTH at once
         own = [i for i, vid in enumerate(mids) if vid in ACC[acct]['ctr']]
         if w_views_ch is not None and len(own) >= MIN_OWNED:
@@ -419,7 +438,17 @@ for ch in ['visual', 'text', 'together']:
             cvv = abs(float(spearmanr(x[views_fit_mask], lv_all[views_fit_mask])[0]))
             coc = abs(float(spearmanr(x[own], cy)[0]))
             ce = mp['proj'].get(f'ctr__{acct}', {}).get('est')   # per-point CTR estimate (reused from the ctr__ axis) so the trend bands can show CTR too
-            mp['proj'][f'ctrviews__{acct}'] = {'x': grid(x), 'y': grid(y), 'cv': round(cvv, 3), 'co': round(coc, 3), 'joint': True, 'ctr_est': ce}
+            mp['proj'][f'ctrviews__{acct}'] = {
+                'x': grid(x),
+                'y': grid(y),
+                'cv': round(cvv, 3),
+                'co': round(coc, 3),
+                'joint': True,
+                'ctr_est': ce,
+                'geometry_fit_scope': 'full_fit_descriptive_private_ctr_plus_public_views',
+                'validation_metric_scope': 'in_sample_rank_alignment_only',
+                'scalar_score_use': 'forbidden',
+            }
             print(f'  {ch}/ctrviews__{acct}: views r={cvv:.3f} · CTR r={coc:.3f} (owned {len(own)})', flush=True)
     for b in ['ctr', 'ret30', 'realviews', 'ctrviews']:
         if f'{b}__tyler' in mp['proj']: mp['proj'][b] = mp['proj'][f'{b}__tyler']
@@ -433,7 +462,15 @@ for ch in ['visual', 'text', 'together']:
         cvv = abs(float(spearmanr(oofv, vmap)[0])); ch10 = abs(float(spearmanr(oofv, (vmap > 1e7).astype(float))[0]))
         XYv = PLSRegression(2).fit(Vm, vmap).transform(Vm)
         if spearmanr(XYv[:, 0], vmap)[0] < 0: XYv[:, 0] = -XYv[:, 0]
-        mp['proj']['rawviews'] = {'x': grid(XYv[:, 0]), 'y': grid(XYv[:, 1]), 'cv': round(cvv, 3), 'co': round(ch10, 3)}
+        mp['proj']['rawviews'] = {
+            'x': grid(XYv[:, 0]),
+            'y': grid(XYv[:, 1]),
+            'cv': round(cvv, 3),
+            'co': round(ch10, 3),
+            'geometry_fit_scope': 'full_fit_descriptive_all_eligible_public_labels',
+            'validation_metric_scope': '5_fold_out_of_fold_spearman_only',
+            'scalar_score_use': 'forbidden',
+        }
 
     projection_fit_ids = [
         mids[index]

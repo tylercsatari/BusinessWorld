@@ -6,9 +6,35 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const validation = require('../buildings/jarvis/saved-channel-validation');
+const {
+    scoreLedgerFromFeatures,
+} = require('./fixtures/score-ledger-fixture');
+const {
+    FEATURE_CONTRACT_SHA256,
+    scoreRecordBindingSha256,
+} = require('../buildings/jarvis/shorts-score-ledger');
+const featureContract = require(
+    '../buildings/jarvis/saved-channel-feature-contract.json'
+);
+const {
+    manifestRowBindingSha256,
+} = require(
+    '../buildings/jarvis/saved-channel-manifest-binding'
+);
+const {
+    canonicalArtifactIdentity,
+} = require('../buildings/jarvis/canonical-json-artifact');
 const featureContractPath = path.join(__dirname, '..', 'buildings', 'jarvis', 'saved-channel-feature-contract.json');
 const featureContractSha256 = crypto.createHash('sha256').update(fs.readFileSync(featureContractPath)).digest('hex');
+const serverSource = fs.readFileSync(
+    path.join(__dirname, '..', 'server.js'),
+    'utf8'
+);
 const fixtureSha256 = value => crypto.createHash('sha256').update(String(value)).digest('hex');
+const fixtureYoutubeChannelId = value => (
+    `UC${crypto.createHash('sha256').update(String(value))
+        .digest('base64url').slice(0, 22)}`
+);
 const fixturePopulation = (label, rowCount = 24) => ({
     rowCount,
     uniqueVideoCount: rowCount,
@@ -20,6 +46,10 @@ const fixtureSnakePopulation = (label, rowCount = 24) => ({
     duplicate_video_id_count: 0,
     video_id_sha256: fixtureSha256(`population:${label}:${rowCount}`),
 });
+const VISUAL_KEEP_ARTIFACT_SHA256 =
+    fixtureSha256('visual-keep-model');
+const VISUAL_KEEP_MANIFEST_SHA256 =
+    fixtureSha256('visual-keep-model-manifest');
 const CREATOR_ADAPTIVE_BENCHMARK_ID = 'shorts.causal-keep-mixture-benchmark.v1';
 const CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID = 'shorts.causal-keep-mixture.v1';
 const CREATOR_ADAPTIVE_CANDIDATE_COUNT = 43360;
@@ -76,7 +106,17 @@ const creatorAdaptiveLockedFormula = {
 };
 
 assert.strictEqual(validation.contract.features.length, 21);
-assert.strictEqual(validation.contract.version, 8);
+assert.deepStrictEqual(
+    validation.contract.features.map(feature => feature.key),
+    featureContract.features.map(feature => feature.key),
+    'validation must expose the unchanged canonical 21-feature scorer contract'
+);
+assert.strictEqual(validation.contract.version, 10);
+assert.match(
+    serverSource,
+    /'computed:raw\/saved-channel-validation',\s*-1,\s*buildSavedChannelValidationBuffer/,
+    'saved-channel validation must bypass time-based response reuse and defer to its exact source fingerprint'
+);
 assert.strictEqual(validation.contract.pipeline.embeddingModel, 'gemini-embedding-2');
 assert.strictEqual(
     validation.contract.features.find(feature => feature.key === 'novelty.views').unit,
@@ -120,17 +160,55 @@ function savedFeatures(index) {
         let raw;
         if (feature.unit === 'views') raw = 10 ** (5.7 + index * .15);
         else if (feature.unit === 'log10_views') raw = 5.8 + index * .15;
-        else if (feature.unit === 'probability') raw = .1 + index * .12;
-        else if (feature.unit === 'percent') raw = 50 + index * 5;
+        else if (feature.unit === 'probability') raw = .1 + (index % 8) * .1;
+        else if (feature.unit === 'percent') raw = 45 + (index % 10) * 5;
         else raw = .5 + index * .2;
-        return [feature.key, [raw, 15 + index * 15]];
+        return [feature.key, [raw, 5 + (index % 10) * 9]];
     }));
 }
 
+function visualKeepInputManifest(id) {
+    const scoreInputFingerprint =
+        fixtureSha256(`score-input:${id}`);
+    return {
+        input_fingerprint: scoreInputFingerprint,
+        score_input_fingerprint: scoreInputFingerprint,
+        embedding_input_fingerprint:
+            fixtureSha256(`embedding-input:${id}`),
+        revision_fingerprint:
+            fixtureSha256(`score-revision:${id}`),
+        canonical_montage: {
+            montage_sha256: fixtureSha256(`montage:${id}`),
+        },
+    };
+}
+
+function bindSavedVideo(video) {
+    video.evidence_state = 'canonical_bound';
+    video.canonical = true;
+    video.predictor_eligible = true;
+    video.evidence_warning = null;
+    video.score_record_sha256 =
+        scoreRecordBindingSha256(video);
+    const fullRecordArtifact = canonicalArtifactIdentity({
+        ...video,
+    });
+    video.record_artifact_sha256 =
+        fullRecordArtifact.sha256;
+    video.record_byte_length =
+        fullRecordArtifact.byte_length;
+    video.manifest_row_sha256 =
+        manifestRowBindingSha256(video);
+    return video;
+}
+
 const channels = validation.SUPPORTED_CHANNELS.map((definition, channelIndex) => {
+    const youtubeChannelId = fixtureYoutubeChannelId(
+        definition.accountId
+    );
     const videos = Array.from({ length: 24 }, (_, index) => {
         const id = `${definition.accountId}-${index}`;
-        return {
+        const video = {
             id,
             title: `${definition.accountName} fixture ${index}`,
             status: 'done',
@@ -138,21 +216,51 @@ const channels = validation.SUPPORTED_CHANNELS.map((definition, channelIndex) =>
             subscribers: channelIndex ? 200000 : 100000,
             views: 10 ** (5.8 + index * .2 + channelIndex * .05),
             features: savedFeatures(index),
+            score_ledger: scoreLedgerFromFeatures(
+                savedFeatures(index)
+            ),
+            input_manifest: visualKeepInputManifest(id),
+            montageSha256: fixtureSha256(`montage:${id}`),
             visual_keep_forecast: index < 2 ? {
                 coordinate_id: 'shorts.visual-keep-forecast.v1',
                 raw: index === 0 ? 91.25 : 99.75,
                 est: index === 0 ? 91.25 : 99.75,
+                kind: 'keep_rate_percent',
+                unit: 'percent',
+                source: 'live_frozen_model_score',
                 calibration_scope: 'pooled_global',
                 account_model: null,
                 model_artifact_sha256: index === 0
-                    ? fixtureSha256('visual-keep-model')
+                    ? VISUAL_KEEP_ARTIFACT_SHA256
                     : fixtureSha256('stale-visual-keep-model'),
+                model_manifest_sha256:
+                    VISUAL_KEEP_MANIFEST_SHA256,
+                model_artifact_key:
+                    'raw/predictor-lab/visual-keep-model/by-sha256/'
+                    + `${
+                        index === 0
+                            ? VISUAL_KEEP_ARTIFACT_SHA256
+                            : fixtureSha256('stale-visual-keep-model')
+                    }.json`,
+                model_artifact_canonical_key:
+                    'raw/predictor-lab/visual-keep-model-v1.json',
+                model_manifest_key:
+                    'raw/predictor-lab/visual-keep-model-v1.manifest.json',
+                producer_source_sha256:
+                    fixtureSha256('visual-keep-producer'),
+                feature_contract_version: featureContract.version,
+                feature_contract_sha256:
+                    FEATURE_CONTRACT_SHA256,
+                input: 'first-five-second five-frame montage embedding only',
+                pctile: null,
             } : null,
         };
+        return bindSavedVideo(video);
     });
     return {
         ...definition,
-        manifest: { videos },
+        youtubeChannelId,
+        manifest: { youtubeChannelId, videos },
         privateTable: {
             videos: videos.map((video, index) => ({
                 id: video.id,
@@ -208,6 +316,47 @@ const blindArtifactRows = [
     }),
 ];
 assert.strictEqual(blindArtifactRows.length, 632);
+blindArtifactRows.forEach(row => {
+    row.montageSha256 = fixtureSha256(`blind-montage:${row.id}`);
+});
+const blindFoldAssignment = validation._contentFamilyFoldAssignments(
+    blindArtifactRows,
+    5,
+    'outer'
+);
+blindArtifactRows.forEach((row, index) => {
+    row.videoFold = blindFoldAssignment.assignments[index];
+});
+const blindRowFoldManifestSha256 = validation._sha256Json(
+    validation._blindFoldManifestRows(blindArtifactRows)
+);
+const strictPublicCoordinateKeys = validation.contract.features.filter(
+    feature => feature.group !== 'novelty'
+        && ['views', 'outlier', 'gt10M'].includes(feature.target)
+).map(feature => feature.key);
+const publicFitRows = Array.from({ length: 12 }, (_, index) => ({
+    id: `public-fit-${index}`,
+    channelId: fixtureYoutubeChannelId(`public-${index % 3}`),
+}));
+const publicFitCanonicalRows = validation._canonicalFitManifestRows(
+    publicFitRows
+);
+const publicFitPopulationSha256 = validation._sha256Json(
+    publicFitCanonicalRows
+);
+const publicAxisFitPopulations = {
+    [publicFitPopulationSha256]: {
+        rows: publicFitCanonicalRows,
+        rowsSha256: publicFitPopulationSha256,
+    },
+};
+const publicAxisFitManifests = Object.fromEntries(
+    strictPublicCoordinateKeys.map(key => [key, {
+        populationSha256: publicFitPopulationSha256,
+        rowsSha256: publicFitPopulationSha256,
+        rowCount: publicFitCanonicalRows.length,
+    }])
+);
 const missingAxisRow = allRows.find(row => row.id === 'hafu-0');
 missingAxisRow.videoHeldOut[blindNames.indexOf('text.views.raw')] = null;
 const keepPoints = allRows.map((row, index) => ({
@@ -327,6 +476,16 @@ const fixtureIndicatorRegistry = {
     })),
 };
 const fixtureRuntimeManifests = {
+    visualKeepModelRelease: {
+        key: 'raw/predictor-lab/visual-keep-model-v1.manifest.json',
+        artifactSha256: VISUAL_KEEP_ARTIFACT_SHA256,
+        manifestSha256: VISUAL_KEEP_MANIFEST_SHA256,
+        archiveKey:
+            `raw/predictor-lab/visual-keep-model/by-sha256/${VISUAL_KEEP_ARTIFACT_SHA256}.json`,
+        producerSourceSha256:
+            fixtureSha256('visual-keep-producer'),
+        featureContractSha256,
+    },
     shortsSteer: {
         key: 'raw/steer_manifest.json',
         artifactSha256: fixtureSha256('shorts-steer-manifest'),
@@ -464,7 +623,11 @@ const predictor = {
         savedAxisTrainingIdOverlap: 0,
         validationCreatorAxisTrainingIdOverlap: 0,
         validationCreatorVideoCountExcluded: 16,
-        validationCreatorChannelIds: ['UCfixtureTyler', 'UCfixtureHafu'],
+        validationCreatorChannelIds: channels.map(
+            source => source.youtubeChannelId
+        ),
+        publicAxisFitManifests,
+        publicAxisFitPopulations,
         featureScorerVersionPersistedPerVideo: false,
         featureContractVersion: validation.contract.version,
         featureContractSha256,
@@ -522,7 +685,21 @@ const predictor = {
                     ),
                 },
                 formula: {
-                    selected: { pooledAlpha: 1, accountAlpha: 1, accountWeight: .75 },
+                    scope: 'pooled_global',
+                    outputTransform:
+                        'clip(linear_prediction, 0, 100)',
+                    outputBounds: [0, 100],
+                    selected: {
+                        pooledAlpha: 1,
+                        accountWeight: 0,
+                    },
+                    pooled: {
+                        intercept: 60,
+                        coefficients: Array.from(
+                            { length: 1536 },
+                            () => 0
+                        ),
+                    },
                 },
                 production: {
                     fitPopulation: {
@@ -541,9 +718,9 @@ const predictor = {
                     })),
                 },
                 modelArtifact: {
-                    artifactSha256: fixtureSha256('visual-keep-model'),
+                    artifactSha256: VISUAL_KEEP_ARTIFACT_SHA256,
                     canonicalKey: 'raw/predictor-lab/visual-keep-model-v1.json',
-                    archiveKey: `raw/predictor-lab/visual-keep-model/by-sha256/${fixtureSha256('visual-keep-model')}.json`,
+                    archiveKey: `raw/predictor-lab/visual-keep-model/by-sha256/${VISUAL_KEEP_ARTIFACT_SHA256}.json`,
                     producerSourceSha256: fixtureSha256('visual-keep-producer'),
                     generatedAt: 123456,
                 },
@@ -677,6 +854,7 @@ const predictor = {
                 featureNames: blindNames,
                 videoHeldOutProtocol: 'synthetic video holdout',
                 accountHeldOutProtocol: 'synthetic account holdout',
+                rowFoldManifestSha256: blindRowFoldManifestSha256,
                 rows: blindArtifactRows,
             },
             stressTests: [
@@ -705,6 +883,23 @@ const result = validation.buildValidation({
     generatedAt: 999,
     sourceFingerprint: fixtureSha256('fixture'),
 });
+
+function validationAfterSavedVideoMutation(label, mutate) {
+    const mutatedChannels = JSON.parse(JSON.stringify(channels));
+    const target = mutatedChannels[0].manifest.videos.find(
+        video => video.id === 'tyler-0'
+    );
+    assert(target, `${label}: fixture row missing`);
+    mutate(target);
+    bindSavedVideo(target);
+    return validation.buildValidation({
+        channels: mutatedChannels,
+        predictor,
+        creatorAdaptiveKeepModel,
+        generatedAt: 999,
+        sourceFingerprint: fixtureSha256(`fixture:${label}`),
+    });
+}
 
 assert.strictEqual(result.version, validation.VERSION);
 assert.strictEqual(result.visualKeepStudy, predictor.targets.keep.visualOnlyStudy);
@@ -761,7 +956,10 @@ assert.throws(
 );
 assert.strictEqual(result.rows.length, 48);
 assert.strictEqual(result.validationRows.length, 632);
-assert(result.validationRows.every(row => row.scoreLedger && row.scoreLedger.values.length === 108));
+assert(result.validationRows.every(row => (
+    row.scoreLedger
+    && row.scoreLedger.values.length === 89
+)));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindVideoHeldOut')));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindAccountHeldOut')));
 assert.strictEqual(result.scopes.pooled.n, 48);
@@ -777,13 +975,47 @@ assert(result.leakageAudit.passedForBlindInputs, 'all blind arrays should align 
 assert.strictEqual(result.leakageAudit.privateRowsExcludedFromPublicAxis, true);
 assert.strictEqual(result.leakageAudit.savedRowsExcludedFromPublicAxis, true);
 assert.strictEqual(result.leakageAudit.validationCreatorsExcludedFromPublicAxis, true);
+assert.strictEqual(result.leakageAudit.publicAxisOverlapAudit.validManifestCount, 9);
+assert.strictEqual(result.leakageAudit.publicAxisOverlapAudit.uniqueFitPopulations, 1);
+assert.strictEqual(result.leakageAudit.blindFoldAudit.passed, true);
+assert.strictEqual(
+    result.leakageAudit.blindFoldAudit
+        .strongDuplicateProtectionPassed,
+    true
+);
+assert.strictEqual(
+    result.leakageAudit.validationCreatorChannelIdentityAudit.passed,
+    true
+);
+assert.deepStrictEqual(
+    result.leakageAudit.validationCreatorChannelIdentityAudit
+        .canonicalChannelIds,
+    channels.map(source => source.youtubeChannelId).sort()
+);
+assert.strictEqual(result.leakageAudit.allRequiredInputsFinite, false);
+assert(result.leakageAudit.requiredFiniteInputRows < result.validationRows.length);
+const leakedManifests = JSON.parse(JSON.stringify(publicAxisFitManifests));
+const leakedManifest = leakedManifests['visual.views'];
+leakedManifest.rows = publicFitCanonicalRows.concat({
+    id: channels[0].manifest.videos[0].id,
+    channelId: channels[0].youtubeChannelId,
+});
+leakedManifest.rows = validation._canonicalFitManifestRows(
+    leakedManifest.rows
+);
+leakedManifest.rowsSha256 = validation._sha256Json(leakedManifest.rows);
+delete leakedManifest.populationSha256;
+leakedManifest.rowCount = leakedManifest.rows.length;
 const leakedResult = validation.buildValidation({
     channels,
     predictor: {
         ...predictor,
         provenance: {
             ...predictor.provenance,
-            validationCreatorAxisTrainingIdOverlap: 1,
+            privateAxisTrainingIdOverlap: 0,
+            savedAxisTrainingIdOverlap: 0,
+            validationCreatorAxisTrainingIdOverlap: 0,
+            publicAxisFitManifests: leakedManifests,
         },
     },
     generatedAt: 1000,
@@ -791,6 +1023,49 @@ const leakedResult = validation.buildValidation({
 });
 assert.strictEqual(leakedResult.leakageAudit.passedForBlindInputs, false, 'creator overlap must fail the blind audit instead of being hard-coded green');
 assert.strictEqual(leakedResult.leakageAudit.validationCreatorsExcludedFromPublicAxis, false);
+assert(
+    leakedResult.leakageAudit.publicAxisOverlapAudit
+        .validationCreatorOverlap.includes(channels[0].manifest.videos[0].id),
+    'locally recomputed overlap must defeat forged zero counters'
+);
+const mismatchedNamespaceChannels = JSON.parse(
+    JSON.stringify(channels)
+);
+mismatchedNamespaceChannels.forEach(source => {
+    delete source.youtubeChannelId;
+    delete source.manifest.youtubeChannelId;
+    source.manifest.channelId = source.channelId;
+});
+const mismatchedNamespacePredictor = JSON.parse(
+    JSON.stringify(predictor)
+);
+mismatchedNamespacePredictor.provenance
+    .validationCreatorChannelIds =
+    mismatchedNamespaceChannels.map(source => source.channelId);
+const mismatchedNamespaceResult = validation.buildValidation({
+    channels: mismatchedNamespaceChannels,
+    predictor: mismatchedNamespacePredictor,
+    generatedAt: 1000.5,
+    sourceFingerprint:
+        fixtureSha256('fixture-mismatched-channel-namespace'),
+});
+assert.strictEqual(
+    mismatchedNamespaceResult.leakageAudit
+        .validationCreatorChannelIdentityAudit.passed,
+    false,
+    'internal ch… IDs must never be compared with public YouTube channel IDs'
+);
+assert.strictEqual(
+    mismatchedNamespaceResult.leakageAudit.passedForBlindInputs,
+    false,
+    'unknown or mismatched channel-ID namespaces must fail the global leakage gate'
+);
+assert(
+    mismatchedNamespaceResult.leakageAudit
+        .validationCreatorChannelIdentityAudit.blockers.some(
+            blocker => /non-YouTube channel-ID namespace/.test(blocker)
+        )
+);
 const { publicAxisPopulations: omittedHistoricalPopulation, ...historicalProvenance } = predictor.provenance;
 let historicalPopulationError = null;
 try {
@@ -898,32 +1173,73 @@ assert.deepStrictEqual(result.score21Model.inputs.excludedStoredNovelty, [
     'novelty.ret5',
     'novelty.views',
 ]);
-assert.strictEqual(result.coordinateRegistry.version, 7);
+assert.strictEqual(
+    result.score21Model.protocols.video.scalarOuterFoldLineageConsistent,
+    true
+);
+assert.strictEqual(
+    result.score21Model.protocols.video.checkpointOuterFoldLineageConsistent,
+    true
+);
+assert.strictEqual(
+    result.score21Model.protocols.video.curveOuterFoldLineageConsistent,
+    true
+);
+assert.strictEqual(
+    result.score21Model.protocols.video.scalarOuterFoldLineage.assignmentSha256,
+    result.score21Model.protocols.video.checkpointOuterFoldLineage.assignmentSha256,
+    'all video-held-out targets must reuse one exact content-family fold lineage',
+);
+assert.strictEqual(
+    result.score21Model.protocols.video.scalarOuterFoldLineage.assignmentSha256,
+    result.score21Model.protocols.video.curveOuterFoldLineage.assignmentSha256,
+    'curve forecasts must use the same family placement as scalar forecasts',
+);
+assert.strictEqual(
+    result.coordinateRegistry.version,
+    validation.LEDGER_VERSION
+);
+assert.strictEqual(
+    result.coordinateRegistry.governanceVersion,
+    validation.coordinateGovernance.schemaVersion
+);
+assert.strictEqual(result.coordinateRegistry.governanceSha256, validation.GOVERNANCE_SHA256);
 assert.strictEqual(result.coordinateRegistry.totals.shortsStoredProduction, 21);
 assert.strictEqual(result.coordinateRegistry.totals.shortsVisualKeepForecasts, 1);
 assert.strictEqual(result.coordinateRegistry.totals.shortsVisualKeepProtocolForecasts, 3);
-assert.strictEqual(result.coordinateRegistry.totals.shortsCreatorAdaptiveKeepForecasts, 1);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDirectHeldout, 36);
-assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 27);
-assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 13);
-assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 7);
-assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 108);
-assert.strictEqual(result.coordinateRegistry.totals.shortsBlindColumns, 62);
-assert.strictEqual(result.coordinateRegistry.totals.shortsBlindUniquePredictions, 53);
-assert.strictEqual(result.coordinateRegistry.totals.shortsBlindAliasColumns, 9);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 33);
-assert.strictEqual(result.coordinateRegistry.totals.shortsOutcomeColumns, 13);
+assert.strictEqual(
+    result.coordinateRegistry.totals
+        .shortsCreatorAdaptiveKeepPrequential,
+    1,
+);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCreatorExcludedPublic, 9);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDirectHeldout, 18);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 29);
+assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 12);
+assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 0);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCompatibilityAliases, 18);
+assert.strictEqual(result.coordinateRegistry.totals.shortsRetiredCoordinates, 7);
+assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 89);
+assert.strictEqual(result.coordinateRegistry.totals.shortsBlindColumns, 51);
+assert.strictEqual(result.coordinateRegistry.totals.shortsBlindUniquePredictions, 51);
+assert.strictEqual(result.coordinateRegistry.totals.shortsBlindAliasColumns, 0);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 26);
+assert.strictEqual(result.coordinateRegistry.totals.shortsOutcomeColumns, 12);
 assert.deepStrictEqual(result.coordinateRegistry.classification.blind, {
-    columns: 62,
-    uniquePredictions: 53,
-    aliasColumns: 9,
-    families: ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
-    meaning: 'Coordinates currently eligible for leakage-controlled predictor ranking. Shared creator-excluded public direct axes can appear in both protocol views but identify the same fitted prediction.',
+    columns: 51,
+    uniquePredictions: 51,
+    aliasColumns: 0,
+    families: ['creatorExcludedPublic', 'videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
+    meaning: 'Coordinates currently eligible for leakage-controlled predictor ranking. Every active blind column is one unique scalar prediction; compatibility aliases are outside the active ledger.',
 });
-assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 33);
-assert.strictEqual(result.coordinateRegistry.classification.outcomes.columns, 13);
-assert.strictEqual(result.coordinateRegistry.totals.longStoredOutputs, 12);
-assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 108);
+assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 26);
+assert.strictEqual(result.coordinateRegistry.classification.outcomes.columns, 12);
+assert.strictEqual(result.coordinateRegistry.totals.longStoredOutputs, 21);
+assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 89);
+assert.strictEqual(result.coordinateRegistry.compatibility.activeColumnsContainAliases, false);
+assert.strictEqual(result.coordinateRegistry.compatibility.activeColumnsContainRetired, false);
+assert.strictEqual(result.coordinateRegistry.aliases.length, 18);
+assert.strictEqual(result.coordinateRegistry.retired.length, 7);
 const fixtureProtocolRow = result.validationRows.find(
     row => row.id === blindArtifactRows[0].id
 );
@@ -949,11 +1265,10 @@ assert.strictEqual(
 assert.deepStrictEqual(result.ledgerAudit.visualKeepProtocolParityMismatches, []);
 
 const expectedValueClassCounts = {
-    direct_embedding_axis: 45,
+    direct_embedding_axis: 36,
     embedding_derived_transform: 12,
-    combined_forecast: 31,
-    observed_outcome: 13,
-    legacy_diagnostic: 7,
+    combined_forecast: 29,
+    observed_outcome: 12,
 };
 const actualValueClassCounts = result.coordinateRegistry.columns.reduce((counts, column) => {
     counts[column.valueClass] = (counts[column.valueClass] || 0) + 1;
@@ -961,13 +1276,13 @@ const actualValueClassCounts = result.coordinateRegistry.columns.reduce((counts,
 }, {});
 assert.deepStrictEqual(actualValueClassCounts, expectedValueClassCounts);
 assert.strictEqual(result.coordinateRegistry.totals.shortsDirectEmbeddingAxes, 36);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisColumns, 45);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisColumns, 36);
 assert.strictEqual(result.coordinateRegistry.totals.shortsDistinctDirectEmbeddingAxes, 36);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisAliasColumns, 9);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisAliasColumns, 0);
 assert.strictEqual(result.coordinateRegistry.totals.shortsEmbeddingDerivedTransforms, 12);
-assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 27);
-assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 13);
-assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 7);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 29);
+assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 12);
+assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 0);
 result.coordinateRegistry.columns.forEach(column => {
     assert(/^[a-f0-9]{64}$/.test(column.coordinateIdentity.axisFingerprint), `${column.id} axis identity missing`);
     assert(/^[a-f0-9]{64}$/.test(column.coordinateIdentity.coordinateFingerprint), `${column.id} coordinate identity missing`);
@@ -1144,11 +1459,13 @@ assert(
     && result.coordinateRegistry.lineageAudit.passed === true,
     JSON.stringify(result.coordinateRegistry.lineageAudit),
 );
-assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 108);
+assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 89);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unclassifiedColumns.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.incompleteLineages.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unresolvedReferences.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.catalogReferenceErrors.length, 0);
+assert.deepStrictEqual(result.coordinateRegistry.lineageAudit.duplicateActiveAxes, []);
+assert.deepStrictEqual(result.coordinateRegistry.lineageAudit.aliasErrors, []);
 
 function registryColumn(id) {
     const column = result.coordinateRegistry.columns.find(candidate => candidate.id === id);
@@ -1219,29 +1536,47 @@ assertLineageMentions(videoHeldoutVisualKeep, [
     /entire.{0,16}(?:outer.)?fold/,
 ]);
 
-const accountHeldoutVisualViews = registryColumn('shorts.account-heldout.visual.views');
-assert.strictEqual(accountHeldoutVisualViews.valueClass, 'direct_embedding_axis');
-assertLineageMentions(accountHeldoutVisualViews, [
+const creatorExcludedVisualViews = registryColumn('shorts.creator-excluded.visual.views');
+assert.strictEqual(creatorExcludedVisualViews.valueClass, 'direct_embedding_axis');
+assertLineageMentions(creatorExcludedVisualViews, [
     /public/,
     /pls/,
     /(?:account|creator).{0,24}exclud|exclud.{0,24}(?:account|creator)/,
 ]);
-const videoHeldoutVisualViews = registryColumn('shorts.video-heldout.visual.views');
 assert.strictEqual(
-    videoHeldoutVisualViews.lineage.fitDatasetId,
+    creatorExcludedVisualViews.lineage.fitDatasetId,
     'dataset.shorts.creator-excluded-public.v1',
 );
 assert.strictEqual(
-    accountHeldoutVisualViews.lineage.fitDatasetId,
-    'dataset.shorts.creator-excluded-public.v1',
+    result.coordinateRegistry.columns.some(
+        column => column.id === 'shorts.video-heldout.visual.views'
+    ),
+    false,
+    'a compatibility alias must not remain in the active ledger'
 );
 assert.strictEqual(
-    videoHeldoutVisualViews.lineage.underlyingAxisId,
-    accountHeldoutVisualViews.lineage.underlyingAxisId,
-    'the two protocol columns must disclose that they alias one shared public fit',
+    result.coordinateRegistry.columns.some(
+        column => column.id === 'shorts.account-heldout.visual.views'
+    ),
+    false,
+    'a compatibility alias must not remain in the active ledger'
 );
 assert.strictEqual(
-    videoHeldoutVisualViews.lineage.calibrationId,
+    validation.resolveCoordinateId(
+        result.coordinateRegistry,
+        'shorts.video-heldout.visual.views'
+    ),
+    'shorts.creator-excluded.visual.views'
+);
+assert.strictEqual(
+    validation.resolveCoordinateId(
+        result.coordinateRegistry,
+        'shorts.account-heldout.visual.views'
+    ),
+    'shorts.creator-excluded.visual.views'
+);
+assert.strictEqual(
+    creatorExcludedVisualViews.lineage.calibrationId,
     'calibration.inverse-log10-nonnegative.v1',
 );
 assert.match(
@@ -1266,18 +1601,26 @@ assertLineageMentions(videoForecastKeep, [
 const videoForecastViews = registryColumn('shorts.video-forecast.views');
 assert.strictEqual(videoForecastViews.lineage.targetField, 'log10(current lifetime views + 1)');
 assert.strictEqual(videoForecastViews.lineage.calibrationId, 'calibration.inverse-log10-nonnegative.v1');
-const videoForecastSwipe = registryColumn('shorts.video-forecast.swipe');
-assert.strictEqual(videoForecastSwipe.lineage.targetField, 'keep');
-assert.strictEqual(videoForecastSwipe.lineage.calibrationId, 'calibration.one-minus-percent.v1');
+const videoForecastSwipe = result.coordinateRegistry.displayTransforms.find(
+    transform => transform.id === 'shorts.video-forecast.swipe'
+);
+assert(videoForecastSwipe);
+assert.strictEqual(videoForecastSwipe.sourceCoordinateId, 'shorts.video-forecast.keep');
+assert.strictEqual(videoForecastSwipe.formula, '100 - source');
+assert.strictEqual(videoForecastSwipe.stored, false);
 const videoForecastHit10M = registryColumn('shorts.video-forecast.hit10M');
 assert.strictEqual(videoForecastHit10M.unit, 'probability');
 assert.strictEqual(videoForecastHit10M.lineage.calibrationId, 'calibration.clamp-probability.v1');
 assert.match(
-    lineageCatalog.representations['representation.runtime.shorts.nine-axis-vector.v1'].construction,
+    lineageCatalog.representations[
+        'representation.runtime.shorts.creator-excluded-nine-axis-vector.v1'
+    ].construction,
     /training.*mean imputation|training-mean imputation/i,
 );
 assert.doesNotMatch(
-    lineageCatalog.representations['representation.runtime.shorts.nine-axis-vector.v1'].construction,
+    lineageCatalog.representations[
+        'representation.runtime.shorts.creator-excluded-nine-axis-vector.v1'
+    ].construction,
     /median imputation/i,
 );
 
@@ -1311,18 +1654,67 @@ assert.strictEqual(
     videoHeldoutRealviews.lineage.calibrationId,
     'calibration.inverse-log10-nonnegative.v1',
 );
-const legacyPublicEnsemble = registryColumn('shorts.legacy.views-public-axis-ensemble');
-assert.strictEqual(legacyPublicEnsemble.lineage.usesEmbedding, true);
 assert.strictEqual(
-    legacyPublicEnsemble.lineage.algorithmId,
-    'algorithm.shorts.legacy-public-axis-ensemble.v1',
+    result.coordinateRegistry.columns.some(
+        column => column.id === 'shorts.legacy.views-public-axis-ensemble'
+    ),
+    false,
+    'retired diagnostics must not remain active ledger columns'
 );
-assert.strictEqual(
-    legacyPublicEnsemble.lineage.representationId,
-    'representation.runtime.shorts.three-public-view-axes.v1',
+assert(
+    result.coordinateRegistry.retired.some(
+        coordinate => (
+            coordinate.id === 'shorts.legacy.views-public-axis-ensemble'
+            && coordinate.status === 'retired'
+            && coordinate.predictorEligible === false
+            && coordinate.predictor_eligible === false
+            && coordinate.replacement === 'shorts.video-forecast.views'
+        )
+    ),
+    'retired diagnostics must remain traceable in compatibility metadata'
 );
+result.coordinateRegistry.retired.forEach(coordinate => {
+    assert.strictEqual(coordinate.coordinateId, coordinate.id);
+    assert.strictEqual(
+        coordinate.coordinateIdentity.coordinateId,
+        coordinate.id
+    );
+    assert.strictEqual(
+        coordinate.coordinateIdentity.status,
+        'retired'
+    );
+    assert.strictEqual(coordinate.predictorEligible, false);
+    assert.strictEqual(coordinate.predictor_eligible, false);
+    assert.strictEqual(coordinate.active, false);
+    assert(/^[a-f0-9]{64}$/.test(
+        coordinate.coordinateIdentitySha256
+    ));
+    assert.strictEqual(
+        result.coordinateRegistry.columns.some(
+            column => column.id === coordinate.id
+        ),
+        false,
+        `${coordinate.id} entered active ledger columns`
+    );
+    for (const outcome of Object.values(
+        result.scopes.pooled.ledgerOutcomeMatrix
+    )) {
+        assert.strictEqual(
+            outcome.coordinates.some(
+                entry => entry.coordinateId === coordinate.id
+            ),
+            false,
+            `${coordinate.id} entered active forecast rankings`
+        );
+    }
+});
 
-assert.strictEqual(result.coordinateRegistry.longQuant.columns.length, 12);
+assert.strictEqual(result.coordinateRegistry.longQuant.columns.length, 21);
+assert.deepStrictEqual(
+    result.coordinateRegistry.longQuant.groups,
+    ['visual', 'text', 'together']
+);
+assert.strictEqual(result.coordinateRegistry.longQuant.mapPlacements.length, 36);
 result.coordinateRegistry.longQuant.columns.forEach(column => {
     assert(
         ['direct_embedding_axis', 'embedding_derived_transform'].includes(column.valueClass),
@@ -1388,7 +1780,10 @@ assert.deepStrictEqual(
 assert(referenceIds(longTogetherCtrviews.lineage.algorithm).includes('algorithm.long.ctrviews-blend.v1'));
 const longVisualCtrviews = longColumn('long.output.visual.ctrviews');
 assert.strictEqual(longVisualCtrviews.valueClass, 'direct_embedding_axis');
-assert.strictEqual(longVisualCtrviews.lineage.reproducibility.status, 'frozen-artifact-required');
+assert.strictEqual(
+    longVisualCtrviews.lineage.reproducibility.status,
+    'frozen-artifact-required-not-held-out'
+);
 assert.deepStrictEqual(
     referenceIds(longVisualCtrviews.lineage.artifact),
     ['artifact.long.visual-ctrviews-ladder.v1', 'artifact.long.live-score-runtime.v1'],
@@ -1439,29 +1834,47 @@ const expectedMetricKeys = [
     'spearman',
     'withinAccountSpearman',
     'auc',
-    'oofR2',
-    'oofSpearman',
-    'oofMae',
-    'oofBaselineMae',
-    'oofMaeImprovementVsBaseline',
-    'oofProtocolBaselineR2',
-    'oofMedianFactorError',
-    'oofAuc',
-    'oofBrier',
+    'withinAccountAuc',
+    'inferentialEffect',
+    'inferentialPValue',
+    'inferentialEstimand',
+    'inferentialN',
+    'inferentialCreatorCount',
+    'inferentialMethod',
+    'predictionR2',
+    'predictionSpearman',
+    'predictionMae',
+    'predictionBaselineMae',
+    'predictionMaeImprovementVsBaseline',
+    'predictionProtocolBaselineR2',
+    'predictionMedianFactorError',
+    'predictionAuc',
+    'predictionBrier',
     'n',
-    'oofN',
+    'predictionN',
     'qValue',
     'evidence',
 ];
 outcomeKeys.forEach(outcomeKey => {
     const matrixRow = ledgerOutcomeMatrix[outcomeKey];
     assert(matrixRow.outcome && matrixRow.outcome.key === outcomeKey);
-    assert.strictEqual(matrixRow.outcome.qValueFamily, 'global_all_eligible_108x13');
+    assert.strictEqual(
+        matrixRow.outcome.qValueFamily,
+        'global_unique_coordinate_axis_by_outcome_hypothesis'
+    );
     assert(
-        matrixRow.outcome.qValueEligibleTests > 108,
+        matrixRow.outcome.qValueEligibleTests > 89,
         'the BH family must span eligible tests across outcomes, not one outcome at a time',
     );
-    assert.strictEqual(matrixRow.coordinates.length, 108);
+    assert(
+        matrixRow.outcome.qValueEligibleRows
+            >= matrixRow.outcome.qValueEligibleTests
+    );
+    assert(
+        matrixRow.outcome.qValueDuplicateRowsRemoved > 0,
+        'derived swipe and keep must share one feed-decision hypothesis family'
+    );
+    assert.strictEqual(matrixRow.coordinates.length, 89);
     assert.deepStrictEqual(
         matrixRow.coordinates.map(entry => entry.coordinateId),
         canonicalCoordinateIds,
@@ -1479,12 +1892,19 @@ outcomeKeys.forEach(outcomeKey => {
             'unit',
             'available',
             'availabilityNote',
+            'nativeOutcomeKey',
+            'evaluationMode',
             'validationTier',
             'plainEnglish',
             'coverage',
+            'inference',
+            'evaluation',
             'metrics',
         ].forEach(key => assert(Object.prototype.hasOwnProperty.call(entry, key), `${outcomeKey}:${entry.coordinateId}:${key}`));
         assert.deepStrictEqual(Object.keys(entry.metrics), expectedMetricKeys);
+        assert.strictEqual(entry.coverage.chartFittedParameterCount, 0);
+        assert.strictEqual(entry.coverage.chartTrainingRowsRead, 0);
+        assert.strictEqual(entry.coverage.chartTrainingOutcomesRead, 0);
     });
 });
 const matrixEntry = (outcomeKey, coordinateId) => {
@@ -1496,55 +1916,61 @@ const matrixEntry = (outcomeKey, coordinateId) => {
 };
 const fullBlindKeep = matrixEntry('keep', 'shorts.video-heldout.visual.keep');
 assert.strictEqual(fullBlindKeep.metrics.n, 632);
-assert.strictEqual(fullBlindKeep.metrics.oofN, 632);
+assert.strictEqual(fullBlindKeep.metrics.predictionN, 632);
 assert.strictEqual(fullBlindKeep.coverage.pairedBlindOnlyRows, 584);
-assert.strictEqual(fullBlindKeep.coverage.calibrationMode, 'video_5fold');
-assert.strictEqual(fullBlindKeep.coverage.trainingTestOverlapN, 0);
-assert.strictEqual(fullBlindKeep.coverage.duplicateTestPredictionN, 0);
-assert.strictEqual(fullBlindKeep.validationTier, 'video_held_out_coordinate_plus_video_5fold_calibration');
-assert.strictEqual(fullBlindKeep.calibration.mode, 'video_5fold');
-assert.strictEqual(fullBlindKeep.calibration.folds.length, 5);
-assert(fullBlindKeep.calibration.folds.every(fold => fold.parameters && fold.parameters.kind === 'linear'));
-assert(Number.isFinite(fullBlindKeep.calibration.diagnostics.actualRange));
-assert(Number.isFinite(fullBlindKeep.calibration.diagnostics.predictedRange));
-assert(Number.isFinite(fullBlindKeep.calibration.diagnostics.rangeRatio));
+assert.strictEqual(fullBlindKeep.coverage.evaluationMode, 'registered_video_heldout_identity');
+assert.strictEqual(fullBlindKeep.coverage.predictionRows, 632);
+assert.strictEqual(fullBlindKeep.validationTier, 'video_held_out_coordinate_identity');
+assert.strictEqual(fullBlindKeep.nativeOutcomeKey, 'keep');
+assert.strictEqual(fullBlindKeep.evaluation.identity, true);
+assert.strictEqual(fullBlindKeep.evaluation.fittedByRelationshipChart, false);
+assert.strictEqual(fullBlindKeep.evaluation.audit.fittedParameterCount, 0);
+assert.strictEqual(fullBlindKeep.evaluation.audit.trainingRowsReadByChart, 0);
+assert.strictEqual(fullBlindKeep.evaluation.audit.trainingOutcomesReadByChart, 0);
+assert.strictEqual(
+    Object.prototype.hasOwnProperty.call(fullBlindKeep, 'calibration'),
+    false,
+    'relationship rows must not expose a second UI calibration'
+);
 const fullBlindKeepColumnIndex = result.coordinateRegistry.columns.findIndex(
     column => column.id === 'shorts.video-heldout.visual.keep'
 );
-const directFullBlindKeepOof = validation._singleCoordinateOof(
-    result.validationRows.map(row => ({
-        id: row.id,
-        accountId: row.accountId,
-        predicted: row.scoreLedger.values[fullBlindKeepColumnIndex],
-        actual: row.actual.keep,
-    })),
+assert.strictEqual(
+    fullBlindKeep.evaluation.valueSource,
+    'scoreLedger.values[coordinateRegistry.index]'
+);
+const firstBlindKeepPrediction = validation._identityCoordinateEvaluation(
+    [{
+        id: fixtureProtocolRow.id,
+        accountId: fixtureProtocolRow.accountId,
+        actual: fixtureProtocolRow.actual.keep,
+        predicted: fixtureProtocolRow.scoreLedger.values[
+            fullBlindKeepColumnIndex
+        ],
+    }],
     { key: 'keep', unit: 'percent' },
-    'video_5fold',
+    'registered_video_heldout_identity'
+).predictions[0];
+assert.strictEqual(
+    firstBlindKeepPrediction.predicted,
+    fixtureProtocolRow.scoreLedger.values[fullBlindKeepColumnIndex],
+    'native prediction charts must read the exact ledger scalar'
 );
-assert.deepStrictEqual(
-    fullBlindKeep.calibration.folds.map(fold => [fold.fold, fold.parameters]),
-    directFullBlindKeepOof.audit.folds.map(fold => [fold.fold, fold.calibration]),
-    'the UI calibration registry must persist the exact parameters used by OOF metrics',
-);
-const directPredictionRange = Math.max(...directFullBlindKeepOof.predictions.map(point => point.calibrated))
-    - Math.min(...directFullBlindKeepOof.predictions.map(point => point.calibrated));
-assert(Math.abs(directPredictionRange - fullBlindKeep.calibration.diagnostics.predictedRange) < 1e-4);
 const accountBlindKeep = matrixEntry('keep', 'shorts.account-heldout.visual.keep');
 assert.strictEqual(accountBlindKeep.metrics.n, 632);
-assert.strictEqual(accountBlindKeep.metrics.oofN, 632);
-assert.strictEqual(accountBlindKeep.coverage.calibrationMode, 'leave_account_out');
-assert.strictEqual(accountBlindKeep.coverage.heldOutAccountLeakageN, 0);
-assert.strictEqual(accountBlindKeep.validationTier, 'account_held_out_coordinate_plus_leave_account_out_calibration');
-assert.strictEqual(accountBlindKeep.calibration.mode, 'leave_account_out');
-assert(accountBlindKeep.calibration.folds.every(fold => fold.parameters && fold.parameters.kind === 'linear'));
+assert.strictEqual(accountBlindKeep.metrics.predictionN, 632);
+assert.strictEqual(accountBlindKeep.coverage.evaluationMode, 'registered_account_heldout_identity');
+assert.strictEqual(accountBlindKeep.validationTier, 'account_held_out_coordinate_identity');
+assert.strictEqual(accountBlindKeep.evaluation.identity, true);
+assert.strictEqual(accountBlindKeep.evaluation.fittedByRelationshipChart, false);
 const tylerAccountBlindKeep = result.scopes.tyler.ledgerOutcomeMatrix.keep.coordinates.find(
     entry => entry.coordinateId === 'shorts.account-heldout.visual.keep'
 );
-assert.strictEqual(tylerAccountBlindKeep.metrics.oofN, 24);
+assert.strictEqual(tylerAccountBlindKeep.metrics.predictionN, 24);
 assert.strictEqual(
-    tylerAccountBlindKeep.coverage.heldOutAccountLeakageN,
+    tylerAccountBlindKeep.coverage.chartTrainingOutcomesRead,
     0,
-    'account-specific scope predictions must still be calibrated on the other accounts',
+    'account-specific charts must not fit against outcomes from any account',
 );
 assert.strictEqual(
     matrixEntry('keep', 'shorts.stored.visual.keep').metrics.n,
@@ -1569,7 +1995,7 @@ assert.strictEqual(
 const observedColumns = result.coordinateRegistry.columns.filter(
     column => column.valueClass === 'observed_outcome'
 );
-assert.strictEqual(observedColumns.length, 13);
+assert.strictEqual(observedColumns.length, 12);
 outcomeKeys.forEach(outcomeKey => {
     observedColumns.forEach(column => {
         const entry = matrixEntry(outcomeKey, column.id);
@@ -1577,17 +2003,17 @@ outcomeKeys.forEach(outcomeKey => {
         assert.strictEqual(entry.validationTier, 'outcome_not_predictor');
         assert.strictEqual(entry.metrics.evidence, 'outcome_not_predictor');
         assert.strictEqual(entry.metrics.qValue, null);
-        assert.strictEqual(entry.metrics.oofN, 0);
-        assert.strictEqual(entry.metrics.oofR2, null);
-        assert.strictEqual(entry.metrics.oofAuc, null);
+        assert.strictEqual(entry.metrics.predictionN, 0);
+        assert.strictEqual(entry.metrics.predictionR2, null);
+        assert.strictEqual(entry.metrics.predictionAuc, null);
     });
 });
-assert.match(result.validationContract.videoHeldOut, /five-fold calibration/i);
-assert.match(result.validationContract.accountHeldOut, /leave-account-out calibration/i);
+assert.match(result.validationContract.videoHeldOut, /does not fit a second chart-only calibration/i);
+assert.match(result.validationContract.accountHeldOut, /does not fit a second chart-only calibration/i);
 assert.match(result.validationContract.glossary.outcomeNotPredictor, /excluded/i);
-assert.match(result.validationContract.glossary.qValue, /full eligible 108-coordinate by 13-outcome/i);
+assert.match(result.validationContract.glossary.qValue, /full eligible 89-coordinate by 13-outcome/i);
 assert.match(result.validationContract.glossary.predictionRange, /narrow ratio/i);
-assert.match(result.validationContract.glossary.plotModes, /exact fold-specific calibration/i);
+assert.match(result.validationContract.glossary.plotModes, /no fold assignment, fit, or recalibration/i);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(result.scopes.pooled, 'outcomeMatrix'), false);
 
 const firstRow = result.rows.find(row => row.id === 'tyler-0');
@@ -1599,21 +2025,173 @@ assert.strictEqual(
     91.25,
     'a persisted scalar is canonical only when its coordinate, scope, and artifact revision match',
 );
-assert.strictEqual(firstRow.predictions.visualKeepForecastSource, 'persisted_score_artifact');
+assert.strictEqual(
+    firstRow.predictions.visualKeepForecastSource,
+    'live_frozen_model_score'
+);
+assert.strictEqual(
+    firstRow.predictions.visualKeepForecastEvaluationStatus,
+    'retrospective_score_time_prediction_not_confirmed_by_preregistered_result'
+);
 assert.strictEqual(
     staleVisualKeepRow.predictions.visualKeepForecast,
-    predictor.targets.keep.visualOnlyStudy.production.points.find(
-        point => point.id === staleVisualKeepRow.id
-    ).predicted,
-    'a stale persisted model revision must be replaced by the current frozen-model backfill',
+    null,
+    'a stale persisted model revision must fail closed instead of receiving a full-fit reconstruction',
 );
 assert.strictEqual(
     staleVisualKeepRow.predictions.visualKeepForecastSource,
-    'current_frozen_model_training_population_backfill',
+    null,
+);
+assert.strictEqual(
+    staleVisualKeepRow.predictions.visualKeepForecastEvaluationStatus,
+    null,
 );
 assert.strictEqual(
     staleVisualKeepRow.predictions.visualKeepForecastRejectedRevision,
     fixtureSha256('stale-visual-keep-model'),
+);
+assert(
+    staleVisualKeepRow.predictions
+        .visualKeepForecastRejectionReasons.some(
+            reason => /model artifact SHA-256 does not match/i.test(reason)
+        )
+);
+assert.strictEqual(
+    staleVisualKeepRow.studyMetadata.visualKeep
+        .persistedScoreTimeForecastAudit
+        .recordedScoreRecordSha256,
+    staleVisualKeepRow.studyMetadata.visualKeep
+        .persistedScoreTimeForecastAudit
+        .calculatedScoreRecordSha256,
+    'the wrong-artifact adversary must remain otherwise cryptographically bound'
+);
+assert.strictEqual(
+    staleVisualKeepRow.studyMetadata.visualKeep
+        .fullFitTrainingDiagnostic
+        .excludedFromCanonicalLedger,
+    true,
+);
+assert.strictEqual(
+    staleVisualKeepRow.studyMetadata.visualKeep
+        .fullFitTrainingDiagnostic.value,
+    predictor.targets.keep.visualOnlyStudy.production.points.find(
+        point => point.id === staleVisualKeepRow.id
+    ).predicted,
+    'the full-fit value remains inspectable only as separate study metadata',
+);
+assert.strictEqual(
+    firstRow.predictions.visualKeepForecastManifestSha256,
+    VISUAL_KEEP_MANIFEST_SHA256
+);
+assert.strictEqual(
+    firstRow.predictions.visualKeepForecastInputFingerprint,
+    firstRow.inputManifest.score_input_fingerprint
+);
+assert.strictEqual(
+    firstRow.predictions
+        .visualKeepForecastInputRevisionFingerprint,
+    firstRow.inputManifest.revision_fingerprint
+);
+const missingModelManifestResult =
+    validationAfterSavedVideoMutation(
+        'missing-visual-model-manifest',
+        video => {
+            delete video.visual_keep_forecast
+                .model_manifest_sha256;
+        }
+    );
+const missingModelManifestRow =
+    missingModelManifestResult.rows.find(
+        row => row.id === 'tyler-0'
+    );
+assert.strictEqual(
+    missingModelManifestRow.predictions.visualKeepForecast,
+    null,
+    'a forecast without its immutable model-manifest SHA must fail closed'
+);
+assert(
+    missingModelManifestRow.predictions
+        .visualKeepForecastRejectionReasons.some(
+            reason =>
+                /model manifest SHA-256 is missing or malformed/i.test(
+                    reason
+                )
+        )
+);
+assert.strictEqual(
+    missingModelManifestRow.studyMetadata.visualKeep
+        .persistedScoreTimeForecastAudit
+        .recordedScoreRecordSha256,
+    missingModelManifestRow.studyMetadata.visualKeep
+        .persistedScoreTimeForecastAudit
+        .calculatedScoreRecordSha256
+);
+assert(
+    missingModelManifestRow.studyMetadata.visualKeep
+        .fullFitTrainingDiagnostic,
+    'rejecting score-time provenance must not erase separately labeled study metadata'
+);
+const missingInputFingerprintResult =
+    validationAfterSavedVideoMutation(
+        'missing-score-input-fingerprint',
+        video => {
+            delete video.input_manifest.input_fingerprint;
+            delete video.input_manifest.score_input_fingerprint;
+        }
+    );
+const missingInputFingerprintRow =
+    missingInputFingerprintResult.rows.find(
+        row => row.id === 'tyler-0'
+    );
+assert.strictEqual(
+    missingInputFingerprintRow.predictions
+        .visualKeepForecast,
+    null,
+    'a forecast without its exact score-input fingerprint must fail closed'
+);
+assert(
+    missingInputFingerprintRow.predictions
+        .visualKeepForecastRejectionReasons.some(
+            reason => /input fingerprint is missing/i.test(reason)
+        )
+);
+assert.strictEqual(
+    missingInputFingerprintRow.studyMetadata.visualKeep
+        .persistedScoreTimeForecastAudit
+        .recordedScoreRecordSha256,
+    missingInputFingerprintRow.studyMetadata.visualKeep
+        .persistedScoreTimeForecastAudit
+        .calculatedScoreRecordSha256
+);
+const noPersistedForecastRow = result.rows.find(
+    row => row.id === 'tyler-2'
+);
+assert(noPersistedForecastRow);
+assert.strictEqual(
+    noPersistedForecastRow.predictions.visualKeepForecast,
+    null,
+    'the current model full-fit point must never substitute for a missing persisted forecast'
+);
+assert.strictEqual(
+    noPersistedForecastRow.studyMetadata.visualKeep
+        .fullFitTrainingDiagnostic
+        .excludedFromCanonicalLedger,
+    true
+);
+assert.strictEqual(
+    result.leakageAudit.visualKeepForecastProvenanceAudit
+        .fullFitTrainingDiagnosticsInsertedIntoCanonicalLedger,
+    0
+);
+assert.strictEqual(
+    result.leakageAudit.visualKeepForecastProvenanceAudit
+        .requiredSource,
+    'live_frozen_model_score'
+);
+assert.deepStrictEqual(
+    result.leakageAudit.visualKeepForecastProvenanceAudit
+        .modelOutputContract.outputBounds,
+    [0, 100]
 );
 assert.strictEqual(firstRow.scoreLedger.values.length, result.coordinateRegistry.columns.length);
 assert.strictEqual(firstRow.scoreLedger.percentiles.length, result.coordinateRegistry.columns.length);
@@ -1625,16 +2203,19 @@ assert.strictEqual(
     firstRow.scoreLedger.values[videoRet5Index],
     firstRow.blindVideoHeldOut[firstRow.blindFeatureNames.indexOf('text.ret5.raw')],
 );
-const videoPublicViewsIndex = result.coordinateRegistry.columns.findIndex(
-    column => column.id === 'shorts.video-heldout.visual.views'
+const creatorExcludedPublicViewsIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.creator-excluded.visual.views'
 );
-const accountPublicViewsIndex = result.coordinateRegistry.columns.findIndex(
-    column => column.id === 'shorts.account-heldout.visual.views'
-);
+assert(creatorExcludedPublicViewsIndex >= 0);
 assert.strictEqual(
-    firstRow.scoreLedger.values[videoPublicViewsIndex],
-    firstRow.scoreLedger.values[accountPublicViewsIndex],
-    'public-axis protocol aliases must display the same fitted coordinate',
+    firstRow.scoreLedger.values[creatorExcludedPublicViewsIndex],
+    Math.max(
+        0,
+        10 ** firstRow.blindVideoHeldOut[
+            firstRow.blindFeatureNames.indexOf('visual.views.raw')
+        ] - 1
+    ),
+    'the canonical creator-excluded public coordinate must use its native ledger value'
 );
 const observedKeepIndex = result.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.observed.keep');
 assert.strictEqual(firstRow.scoreLedger.values[observedKeepIndex], firstRow.actual.keep);
@@ -1656,10 +2237,13 @@ assert.strictEqual(
     result.coordinateRegistry.lineageCatalog.artifacts[
         'artifact.shorts.visual-keep-model.v1'
     ].artifactSha256,
-    fixtureSha256('visual-keep-model'),
+    VISUAL_KEEP_ARTIFACT_SHA256,
 );
 const creatorAdaptiveKeepIndex = result.coordinateRegistry.columns.findIndex(
-    column => column.id === 'shorts.creator-adaptive-keep.v1'
+    column => (
+        column.id
+        === 'shorts.creator-prequential-forecast.keep'
+    )
 );
 assert(creatorAdaptiveKeepIndex >= 0);
 const firstCreatorAdaptivePoint = predictor.targets.keep.creatorAdaptiveStudy
@@ -1671,6 +2255,11 @@ assert.strictEqual(
 );
 const creatorAdaptiveColumn =
     result.coordinateRegistry.columns[creatorAdaptiveKeepIndex];
+assert.notStrictEqual(
+    creatorAdaptiveColumn.id,
+    predictor.targets.keep.creatorAdaptiveStudy.coordinateId,
+    'historical prequential and live future-upload estimands need distinct coordinate IDs',
+);
 assert.strictEqual(creatorAdaptiveColumn.valueClass, 'combined_forecast');
 assert.strictEqual(creatorAdaptiveColumn.protocol, 'prequential');
 assert.strictEqual(creatorAdaptiveColumn.predictorEligible, false);
@@ -1686,34 +2275,70 @@ assert.strictEqual(
     fixtureSha256('creator-adaptive-keep-model'),
 );
 const creatorKeepMatrixEntry = result.scopes.pooled.ledgerOutcomeMatrix.keep.coordinates
-    .find(entry => entry.coordinateId === 'shorts.creator-adaptive-keep.v1');
+    .find(entry => (
+        entry.coordinateId
+        === 'shorts.creator-prequential-forecast.keep'
+    ));
 const creatorSwipeMatrixEntry = result.scopes.pooled.ledgerOutcomeMatrix.swipe.coordinates
-    .find(entry => entry.coordinateId === 'shorts.creator-adaptive-keep.v1');
+    .find(entry => (
+        entry.coordinateId
+        === 'shorts.creator-prequential-forecast.keep'
+    ));
 const creatorViewsMatrixEntry = result.scopes.pooled.ledgerOutcomeMatrix.views.coordinates
-    .find(entry => entry.coordinateId === 'shorts.creator-adaptive-keep.v1');
-assert(creatorKeepMatrixEntry.metrics.oofN > 0);
+    .find(entry => (
+        entry.coordinateId
+        === 'shorts.creator-prequential-forecast.keep'
+    ));
+assert(creatorKeepMatrixEntry.metrics.predictionN > 0);
 assert.strictEqual(creatorKeepMatrixEntry.predictorEligible, false);
-assert.strictEqual(creatorKeepMatrixEntry.metrics.oofBaselineMae, 2);
-assert.strictEqual(creatorKeepMatrixEntry.metrics.oofMae, 1);
+assert.strictEqual(creatorKeepMatrixEntry.metrics.predictionBaselineMae, 2);
+assert.strictEqual(creatorKeepMatrixEntry.metrics.predictionMae, 1);
 assert.strictEqual(
-    creatorKeepMatrixEntry.metrics.oofMaeImprovementVsBaseline,
+    creatorKeepMatrixEntry.metrics.predictionMaeImprovementVsBaseline,
     1,
 );
-assert(creatorSwipeMatrixEntry.metrics.oofN > 0);
-assert.strictEqual(creatorSwipeMatrixEntry.metrics.oofBaselineMae, 2);
-assert.strictEqual(creatorSwipeMatrixEntry.metrics.oofMae, 1);
-assert.strictEqual(
-    creatorSwipeMatrixEntry.metrics.oofMaeImprovementVsBaseline,
-    1,
-);
-assert.strictEqual(creatorViewsMatrixEntry.metrics.oofN, 0);
+assert.strictEqual(creatorSwipeMatrixEntry.metrics.predictionN, 0);
+assert.strictEqual(creatorSwipeMatrixEntry.evaluationMode, 'association_only');
+assert.match(creatorSwipeMatrixEntry.availabilityNote, /Association only/);
+assert.strictEqual(creatorViewsMatrixEntry.metrics.predictionN, 0);
 assert.match(creatorViewsMatrixEntry.availabilityNote, /Association only/);
 assert.deepStrictEqual(result.ledgerAudit.creatorAdaptiveParityMismatches, []);
 const blindOnlyRow = result.validationRows.find(
     row => row.validationSource === 'predictor_blind_inputs_only'
 );
 assert(blindOnlyRow, 'the expanded blind cohort must be returned for UI plots');
-assert(Number.isFinite(blindOnlyRow.scoreLedger.values[visualKeepForecastIndex]));
+assert(Number.isFinite(
+    blindOnlyRow.predictions.score21.video.keep
+), 'every blind-only row with a keep label must receive the video-held-out combined forecast');
+assert(Number.isFinite(
+    blindOnlyRow.predictions.score21.account.keep
+), 'every blind-only row with a keep label must receive the account-held-out combined forecast');
+assert.strictEqual(
+    blindOnlyRow.predictions.score21.video.retentionCurve,
+    null,
+    'a blind-only row without an observed retention curve must not receive a fabricated curve forecast'
+);
+assert.strictEqual(
+    result.score21Model.protocols.video.scalarEligible,
+    result.validationRows.length,
+    'the scalar forecast population must be the full exact blind validation cohort'
+);
+assert.strictEqual(
+    result.score21Model.protocols.account.scalarEligible,
+    result.validationRows.length,
+    'whole-account transfer must use the same exact eligible scalar cohort'
+);
+assert.strictEqual(
+    blindOnlyRow.scoreLedger.values[visualKeepForecastIndex],
+    null,
+    'blind-only and full-fit artifact rows must never backfill the canonical score-time coordinate',
+);
+assert.strictEqual(
+    blindOnlyRow.studyMetadata.visualKeep
+        .fullFitTrainingDiagnostic
+        .excludedFromValidationMatrix,
+    true,
+);
 const storedVisualKeepIndex = result.coordinateRegistry.columns.findIndex(
     column => column.id === 'shorts.stored.visual.keep'
 );
@@ -1738,7 +2363,57 @@ assert.strictEqual(result.ledgerAudit.rows, 632);
 assert.strictEqual(firstRow.actual.retentionCurve.seconds.length, 21);
 assert.strictEqual(firstRow.actual.retentionCurve.observed[0], 118);
 assert.strictEqual(firstRow.actual.retentionCurve.normalized[0], 100);
-assert.strictEqual(firstRow.actual.swipe, 50);
+const observedSwipeTransform = result.coordinateRegistry.displayTransforms.find(
+    transform => transform.id === 'shorts.observed.swipe'
+);
+assert(observedSwipeTransform);
+assert.strictEqual(observedSwipeTransform.sourceCoordinateId, 'shorts.observed.keep');
+assert.strictEqual(observedSwipeTransform.formula, '100 - source');
+assert.strictEqual(observedSwipeTransform.stored, false);
+assert.strictEqual(
+    result.coordinateRegistry.shortsMapProjections.keys.includes('swipe'),
+    false,
+    'runtime map inventory must not advertise the retired swipe plane'
+);
+assert.strictEqual(
+    result.coordinateRegistry.shortsMapProjections.mapIds.some(
+        id => id === 'map.shorts.swipe.v1'
+    ),
+    false,
+    'runtime map registry must not expose the retired swipe plane'
+);
+assert.strictEqual(
+    result.coordinateRegistry.columns.filter(
+        column => column.family === 'stored'
+    ).length,
+    21,
+    'retiring a map plane must not alter the stored scorer ledger'
+);
+const videoForecastKeepIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.video-forecast.keep'
+);
+const accountForecastKeepIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.account-forecast.keep'
+);
+assert.strictEqual(
+    firstRow.predictions.score21.video.swipe,
+    100 - firstRow.scoreLedger.values[videoForecastKeepIndex],
+    'video-held-out swipe must be the exact deterministic inverse of keep'
+);
+assert.strictEqual(
+    firstRow.predictions.score21.account.swipe,
+    100 - firstRow.scoreLedger.values[accountForecastKeepIndex],
+    'account-held-out swipe must be the exact deterministic inverse of keep'
+);
+assert.strictEqual(
+    result.coordinateRegistry.columns.some(
+        column => column.id === 'shorts.video-forecast.swipe'
+            || column.id === 'shorts.account-forecast.swipe'
+            || column.id === 'shorts.observed.swipe'
+    ),
+    false,
+    'swipe complements must not occupy independent ledger coordinates',
+);
 assert.strictEqual(firstRow.predictions.score21.video.retentionCurve.length, 21);
 assert.strictEqual(firstRow.predictions.score21.account.retentionCurve.length, 21);
 assert(Number.isFinite(firstRow.predictions.score21.video.drop20));
@@ -1747,7 +2422,7 @@ assert(result.scopes.pooled.retentionForecasts.video.curves > 0);
 assert(Number.isFinite(result.scopes.pooled.score21Forecasts.video.keep.mae));
 assert(Number.isFinite(result.scopes.pooled.score21Forecasts.video.drop20.mae));
 assert(Number.isFinite(
-    matrixEntry('hit10M', 'shorts.video-heldout.visual.gt10M').metrics.oofAuc
+    matrixEntry('hit10M', 'shorts.creator-excluded.visual.gt10M').metrics.predictionAuc
 ));
 assert(Math.abs(firstRow.predictions.viewsPublicAxis.visual - 999999) < 1, 'log10 public-axis values must convert back to ordinary views');
 assert(Math.abs(firstRow.predictions.viewsPublicAxisEnsemble - 999999) < 1);
@@ -1762,69 +2437,620 @@ assert.strictEqual(typeof blindPercentile.metrics.spearman, 'number');
 assert(result.scopes.tyler.storedIndicators.find(item => item.key === 'visual.keep').warning.includes('in-sample'));
 assert(result.scopes.hafu.storedIndicators.find(item => item.key === 'visual.keep').warning.includes('account-external'));
 
-const continuousOutcome = { key: 'keep', unit: 'percent' };
-const videoFoldPoints = Array.from({ length: 40 }, (_, index) => ({
-    id: `video-fold-proof-${index}`,
-    accountId: index % 2 ? 'account-a' : 'account-b',
-    predicted: index,
-    actual: 12 + index * 1.75,
-}));
-const videoProofTarget = videoFoldPoints[7];
-const videoOofOriginal = validation._singleCoordinateOof(
-    videoFoldPoints,
-    continuousOutcome,
-    'video_5fold',
+const identityPoints = [
+    { id: 'identity-a', accountId: 'account-a', actual: 10, predicted: 71.25, baseline: 60 },
+    { id: 'identity-b', accountId: 'account-b', actual: 90, predicted: 28.75, baseline: 60 },
+];
+const identityEvaluation = validation._identityCoordinateEvaluation(
+    identityPoints,
+    { key: 'keep', unit: 'percent' },
+    'registered_video_heldout_identity'
 );
-const videoOofPoisoned = validation._singleCoordinateOof(
-    videoFoldPoints.map(point => (
-        point.id === videoProofTarget.id ? { ...point, actual: point.actual + 1000000 } : point
-    )),
-    continuousOutcome,
-    'video_5fold',
-);
-const videoPrediction = resultSet => resultSet.predictions.find(
-    point => point.id === videoProofTarget.id
-).calibrated;
-assert.strictEqual(
-    videoPrediction(videoOofOriginal),
-    videoPrediction(videoOofPoisoned),
-    'changing a test video outcome must not change that video\'s OOF prediction',
-);
-assert.strictEqual(videoOofOriginal.audit.trainingTestOverlapN, 0);
-assert.strictEqual(videoOofOriginal.audit.duplicateTestPredictionN, 0);
-
-const accountFoldPoints = ['account-a', 'account-b', 'account-c'].flatMap(
-    (accountId, accountIndex) => Array.from({ length: 12 }, (_, index) => ({
-        id: `${accountId}-${index}`,
-        accountId,
-        predicted: index + accountIndex * 0.25,
-        actual: 20 + index * 2 + accountIndex,
-    }))
-);
-const accountOofOriginal = validation._singleCoordinateOof(
-    accountFoldPoints,
-    continuousOutcome,
-    'leave_account_out',
-);
-const accountOofPoisoned = validation._singleCoordinateOof(
-    accountFoldPoints.map(point => (
-        point.accountId === 'account-c' ? { ...point, actual: point.actual + 1000000 } : point
-    )),
-    continuousOutcome,
-    'leave_account_out',
-);
-const accountPredictions = resultSet => resultSet.predictions
-    .filter(point => point.accountId === 'account-c')
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map(point => point.calibrated);
 assert.deepStrictEqual(
-    accountPredictions(accountOofOriginal),
-    accountPredictions(accountOofPoisoned),
-    'changing every outcome in a held-out account must not change that account\'s predictions',
+    identityEvaluation.predictions.map(point => point.predicted),
+    [71.25, 28.75],
+    'native-target evaluation must preserve exact registered predictions'
 );
-assert.strictEqual(accountOofOriginal.audit.trainingTestOverlapN, 0);
-assert.strictEqual(accountOofOriginal.audit.heldOutAccountLeakageN, 0);
-assert.strictEqual(accountOofOriginal.audit.duplicateTestPredictionN, 0);
+assert.strictEqual(identityEvaluation.identity, true);
+assert.strictEqual(identityEvaluation.fittedByRelationshipChart, false);
+assert.strictEqual(identityEvaluation.audit.fittedParameterCount, 0);
+assert.strictEqual(identityEvaluation.audit.trainingRowsReadByChart, 0);
+assert.strictEqual(identityEvaluation.audit.trainingOutcomesReadByChart, 0);
+const poisonedIdentityEvaluation = validation._identityCoordinateEvaluation(
+    identityPoints.map(point => ({ ...point, actual: point.actual + 1000000 })),
+    { key: 'keep', unit: 'percent' },
+    'registered_video_heldout_identity'
+);
+assert.deepStrictEqual(
+    poisonedIdentityEvaluation.predictions.map(point => point.predicted),
+    identityEvaluation.predictions.map(point => point.predicted),
+    'changing outcomes must never alter a native ledger prediction'
+);
+assert.strictEqual(
+    Object.prototype.hasOwnProperty.call(validation, '_singleCoordinateOof'),
+    false,
+    'the UI-only recalibration helper must not remain part of the validation API'
+);
+
+const simpsonPoints = [
+    { id: 'a-0', accountId: 'a', actual: 100, predicted: 0 },
+    { id: 'a-1', accountId: 'a', actual: 99, predicted: 1 },
+    { id: 'a-2', accountId: 'a', actual: 98, predicted: 2 },
+    { id: 'a-3', accountId: 'a', actual: 97, predicted: 3 },
+    { id: 'b-0', accountId: 'b', actual: 200, predicted: 100 },
+    { id: 'b-1', accountId: 'b', actual: 199, predicted: 101 },
+    { id: 'b-2', accountId: 'b', actual: 198, predicted: 102 },
+    { id: 'b-3', accountId: 'b', actual: 197, predicted: 103 },
+];
+const simpsonAssociation = validation._rawCoordinateAssociation(
+    simpsonPoints,
+    { key: 'keep', unit: 'percent' },
+    'pooled'
+);
+assert(
+    simpsonAssociation.spearman > 0.5,
+    'the adversarial fixture must have a positive pooled descriptive association'
+);
+assert.strictEqual(
+    simpsonAssociation.inferentialEffect,
+    simpsonAssociation.withinAccountSpearman,
+    'the inferential effect must use the same within-account estimand as its p/q path'
+);
+assert(
+    simpsonAssociation.inferentialEffect < -0.99,
+    'between-creator level shifts must not reverse the registered inferential effect'
+);
+assert.strictEqual(
+    simpsonAssociation.inferentialEstimand,
+    'creator_macro_content_family_spearman'
+);
+assert.strictEqual(simpsonAssociation.inferentialN, simpsonPoints.length);
+assert.strictEqual(simpsonAssociation.inferentialCreatorCount, 2);
+assert.strictEqual(
+    simpsonAssociation.inferentialPValue,
+    null,
+    'fewer than three independent creators must not produce a transfer p-value',
+);
+const threeCreatorPoints = ['a', 'b', 'c'].flatMap(accountId => (
+    [1, 2, 3].map(value => ({
+        id: `${accountId}-${value}`,
+        accountId,
+        contentFamilyId: `${accountId}-family-${value}`,
+        actual: value,
+        predicted: value,
+    }))
+));
+const threeCreatorAssociation = validation._rawCoordinateAssociation(
+    threeCreatorPoints,
+    { key: 'keep', unit: 'percent' },
+    'pooled'
+);
+assert.strictEqual(threeCreatorAssociation.inferentialCreatorCount, 3);
+assert.strictEqual(
+    threeCreatorAssociation.inferentialMethod,
+    'exact-creator-sign-flip-after-content-family-collapse'
+);
+assert(Number.isFinite(threeCreatorAssociation.inferentialPValue));
+
+const explicitRetention = validation._retentionCurveSnapshot([
+    { second: 0, value: 1.2 },
+    { second: 4, value: 0.9 },
+    { second: 20, value: 0.5 },
+], 20);
+assert.strictEqual(explicitRetention.sourceTimebase, 'explicit-seconds');
+assert.strictEqual(explicitRetention.observed[0], 120);
+assert.strictEqual(explicitRetention.observed[4], 90);
+assert.strictEqual(explicitRetention.observed[20], 50);
+assert.strictEqual(
+    explicitRetention.observed[2],
+    105,
+    'irregular timestamped retention must interpolate by seconds rather than array index',
+);
+
+const sharedFamilyRows = [
+    {
+        id: 'shared-a',
+        account: 'creator-a',
+        title: 'Completely different title A',
+        contentFamilyId: 'same-perceptual-content',
+    },
+    {
+        id: 'shared-b',
+        account: 'creator-b',
+        title: 'Completely different title B',
+        contentFamilyId: 'same-perceptual-content',
+    },
+    {
+        id: 'unique-a',
+        account: 'creator-a',
+        title: 'Unique A',
+    },
+    {
+        id: 'unique-b',
+        account: 'creator-b',
+        title: 'Unique B',
+    },
+];
+const sharedFamilyAssignment = validation._contentFamilyFoldAssignments(
+    sharedFamilyRows,
+    2,
+    'outer'
+);
+assert.strictEqual(
+    sharedFamilyAssignment.assignments[0],
+    sharedFamilyAssignment.assignments[1],
+    'the same declared content family must never cross a shared outer fold, even across creators',
+);
+assert.strictEqual(
+    sharedFamilyAssignment.evidenceAudit
+        .bySource.explicit_content_family,
+    2
+);
+assert.strictEqual(
+    sharedFamilyAssignment.evidenceAudit.titleFallbackRows,
+    2
+);
+assert.strictEqual(
+    sharedFamilyAssignment.evidenceAudit
+        .strongDuplicateProtectionPassed,
+    false,
+    'title equality must never be silently reported as strong duplicate protection'
+);
+assert.match(
+    sharedFamilyAssignment.evidenceAudit.warning,
+    /title\/row-identity fallbacks.*do not provide strong duplicate-content protection/i
+);
+const montagePreferredRows = [
+    {
+        id: 'montage-a',
+        account: 'creator-a',
+        montageSha256: fixtureSha256('shared-montage'),
+        perceptualHash: 'aaaa',
+        title: 'First title',
+    },
+    {
+        id: 'montage-b',
+        account: 'creator-b',
+        montageSha256: fixtureSha256('shared-montage'),
+        perceptualHash: 'bbbb',
+        title: 'Second title',
+    },
+];
+const montagePreferredAssignment =
+    validation._contentFamilyFoldAssignments(
+        montagePreferredRows,
+        2,
+        'montage-precedence'
+    );
+assert.strictEqual(
+    montagePreferredAssignment.assignments[0],
+    montagePreferredAssignment.assignments[1],
+    'canonical montage SHA must take precedence over conflicting weaker perceptual hashes'
+);
+assert.strictEqual(
+    montagePreferredAssignment.evidenceAudit
+        .bySource.canonical_montage_sha256,
+    2
+);
+
+const gt10MRaw = result.scopes.pooled.blindVideoIndicators.find(
+    item => item.key === 'visual.gt10M.raw'
+);
+const gt10MPercentile = result.scopes.pooled.blindVideoIndicators.find(
+    item => item.key === 'visual.gt10M.percentile'
+);
+assert(Number.isFinite(gt10MRaw.metrics.brier));
+assert.strictEqual(gt10MRaw.metrics.spearman, undefined);
+assert(Number.isFinite(gt10MPercentile.metrics.spearman));
+assert.strictEqual(gt10MPercentile.metrics.brier, undefined);
+assert.strictEqual(gt10MPercentile.metrics.auc, undefined);
+assert.strictEqual(
+    matrixEntry(
+        'keep',
+        'shorts.creator-excluded.visual.views'
+    ).inference.status,
+    'exploratory-creator-blocked-exact-sign-flip'
+);
+
+function buildAdversarialValidation(adversarialPredictor, generatedAt) {
+    return validation.buildValidation({
+        channels,
+        predictor: adversarialPredictor,
+        creatorAdaptiveKeepModel,
+        generatedAt,
+        sourceFingerprint: fixtureSha256(
+            `adversarial-${generatedAt}`
+        ),
+    });
+}
+
+const accountMismatchPredictor = JSON.parse(JSON.stringify(predictor));
+accountMismatchPredictor.targets.keep.blindInputs.rows[0].account = 'hafu';
+assert.throws(
+    () => buildAdversarialValidation(accountMismatchPredictor, 1101),
+    error => error && error.code === 'BLIND_ROW_ACCOUNT_MISMATCH',
+    'video IDs must join through account plus video identity, not video ID alone',
+);
+
+const duplicateBlindIdPredictor = JSON.parse(JSON.stringify(predictor));
+duplicateBlindIdPredictor.targets.keep.blindInputs.rows.push({
+    ...duplicateBlindIdPredictor.targets.keep.blindInputs.rows[0],
+});
+assert.throws(
+    () => buildAdversarialValidation(duplicateBlindIdPredictor, 1102),
+    error => error && error.code === 'BLIND_ROW_DUPLICATE_VIDEO_ID',
+    'ambiguous duplicate blind video IDs must fail closed',
+);
+
+const wrongFoldPredictor = JSON.parse(JSON.stringify(predictor));
+const wrongFoldInputs = wrongFoldPredictor.targets.keep.blindInputs;
+wrongFoldInputs.rows[0].videoFold =
+    (Number(wrongFoldInputs.rows[0].videoFold) + 1) % 5;
+wrongFoldInputs.rowFoldManifestSha256 = validation._sha256Json(
+    validation._blindFoldManifestRows(wrongFoldInputs.rows)
+);
+const wrongFoldResult = buildAdversarialValidation(
+    wrongFoldPredictor,
+    1103
+);
+assert.strictEqual(wrongFoldResult.leakageAudit.blindFoldAudit.contentAddressed, true);
+assert.strictEqual(wrongFoldResult.leakageAudit.blindFoldAudit.passed, false);
+assert(
+    wrongFoldResult.leakageAudit.blindFoldAudit.mismatches.includes(
+        wrongFoldInputs.rows[0].id
+    ),
+    'a self-consistent hash must not conceal a fold assignment that differs from the shared algorithm',
+);
+assert.strictEqual(wrongFoldResult.leakageAudit.passedForBlindInputs, false);
+
+const titleOnlyPredictor = JSON.parse(JSON.stringify(predictor));
+const titleOnlyInputs =
+    titleOnlyPredictor.targets.keep.blindInputs;
+titleOnlyInputs.rows.forEach(row => {
+    delete row.contentFamilyId;
+    delete row.content_family_id;
+    delete row.sourceContentId;
+    delete row.source_content_id;
+    delete row.montageSha256;
+    delete row.montage_sha256;
+    delete row.perceptualHash;
+    delete row.perceptual_hash;
+    delete row.inputManifest;
+    delete row.input_manifest;
+});
+const titleOnlyAssignments =
+    validation._contentFamilyFoldAssignments(
+        titleOnlyInputs.rows,
+        5,
+        'outer'
+    );
+titleOnlyInputs.rows.forEach((row, index) => {
+    row.videoFold = titleOnlyAssignments.assignments[index];
+});
+titleOnlyInputs.rowFoldManifestSha256 =
+    validation._sha256Json(
+        validation._blindFoldManifestRows(
+            titleOnlyInputs.rows
+        )
+    );
+const titleOnlyResult = buildAdversarialValidation(
+    titleOnlyPredictor,
+    1103.5
+);
+assert.strictEqual(
+    titleOnlyResult.leakageAudit.blindFoldAudit
+        .contentAddressed,
+    true,
+    'the adversarial title-only fold must otherwise be internally self-consistent'
+);
+assert.strictEqual(
+    titleOnlyResult.leakageAudit.blindFoldAudit
+        .strongDuplicateProtectionPassed,
+    false
+);
+assert.strictEqual(
+    titleOnlyResult.leakageAudit.blindFoldAudit.passed,
+    false,
+    'title-only families cannot pass a blind fold audit'
+);
+assert.strictEqual(
+    titleOnlyResult.leakageAudit.passedForBlindInputs,
+    false,
+    'title-only duplicate protection cannot pass the global leakage gate'
+);
+assert(
+    titleOnlyResult.coordinateRegistry.columns
+        .filter(column => (
+            [
+                'videoHeldout',
+                'accountHeldout',
+                'videoForecast',
+                'accountForecast',
+            ].includes(column.family)
+        ))
+        .every(column => column.predictorEligible === false),
+    'weak duplicate protection must not promote held-out forecast families'
+);
+
+const noFitManifestPredictor = JSON.parse(JSON.stringify(predictor));
+delete noFitManifestPredictor.provenance.publicAxisFitManifests;
+const noFitManifestResult = buildAdversarialValidation(
+    noFitManifestPredictor,
+    1104
+);
+assert.strictEqual(
+    noFitManifestResult.leakageAudit.publicAxisOverlapAudit.manifestsComplete,
+    false
+);
+assert.strictEqual(noFitManifestResult.leakageAudit.passedForBlindInputs, false);
+
+const tamperedManifestPredictor = JSON.parse(JSON.stringify(predictor));
+tamperedManifestPredictor.provenance.publicAxisFitPopulations[
+    publicFitPopulationSha256
+].rows[0].id = 'tampered-without-rehash';
+const tamperedManifestResult = buildAdversarialValidation(
+    tamperedManifestPredictor,
+    1105
+);
+assert.strictEqual(
+    tamperedManifestResult.leakageAudit.publicAxisOverlapAudit.manifests
+        .find(item => item.key === 'visual.views').hashValid,
+    false,
+    'the locally recomputed content hash must reject mutated fit membership',
+);
+assert.strictEqual(tamperedManifestResult.leakageAudit.passedForBlindInputs, false);
+
+const strictForecastNames = validation.contract.features.filter(feature => (
+    feature.group !== 'novelty'
+    && ['views', 'outlier', 'gt10M'].includes(feature.target)
+)).map(feature => `${feature.key}.raw`);
+const cvRows = Array.from({ length: 45 }, (_, index) => {
+    const accountId = `creator-${index % 3}`;
+    const featureValues = strictForecastNames.map((name, featureIndex) => (
+        0.1 * featureIndex + index / 10 + (index % 3) * 0.25
+    ));
+    return {
+        id: `cv-${index}`,
+        accountId,
+        blindFeatureNames: strictForecastNames,
+        blindVideoHeldOut: featureValues,
+        targetKeep: 42 + index * 0.7 + (index % 3) * 3,
+        targetViews: 5 + index * 0.05,
+    };
+});
+const cvTargets = [
+    {
+        key: 'keep',
+        selectionFamily: 'feed-decision',
+        accessor: row => row.targetKeep,
+    },
+    {
+        key: 'views',
+        selectionFamily: 'reach',
+        accessor: row => row.targetViews,
+    },
+];
+const completeTargetRun = validation._crossValidatedMulti(
+    cvRows,
+    cvTargets,
+    'video'
+);
+const missingUnrelatedRows = cvRows.map((row, index) => ({
+    ...row,
+    targetViews: index % 4 === 0 ? null : row.targetViews,
+}));
+const missingUnrelatedRun = validation._crossValidatedMulti(
+    missingUnrelatedRows,
+    cvTargets,
+    'video'
+);
+assert.strictEqual(
+    completeTargetRun.targetEligibility.keep.n,
+    cvRows.length
+);
+assert.strictEqual(
+    missingUnrelatedRun.targetEligibility.keep.n,
+    cvRows.length,
+    'missing an unrelated outcome must not remove a valid keep row'
+);
+assert(
+    missingUnrelatedRun.targetEligibility.views.n < cvRows.length,
+    'the missingness must affect only the views target population'
+);
+cvRows.forEach(row => {
+    assert.strictEqual(
+        missingUnrelatedRun.predictions.get(row.id)[0],
+        completeTargetRun.predictions.get(row.id)[0],
+        `unrelated outcome missingness changed keep prediction for ${row.id}`
+    );
+});
+assert(
+    completeTargetRun.selected.every(selection => (
+        selection.innerFoldUnit === 'creator_account'
+        && selection.innerCreatorCount >= 2
+        && Number.isFinite(selection.innerCreatorMacroStandardizedMse)
+        && Number.isFinite(selection.innerWorstCreatorStandardizedMse)
+    )),
+    'inner Ridge selection must be creator-balanced and expose its worst-creator loss'
+);
+
+const promotionHash = label => fixtureSha256(`promotion:${label}`);
+function immutableEvidenceRecord(label, fields) {
+    const artifactBytes = JSON.stringify(fields);
+    const artifactSha256 = crypto.createHash('sha256')
+        .update(Buffer.from(artifactBytes, 'utf8'))
+        .digest('hex');
+    return {
+        ...fields,
+        artifactBytes,
+        artifactSha256,
+        archiveKey:
+            `prospective/by-sha256/${artifactSha256}.json`,
+    };
+}
+const prospectiveStudy = perAccount => {
+    const locked = {
+        modelArtifactSha256: promotionHash('model'),
+        protocolSha256: promotionHash('protocol'),
+        outcomeDefinitionSha256: promotionHash('outcome'),
+        evaluationPopulationSha256: promotionHash('population'),
+    };
+    const registrationArtifact = immutableEvidenceRecord(
+        'registration',
+        {
+            registeredAt: 200,
+            ...locked,
+        }
+    );
+    const prospectiveResult = immutableEvidenceRecord(
+        'result',
+        {
+            completedAt: 300,
+            registrationArtifactSha256:
+                registrationArtifact.artifactSha256,
+            ...locked,
+        },
+    );
+    return {
+        modelArtifact: {
+            artifactSha256: promotionHash('model'),
+            generatedAt: 100,
+        },
+        protocols: {
+            accountHoldout: {
+                metrics: { perAccount },
+            },
+        },
+        promotion: {
+            promoted: true,
+            prospectiveValidated: true,
+        },
+        status: {
+            promoted: true,
+            predictorEligible: true,
+            prospectiveValidated: true,
+        },
+        prospectiveValidation: {
+            confirmed: true,
+            registrationArtifact,
+            result: prospectiveResult,
+        },
+    };
+};
+const oneRowCreatorStudy = prospectiveStudy(Array.from(
+    { length: 5 },
+    (_, index) => ({ account: `creator-${index}`, n: 1 })
+));
+const oneRowPromotionAudit = validation._promotionEligibilityAudit(
+    oneRowCreatorStudy,
+    'visual_keep'
+);
+assert.strictEqual(oneRowPromotionAudit.creatorDiversityPassed, false);
+assert.strictEqual(oneRowPromotionAudit.effectivePromoted, false);
+assert.strictEqual(oneRowPromotionAudit.independentAccountCount, 0);
+assert.strictEqual(
+    oneRowPromotionAudit.minimumRowsPerIndependentAccount,
+    validation._minimumConfirmatoryRowsPerAccount
+);
+
+const adequatelySizedStudy = prospectiveStudy(Array.from(
+    { length: 5 },
+    (_, index) => ({
+        account: `creator-${index}`,
+        n: validation._minimumConfirmatoryRowsPerAccount,
+    })
+));
+const immutablePromotionAudit = validation._promotionEligibilityAudit(
+    adequatelySizedStudy,
+    'visual_keep'
+);
+assert.strictEqual(immutablePromotionAudit.creatorDiversityPassed, true);
+assert.strictEqual(immutablePromotionAudit.prospectiveConfirmed, true);
+assert.strictEqual(immutablePromotionAudit.effectivePromoted, true);
+assert.strictEqual(
+    immutablePromotionAudit.prospectiveRegistrationAudit
+        .immutableEvidencePassed,
+    true
+);
+const syntheticHashStudy = JSON.parse(JSON.stringify(
+    adequatelySizedStudy
+));
+for (const evidence of [
+    syntheticHashStudy.prospectiveValidation.registrationArtifact,
+    syntheticHashStudy.prospectiveValidation.result,
+]) {
+    delete evidence.artifactBytes;
+    evidence.artifactSha256 = promotionHash(
+        `synthetic-${evidence.completedAt ? 'result' : 'registration'}`
+    );
+    evidence.archiveKey =
+        `prospective/by-sha256/${evidence.artifactSha256}.json`;
+}
+syntheticHashStudy.prospectiveValidation.result
+    .registrationArtifactSha256 =
+    syntheticHashStudy.prospectiveValidation.registrationArtifact
+        .artifactSha256;
+const syntheticHashAudit = validation._promotionEligibilityAudit(
+    syntheticHashStudy,
+    'visual_keep'
+);
+assert.strictEqual(
+    syntheticHashAudit.effectivePromoted,
+    false,
+    'matching self-reported 64-character strings cannot promote without evidence bytes'
+);
+assert(
+    syntheticHashAudit.prospectiveRegistrationAudit.blockers.some(
+        blocker => /hash-shaped metadata alone is not evidence/.test(
+            blocker
+        )
+    )
+);
+const booleanOnlyStudy = JSON.parse(JSON.stringify(adequatelySizedStudy));
+delete booleanOnlyStudy.prospectiveValidation.registrationArtifact;
+delete booleanOnlyStudy.prospectiveValidation.result;
+const booleanOnlyAudit = validation._promotionEligibilityAudit(
+    booleanOnlyStudy,
+    'visual_keep'
+);
+assert.strictEqual(
+    booleanOnlyAudit.effectivePromoted,
+    false,
+    'caller-supplied prospective booleans cannot substitute for immutable preregistration metadata'
+);
+assert.strictEqual(
+    booleanOnlyAudit.prospectiveRegistrationAudit.passed,
+    false
+);
+const tamperedRegistrationStudy = JSON.parse(JSON.stringify(
+    adequatelySizedStudy
+));
+tamperedRegistrationStudy.prospectiveValidation.result.protocolSha256 =
+    promotionHash('different-protocol');
+const tamperedRegistrationAudit = validation._promotionEligibilityAudit(
+    tamperedRegistrationStudy,
+    'visual_keep'
+);
+assert.strictEqual(tamperedRegistrationAudit.effectivePromoted, false);
+assert(
+    tamperedRegistrationAudit.prospectiveRegistrationAudit.blockers.some(
+        blocker => /protocolSha256 does not match/.test(blocker)
+    )
+);
+const conflictingPromotionStudy = JSON.parse(JSON.stringify(
+    adequatelySizedStudy
+));
+conflictingPromotionStudy.status.promoted = false;
+const conflictingPromotionAudit = validation._promotionEligibilityAudit(
+    conflictingPromotionStudy,
+    'visual_keep'
+);
+assert.strictEqual(conflictingPromotionAudit.effectivePromoted, false);
+assert(
+    conflictingPromotionAudit.evidenceBlockers.some(
+        blocker => /promotion claims are internally inconsistent/i.test(blocker)
+    )
+);
 
 console.log(JSON.stringify({
     ok: true,

@@ -40,6 +40,13 @@ from sklearn.linear_model import RidgeCV
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from shorts_score_ledger import (  # noqa: E402
+    score_record_binding_sha256,
+    validate_score_ledger,
+)
+
 PROMISE_LAB = ROOT / "buildings" / "jarvis" / "promise-lab"
 sys.path.insert(0, str(PROMISE_LAB))
 from embedding_store import EmbeddingStore  # noqa: E402
@@ -687,7 +694,25 @@ def source_hash(row: dict[str, Any], image_etag: str) -> str:
 
 
 def get_keep(row: dict[str, Any], steer_key: str, field: str = "est") -> float | None:
-    value = ((row.get("steer") or {}).get(steer_key) or {}).get(field)
+    cache = row.get("_canonical_score_entries_by_source")
+    if not isinstance(cache, dict):
+        try:
+            cache = {
+                str(entry.get("source_key")): entry
+                for entry in validate_score_ledger(
+                    row.get("score_ledger")
+                )
+                if isinstance(entry, dict)
+            }
+        except (TypeError, ValueError):
+            cache = {}
+        row["_canonical_score_entries_by_source"] = cache
+    entry = cache.get(steer_key) or {}
+    value = (
+        entry.get("percentile")
+        if field == "pctile"
+        else entry.get("value")
+    )
     try:
         number = float(value)
         return number if math.isfinite(number) else None
@@ -705,6 +730,18 @@ def fetch_records(index: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str
         payload = R2.get_json(f"{SOURCE_PREFIX}{hook_id}.json")
         if not payload:
             raise RuntimeError(f"saved hook {hook_id} has no durable record")
+        recorded_sha256 = payload.get("score_record_sha256")
+        calculated_sha256 = score_record_binding_sha256(payload)
+        if recorded_sha256 != calculated_sha256:
+            raise RuntimeError(
+                f"saved hook {hook_id} failed its score-record binding"
+            )
+        try:
+            validate_score_ledger(payload.get("score_ledger"))
+        except ValueError as exc:
+            raise RuntimeError(
+                f"saved hook {hook_id} has no valid canonical score ledger: {exc}"
+            ) from exc
         return hook_id, payload
 
     records: dict[str, dict[str, Any]] = {}
@@ -1831,6 +1868,10 @@ def build_artifact(
             "source": row.get("source"),
             "montage": f"/api/raw/saved-montage/{row['id']}",
             "validationFold": int(fold_assignments[index]),
+            "scoreLedgerSha256": (
+                row["score_ledger"]["ledger_sha256"]
+            ),
+            "scoreRecordSha256": row["score_record_sha256"],
             "targets": targets,
             "description": description["visual_description"],
             "sequence": description["sequence"],
@@ -1893,6 +1934,10 @@ def build_artifact(
                 }
                 for key, target in TARGETS.items()
             },
+            "scoreLedgerSha256": (
+                row["score_ledger"]["ledger_sha256"]
+            ),
+            "scoreRecordSha256": row["score_record_sha256"],
         } for row in rows],
         "descriptions": [
             stable_hash({

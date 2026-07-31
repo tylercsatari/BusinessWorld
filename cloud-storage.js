@@ -9,11 +9,129 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const https = require('https');
 const fs = require('fs');
+const path = require('path');
 
 // ── R2 Client ──────────────────────────────────────────────
 
 let s3 = null;
 let bucket = null;
+let r2DownloadPartSequence = 0;
+
+const DEFAULT_R2_DOWNLOAD_MAX_BYTES = 512 * 1024 * 1024;
+// Quant manifests are still bounded control-plane objects, but the largest
+// saved-channel manifest is currently about 14 MiB. A 64 KiB ceiling made the
+// compare-and-swap path impossible on real data and silently encouraged
+// callers back toward unconditional writes. Keep a hard, explicit ceiling
+// while covering the production artifact population.
+const DEFAULT_R2_SMALL_OBJECT_MAX_BYTES = 32 * 1024 * 1024;
+const R2_DOWNLOAD_ERROR_CODES = Object.freeze({
+    MISSING: 'R2_OBJECT_MISSING',
+    STORAGE: 'R2_STORAGE_ERROR',
+    TOO_LARGE: 'R2_OBJECT_TOO_LARGE',
+});
+const R2_CONDITIONAL_ERROR_CODES = Object.freeze({
+    PRECONDITION_FAILED: 'R2_PRECONDITION_FAILED',
+});
+
+class R2DownloadError extends Error {
+    constructor(message, { code, kind, statusCode, key, cause, ...details }) {
+        super(message);
+        this.name = this.constructor.name;
+        this.code = code;
+        this.kind = kind;
+        this.statusCode = statusCode;
+        this.httpStatusCode = statusCode;
+        this.key = key;
+        if (cause) this.cause = cause;
+        Object.assign(this, details);
+    }
+}
+
+class R2ObjectMissingError extends R2DownloadError {
+    constructor(key, cause) {
+        super(`R2 object not found: ${key}`, {
+            code: R2_DOWNLOAD_ERROR_CODES.MISSING,
+            kind: 'missing',
+            statusCode: 404,
+            key,
+            cause,
+            retryable: false,
+        });
+    }
+}
+
+class R2StorageError extends R2DownloadError {
+    constructor(key, cause, message = `R2 storage failed while downloading: ${key}`) {
+        super(message, {
+            code: R2_DOWNLOAD_ERROR_CODES.STORAGE,
+            kind: 'storage',
+            statusCode: 502,
+            key,
+            cause,
+            retryable: true,
+        });
+    }
+}
+
+class R2ObjectTooLargeError extends R2DownloadError {
+    constructor(key, maxBytes, receivedBytes, details = {}) {
+        super(`R2 object exceeds the ${maxBytes}-byte download limit: ${key}`, {
+            code: R2_DOWNLOAD_ERROR_CODES.TOO_LARGE,
+            kind: 'too-large',
+            statusCode: 413,
+            key,
+            retryable: false,
+            maxBytes,
+            receivedBytes,
+            ...details,
+        });
+    }
+}
+
+class R2PreconditionFailedError extends R2DownloadError {
+    constructor(key, condition, cause) {
+        super(`R2 conditional write precondition failed: ${key}`, {
+            code: R2_CONDITIONAL_ERROR_CODES.PRECONDITION_FAILED,
+            kind: 'precondition-failed',
+            statusCode: 412,
+            key,
+            cause,
+            retryable: false,
+            condition: Object.freeze({ ...condition }),
+        });
+    }
+}
+
+function isMissingR2ObjectError(error) {
+    return error?.name === 'NoSuchKey'
+        || error?.name === 'NotFound'
+        || error?.Code === 'NoSuchKey'
+        || error?.code === 'NoSuchKey'
+        || error?.$metadata?.httpStatusCode === 404
+        || error?.statusCode === 404;
+}
+
+function isR2PreconditionFailedError(error) {
+    return error instanceof R2PreconditionFailedError
+        || error?.code === R2_CONDITIONAL_ERROR_CODES.PRECONDITION_FAILED
+        || error?.name === 'PreconditionFailed'
+        || error?.name === 'ConditionalRequestConflict'
+        || error?.Code === 'PreconditionFailed'
+        || error?.Code === 'ConditionalRequestConflict'
+        || error?.code === 'PreconditionFailed'
+        || error?.code === 'ConditionalRequestConflict'
+        || error?.$metadata?.httpStatusCode === 412
+        || error?.statusCode === 412;
+}
+
+async function stopR2Body(body, iterator) {
+    if (iterator && typeof iterator.return === 'function') {
+        try { await iterator.return(); } catch (e) {}
+    }
+    if (body && typeof body.destroy === 'function') {
+        try { body.destroy(); } catch (e) {}
+    }
+}
 
 function initR2() {
     const accountId = process.env.R2_ACCOUNT_ID;
@@ -109,16 +227,423 @@ async function uploadFileToR2(key, filePath, contentType) {
     }
 }
 
-async function downloadFromR2(key) {
+async function downloadFromR2(key, options = {}) {
     if (!s3) throw new Error('R2 not ready');
+    const timeout = createR2OperationTimeout(
+        'downloadFromR2',
+        options.timeoutMs
+    );
     try {
-        const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+        const resp = await s3.send(
+            new GetObjectCommand({ Bucket: bucket, Key: key }),
+            timeout.signalOptions
+        );
         const chunks = [];
         for await (const chunk of resp.Body) chunks.push(chunk);
         return Buffer.concat(chunks);
     } catch (e) {
         if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return null;
         throw e;
+    } finally {
+        timeout.clear();
+    }
+}
+
+function validateR2SmallObjectKey(key) {
+    if (typeof key !== 'string' || !key || Buffer.byteLength(key, 'utf8') > 1024) {
+        throw new TypeError('R2 small-object key must be a non-empty string no larger than 1024 bytes');
+    }
+}
+
+function validateR2SmallObjectLimit(maxBytes) {
+    const parsed = Number(maxBytes);
+    if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > DEFAULT_R2_SMALL_OBJECT_MAX_BYTES) {
+        throw new RangeError(
+            `maxBytes must be a non-negative safe integer no larger than ${DEFAULT_R2_SMALL_OBJECT_MAX_BYTES}`
+        );
+    }
+    return parsed;
+}
+
+function normalizeR2Etag(etag, key, operation) {
+    const normalized = typeof etag === 'string' ? etag.trim() : '';
+    if (!normalized) {
+        throw new R2StorageError(
+            key,
+            new Error(`R2 ${operation} response did not contain an ETag`),
+            `R2 ${operation} response did not contain the ETag required for compare-and-swap: ${key}`
+        );
+    }
+    return normalized;
+}
+
+function normalizeR2Metadata(metadata) {
+    if (metadata === undefined || metadata === null) return {};
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw new TypeError('R2 object metadata must be a plain object');
+    }
+    const normalized = {};
+    for (const key of Object.keys(metadata).sort()) {
+        if (!/^[A-Za-z0-9._-]{1,128}$/.test(key)) {
+            throw new TypeError(`Invalid R2 metadata key: ${key}`);
+        }
+        const value = metadata[key];
+        if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 1024) {
+            throw new TypeError(`R2 metadata value for "${key}" must be a string no larger than 1024 bytes`);
+        }
+        normalized[key] = value;
+    }
+    return normalized;
+}
+
+function normalizeR2SmallObjectBody(body, key, maxBytes) {
+    let buffer;
+    if (Buffer.isBuffer(body)) buffer = body;
+    else if (body instanceof Uint8Array) buffer = Buffer.from(body);
+    else if (typeof body === 'string') buffer = Buffer.from(body, 'utf8');
+    else throw new TypeError('R2 small-object body must be a Buffer, Uint8Array, or string');
+
+    if (buffer.length > maxBytes) {
+        throw new R2ObjectTooLargeError(key, maxBytes, buffer.length, {
+            contentLength: buffer.length,
+            bytesWritten: 0,
+        });
+    }
+    return buffer;
+}
+
+async function bufferR2SmallObjectBody(key, response, maxBytes) {
+    const advertisedLength = Number(response?.ContentLength);
+    const contentLength = Number.isSafeInteger(advertisedLength) && advertisedLength >= 0
+        ? advertisedLength
+        : null;
+    const body = response?.Body;
+
+    if (contentLength !== null && contentLength > maxBytes) {
+        await stopR2Body(body, null);
+        throw new R2ObjectTooLargeError(key, maxBytes, contentLength, {
+            contentLength,
+            bytesWritten: 0,
+        });
+    }
+    if (!body && contentLength === 0) return { body: Buffer.alloc(0), contentLength };
+    if (!body || typeof body[Symbol.asyncIterator] !== 'function') {
+        await stopR2Body(body, null);
+        throw new R2StorageError(
+            key,
+            new TypeError('R2 small-object response body is not an async iterable'),
+            `R2 returned an invalid small-object body: ${key}`
+        );
+    }
+
+    const chunks = [];
+    let receivedBytes = 0;
+    const iterator = body[Symbol.asyncIterator]();
+    try {
+        while (true) {
+            const step = await iterator.next();
+            if (step.done) break;
+            const chunk = Buffer.isBuffer(step.value) ? step.value : Buffer.from(step.value);
+            receivedBytes += chunk.length;
+            if (receivedBytes > maxBytes) {
+                throw new R2ObjectTooLargeError(key, maxBytes, receivedBytes, {
+                    contentLength,
+                    bytesWritten: 0,
+                });
+            }
+            if (chunk.length) chunks.push(chunk);
+        }
+    } catch (cause) {
+        await stopR2Body(body, iterator);
+        if (cause instanceof R2ObjectTooLargeError) throw cause;
+        throw new R2StorageError(
+            key,
+            cause,
+            `R2 small-object stream failed while downloading: ${key}`
+        );
+    }
+    if (contentLength !== null && receivedBytes !== contentLength) {
+        throw new R2StorageError(
+            key,
+            new Error(`Expected ${contentLength} bytes but received ${receivedBytes}`),
+            `R2 small-object Content-Length did not match the received body: ${key}`
+        );
+    }
+    return { body: Buffer.concat(chunks, receivedBytes), contentLength };
+}
+
+function createR2SmallObjectStore({
+    client,
+    bucketName,
+    maxBytes = DEFAULT_R2_SMALL_OBJECT_MAX_BYTES,
+}) {
+    if (!client || typeof client.send !== 'function') {
+        throw new TypeError('R2 small-object store requires a client with a send(command) method');
+    }
+    if (typeof bucketName !== 'string' || !bucketName) {
+        throw new TypeError('R2 small-object store requires a non-empty bucketName');
+    }
+    const hardMaxBytes = validateR2SmallObjectLimit(maxBytes);
+
+    return Object.freeze({
+        async get(key, options = {}) {
+            validateR2SmallObjectKey(key);
+            const requestMaxBytes = validateR2SmallObjectLimit(
+                options.maxBytes === undefined ? hardMaxBytes : options.maxBytes
+            );
+            if (requestMaxBytes > hardMaxBytes) {
+                throw new RangeError(`maxBytes cannot exceed this store's ${hardMaxBytes}-byte limit`);
+            }
+            if (
+                options.ifMatch !== undefined
+                && (
+                    typeof options.ifMatch !== 'string'
+                    || !options.ifMatch.trim()
+                    || options.ifMatch === '*'
+                )
+            ) {
+                throw new TypeError('ifMatch must be a non-empty exact ETag');
+            }
+
+            let response;
+            try {
+                response = await client.send(new GetObjectCommand({
+                    Bucket: bucketName,
+                    Key: key,
+                    ...(options.ifMatch ? { IfMatch: options.ifMatch } : {}),
+                }));
+            } catch (cause) {
+                if (isMissingR2ObjectError(cause)) throw new R2ObjectMissingError(key, cause);
+                if (isR2PreconditionFailedError(cause)) {
+                    throw new R2PreconditionFailedError(key, { ifMatch: options.ifMatch }, cause);
+                }
+                throw new R2StorageError(key, cause, `R2 small-object read failed: ${key}`);
+            }
+
+            const buffered = await bufferR2SmallObjectBody(key, response, requestMaxBytes);
+            const metadata = normalizeR2Metadata(response.Metadata);
+            let lastModified = null;
+            if (response.LastModified) {
+                const timestamp = new Date(response.LastModified);
+                if (!Number.isFinite(timestamp.getTime())) {
+                    throw new R2StorageError(
+                        key,
+                        new TypeError('R2 LastModified value is invalid'),
+                        `R2 returned invalid small-object metadata: ${key}`
+                    );
+                }
+                lastModified = timestamp.toISOString();
+            }
+            return Object.freeze({
+                key,
+                body: buffered.body,
+                etag: normalizeR2Etag(response.ETag, key, 'read'),
+                contentLength: buffered.contentLength === null
+                    ? buffered.body.length
+                    : buffered.contentLength,
+                contentType: response.ContentType || null,
+                metadata: Object.freeze(metadata),
+                lastModified,
+                versionId: response.VersionId || null,
+            });
+        },
+
+        async put(key, body, options = {}) {
+            validateR2SmallObjectKey(key);
+            const requestMaxBytes = validateR2SmallObjectLimit(
+                options.maxBytes === undefined ? hardMaxBytes : options.maxBytes
+            );
+            if (requestMaxBytes > hardMaxBytes) {
+                throw new RangeError(`maxBytes cannot exceed this store's ${hardMaxBytes}-byte limit`);
+            }
+
+            const ifMatch = options.ifMatch;
+            const ifNoneMatch = options.ifNoneMatch;
+            if ((ifMatch ? 1 : 0) + (ifNoneMatch ? 1 : 0) !== 1) {
+                throw new TypeError('Conditional R2 put requires exactly one of ifMatch or ifNoneMatch');
+            }
+            if (ifMatch !== undefined && (typeof ifMatch !== 'string' || !ifMatch.trim() || ifMatch === '*')) {
+                throw new TypeError('ifMatch must be a non-empty exact ETag');
+            }
+            if (ifNoneMatch !== undefined && ifNoneMatch !== '*') {
+                throw new TypeError('ifNoneMatch must be exactly "*"');
+            }
+
+            const buffer = normalizeR2SmallObjectBody(body, key, requestMaxBytes);
+            const metadata = normalizeR2Metadata(options.metadata);
+            let response;
+            try {
+                response = await client.send(new PutObjectCommand({
+                    Bucket: bucketName,
+                    Key: key,
+                    Body: buffer,
+                    ContentLength: buffer.length,
+                    ContentType: options.contentType || 'application/octet-stream',
+                    Metadata: metadata,
+                    ...(ifMatch ? { IfMatch: ifMatch } : {}),
+                    ...(ifNoneMatch ? { IfNoneMatch: ifNoneMatch } : {}),
+                }));
+            } catch (cause) {
+                if (isR2PreconditionFailedError(cause)) {
+                    throw new R2PreconditionFailedError(key, {
+                        ...(ifMatch ? { ifMatch } : {}),
+                        ...(ifNoneMatch ? { ifNoneMatch } : {}),
+                    }, cause);
+                }
+                throw new R2StorageError(key, cause, `R2 conditional small-object write failed: ${key}`);
+            }
+            return Object.freeze({
+                key,
+                etag: normalizeR2Etag(response.ETag, key, 'write'),
+                versionId: response.VersionId || null,
+            });
+        },
+    });
+}
+
+function getDefaultR2SmallObjectStore() {
+    if (!s3) {
+        throw new R2StorageError(
+            '',
+            new Error('R2 not ready'),
+            'R2 storage is not initialized'
+        );
+    }
+    return createR2SmallObjectStore({
+        client: s3,
+        bucketName: bucket,
+        maxBytes: DEFAULT_R2_SMALL_OBJECT_MAX_BYTES,
+    });
+}
+
+async function getR2SmallObject(key, options = {}) {
+    return getDefaultR2SmallObjectStore().get(key, options);
+}
+
+async function putR2SmallObjectConditional(key, body, options = {}) {
+    return getDefaultR2SmallObjectStore().put(key, body, options);
+}
+
+/**
+ * Stream an R2 object to disk with a hard byte ceiling and atomic publication.
+ *
+ * The destination is replaced only after the full object has been written to a
+ * sibling temporary file. Missing objects, R2 failures, and size violations
+ * have stable error classes/codes; local filesystem errors retain their native
+ * Node error codes.
+ */
+async function downloadFromR2ToFile(key, filePath, options = {}) {
+    if (typeof key !== 'string' || !key) throw new TypeError('R2 key must be a non-empty string');
+    if (typeof filePath !== 'string' || !filePath) throw new TypeError('Destination path must be a non-empty string');
+
+    const maxBytes = options.maxBytes === undefined
+        ? DEFAULT_R2_DOWNLOAD_MAX_BYTES
+        : Number(options.maxBytes);
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+        throw new RangeError('maxBytes must be a non-negative safe integer');
+    }
+    if (!s3) {
+        throw new R2StorageError(key, new Error('R2 not ready'), 'R2 storage is not initialized');
+    }
+
+    let response;
+    try {
+        response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    } catch (cause) {
+        if (isMissingR2ObjectError(cause)) throw new R2ObjectMissingError(key, cause);
+        throw new R2StorageError(key, cause);
+    }
+
+    const body = response?.Body;
+    const parsedContentLength = Number(response?.ContentLength);
+    const contentLength = Number.isSafeInteger(parsedContentLength) && parsedContentLength >= 0
+        ? parsedContentLength
+        : null;
+
+    if (contentLength !== null && contentLength > maxBytes) {
+        await stopR2Body(body, null);
+        throw new R2ObjectTooLargeError(key, maxBytes, contentLength, {
+            contentLength,
+            bytesWritten: 0,
+        });
+    }
+    if (!body || typeof body[Symbol.asyncIterator] !== 'function') {
+        await stopR2Body(body, null);
+        throw new R2StorageError(key, new TypeError('R2 response body is not an async iterable'));
+    }
+
+    const tempPath = `${filePath}.part-${process.pid}-${Date.now()}-${++r2DownloadPartSequence}`;
+    let fileHandle = null;
+    let iterator = null;
+    let bytesWritten = 0;
+    let committed = false;
+
+    try {
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        fileHandle = await fs.promises.open(tempPath, 'wx');
+        iterator = body[Symbol.asyncIterator]();
+
+        while (true) {
+            let step;
+            try {
+                step = await iterator.next();
+            } catch (cause) {
+                throw new R2StorageError(key, cause, `R2 object stream failed while downloading: ${key}`);
+            }
+            if (step.done) break;
+
+            let chunk;
+            try {
+                chunk = Buffer.isBuffer(step.value) ? step.value : Buffer.from(step.value);
+            } catch (cause) {
+                throw new R2StorageError(key, cause, `R2 object stream returned an invalid chunk: ${key}`);
+            }
+
+            const receivedBytes = bytesWritten + chunk.length;
+            if (receivedBytes > maxBytes) {
+                throw new R2ObjectTooLargeError(key, maxBytes, receivedBytes, {
+                    contentLength,
+                    bytesWritten,
+                });
+            }
+
+            let chunkOffset = 0;
+            while (chunkOffset < chunk.length) {
+                const result = await fileHandle.write(
+                    chunk,
+                    chunkOffset,
+                    chunk.length - chunkOffset,
+                    null
+                );
+                if (!result.bytesWritten) {
+                    const error = new Error(`Filesystem made no progress writing ${tempPath}`);
+                    error.code = 'R2_FILE_WRITE_STALLED';
+                    throw error;
+                }
+                chunkOffset += result.bytesWritten;
+            }
+            bytesWritten = receivedBytes;
+        }
+
+        await fileHandle.close();
+        fileHandle = null;
+        await fs.promises.rename(tempPath, filePath);
+        committed = true;
+
+        return {
+            key,
+            path: filePath,
+            bytesWritten,
+            contentLength,
+            etag: response.ETag || null,
+            contentType: response.ContentType || null,
+        };
+    } catch (error) {
+        await stopR2Body(body, iterator);
+        throw error;
+    } finally {
+        if (fileHandle) await fileHandle.close().catch(() => {});
+        if (!committed) await fs.promises.unlink(tempPath).catch(() => {});
     }
 }
 
@@ -157,39 +682,105 @@ async function deleteFromR2(key) {
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
-async function listR2Keys(prefix) {
-    if (!s3) throw new Error('R2 not ready');
-    const keys = [];
-    let continuationToken;
-    do {
-        const resp = await s3.send(new ListObjectsV2Command({
-            Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken
-        }));
-        for (const obj of (resp.Contents || [])) keys.push(obj.Key);
-        continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
-    } while (continuationToken);
-    return keys;
+function createR2OperationTimeout(
+    operation,
+    timeoutMs
+) {
+    const value = timeoutMs === undefined
+        ? null
+        : Number(timeoutMs);
+    if (
+        value !== null
+        && (
+            !Number.isSafeInteger(value)
+            || value <= 0
+        )
+    ) {
+        throw new RangeError(
+            `${operation} timeoutMs must be a positive safe integer`
+        );
+    }
+    const controller = value === null
+        ? null
+        : new AbortController();
+    const timer = controller
+        ? setTimeout(() => controller.abort(), value)
+        : null;
+    return {
+        signalOptions: controller
+            ? { abortSignal: controller.signal }
+            : undefined,
+        clear() {
+            if (timer) clearTimeout(timer);
+        },
+    };
 }
 
-async function listR2Objects(prefix) {
+async function listR2Keys(prefix, options = {}) {
     if (!s3) throw new Error('R2 not ready');
+    const timeout = createR2OperationTimeout(
+        'listR2Keys',
+        options.timeoutMs
+    );
+    const keys = [];
+    let continuationToken;
+    try {
+        do {
+            const resp = await s3.send(
+                new ListObjectsV2Command({
+                    Bucket: bucket,
+                    Prefix: prefix,
+                    ContinuationToken: continuationToken,
+                }),
+                timeout.signalOptions
+            );
+            for (const obj of (resp.Contents || [])) keys.push(obj.Key);
+            continuationToken = resp.IsTruncated
+                ? resp.NextContinuationToken
+                : undefined;
+        } while (continuationToken);
+        return keys;
+    } finally {
+        timeout.clear();
+    }
+}
+
+async function listR2Objects(prefix, options = {}) {
+    if (!s3) throw new Error('R2 not ready');
+    const timeout = createR2OperationTimeout(
+        'listR2Objects',
+        options.timeoutMs
+    );
     const objects = [];
     let continuationToken;
-    do {
-        const resp = await s3.send(new ListObjectsV2Command({
-            Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken
-        }));
-        for (const obj of (resp.Contents || [])) {
-            objects.push({
-                key: obj.Key,
-                size: Number(obj.Size) || 0,
-                etag: String(obj.ETag || ''),
-                lastModified: obj.LastModified ? new Date(obj.LastModified).getTime() : 0,
-            });
-        }
-        continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
-    } while (continuationToken);
-    return objects;
+    try {
+        do {
+            const resp = await s3.send(
+                new ListObjectsV2Command({
+                    Bucket: bucket,
+                    Prefix: prefix,
+                    ContinuationToken: continuationToken,
+                }),
+                timeout.signalOptions
+            );
+            for (const obj of (resp.Contents || [])) {
+                objects.push({
+                    key: obj.Key,
+                    size: Number(obj.Size) || 0,
+                    etag: String(obj.ETag || ''),
+                    lastModified: obj.LastModified
+                        ? new Date(obj.LastModified).getTime()
+                        : 0,
+                });
+            }
+            continuationToken = resp.IsTruncated
+                ? resp.NextContinuationToken
+                : undefined;
+        } while (continuationToken);
+        return objects;
+    } finally {
+        timeout.clear();
+    }
 }
 
 // ── Dropbox ────────────────────────────────────────────────
@@ -478,8 +1069,14 @@ function sanitizeTitle(title) {
 
 module.exports = {
     // R2
-    initR2, isR2Ready, uploadToR2, uploadFileToR2, downloadFromR2, getR2Stream, getR2SignedUrl,
+    initR2, isR2Ready, uploadToR2, uploadFileToR2, downloadFromR2, downloadFromR2ToFile,
+    getR2Stream, getR2SignedUrl,
     existsInR2, deleteFromR2, listR2Keys, listR2Objects,
+    getR2SmallObject, putR2SmallObjectConditional, createR2SmallObjectStore,
+    DEFAULT_R2_DOWNLOAD_MAX_BYTES, DEFAULT_R2_SMALL_OBJECT_MAX_BYTES,
+    R2_DOWNLOAD_ERROR_CODES, R2_CONDITIONAL_ERROR_CODES,
+    R2DownloadError, R2ObjectMissingError, R2StorageError, R2ObjectTooLargeError,
+    R2PreconditionFailedError, isMissingR2ObjectError, isR2PreconditionFailedError,
     // Dropbox
     getDropboxToken, getDropboxAuthStatus, uploadToDropbox, uploadLargeToDropbox, createDropboxFolder,
     // Job persistence

@@ -11,13 +11,20 @@ const JarvisRetention = (function () {
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
     let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, EXPPLOTS = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVALIDATION = null, SAVEDCHANNELVIDEOCACHE = {}, SCORECONTRACT = null, SCORECONTRACT_PROMISE = null, SCORECONTRACT_AT = 0, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    const RAW_REQUESTS = {};
+    const EXPPLOT_RELEASES = {};
+    const EXPPLOT_REQUESTS = {};
+    let EXPPLOT_REQUEST_SEQUENCE = 0;
+    let PREDICTORLAB_PROMISE = null;
+    let PREDICTORLAB_RETRY_TIMER = null;
+    let PREDICTORLAB_ROLLOVER_RETRIES = 0;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let PROMISE_UI = null, OPERATIONS_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
-    st.savedValidationFeature = 'shorts.video-heldout.together.keep';
+    st.savedValidationFeature = null;
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -313,79 +320,933 @@ const JarvisRetention = (function () {
         const [a, b, u] = t < 0.5 ? [cool, mid, t * 2] : [mid, warm, (t - 0.5) * 2];
         return `rgb(${a.map((c, k) => Math.round(c + (b[k] - c) * u)).join(',')})`;
     }
+    function rtExactSha256(value) {
+        return (
+            typeof value === 'string'
+            && /^[a-f0-9]{64}$/.test(value)
+        );
+    }
+    function rtReleaseIdentity(parts) {
+        return [
+            parts.manifestSha256,
+            parts.pointerSha256,
+            parts.artifactSha256,
+        ].join(':');
+    }
+    function rtRawMapRelease(headers) {
+        const release = {
+            manifestSha256:
+                headers && headers.mapReleaseSha256,
+            pointerSha256:
+                headers && headers.mapPointerSha256,
+            artifactSha256:
+                headers && headers.artifactSha256,
+            etag: headers && headers.etag || null,
+        };
+        if (
+            !rtExactSha256(release.manifestSha256)
+            || !rtExactSha256(release.pointerSha256)
+            || !rtExactSha256(release.artifactSha256)
+        ) {
+            throw new Error(
+                'Raw map response is missing exact immutable release headers.'
+            );
+        }
+        release.identity = rtReleaseIdentity(release);
+        return Object.freeze(release);
+    }
+    function rtCompactPlotRelease(release) {
+        const normalized = {
+            manifestSha256:
+                release && release.manifest_sha256,
+            pointerSha256:
+                release && release.pointer_sha256,
+            artifactSha256:
+                release && release.artifact_sha256,
+        };
+        if (
+            !rtExactSha256(normalized.manifestSha256)
+            || !rtExactSha256(normalized.pointerSha256)
+            || !rtExactSha256(normalized.artifactSha256)
+        ) {
+            throw new Error(
+                'compact plot is missing exact immutable release identity'
+            );
+        }
+        normalized.identity = rtReleaseIdentity(normalized);
+        return Object.freeze(normalized);
+    }
+    function rtCompactPlotCacheKey(baseKey, release) {
+        return `${baseKey}:release:${release.identity}`;
+    }
+    function rtReleaseResponseIsCurrent(
+        request,
+        latestRequest,
+        responseRelease,
+        activeRelease
+    ) {
+        if (
+            !request
+            || !latestRequest
+            || request.sequence !== latestRequest.sequence
+        ) return false;
+        return !(
+            activeRelease
+            && activeRelease.identity
+                !== request.startedReleaseIdentity
+            && activeRelease.identity !== responseRelease.identity
+        );
+    }
     function rawEnsure(ch, force) {
         const current = RAW[ch];
-        if (!force && current && (current.loading || !current.error)) return;
-        RAW[ch] = { loading: 1 };
-        rtFetchJson('/api/raw/map?channel=' + ch, { cache: 'default' }, 3)
+        const currentIsUsable = current
+            && !current.loading
+            && !current.error
+            && Number(current.n) > 0
+            && current.release
+            && rtExactSha256(current.release.manifestSha256)
+            && rtExactSha256(current.release.pointerSha256)
+            && rtExactSha256(current.release.artifactSha256);
+        if (
+            !force
+            && current
+            && (
+                current.loading
+                || current.refreshing
+                || (
+                    currentIsUsable
+                    && Date.now() - Number(current.at || 0)
+                        < 30000
+                )
+            )
+        ) return;
+        const requestSequence =
+            Number(RAW_REQUESTS[ch] || 0) + 1;
+        RAW_REQUESTS[ch] = requestSequence;
+        if (currentIsUsable) current.refreshing = true;
+        else RAW[ch] = { loading: 1 };
+        rtFetchJson('/api/raw/map?channel=' + ch, {
+            cache: 'no-cache',
+            _captureResponseHeaders: true,
+        }, 3)
             .then(j => {
+                if (RAW_REQUESTS[ch] !== requestSequence) return;
                 if (!j || j.error) throw new Error((j && j.error) || 'empty embedding map');
+                const headers = j._response_headers || {};
+                const release = rtRawMapRelease(headers);
+                j.at = Date.now();
+                j.release = release;
                 RAW[ch] = j;
                 rtgUpdateRaw(); rtgUpdateExp();
             })
             .catch(e => {
-                RAW[ch] = { n: 0, error: fetchFail(e), at: Date.now() };
+                if (RAW_REQUESTS[ch] !== requestSequence) return;
+                if (currentIsUsable) {
+                    current.refreshing = false;
+                    current.refreshError = fetchFail(e);
+                    current.at = Date.now();
+                    RAW[ch] = current;
+                } else {
+                    RAW[ch] = { n: 0, error: fetchFail(e), at: Date.now() };
+                }
                 rtgUpdateRaw(); rtgUpdateExp();
             });
     }
+    function shortsGeometryChannels(up) {
+        const geometry = up && up.non_authoritative_geometry;
+        if (
+            geometry
+            && geometry.authority === 'non_authoritative_visualization_only'
+            && geometry.scalar_score_use === 'forbidden'
+            && geometry.channels
+            && typeof geometry.channels === 'object'
+            && !Array.isArray(geometry.channels)
+        ) return geometry.channels;
+        // Older score records persisted this visualization payload directly.
+        // It remains geometry-only through this adapter and is never consulted
+        // by shortsRegisteredCoordinate or any score renderer.
+        return up && up.channels
+            && typeof up.channels === 'object'
+            && !Array.isArray(up.channels)
+            ? up.channels
+            : {};
+    }
+    function shortsGeometryChannel(up, channel) {
+        const value = shortsGeometryChannels(up)[channel];
+        return value && typeof value === 'object' && !Array.isArray(value)
+            ? value
+            : {};
+    }
     function expPlotKey(up, ch) {
-        const neighbors = up && up.channels && up.channels[ch] && up.channels[ch].neighbors;
+        const neighbors = shortsGeometryChannel(up, ch).neighbors;
         if (!Array.isArray(neighbors) || !neighbors.length) return '';
-        return ch + ':' + neighbors.slice(0, 20).map(row => `${row.id}:${Number(row.sim || 0).toFixed(5)}`).join('|');
+        const ledgerRevision =
+            up
+            && up.score_ledger
+            && up.score_ledger.ledger_sha256
+            || up
+            && up.input_manifest
+            && up.input_manifest.revision_fingerprint
+            || 'unbound';
+        return `${ch}:${ledgerRevision}:`
+            + neighbors.slice(0, 20)
+                .map(
+                    row => (
+                        `${row.id}:`
+                        + Number(row.sim || 0).toFixed(5)
+                    )
+                )
+                .join('|');
     }
     function expPlotFor(up, ch) {
-        const key = expPlotKey(up, ch);
-        return key ? EXPPLOTS[key] : null;
+        const baseKey = expPlotKey(up, ch);
+        if (!baseKey) return null;
+        const release = EXPPLOT_RELEASES[ch];
+        const releaseKey = release
+            ? rtCompactPlotCacheKey(baseKey, release)
+            : null;
+        return (
+            releaseKey && EXPPLOTS[releaseKey]
+            || EXPPLOTS[baseKey]
+            || null
+        );
     }
     function expPlotEnsure(up, ch, force) {
-        const key = expPlotKey(up, ch);
-        if (!key) return null;
-        const current = EXPPLOTS[key];
-        if (!force && current && (current.loading || !current.error)) return current;
-        const neighbors = (up.channels[ch].neighbors || []).slice(0, 20).map(row => ({ id: row.id, sim: row.sim }));
+        const baseKey = expPlotKey(up, ch);
+        if (!baseKey) return null;
+        const current = expPlotFor(up, ch);
+        const inflight = EXPPLOT_REQUESTS[baseKey];
+        if (
+            !force
+            && (
+                inflight
+                || (
+                    current
+                    && !current.error
+                    && Date.now() - Number(current.at || 0)
+                        < 30000
+                )
+            )
+        ) return current;
+        const neighbors = (shortsGeometryChannel(up, ch).neighbors || [])
+            .slice(0, 20)
+            .map(row => ({ id: row.id, sim: row.sim }));
         const pointLimit = window.innerWidth < 700 ? 96 : 180;
-        EXPPLOTS[key] = { loading: 1, at: Date.now() };
+        const sequence = ++EXPPLOT_REQUEST_SEQUENCE;
+        const request = Object.freeze({
+            sequence,
+            startedReleaseIdentity:
+                EXPPLOT_RELEASES[ch]
+                && EXPPLOT_RELEASES[ch].identity
+                || null,
+        });
+        EXPPLOT_REQUESTS[baseKey] = request;
+        if (!current) {
+            EXPPLOTS[baseKey] = {
+                loading: 1,
+                at: Date.now(),
+            };
+        } else {
+            current.refreshing = true;
+        }
         rtFetchJson('/api/raw/plot?channel=' + encodeURIComponent(ch) + '&limit=' + pointLimit + '&neighbors=' + encodeURIComponent(JSON.stringify(neighbors)), {
             _timeoutMs: 45000,
             _retryDelays: [1000, 2500],
+            cache: 'no-store',
         }, 3).then(plot => {
-            EXPPLOTS[key] = plot;
+            const release = rtCompactPlotRelease(
+                plot && plot.plot_artifact
+            );
+            const latestRequest =
+                EXPPLOT_REQUESTS[baseKey];
+            const priorRelease =
+                EXPPLOT_RELEASES[ch] || null;
+            if (
+                !rtReleaseResponseIsCurrent(
+                    request,
+                    latestRequest,
+                    release,
+                    priorRelease
+                )
+            ) {
+                if (
+                    latestRequest
+                    && latestRequest.sequence === sequence
+                ) delete EXPPLOT_REQUESTS[baseKey];
+                return;
+            }
+            if (
+                priorRelease
+                && priorRelease.identity !== release.identity
+            ) {
+                for (const cachedKey of Object.keys(EXPPLOTS)) {
+                    if (cachedKey.startsWith(`${ch}:`)) {
+                        delete EXPPLOTS[cachedKey];
+                    }
+                }
+            }
+            EXPPLOT_RELEASES[ch] = release;
+            delete EXPPLOT_REQUESTS[baseKey];
+            delete EXPPLOTS[baseKey];
+            const releaseKey =
+                rtCompactPlotCacheKey(baseKey, release);
+            plot.at = Date.now();
+            plot.release = release;
+            EXPPLOTS[releaseKey] = plot;
             const keys = Object.keys(EXPPLOTS);
             while (keys.length > 12) delete EXPPLOTS[keys.shift()];
             rtgUpdateExp();
         }).catch(error => {
-            EXPPLOTS[key] = { error: fetchFail(error), at: Date.now(), plots: {} };
+            const latestRequest =
+                EXPPLOT_REQUESTS[baseKey];
+            if (
+                !latestRequest
+                || latestRequest.sequence !== sequence
+            ) return;
+            delete EXPPLOT_REQUESTS[baseKey];
+            const fallback = expPlotFor(up, ch);
+            if (fallback && !fallback.loading && !fallback.error) {
+                fallback.refreshing = false;
+                fallback.refreshError = fetchFail(error);
+                fallback.at = Date.now();
+            } else {
+                EXPPLOTS[baseKey] = {
+                    error: fetchFail(error),
+                    at: Date.now(),
+                    plots: {},
+                };
+            }
             rtgUpdateExp();
         });
-        return EXPPLOTS[key];
+        return expPlotFor(up, ch);
     }
-    // ── ONE global hook-scoring source: an upload's number on the map IS out.steer (computed
-    //    server-side, identical to how the map scores every video). The graph marker AND the
-    //    Experiment grid both read it through these — change the maths once, both follow. ──
+    // The canonical score ledger is the only stored-score source. Producer
+    // aliases and visualization geometry are never consulted for scalar values.
     const STEER_KEY = { views: 'views', rawviews: 'views', realviews: 'realviews', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5' };
-    function steerOf(up, mod, tn) { const s = up && up.steer; const k = s && s[`${mod}_${tn}`]; return k || null; }   // {est,pctile,kind}
+    const SHORTS_LEDGER_SHA256 = /^[a-f0-9]{64}$/;
+    const SHORTS_PERCENTILE_UNIT = 'percentile_0_100';
+    const SHORTS_LEDGER_STATE_CACHE = new WeakMap();
+    function shortsCanonicalJson(value) {
+        if (Array.isArray(value)) {
+            return `[${value.map(shortsCanonicalJson).join(',')}]`;
+        }
+        if (value && typeof value === 'object') {
+            return `{${Object.keys(value).sort().map(key => (
+                `${JSON.stringify(key)}:${shortsCanonicalJson(value[key])}`
+            )).join(',')}}`;
+        }
+        return JSON.stringify(value === undefined ? null : value);
+    }
+    function shortsSha256(value) {
+        const bytes = [];
+        for (const character of String(value)) {
+            const code = character.codePointAt(0);
+            if (code < 0x80) bytes.push(code);
+            else if (code < 0x800) bytes.push(
+                0xc0 | (code >>> 6),
+                0x80 | (code & 63)
+            );
+            else if (code < 0x10000) bytes.push(
+                0xe0 | (code >>> 12),
+                0x80 | ((code >>> 6) & 63),
+                0x80 | (code & 63)
+            );
+            else bytes.push(
+                0xf0 | (code >>> 18),
+                0x80 | ((code >>> 12) & 63),
+                0x80 | ((code >>> 6) & 63),
+                0x80 | (code & 63)
+            );
+        }
+        const byteLength = bytes.length;
+        bytes.push(0x80);
+        while (bytes.length % 64 !== 56) bytes.push(0);
+        const bitHigh = Math.floor(byteLength / 0x20000000);
+        const bitLow = (byteLength << 3) >>> 0;
+        bytes.push(
+            (bitHigh >>> 24) & 255, (bitHigh >>> 16) & 255,
+            (bitHigh >>> 8) & 255, bitHigh & 255,
+            (bitLow >>> 24) & 255, (bitLow >>> 16) & 255,
+            (bitLow >>> 8) & 255, bitLow & 255
+        );
+        const constants = [
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+            0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+            0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+            0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+            0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+            0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+            0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+            0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+        ];
+        const state = [
+            0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+            0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+        ];
+        const rotate = (value, amount) => (
+            (value >>> amount) | (value << (32 - amount))
+        );
+        for (let offset = 0; offset < bytes.length; offset += 64) {
+            const words = new Array(64);
+            for (let index = 0; index < 16; index++) {
+                const base = offset + index * 4;
+                words[index] = (
+                    (bytes[base] << 24)
+                    | (bytes[base + 1] << 16)
+                    | (bytes[base + 2] << 8)
+                    | bytes[base + 3]
+                ) >>> 0;
+            }
+            for (let index = 16; index < 64; index++) {
+                const s0 = rotate(words[index - 15], 7)
+                    ^ rotate(words[index - 15], 18)
+                    ^ (words[index - 15] >>> 3);
+                const s1 = rotate(words[index - 2], 17)
+                    ^ rotate(words[index - 2], 19)
+                    ^ (words[index - 2] >>> 10);
+                words[index] = (
+                    words[index - 16] + s0 + words[index - 7] + s1
+                ) >>> 0;
+            }
+            let [a, b, c, d, e, f, g, h] = state;
+            for (let index = 0; index < 64; index++) {
+                const sum1 = rotate(e, 6) ^ rotate(e, 11)
+                    ^ rotate(e, 25);
+                const choice = (e & f) ^ (~e & g);
+                const temp1 = (
+                    h + sum1 + choice + constants[index] + words[index]
+                ) >>> 0;
+                const sum0 = rotate(a, 2) ^ rotate(a, 13)
+                    ^ rotate(a, 22);
+                const majority = (a & b) ^ (a & c) ^ (b & c);
+                const temp2 = (sum0 + majority) >>> 0;
+                h = g; g = f; f = e; e = (d + temp1) >>> 0;
+                d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+            }
+            state[0] = (state[0] + a) >>> 0;
+            state[1] = (state[1] + b) >>> 0;
+            state[2] = (state[2] + c) >>> 0;
+            state[3] = (state[3] + d) >>> 0;
+            state[4] = (state[4] + e) >>> 0;
+            state[5] = (state[5] + f) >>> 0;
+            state[6] = (state[6] + g) >>> 0;
+            state[7] = (state[7] + h) >>> 0;
+        }
+        return state.map(
+            part => part.toString(16).padStart(8, '0')
+        ).join('');
+    }
+    function scoreFeatureContractIdentitySha256(contract) {
+        const pipeline = contract
+            && contract.pipeline || {};
+        const identity = {
+            schema:
+                'shorts-stored-score-contract-identity-v1',
+            schema_version: 1,
+            pipeline: Object.fromEntries([
+                'sourceWindow',
+                'embeddingModel',
+                'embeddingDimensions',
+                'scorer',
+            ].map(key => [key, pipeline[key] ?? null])),
+            features: (
+                contract
+                && Array.isArray(contract.features)
+                    ? contract.features
+                    : []
+            ).map(definition => Object.fromEntries([
+                'key',
+                'group',
+                'target',
+                'unit',
+                'displayUnit',
+                'source',
+                'sourceKey',
+            ].map(key => [
+                key,
+                definition[key] ?? null,
+            ]))),
+        };
+        return shortsSha256(shortsCanonicalJson(identity));
+    }
+    function shortsDeepFreeze(value) {
+        if (
+            !value
+            || typeof value !== 'object'
+            || Object.isFrozen(value)
+        ) return value;
+        Object.values(value).forEach(shortsDeepFreeze);
+        return Object.freeze(value);
+    }
+    function shortsLedgerState(up) {
+        const ledger = up && up.score_ledger;
+        const validation = up && up.score_ledger_validation;
+        if (!ledger || typeof ledger !== 'object') {
+            return {
+                present: false,
+                valid: false,
+                ledgerSha256: null,
+                entriesById: new Map(),
+                errors: ['canonical score ledger is missing'],
+            };
+        }
+        const cached = SHORTS_LEDGER_STATE_CACHE.get(ledger);
+        if (cached && cached.validation === validation) return cached.state;
+        const errors = [];
+        const entries = Array.isArray(ledger.entries) ? ledger.entries : [];
+        const expected = Array.isArray(ledger.expected_coordinate_ids)
+            ? ledger.expected_coordinate_ids
+            : [];
+        const ids = entries.map(entry => entry && entry.coordinate_id);
+        const ledgerSha256 = String(ledger.ledger_sha256 || '');
+        const hashPayload = { ...ledger };
+        delete hashPayload.ledger_sha256;
+        const computedLedgerSha256 = shortsSha256(
+            shortsCanonicalJson(hashPayload)
+        );
+        if (
+            ledger.schema !== 'shorts-stored-score-ledger-v1'
+            || ledger.schema_version !== 1
+            || ledger.schema_complete !== true
+        ) errors.push('schema');
+        if (
+            !SHORTS_LEDGER_SHA256.test(ledgerSha256)
+            || ledgerSha256 !== computedLedgerSha256
+            || !validation
+            || validation.valid !== true
+            || validation.ledger_sha256 !== ledgerSha256
+        ) errors.push('ledger hash binding');
+        if (
+            entries.length !== 21
+            || expected.length !== entries.length
+            || new Set(ids).size !== entries.length
+            || ids.some((id, index) => id !== expected[index])
+        ) errors.push('coordinate inventory');
+        const values = ledger.values_by_id;
+        const percentiles = ledger.percentiles_by_id;
+        if (
+            !values
+            || typeof values !== 'object'
+            || Array.isArray(values)
+            || !percentiles
+            || typeof percentiles !== 'object'
+            || Array.isArray(percentiles)
+        ) errors.push('coordinate indexes');
+        const entriesById = new Map();
+        entries.forEach(entry => {
+            if (!entry || typeof entry !== 'object') {
+                errors.push('entry');
+                return;
+            }
+            const coordinateId = String(entry.coordinate_id || '');
+            entriesById.set(coordinateId, entry);
+            const expectedId = `shorts.stored.${entry.feature_key || ''}`;
+            const finiteValue = (
+                entry.value !== null
+                && entry.value !== undefined
+                && entry.value !== ''
+                && typeof entry.value !== 'boolean'
+                && isFinite(Number(entry.value))
+            );
+            const percentile = entry.percentile;
+            const validPercentile = (
+                percentile == null
+                || (
+                    isFinite(Number(percentile))
+                    && Number(percentile) >= 0
+                    && Number(percentile) <= 100
+                )
+            );
+            if (
+                coordinateId !== expectedId
+                || !entry.group
+                || !entry.target
+                || !entry.unit
+            ) errors.push(`${coordinateId || 'unknown'} identity`);
+            if ((entry.available === true) !== finiteValue) {
+                errors.push(`${coordinateId} availability`);
+            }
+            if (entry.available === true) {
+                if (
+                    !validPercentile
+                    || !values
+                    || Number(values[coordinateId]) !== Number(entry.value)
+                    || (
+                        percentile == null
+                            ? !percentiles
+                                || percentiles[coordinateId] != null
+                            : !percentiles
+                                || Number(percentiles[coordinateId])
+                                    !== Number(percentile)
+                    )
+                ) errors.push(`${coordinateId} value parity`);
+            } else if (
+                values && values[coordinateId] != null
+                || percentiles && percentiles[coordinateId] != null
+                || !entry.unavailable_reason
+            ) {
+                errors.push(`${coordinateId} unavailable`);
+            }
+        });
+        const state = {
+            present: true,
+            valid: errors.length === 0,
+            ledgerSha256: errors.length === 0 ? ledgerSha256 : null,
+            entriesById,
+            errors: [...new Set(errors)],
+        };
+        if (state.valid) {
+            shortsDeepFreeze(ledger);
+            shortsDeepFreeze(validation);
+        }
+        SHORTS_LEDGER_STATE_CACHE.set(ledger, { validation, state });
+        return state;
+    }
+    function shortsInputDescriptor(up, channel) {
+        const manifest = up && up.input_manifest;
+        const value = manifest && manifest.channels
+            && manifest.channels[channel];
+        const modality = channel === 'visual'
+            ? 'visual'
+            : channel === 'text'
+                ? 'text'
+                : channel === 'together'
+                    ? 'multimodal'
+                    : channel === 'novelty'
+                        ? 'derived'
+                        : 'unknown';
+        if (!value || typeof value !== 'object') {
+            const expected = channel === 'visual'
+                ? 'first-five-second five-frame montage only'
+                : channel === 'text'
+                    ? 'first-five-second transcript only'
+                    : channel === 'together'
+                        ? 'first-five-second montage plus transcript'
+                        : 'derived novelty inputs recorded in coordinate provenance';
+            return {
+                present: false,
+                modality,
+                input: `canonical input manifest unavailable; expected ${expected}`,
+            };
+        }
+        return {
+            present: value.present === true,
+            modality,
+            input: String(
+                value.input
+                || (
+                    channel === 'visual'
+                        ? 'first-five-second five-frame montage only'
+                        : channel === 'text'
+                            ? 'first-five-second transcript only'
+                            : 'first-five-second montage plus transcript'
+                )
+            ),
+        };
+    }
+    function scoreLedgerEntry(up, coordinateId) {
+        const state = shortsLedgerState(up);
+        return state.valid
+            ? state.entriesById.get(coordinateId) || null
+            : null;
+    }
+    function shortsRegisteredCoordinate(up, coordinateId) {
+        const state = shortsLedgerState(up);
+        const entry = state.valid
+            ? state.entriesById.get(coordinateId)
+            : null;
+        if (
+            !entry
+            || entry.available !== true
+            || entry.value == null
+            || !isFinite(Number(entry.value))
+        ) return null;
+        const input = shortsInputDescriptor(up, entry.group);
+        return Object.freeze({
+            coordinateId,
+            featureKey: entry.feature_key,
+            channel: entry.group,
+            modality: input.modality,
+            input: input.input,
+            inputPresent: input.present,
+            target: entry.target,
+            value: Number(entry.value),
+            valueUnit: entry.unit,
+            displayUnit: entry.display_unit || entry.unit,
+            percentile100: entry.percentile == null
+                ? null
+                : Number(entry.percentile),
+            percentileUnit: SHORTS_PERCENTILE_UNIT,
+            ledgerSha256: state.ledgerSha256,
+            kind: entry.provenance && entry.provenance.kind || entry.source,
+            sourceKey: entry.source_key || entry.feature_key,
+            provenance: entry.provenance || null,
+        });
+    }
+    function steerOf(up, mod, tn) {
+        const coordinateId = `shorts.stored.${mod}.${tn}`;
+        const coordinate = shortsRegisteredCoordinate(up, coordinateId);
+        return coordinate
+            && coordinate.channel === mod
+            && coordinate.target === tn
+            ? coordinate
+            : null;
+    }
+    function savedCoordinateRegistry(validation = SAVEDCHANNELVALIDATION) {
+        return validation && !validation.loading && !validation.error
+            && validation.coordinateRegistry || null;
+    }
+    function savedCoordinateByRole(predicate, validation = SAVEDCHANNELVALIDATION) {
+        const registry = savedCoordinateRegistry(validation);
+        return registry && (registry.columns || []).find(predicate) || null;
+    }
+    function savedCoordinateIdByFamily(family, validation = SAVEDCHANNELVALIDATION) {
+        const column = savedCoordinateByRole(
+            candidate => candidate.family === family,
+            validation
+        );
+        return column && column.id || null;
+    }
+    function savedVisualKeepProtocolIds(validation = SAVEDCHANNELVALIDATION) {
+        const registry = savedCoordinateRegistry(validation);
+        return Object.fromEntries((registry && registry.columns || [])
+            .filter(column => column.family === 'visualKeepProtocolForecast')
+            .map(column => [column.protocolKey, column.id]));
+    }
+    function savedResolveCoordinateId(coordinateId, validation = SAVEDCHANNELVALIDATION) {
+        const registry = savedCoordinateRegistry(validation);
+        if (!registry || !coordinateId) return coordinateId || null;
+        const active = new Set((registry.columns || []).map(column => column.id));
+        let current = String(coordinateId), hops = 0;
+        while (!active.has(current) && registry.aliasMap
+            && registry.aliasMap[current] && hops < 20) {
+            current = registry.aliasMap[current];
+            hops++;
+        }
+        return active.has(current) ? current : null;
+    }
     function visualKeepForecastOf(up) {
         const value = up && up.visual_keep_forecast;
-        if (!value || value.coordinate_id !== 'shorts.visual-keep-forecast.v1') return null;
+        if (!value || !value.coordinate_id) return null;
+        const ledgerState = shortsLedgerState(up);
+        const recordValidation = up && up.score_record_validation;
+        const live = SCORECONTRACT && SCORECONTRACT.live || {};
+        const registeredId = (
+            savedCoordinateIdByFamily('visualKeepForecast')
+            || live.coordinates
+                && live.coordinates.visual_keep_forecast
+        );
         const raw = value.raw != null ? +value.raw : +value.est;
-        return isFinite(raw) ? { ...value, raw, est: raw } : null;
+        const est = value.est != null ? +value.est : raw;
+        if (
+            !ledgerState.valid
+            || !recordValidation
+            || recordValidation.valid !== true
+            || !SHORTS_LEDGER_SHA256.test(
+                String(recordValidation.recorded_sha256 || '')
+            )
+            || recordValidation.recorded_sha256
+                !== recordValidation.calculated_sha256
+            || !registeredId
+            || value.coordinate_id !== registeredId
+            || value.source !== 'live_frozen_model_score'
+            || value.calibration_scope !== 'pooled_global'
+            || !Object.prototype.hasOwnProperty.call(
+                value,
+                'account_model'
+            )
+            || value.account_model !== null
+            || value.kind !== 'keep_rate_percent'
+            || value.unit !== 'percent'
+            || value.pctile !== null
+            || value.model_artifact_canonical_key
+                !== 'raw/predictor-lab/visual-keep-model-v1.json'
+            || value.model_manifest_key
+                !== 'raw/predictor-lab/visual-keep-model-v1.manifest.json'
+            || !SHORTS_LEDGER_SHA256.test(
+                String(value.model_artifact_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(value.model_manifest_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(value.producer_source_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(value.feature_contract_sha256 || '')
+            )
+            || value.model_artifact_key
+                !== (
+                    'raw/predictor-lab/visual-keep-model/by-sha256/'
+                    + `${value.model_artifact_sha256}.json`
+                )
+            || (
+                live.visual_keep_model_artifact_sha256
+                && value.model_artifact_sha256
+                    !== live.visual_keep_model_artifact_sha256
+            )
+            || (
+                live.visual_keep_model_manifest_sha256
+                && value.model_manifest_sha256
+                    !== live.visual_keep_model_manifest_sha256
+            )
+            || (
+                live.feature_contract_sha256
+                && value.feature_contract_sha256
+                    !== live.feature_contract_sha256
+            )
+            || (
+                live.display_contract_version != null
+                && value.feature_contract_version
+                    !== live.display_contract_version
+            )
+            || (
+                live.visual_keep_model_producer_source_sha256
+                && value.producer_source_sha256
+                    !== live.visual_keep_model_producer_source_sha256
+            )
+            || !value.input
+            || !isFinite(raw)
+            || !isFinite(est)
+            || raw < 0
+            || raw > 100
+            || Math.abs(raw - est) > 1e-8
+        ) return null;
+        const snapshot = up.savedChannelVideoId
+            ? savedVisualKeepCoordinateSnapshot(
+                up.savedChannelVideoId,
+                up.savedChannelId
+            )
+            : null;
+        const registeredCoordinate = snapshot && snapshot.frozen;
+        if (
+            registeredCoordinate
+            && registeredCoordinate.value != null
+            && (
+                !registeredCoordinate.ledgerSha256
+                || registeredCoordinate.coordinateId !== registeredId
+                || !isFinite(+registeredCoordinate.value)
+                || Math.abs(raw - registeredCoordinate.value) > 1e-8
+            )
+        ) return null;
+        const input = shortsInputDescriptor(up, 'visual');
+        const coordinate = {
+            coordinateId: registeredId,
+            featureKey: 'visual_keep_forecast',
+            channel: 'visual',
+            modality: 'visual',
+            input: String(value.input || input.input),
+            inputPresent: input.present,
+            target: 'keep',
+            value: raw,
+            valueUnit: 'percent',
+            displayUnit: 'percent',
+            percentile100: null,
+            percentileUnit: SHORTS_PERCENTILE_UNIT,
+            ledgerSha256: ledgerState.ledgerSha256,
+            kind: 'record_bound_derived_forecast',
+            sourceKey: 'visual_keep_forecast',
+            authority: 'record-bound-derived-coordinate',
+            origin: 'canonical-score-record',
+            scoreRecordSha256: recordValidation.recorded_sha256,
+            baseLedgerSha256: ledgerState.ledgerSha256,
+        };
+        return {
+            ...value,
+            ...coordinate,
+            raw,
+            est: raw,
+            scoreRecordSha256: recordValidation.recorded_sha256,
+            baseLedgerSha256: ledgerState.ledgerSha256,
+            validationRowLedgerSha256:
+                registeredCoordinate
+                && registeredCoordinate.validationRowLedgerSha256 || null,
+        };
     }
-    const VISUAL_KEEP_PROTOCOL_IDS = Object.freeze({
-        videoHoldout: 'shorts.visual-keep-protocol.video-heldout.v1',
-        forwardTime: 'shorts.visual-keep-protocol.forward-time.v1',
-        accountHoldout: 'shorts.visual-keep-protocol.account-heldout.v1',
-    });
-    function savedVisualKeepCoordinateSnapshot(videoId) {
+    function savedVisualKeepCoordinateSnapshot(videoId, channelId) {
         const validation = SAVEDCHANNELVALIDATION;
         if (!videoId || !validation || validation.loading || validation.error) return null;
         const row = (validation.validationRows || []).find(
-            candidate => String(candidate.id) === String(videoId)
+            candidate => (
+                String(candidate.id) === String(videoId)
+                && (
+                    !channelId
+                    || String(candidate.channelId || '')
+                        === String(channelId)
+                )
+            )
         );
         if (!row) return null;
         const registry = validation.coordinateRegistry || {};
         const coordinates = registry.columns || [];
+        const scoreLedger = row.scoreLedger || {};
+        const coordinateIds = coordinates.map(column => column.id);
+        const rowLedgerSha256 = (
+            Array.isArray(scoreLedger.values)
+            && Array.isArray(scoreLedger.percentiles)
+            && scoreLedger.values.length === coordinateIds.length
+            && scoreLedger.percentiles.length === coordinateIds.length
+        ) ? shortsSha256(shortsCanonicalJson({
+            schema: 'saved-channel-row-score-ledger-v1',
+            registry_version: registry.version || null,
+            row_id: String(row.id),
+            coordinate_ids: coordinateIds,
+            values: scoreLedger.values,
+            percentiles: scoreLedger.percentiles,
+        })) : null;
         const artifactCatalog = registry.lineageCatalog
             && registry.lineageCatalog.artifacts || {};
+        const inputIdentity = column => {
+            const group = column && column.group || '';
+            if (column && column.valueClass === 'observed_outcome') {
+                return {
+                    modality: 'observed',
+                    input: 'measured private video outcome',
+                };
+            }
+            if (
+                column
+                && column.family
+                    === 'creatorAdaptiveKeepPrequential'
+            ) {
+                return {
+                    modality: 'multimodal-plus-history',
+                    input: 'visual embedding plus together embedding plus strictly earlier creator outcomes',
+                };
+            }
+            if (
+                column
+                && (
+                    column.family === 'visualKeepForecast'
+                    || column.family === 'visualKeepProtocolForecast'
+                )
+            ) {
+                return {
+                    modality: 'visual',
+                    input: 'first-five-second five-frame montage embedding only',
+                };
+            }
+            return {
+                modality: group === 'together'
+                    ? 'multimodal'
+                    : group || 'derived',
+                input: group === 'visual'
+                    ? 'first-five-second five-frame montage only'
+                    : group === 'text'
+                        ? 'first-five-second transcript only'
+                        : group === 'together'
+                            ? 'first-five-second montage plus transcript'
+                            : 'derived inputs defined by this coordinate lineage',
+            };
+        };
         const cell = coordinateId => {
             const index = coordinates.findIndex(column => column.id === coordinateId);
             const column = index >= 0 ? coordinates[index] : null;
@@ -401,6 +1262,12 @@ const JarvisRetention = (function () {
                 && column.coordinateIdentity.axisTuple.artifactIds || [];
             const artifactId = artifactIds[0] || null;
             const artifact = artifactId && artifactCatalog[artifactId] || {};
+            const input = inputIdentity(column);
+            const storedCoordinate = column
+                && column.family === 'stored';
+            const ledgerSha256 = storedCoordinate
+                ? row.sourceScoreLedgerSha256 || null
+                : rowLedgerSha256;
             return {
                 coordinateId,
                 column,
@@ -413,11 +1280,43 @@ const JarvisRetention = (function () {
                     || artifact.runtimeRevision
                     && artifact.runtimeRevision.artifactSha256
                     || null,
+                channel: column && column.group || 'derived',
+                modality: input.modality,
+                input: input.input,
+                target: column && column.target || column && column.key
+                    || 'unknown',
+                valueUnit: column && (
+                    column.unit || column.storageUnit
+                ) || 'unit_unavailable',
+                displayUnit: column && column.unit || 'unit_unavailable',
+                percentile100: percentile == null || !isFinite(+percentile)
+                    ? null
+                    : +percentile,
+                percentileUnit: SHORTS_PERCENTILE_UNIT,
+                ledgerSha256,
+                authority: storedCoordinate
+                    ? 'canonical-ledger-coordinate'
+                    : 'validation-row-ledger-coordinate',
+                origin: storedCoordinate
+                    ? 'canonical-score-ledger'
+                    : 'saved-channel-validation-row-ledger',
+                scoreRecordSha256:
+                    row.sourceScoreRecordSha256 || null,
+                validationRowLedgerSha256: rowLedgerSha256,
+                sourceKey: column && (
+                    column.sourceKey || column.key
+                ) || coordinateId,
+                kind: column && column.valueClass || column && column.family
+                    || 'registered-coordinate',
             };
         };
         const study = validation.visualKeepStudy || {};
+        const coordinateBy = predicate => (
+            coordinates.find(predicate) || {}
+        ).id || null;
+        const protocolIds = savedVisualKeepProtocolIds(validation);
         const protocols = Object.fromEntries(
-            Object.entries(VISUAL_KEEP_PROTOCOL_IDS).map(
+            Object.entries(protocolIds).map(
                 ([protocolKey, coordinateId]) => {
                     const protocol = study.protocols
                         && study.protocols[protocolKey] || {};
@@ -444,129 +1343,228 @@ const JarvisRetention = (function () {
             registryVersion: validation.coordinateRegistry
                 && validation.coordinateRegistry.version,
             protocols,
-            frozen: cell('shorts.visual-keep-forecast.v1'),
-            storedVisual: cell('shorts.stored.visual.keep'),
-            storedTogether: cell('shorts.stored.together.keep'),
-            storedText: cell('shorts.stored.text.keep'),
-            videoHeldoutVisualMap: cell('shorts.video-heldout.visual.keep'),
-            accountHeldoutVisualMap: cell('shorts.account-heldout.visual.keep'),
-            observed: cell('shorts.observed.keep'),
+            frozen: cell(coordinateBy(
+                column => column.family === 'visualKeepForecast'
+            )),
+            creatorAdaptive: cell(coordinateBy(
+                column => (
+                    column.family
+                    === 'creatorAdaptiveKeepPrequential'
+                )
+            )),
+            storedVisual: cell(coordinateBy(column => (
+                column.family === 'stored'
+                && column.group === 'visual'
+                && column.target === 'keep'
+            ))),
+            storedTogether: cell(coordinateBy(column => (
+                column.family === 'stored'
+                && column.group === 'together'
+                && column.target === 'keep'
+            ))),
+            storedText: cell(coordinateBy(column => (
+                column.family === 'stored'
+                && column.group === 'text'
+                && column.target === 'keep'
+            ))),
+            videoHeldoutVisualMap: cell(coordinateBy(column => (
+                column.family === 'videoHeldout'
+                && column.group === 'visual'
+                && column.target === 'keep'
+            ))),
+            accountHeldoutVisualMap: cell(coordinateBy(column => (
+                column.family === 'accountHeldout'
+                && column.group === 'visual'
+                && column.target === 'keep'
+            ))),
+            observed: cell(coordinateBy(column => (
+                column.family === 'observed' && column.key === 'keep'
+            ))),
         };
     }
     function creatorAdaptiveKeepForecastOf(up) {
-        const isExplicitSavedChannelRecord = !!(
-            up
-            && up.source === 'saved-channel'
-            && up.savedChannelId
-            && up.savedChannelVideoId
-        );
         const persisted = up && up.creator_adaptive_keep_forecast;
+        if (!persisted || typeof persisted !== 'object') return null;
+        const ledgerState = shortsLedgerState(up);
+        const recordValidation = up && up.score_record_validation;
+        const manifest = up && up.input_manifest || {};
         const liveContract = SCORECONTRACT && SCORECONTRACT.live || {};
-        const liveModelArtifactSha = liveContract.creator_model_artifact_sha256
-            || null;
-        const creatorStudy = SAVEDCHANNELVALIDATION
-            && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy || {};
-        const formula = creatorStudy.formula || {};
-        const selection = creatorStudy.selection || {};
-        const selected = selection.selected || {};
-        const predictorEligible = creatorStudy.status
-            && creatorStudy.status.predictorEligible === true;
-        const hasSchema3Mixture = +creatorStudy.schemaVersion === 3
-            && formula.modalityClass === 'multimodal';
-        const schema3 = {
-            model_modality: 'multimodal',
-            model_history_window: hasSchema3Mixture && formula.historyWindow != null ? +formula.historyWindow : 30,
-            model_minimum_history_n: hasSchema3Mixture && formula.minimumHistoryN != null ? +formula.minimumHistoryN : 8,
-            model_formula: hasSchema3Mixture
-                ? formula.outputTransform || selected.formula || 'clip(0.5 * centered-together residual analog + 0.5 * visual+together semantic stack, 0, 100)'
-                : 'clip(0.5 * centered-together residual analog + 0.5 * visual+together semantic stack, 0, 100)',
-            candidate_count: hasSchema3Mixture && selection.candidateCount != null ? +selection.candidateCount : 43360,
-            candidate_registry_sha256: hasSchema3Mixture ? selection.candidateRegistrySha256 || null : null,
+        const registeredId = liveContract.coordinates
+            && liveContract.coordinates
+                .creator_adaptive_keep_forecast;
+        const raw = persisted.raw != null
+            ? +persisted.raw
+            : +persisted.est;
+        const est = persisted.est != null ? +persisted.est : raw;
+        const historyN = +persisted.history_n;
+        const historyIds = Array.isArray(
+            persisted.history_video_ids
+        ) ? persisted.history_video_ids.map(String) : [];
+        const profile = String(
+            persisted.profile_account || ''
+        ).trim().toLowerCase();
+        const manifestProfile = String(
+            manifest.creator_profile || ''
+        ).trim().toLowerCase();
+        const artifacts = manifest.scorer_revisions
+            && manifest.scorer_revisions.artifacts || {};
+        const modelManifestRevision = artifacts[
+            'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json'
+        ];
+        const servingManifestRevision = artifacts[
+            'raw/predictor-lab/creator-adaptive-keep-serving-v1.manifest.json'
+        ];
+        const immutableModelKey = (
+            'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/'
+            + `${persisted.model_artifact_sha256}.json`
+        );
+        const immutableServingKey = (
+            'raw/predictor-lab/creator-adaptive-keep-serving/by-sha256/'
+            + `${persisted.serving_artifact_sha256}.npz`
+        );
+        if (
+            !ledgerState.valid
+            || !recordValidation
+            || recordValidation.valid !== true
+            || !SHORTS_LEDGER_SHA256.test(
+                String(recordValidation.recorded_sha256 || '')
+            )
+            || recordValidation.recorded_sha256
+                !== recordValidation.calculated_sha256
+            || persisted.coordinate_id !== registeredId
+            || persisted.source
+                !== 'live_creator_profile_shadow_score'
+            || persisted.forecast_scope
+                !== 'future_upload_after_profile_history'
+            || persisted.historical_replay_valid !== false
+            || persisted.calibration_scope
+                !== 'creator_profile_snapshot'
+            || persisted.kind !== 'keep_rate_percent'
+            || persisted.unit !== 'percent'
+            || persisted.pctile !== null
+            || !profile
+            || !manifestProfile
+            || profile !== manifestProfile
+            || !Number.isInteger(historyN)
+            || historyN < 8
+            || historyN > 30
+            || historyIds.length !== historyN
+            || new Set(historyIds).size !== historyN
+            || !isFinite(+persisted.history_end)
+            || !isFinite(+persisted.history_only_baseline)
+            || !isFinite(+persisted.component_a)
+            || !isFinite(+persisted.component_b)
+            || persisted.predictor_eligible !== false
+            || persisted.research_only !== true
+            || +persisted.candidate_count !== 43360
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.candidate_registry_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.serving_artifact_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.serving_manifest_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.serving_producer_source_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.serving_scorer_source_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.model_artifact_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.model_manifest_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.model_producer_source_sha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(persisted.feature_contract_sha256 || '')
+            )
+            || persisted.serving_artifact_canonical_key
+                !== 'raw/predictor-lab/creator-adaptive-keep-serving-v1.npz'
+            || persisted.serving_manifest_key
+                !== 'raw/predictor-lab/creator-adaptive-keep-serving-v1.manifest.json'
+            || persisted.serving_artifact_key
+                !== immutableServingKey
+            || persisted.model_artifact_canonical_key
+                !== 'raw/predictor-lab/creator-adaptive-keep-model-v1.json'
+            || persisted.model_manifest_key
+                !== 'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json'
+            || persisted.model_artifact_key !== immutableModelKey
+            || persisted.feature_contract_version == null
+            || persisted.feature_contract_sha256
+                !== manifest.feature_contract_sha256
+            || (
+                modelManifestRevision
+                && persisted.model_manifest_sha256
+                    !== modelManifestRevision.sha256
+            )
+            || (
+                servingManifestRevision
+                && persisted.serving_manifest_sha256
+                    !== servingManifestRevision.sha256
+            )
+            || !String(persisted.input || '').trim()
+            || !isFinite(raw)
+            || !isFinite(est)
+            || raw < 0
+            || raw > 100
+            || Math.abs(raw - est) > 1e-8
+        ) return null;
+        const artifactCurrent = liveContract
+            .creator_model_artifact_sha256
+            ? (
+                persisted.model_artifact_sha256
+                === liveContract.creator_model_artifact_sha256
+                && persisted.serving_artifact_sha256
+                    === liveContract.creator_serving_artifact_sha256
+            )
+            : null;
+        const scorerCurrent = liveContract.revision_fingerprint
+            ? manifest.revision_fingerprint
+                === liveContract.revision_fingerprint
+            : null;
+        const input = shortsInputDescriptor(up, 'together');
+        const coordinate = {
+            coordinateId: registeredId,
+            featureKey: 'creator_adaptive_keep_forecast',
+            channel: 'together',
+            modality: 'multimodal-plus-history',
+            input: String(persisted.input || input.input),
+            inputPresent: input.present,
+            target: 'keep',
+            value: raw,
+            valueUnit: 'percent',
+            displayUnit: 'percent',
+            percentile100: null,
+            percentileUnit: SHORTS_PERCENTILE_UNIT,
+            ledgerSha256: ledgerState.ledgerSha256,
+            kind: 'record_bound_derived_forecast',
+            sourceKey: 'creator_adaptive_keep_forecast',
+            authority: 'record-bound-derived-coordinate',
+            origin: 'canonical-score-record',
+            scoreRecordSha256:
+                recordValidation.recorded_sha256,
+            baseLedgerSha256: ledgerState.ledgerSha256,
         };
-        const responseArtifactSha = persisted && persisted.model_artifact_sha256
-            || up && up.creator_adaptive_keep_release_sha256
-            || null;
-        if (persisted && responseArtifactSha && persisted.coordinate_id === 'shorts.creator-adaptive-keep.v1') {
-            const raw = persisted.raw != null ? +persisted.raw : +persisted.est;
-            if (isFinite(raw)) {
-                const scoreRevision = up && up.input_manifest
-                    && up.input_manifest.revision_fingerprint || null;
-                const artifactCurrent = liveModelArtifactSha
-                    ? responseArtifactSha === liveModelArtifactSha
-                    : null;
-                const scorerCurrent = liveContract.revision_fingerprint
-                    ? scoreRevision === liveContract.revision_fingerprint
-                    : null;
-                return {
-                    ...persisted,
-                    ...schema3,
-                    raw,
-                    est: raw,
-                    artifact_current: artifactCurrent,
-                    scorer_current: scorerCurrent,
-                    revision_status: artifactCurrent === false || scorerCurrent === false
-                        ? 'stale'
-                        : artifactCurrent === true && scorerCurrent === true
-                            ? 'current'
-                            : 'unverified',
-                    predictor_eligible: predictorEligible,
-                };
-            }
-        }
-        if (!isExplicitSavedChannelRecord) return null;
-        const videoId = up.savedChannelVideoId;
-        if (!videoId || !SAVEDCHANNELVALIDATION || SAVEDCHANNELVALIDATION.loading || SAVEDCHANNELVALIDATION.error) return null;
-        const columns = SAVEDCHANNELVALIDATION.coordinateRegistry
-            && SAVEDCHANNELVALIDATION.coordinateRegistry.columns || [];
-        const coordinateIndex = columns.findIndex(column => column.id === 'shorts.creator-adaptive-keep.v1');
-        const rows = SAVEDCHANNELVALIDATION.validationRows || SAVEDCHANNELVALIDATION.rows || [];
-        const row = rows.find(candidate => (
-            String(candidate.id) === String(videoId)
-            && String(candidate.channelId || '') === String(up.savedChannelId)
-        ));
-        const value = coordinateIndex >= 0
-            && row && row.scoreLedger && row.scoreLedger.values
-            && row.scoreLedger.values[coordinateIndex];
-        if (value == null || !isFinite(+value)) return null;
-        const predictions = row.predictions || {};
         return {
-            coordinate_id: 'shorts.creator-adaptive-keep.v1',
-            raw: +value,
-            est: +value,
-            kind: 'keep_rate_percent',
-            unit: 'percent',
-            source: 'causal_final20_prequential',
-            forecast_scope: 'historical_row_prequential',
-            historical_replay_valid: true,
-            revision_status: 'historical-prequential',
-            claim_boundary: (
-                'This value was generated with only the labels available before '
-                + 'this historical row. It is the valid blind historical comparison.'
-            ),
-            predictor_eligible: predictorEligible,
-            profile_account: row.accountId || null,
-            profile_account_name: row.accountName || null,
-            history_only_baseline: predictions.creatorAdaptiveKeepBaseline == null
-                ? null
-                : +predictions.creatorAdaptiveKeepBaseline,
-            history_n: predictions.creatorAdaptiveKeepHistoryN == null
-                ? null
-                : +predictions.creatorAdaptiveKeepHistoryN,
-            history_end: predictions.creatorAdaptiveKeepHistoryEnd == null
-                ? null
-                : +predictions.creatorAdaptiveKeepHistoryEnd,
-            history_video_ids: Array.isArray(
-                predictions.creatorAdaptiveKeepHistoryVideoIds
-            ) ? predictions.creatorAdaptiveKeepHistoryVideoIds.map(String) : [],
-            component_a: predictions.creatorAdaptiveKeepComponentA == null
-                ? null
-                : +predictions.creatorAdaptiveKeepComponentA,
-            component_b: predictions.creatorAdaptiveKeepComponentB == null
-                ? null
-                : +predictions.creatorAdaptiveKeepComponentB,
-            component_a_definition: 'Centered together-embedding residual analog',
-            component_b_definition: 'Visual-plus-together semantic stack',
-            ...schema3,
+            ...persisted,
+            ...coordinate,
+            raw,
+            est: raw,
+            artifact_current: artifactCurrent,
+            scorer_current: scorerCurrent,
+            revision_status:
+                artifactCurrent === false || scorerCurrent === false
+                    ? 'stale'
+                    : artifactCurrent === true
+                        && scorerCurrent === true
+                        ? 'current'
+                        : 'unverified',
         };
     }
     function creatorAdaptiveForecastPresentation(forecast) {
@@ -593,13 +1591,23 @@ const JarvisRetention = (function () {
             : revisionStatus === 'stale'
                 ? { label: 'stale saved revision', color: C.red }
                 : revisionStatus === 'historical-prequential'
-                    ? { label: 'blind historical row', color: C.cyan }
+                    ? { label: 'historical prequential row', color: C.cyan }
                     : { label: 'revision unverified', color: C.amber };
-        const claimBoundary = forecast.claim_boundary || (
-            historicalPrequential
-                ? 'This row is evaluated only from information that existed before it.'
-                : 'This profile snapshot is a future-upload research forecast. It is not a blind replay of an older upload.'
-        );
+        const claimBoundary = historicalPrequential
+            ? (
+                'Historical prequential row. '
+                + (
+                    forecast.claim_boundary
+                    || 'This row is evaluated only from information that existed before it.'
+                )
+            )
+            : (
+                'Future-upload research forecast. '
+                + (
+                    forecast.claim_boundary
+                    || 'This profile snapshot is not a blind replay of an older upload.'
+                )
+            );
         return {
             historicalPrequential,
             history,
@@ -623,7 +1631,11 @@ const JarvisRetention = (function () {
     function steerBest(up, tn) {
         for (const mod of steerPreference(up)) {
             const metric = steerOf(up, mod, tn);
-            if (metric && metric.est != null && isFinite(Number(metric.est))) return { mod, sourceKey: `${mod}_${tn}`, ...metric };
+            if (
+                metric
+                && metric.value != null
+                && isFinite(Number(metric.value))
+            ) return { mod, ...metric };
         }
         return null;
     }
@@ -634,32 +1646,47 @@ const JarvisRetention = (function () {
         return String(up.embeddingAssetId || '');
     }
     function embeddingIdentityAttrs(identity, assetId) {
-        if (!identity) return '';
+        if (
+            !identity
+            || !identity.coordinateId
+            || !SHORTS_LEDGER_SHA256.test(
+                String(identity.ledgerSha256 || '')
+            )
+            || identity.value == null
+            || !isFinite(Number(identity.value))
+            || !identity.valueUnit
+            || !identity.target
+            || !identity.modality
+            || !identity.input
+        ) return '';
         const rawAsset = assetId || '';
         const attr = (name, value) => value == null || value === '' ? '' : ` ${name}="${esc(String(value))}"`;
-        const sourceKey = identity.sourceKey || `${identity.channel}_${identity.target}`;
-        const embeddingId = `${identity.domain || 'shorts_raw'}:${identity.origin || 'stored-production'}:${sourceKey}`;
-        const coordinateId = identity.coordinateId || (
-            (identity.domain || 'shorts_raw') === 'shorts_raw'
-            && (identity.origin || 'stored-production') === 'stored-production'
-            && identity.channel && identity.target
-                ? `shorts.stored.${identity.channel}.${identity.target}`
-                : ''
-        );
-        return `${attr('data-embedding-id', embeddingId)}${attr('data-coordinate-id', coordinateId)}${attr('data-embedding-asset', rawAsset)}${attr('data-embedding-domain', identity.domain || 'shorts_raw')}${attr('data-embedding-origin', identity.origin || 'stored-production')}${attr('data-embedding-channel', identity.channel)}${attr('data-embedding-target', identity.target)}${attr('data-embedding-source-key', sourceKey)}${attr('data-embedding-est', identity.est)}${attr('data-embedding-percentile', identity.pctile)}${attr('data-embedding-kind', identity.kind)}${attr('data-embedding-model', identity.embeddingModel || identity.embedding_model)}${attr('data-embedding-scorer', identity.scorer)}`;
+        const sourceKey = identity.sourceKey
+            || `${identity.channel}_${identity.target}`;
+        const embeddingId = `shorts_raw:${identity.coordinateId}:${sourceKey}`;
+        const authority = identity.authority
+            || 'canonical-ledger-coordinate';
+        const origin = identity.origin || 'canonical-score-ledger';
+        const authorityLabel = `${identity.coordinateId}; value ${identity.value} ${identity.valueUnit}; percentile ${identity.percentile100 == null ? 'unavailable' : identity.percentile100} ${identity.percentileUnit || SHORTS_PERCENTILE_UNIT}; target ${identity.target}; modality ${identity.modality}; input ${identity.input}; authority ${authority}; ledger lineage ${identity.ledgerSha256}${identity.scoreRecordSha256 ? `; score record ${identity.scoreRecordSha256}` : ''}${identity.validationRowLedgerSha256 ? `; validation row ledger ${identity.validationRowLedgerSha256}` : ''}`;
+        return `${attr('aria-label', authorityLabel)}${attr('data-embedding-id', embeddingId)}${attr('data-embedding-authority', authority)}${attr('data-coordinate-id', identity.coordinateId)}${attr('data-coordinate-ledger-sha256', identity.ledgerSha256)}${attr('data-coordinate-value', identity.value)}${attr('data-coordinate-value-unit', identity.valueUnit)}${attr('data-coordinate-display-unit', identity.displayUnit || identity.valueUnit)}${attr('data-coordinate-percentile-0-100', identity.percentile100)}${attr('data-coordinate-percentile-unit', identity.percentileUnit || SHORTS_PERCENTILE_UNIT)}${attr('data-coordinate-target', identity.target)}${attr('data-coordinate-modality', identity.modality)}${attr('data-coordinate-input', identity.input)}${attr('data-score-record-sha256', identity.scoreRecordSha256)}${attr('data-base-ledger-sha256', identity.baseLedgerSha256)}${attr('data-validation-row-ledger-sha256', identity.validationRowLedgerSha256)}${attr('data-embedding-asset', rawAsset)}${attr('data-embedding-domain', 'shorts_raw')}${attr('data-embedding-origin', origin)}${attr('data-embedding-channel', identity.channel)}${attr('data-embedding-target', identity.target)}${attr('data-embedding-source-key', sourceKey)}${attr('data-embedding-est', identity.value)}${attr('data-embedding-percentile', identity.percentile100)}${attr('data-embedding-kind', identity.kind)}${attr('data-embedding-model', identity.embeddingModel || identity.embedding_model)}${attr('data-embedding-scorer', identity.scorer)}`;
     }
     function embeddingDataAttrs(up, mod, target, origin, assetId, metricOverride) {
         const metric = metricOverride || steerOf(up, mod, target);
         if (!metric) return '';
         const manifest = up && up.input_manifest || {};
         return embeddingIdentityAttrs({
-            domain: String(manifest.domain || 'shorts_raw'),
-            origin: origin || 'stored-production',
             channel: mod,
+            modality: metric.modality,
+            input: metric.input,
             target,
-            sourceKey: `${mod}_${target}`,
-            est: metric.est,
-            pctile: metric.pctile,
+            sourceKey: metric.sourceKey,
+            coordinateId: metric.coordinateId,
+            value: metric.value,
+            valueUnit: metric.valueUnit,
+            displayUnit: metric.displayUnit,
+            percentile100: metric.percentile100,
+            percentileUnit: metric.percentileUnit,
+            ledgerSha256: metric.ledgerSha256,
             kind: metric.kind,
             embeddingModel: manifest.embedding_model,
             scorer: manifest.scorer,
@@ -679,24 +1706,47 @@ const JarvisRetention = (function () {
         options = options || {};
         const manifest = up && up.input_manifest || {};
         const live = SCORECONTRACT && SCORECONTRACT.live || {};
+        const coordinate = metric
+            && metric.coordinateId === coordinateId
+            && metric.ledgerSha256
+            ? metric
+            : shortsRegisteredCoordinate(up, coordinateId);
+        if (!coordinate) {
+            return `<div data-coordinate-trace="${esc(coordinateId || '')}" data-coordinate-authority="unbound-scalar-suppressed" style="border-top:1px solid ${C.border};margin-top:7px;padding-top:6px;font-size:7.7px;color:${C.amber};line-height:1.5"><b>Scalar suppressed:</b> this display cannot resolve <code>${esc(coordinateId || 'unknown coordinate')}</code> to a valid canonical ledger entry and ledger SHA-256.</div>`;
+        }
         const current = !!(
             manifest.revision_fingerprint
             && live.revision_fingerprint
             && manifest.revision_fingerprint === live.revision_fingerprint
         );
-        const raw = metric && metric.raw != null ? +metric.raw
-            : metric && metric.est != null ? +metric.est
-                : null;
-        const percentile = metric && metric.pctile != null ? +metric.pctile : null;
+        const raw = coordinate.value;
+        const percentile = coordinate.percentile100;
         const modelRevision = options.modelRevision || metric && (
             metric.serving_artifact_sha256
             || metric.model_artifact_sha256
         );
         const artifactLabel = options.artifactLabel || 'fitted artifact';
         const profile = options.profile || metric && metric.profile_account || manifest.creator_profile;
-        return `<div data-coordinate-trace="${esc(coordinateId)}" style="border-top:1px solid ${C.border};margin-top:7px;padding-top:6px;font-size:7.7px;color:${C.faint};line-height:1.5">
-          <div><b style="color:${C.text}">Ledger coordinate:</b> <code style="color:${C.cyan};user-select:all">${esc(coordinateId)}</code></div>
-          <div><b style="color:${C.text}">Displayed values:</b> ${raw == null || !isFinite(raw) ? 'raw unavailable' : `raw ${esc(String(Math.round(raw * 10000) / 10000))}`}${percentile == null || !isFinite(percentile) ? '' : ` · corpus rank ${fmtv(percentile, 1)}th percentile`}${options.valueNote ? ` · ${esc(options.valueNote)}` : ''}</div>
+        const derived = coordinate.authority === 'record-bound-derived-coordinate';
+        const validationRow = coordinate.authority
+            === 'validation-row-ledger-coordinate';
+        const coordinateLabel = derived
+            ? 'Derived score coordinate'
+            : validationRow
+                ? 'Validation row coordinate'
+                : 'Ledger coordinate';
+        const ledgerLabel = derived
+            ? 'Base 21-coordinate ledger SHA-256'
+            : validationRow
+                ? 'Validation row ledger SHA-256'
+                : 'Ledger SHA-256';
+        return `<div data-coordinate-trace="${esc(coordinateId)}"${embeddingIdentityAttrs(coordinate, rawEmbeddingAssetId(up))} style="border-top:1px solid ${C.border};margin-top:7px;padding-top:6px;font-size:7.7px;color:${C.faint};line-height:1.5">
+          <div><b style="color:${C.text}">${coordinateLabel}:</b> <code style="color:${C.cyan};user-select:all">${esc(coordinateId)}</code></div>
+          <div><b style="color:${C.text}">Displayed value:</b> ${esc(String(Math.round(raw * 10000) / 10000))} <code>${esc(coordinate.valueUnit)}</code>${percentile == null || !isFinite(percentile) ? '' : ` · corpus rank ${fmtv(percentile, 1)} <code>${esc(coordinate.percentileUnit)}</code>`}${options.valueNote ? ` · ${esc(options.valueNote)}` : ''}</div>
+          <div><b style="color:${C.text}">Target / input:</b> ${esc(coordinate.target)} · ${esc(coordinate.modality)} · ${esc(coordinate.input)}</div>
+          <div><b style="color:${C.text}">${ledgerLabel}:</b> <code style="user-select:all">${esc(coordinate.ledgerSha256)}</code></div>
+          ${derived ? `<div><b style="color:${C.text}">Score-record binding SHA-256:</b> <code style="user-select:all">${esc(coordinate.scoreRecordSha256 || 'unavailable')}</code> · this derived forecast is bound to the scored record and is not one of the 21 stored embedding axes.</div>` : ''}
+          ${validationRow ? `<div><b style="color:${C.text}">Source score record SHA-256:</b> <code style="user-select:all">${esc(coordinate.scoreRecordSha256 || 'unavailable')}</code> · this value belongs to the retrospective validation-row ledger and does not replace the score-time coordinate.</div>` : ''}
           <div><b style="color:${C.text}">Embedding identity:</b> ${shortFingerprint(manifest.embedding_input_fingerprint)} · canonical montage ${shortFingerprint(manifest.canonical_montage && manifest.canonical_montage.montage_sha256)} · ${esc(manifest.source_mode || 'historical source unknown')}</div>
           <div><b style="color:${C.text}">Scorer identity:</b> ${shortFingerprint(manifest.score_input_fingerprint || manifest.input_fingerprint)} · revision <span style="color:${current ? C.green : C.amber}">${shortFingerprint(manifest.revision_fingerprint)}${live.revision_fingerprint ? current ? ' current' : ` stale vs ${shortFingerprint(live.revision_fingerprint)}` : ''}</span>${profile ? ` · profile ${esc(profile)}` : ''}</div>
           <div><b style="color:${C.text}">Artifact:</b> ${esc(artifactLabel)} · ${shortFingerprint(modelRevision || manifest.steer_artifact_sha256)}</div>
@@ -705,7 +1755,8 @@ const JarvisRetention = (function () {
     }
     function savedVisualKeepCoordinateTableHtml(up) {
         const snapshot = savedVisualKeepCoordinateSnapshot(
-            up && up.savedChannelVideoId
+            up && up.savedChannelVideoId,
+            up && up.savedChannelId
         );
         if (!snapshot) return '';
         const selectedProtocolKey = snapshot.protocols[st.savedVisualKeepProtocol]
@@ -770,6 +1821,13 @@ const JarvisRetention = (function () {
                 revision: coordinateRevision(snapshot.frozen),
             },
             {
+                ...snapshot.creatorAdaptive,
+                label: 'Historical creator-adaptive prequential validation',
+                role: 'Retrospective prequential replay using only creator outcomes available before this row. It proves time-ordering, not prospective validation, and belongs to the validation-row ledger rather than the score-time future-upload forecast.',
+                revision:
+                    coordinateRevision(snapshot.creatorAdaptive),
+            },
+            {
                 ...snapshot.storedVisual,
                 label: 'Stored visual keep map estimate',
                 role: 'The visual map score saved when this Short was analyzed. This is the 46-style visual value and is not the held-out protocol model.',
@@ -818,10 +1876,10 @@ const JarvisRetention = (function () {
                     : row.stale
                         ? C.amber
                         : C.green;
-            return `<tr data-visual-keep-coordinate-row="${esc(row.coordinateId)}" data-coordinate-id="${esc(row.coordinateId)}" data-coordinate-value="${row.value == null ? '' : esc(String(row.value))}" style="border-top:1px solid ${row.selected ? C.cyan : C.border};background:${row.selected ? C.cyan + '09' : 'transparent'}">
+            return `<tr data-visual-keep-coordinate-row="${esc(row.coordinateId)}"${row.value == null ? '' : embeddingIdentityAttrs(row, `validation:${snapshot.row.id}`)} style="border-top:1px solid ${row.selected ? C.cyan : C.border};background:${row.selected ? C.cyan + '09' : 'transparent'}">
               <td style="padding:7px;min-width:220px"><div style="font-size:8.5px;color:${color};font-weight:950">${esc(row.label)}</div><button type="button" data-exp-ledger-coordinate="${esc(row.coordinateId)}" style="display:block;background:transparent;border:0;padding:2px 0;color:${C.faint};font:6.7px ui-monospace,SFMono-Regular,Menlo,monospace;cursor:pointer;text-align:left;word-break:break-all">${esc(row.coordinateId)} →</button></td>
-              <td style="padding:7px;min-width:82px;color:${color};font-size:14px;font-weight:950;text-align:right">${valueText(row.value)}${row.percentile == null ? '' : `<div style="font-size:6.5px;color:${C.faint};font-weight:600">${fmtv(row.percentile, 1)}th corpus rank</div>`}</td>
-              <td style="padding:7px;min-width:300px;color:${C.dim};font-size:7.5px;line-height:1.45">${esc(row.role)}<div style="color:${row.stale ? C.amber : C.faint};margin-top:2px">${esc(row.revision || '')}</div></td>
+              <td style="padding:7px;min-width:82px;color:${color};font-size:14px;font-weight:950;text-align:right">${valueText(row.value)}${row.percentile100 == null ? '' : `<div style="font-size:6.5px;color:${C.faint};font-weight:600">${fmtv(row.percentile100, 1)} ${esc(row.percentileUnit)}</div>`}<div style="font-size:6.2px;color:${C.faint};font-weight:600">${esc(row.valueUnit || 'unit unavailable')}</div></td>
+              <td style="padding:7px;min-width:300px;color:${C.dim};font-size:7.5px;line-height:1.45">${esc(row.role)}<div style="color:${C.faint};margin-top:2px">${esc(row.target)} · ${esc(row.modality)} · ${esc(row.input)}</div><div style="color:${row.stale ? C.amber : C.faint};margin-top:2px">${esc(row.revision || '')} · ledger ${row.ledgerSha256 ? esc(row.ledgerSha256.slice(0, 12)) + '…' : 'unavailable'}</div></td>
             </tr>`;
         }).join('');
         const typicalMiss = selectedProtocol
@@ -843,24 +1901,59 @@ const JarvisRetention = (function () {
     }
     function embeddingParityAudit(scope) {
         const groups = new Map(), conflicts = [];
-        const nodes = Array.from((scope || window.document).querySelectorAll('[data-embedding-id][data-embedding-asset]'));
+        const nodes = Array.from((scope || window.document).querySelectorAll('[data-embedding-authority="canonical-ledger-coordinate"][data-coordinate-id][data-embedding-asset]'));
         for (const node of nodes) {
-            const key = `${node.dataset.embeddingAsset}|${node.dataset.embeddingId}`;
+            const key = `${node.dataset.embeddingAsset}|${node.dataset.coordinateId}`;
             const value = {
-                est: node.dataset.embeddingEst === undefined ? null : Number(node.dataset.embeddingEst),
-                percentile: node.dataset.embeddingPercentile === undefined ? null : Number(node.dataset.embeddingPercentile),
-                sourceKey: node.dataset.embeddingSourceKey || '',
+                ledgerSha256: node.getAttribute(
+                    'data-coordinate-ledger-sha256'
+                ) || '',
+                scalar: node.getAttribute('data-coordinate-value') == null
+                    ? null
+                    : Number(node.getAttribute('data-coordinate-value')),
+                valueUnit: node.getAttribute(
+                    'data-coordinate-value-unit'
+                ) || '',
+                percentile: node.getAttribute(
+                    'data-coordinate-percentile-0-100'
+                ) == null
+                    ? null
+                    : Number(node.getAttribute(
+                        'data-coordinate-percentile-0-100'
+                    )),
+                percentileUnit: node.getAttribute(
+                    'data-coordinate-percentile-unit'
+                ) || '',
+                target: node.getAttribute('data-coordinate-target') || '',
+                modality: node.getAttribute(
+                    'data-coordinate-modality'
+                ) || '',
+                input: node.getAttribute('data-coordinate-input') || '',
             };
+            if (
+                !SHORTS_LEDGER_SHA256.test(value.ledgerSha256)
+                || value.scalar == null
+                || !isFinite(value.scalar)
+                || !value.valueUnit
+                || !value.target
+                || !value.modality
+                || !value.input
+            ) {
+                conflicts.push({ key, field: 'incomplete canonical provenance' });
+                continue;
+            }
             if (!groups.has(key)) {
                 groups.set(key, value);
                 continue;
             }
             const first = groups.get(key);
-            for (const field of ['est', 'percentile']) {
+            for (const field of ['scalar', 'percentile']) {
                 if (first[field] == null || value[field] == null) continue;
                 if (Math.abs(first[field] - value[field]) > 1e-8) conflicts.push({ key, field, first: first[field], next: value[field] });
             }
-            if (first.sourceKey !== value.sourceKey) conflicts.push({ key, field: 'sourceKey', first: first.sourceKey, next: value.sourceKey });
+            for (const field of ['ledgerSha256', 'valueUnit', 'percentileUnit', 'target', 'modality', 'input']) {
+                if (first[field] !== value[field]) conflicts.push({ key, field, first: first[field], next: value[field] });
+            }
         }
         return { ok: conflicts.length === 0, nodes: nodes.length, identities: groups.size, conflicts };
     }
@@ -919,19 +2012,58 @@ const JarvisRetention = (function () {
         SCORECONTRACT_AT = Date.now();
         SCORECONTRACT = { loading: true };
         SCORECONTRACT_PROMISE = Promise.allSettled([
-            rtFetchJson('/buildings/jarvis/saved-channel-feature-contract.json', { cache: 'default' }, 3),
+            rtFetchJson('/buildings/jarvis/saved-channel-feature-contract.json', { cache: 'no-cache' }, 3),
             rtFetchJson('/api/raw/scorer-contract', { cache: 'no-store' }, 3),
         ]).then(([contractResult, liveResult]) => {
             const contract = contractResult.status === 'fulfilled' ? contractResult.value : null;
             const live = liveResult.status === 'fulfilled' ? liveResult.value : null;
-            SCORECONTRACT = contract && contract.provenanceByTarget
-                ? {
+            const identitySha256 = contract
+                ? scoreFeatureContractIdentitySha256(contract)
+                : null;
+            const liveError = live && live.error
+                || (
+                    liveResult.status === 'rejected'
+                        ? fetchFail(liveResult.reason)
+                        : null
+                );
+            if (!contract || !contract.provenanceByTarget) {
+                SCORECONTRACT = {
+                    error:
+                        'Score provenance contract is incomplete.',
+                };
+            } else if (
+                !live
+                || !live.revision_fingerprint
+                || !SHORTS_LEDGER_SHA256.test(
+                    String(live.feature_contract_sha256 || '')
+                )
+            ) {
+                SCORECONTRACT = {
+                    error:
+                        liveError
+                        || 'The live scorer contract is unavailable; score provenance is withheld.',
+                };
+            } else if (
+                identitySha256
+                    !== live.feature_contract_sha256
+            ) {
+                SCORECONTRACT = {
+                    error:
+                        'Static feature definitions do not match the live scorer identity; score provenance is withheld.',
+                    expectedFeatureContractSha256:
+                        identitySha256,
+                    liveFeatureContractSha256:
+                        live.feature_contract_sha256,
+                };
+            } else {
+                SCORECONTRACT = {
                     ...contract,
-                    live: live && live.revision_fingerprint ? live : null,
-                    liveError: live && live.error
-                        || (liveResult.status === 'rejected' ? fetchFail(liveResult.reason) : null),
-                }
-                : { error: 'Score provenance contract is incomplete.' };
+                    featureContractIdentitySha256:
+                        identitySha256,
+                    live,
+                    liveError: null,
+                };
+            }
             SCORECONTRACT_AT = Date.now();
             rtgUpdateExp();
             return SCORECONTRACT;
@@ -1002,9 +2134,9 @@ const JarvisRetention = (function () {
           <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Formula:</b> one immutable pooled Ridge. Creator identity is never an input.</div>
           <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Output:</b> raw stayed-to-watch percentage. It reuses the visual embedding and is not a new embedding space.</div>
         </div><div style="display:grid;grid-template-columns:minmax(105px,.55fr) minmax(220px,1.35fr) minmax(190px,1.1fr) minmax(160px,1fr);gap:8px;padding:7px;border-top:1px solid ${C.border};align-items:start">
-          <div><div style="font-size:9px;color:${C.amber};font-weight:950">Causal multimodal keep mixture</div><div style="font-size:7.5px;color:${C.amber}">1 research scalar · never predictor-eligible</div></div>
+          <div><div style="font-size:9px;color:${C.amber};font-weight:950">Prequential multimodal keep mixture</div><div style="font-size:7.5px;color:${C.amber}">1 research scalar · never predictor-eligible</div></div>
           <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Inputs:</b> canonical 1,536D <b>visual</b> embedding + canonical 1,536D <b>together (visual + text)</b> embedding + up to 30 strictly earlier same-creator keep labels; minimum 8.</div>
-          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Frozen selection:</b> 43,360 prespecified causal candidates on the chronological 50%–80% window. Selected formula: 0.5 × centered-together residual analog + 0.5 × visual+together semantic stack.</div>
+          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Frozen selection:</b> 43,360 prespecified time-ordered candidates on the chronological 50%–80% window. Selected formula: 0.5 × centered-together residual analog + 0.5 × visual+together semantic stack.</div>
           <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Output:</b> a derived next-upload keep percentage plus its matched history-only baseline. It is not a new embedding plane and remains excluded from predictor rankings pending prospective fixed-horizon validation.</div>
         </div>`;
         const hash = manifest.steer_artifact_sha256
@@ -1019,7 +2151,7 @@ const JarvisRetention = (function () {
         const liveRevision = SCORECONTRACT.live && SCORECONTRACT.live.revision_fingerprint;
         const revisionCurrent = !!(manifest.revision_fingerprint && liveRevision && manifest.revision_fingerprint === liveRevision);
         const pipeline = SCORECONTRACT.pipeline || {};
-        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">21 embedding outputs + 2 derived keep forecasts</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The original 21 coordinates remain unchanged. The frozen visual forecast reuses the visual vector. The causal creator mixture consumes both the visual and together vectors plus strictly earlier creator history. Neither derived scalar is a new embedding space.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
+        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">21 stored score coordinates + 2 derived keep forecasts</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The original 21 coordinates remain unchanged. Some are direct embedding axes and some are registered transforms. The frozen visual forecast reuses the visual vector. The prequential creator mixture consumes both the visual and together vectors plus strictly earlier creator history. Neither derived scalar is a new embedding space.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
           <div style="overflow:auto"><div style="min-width:760px;border:1px solid ${C.border}">${targetRows}</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;margin-top:7px">
             <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Deterministic replay</div><div style="font-size:9px;color:${manifest.cache_status === 'hit' ? C.green : C.text};font-weight:900">${esc(replayStatus)}</div></div>
@@ -1029,22 +2161,212 @@ const JarvisRetention = (function () {
             <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Canonical source</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(manifest.source_mode || 'historical unknown')} · ${esc(manifest.creator_profile || 'no creator profile')}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">${manifest.canonical_montage ? `${manifest.canonical_montage.width}×${manifest.canonical_montage.height} ${esc(manifest.canonical_montage.format || 'JPEG')} · pixels ${esc(shortFingerprint(manifest.canonical_montage.montage_sha256))}` : 'canonical montage metadata unavailable'}</div></div>
             <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Duration boundary</div><div style="font-size:9px;color:${C.text};font-weight:900">${manifest.duration_s == null ? 'duration defaulted' : `${fmtv(manifest.duration_s, 3)} seconds`}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">ordinary axes ignore duration; forecast-views parity additionally requires the same duration</div></div>
           </div>
-          <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second axes were fitted and calibrated on the exact modality-specific Tyler rows recorded in the current artifact manifest. Their stored Tyler values are in-sample diagnostics; Hafu is account-external. Public views, outlier, and 10M axes use their separately recorded public fit populations. “Forecast views” is a separate Tyler-channel retention-to-views model. The Blind validation tab rebuilds eligible axes with video/account exclusion and reports the actual error. The causal multimodal mixture is research-only: known creator, at least 8 and at most 30 strictly earlier labels, one next upload at a time, and never predictor-eligible.</div>`, 10);
+          <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second axes were fitted and calibrated on the exact modality-specific Tyler rows recorded in the current artifact manifest. Their stored Tyler values are in-sample diagnostics; Hafu is account-external. Public views, outlier, and 10M axes use their separately recorded public fit populations. “Forecast views” is a separate Tyler-channel retention-to-views model. The retrospective validation tab rebuilds eligible axes with video/account exclusion and reports the actual error. The prequential multimodal mixture is research-only: known creator, at least 8 and at most 30 strictly earlier labels, one next upload at a time, and never predictor-eligible.</div>`, 10);
+    }
+    function predictorRolloverError(message) {
+        const error = new Error(message);
+        error.code = 'PREDICTOR_RELEASE_ROLLOVER';
+        return error;
+    }
+    function predictorReleasePair(artifact, status) {
+        const headers =
+            artifact && artifact._response_headers || {};
+        const artifactRelease =
+            headers.predictorReleaseSha256;
+        const artifactSha256 =
+            headers.artifactSha256;
+        if (
+            !rtExactSha256(artifactRelease)
+            || !rtExactSha256(artifactSha256)
+        ) {
+            const error = new Error(
+                'Predictor artifact is missing exact immutable release headers.'
+            );
+            error.code = 'PREDICTOR_RELEASE_INVALID';
+            throw error;
+        }
+        if (
+            !status
+            || !rtExactSha256(status.releaseSha256)
+            || !rtExactSha256(status.artifactSha256)
+            || artifactRelease !== status.releaseSha256
+            || artifactSha256 !== status.artifactSha256
+        ) {
+            throw predictorRolloverError(
+                'Predictor artifact and status belong to different immutable releases.'
+            );
+        }
+        return {
+            artifact,
+            status,
+            release: Object.freeze({
+                releaseSha256: artifactRelease,
+                artifactSha256,
+                sourceOfTruth:
+                    status.sourceOfTruth || null,
+            }),
+        };
+    }
+    async function predictorFetchMatchedRelease(
+        fetchJson,
+        wait
+    ) {
+        const read = fetchJson || ((
+            url,
+            options,
+            attempts
+        ) => rtFetchJson(url, options, attempts));
+        const sleep = wait || (
+            delay => new Promise(
+                resolve => window.setTimeout(resolve, delay)
+            )
+        );
+        let rollover = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const [artifact, status] = await Promise.all([
+                read(
+                    '/api/raw/predictor-lab',
+                    {
+                        cache: 'no-store',
+                        _captureResponseHeaders: true,
+                        _timeoutMs: 120000,
+                    },
+                    3
+                ),
+                read(
+                    '/api/raw/predictor-lab/status',
+                    { cache: 'no-store' },
+                    3
+                ),
+            ]);
+            try {
+                return predictorReleasePair(artifact, status);
+            } catch (error) {
+                if (
+                    error.code
+                        !== 'PREDICTOR_RELEASE_ROLLOVER'
+                ) throw error;
+                rollover = error;
+            }
+            const latestStatus = await read(
+                '/api/raw/predictor-lab/status',
+                { cache: 'no-store' },
+                3
+            );
+            try {
+                return predictorReleasePair(
+                    artifact,
+                    latestStatus
+                );
+            } catch (error) {
+                if (
+                    error.code
+                        !== 'PREDICTOR_RELEASE_ROLLOVER'
+                ) throw error;
+                rollover = error;
+            }
+            if (attempt < 3) {
+                await sleep([150, 500, 1200][attempt] || 1200);
+            }
+        }
+        throw (
+            rollover
+            || predictorRolloverError(
+                'Predictor release changed while it was loading.'
+            )
+        );
+    }
+    function predictorScheduleRolloverRetry() {
+        if (PREDICTORLAB_RETRY_TIMER) return;
+        PREDICTORLAB_ROLLOVER_RETRIES += 1;
+        const delay = Math.min(
+            15000,
+            750 * Math.pow(
+                2,
+                Math.min(
+                    PREDICTORLAB_ROLLOVER_RETRIES - 1,
+                    4
+                )
+            )
+        );
+        PREDICTORLAB_RETRY_TIMER = window.setTimeout(() => {
+            PREDICTORLAB_RETRY_TIMER = null;
+            PREDICTORLAB = null;
+            predictorEnsure(true);
+        }, delay);
     }
     function predictorEnsure(force) {
-        if (!PREDICTORLAB || force) {
+        if ((!PREDICTORLAB || force) && !PREDICTORLAB_PROMISE) {
             PREDICTORLAB = { loading: 1 };
-            fetch('/api/raw/predictor-lab', { cache: force ? 'reload' : 'default' }).then(r => r.json()).then(j => {
-                PREDICTORLAB = j || { status: 'not_ready' };
-                rtgUpdateRaw();
+            PREDICTORLAB_PROMISE =
+                predictorFetchMatchedRelease()
+                .then(({ artifact, status, release }) => {
+                    artifact._release = Object.freeze({
+                        ...release,
+                    });
+                    PREDICTORLAB = artifact;
+                    PREDICTORSTATUS = status;
+                    if (PREDICTORLAB_RETRY_TIMER) {
+                        window.clearTimeout(
+                            PREDICTORLAB_RETRY_TIMER
+                        );
+                        PREDICTORLAB_RETRY_TIMER = null;
+                    }
+                    PREDICTORLAB_ROLLOVER_RETRIES = 0;
+                    st._predictorStatusAt = Date.now();
+                    rtgUpdateRaw();
             }).catch(e => {
-                PREDICTORLAB = { error: e.message || 'Predictor artifact could not be loaded.' };
+                if (
+                    e
+                    && e.code === 'PREDICTOR_RELEASE_ROLLOVER'
+                ) {
+                    PREDICTORLAB = {
+                        loading: 1,
+                        rolloverRetrying: true,
+                        message:
+                            'Predictor release changed while loading; retrying automatically.',
+                    };
+                    predictorScheduleRolloverRetry();
+                } else {
+                    PREDICTORLAB = {
+                        error:
+                            e.message
+                            || 'Predictor artifact could not be loaded.',
+                    };
+                }
                 rtgUpdateRaw();
+            }).finally(() => {
+                PREDICTORLAB_PROMISE = null;
             });
         }
         if (force || !st._predictorStatusAt || Date.now() - st._predictorStatusAt > 15000) {
             st._predictorStatusAt = Date.now();
-            fetch('/api/raw/predictor-lab/status', { cache: 'no-store' }).then(r => r.json()).then(j => {
+            rtFetchJson(
+                '/api/raw/predictor-lab/status',
+                { cache: 'no-store' },
+                3
+            ).then(j => {
+                const loadedRelease = PREDICTORLAB
+                    && PREDICTORLAB._release;
+                if (
+                    loadedRelease
+                    && (
+                        loadedRelease.releaseSha256
+                            !== j.releaseSha256
+                        || loadedRelease.artifactSha256
+                            !== j.artifactSha256
+                    )
+                ) {
+                    PREDICTORLAB = {
+                        loading: 1,
+                        rolloverRetrying: true,
+                        message:
+                            'A newer Predictor release is available; loading it automatically.',
+                    };
+                    predictorScheduleRolloverRetry();
+                    rtgUpdateRaw();
+                    return;
+                }
                 PREDICTORSTATUS = j || null;
                 if (st.rawView === 'predictor') rtgUpdateRaw();
             }).catch(() => {});
@@ -1141,7 +2463,7 @@ const JarvisRetention = (function () {
     function predictorFeatureBars(rows, key, label) {
         rows = (rows || []).slice(0, 12);
         const max = Math.max(...rows.map(row => Math.abs(row[key] || 0)), .001);
-        return cardc(`<div style="font-size:12px;font-weight:900;color:${C.text};margin-bottom:3px">${label}</div><div style="font-size:9px;color:${C.mute};margin-bottom:8px">Association is descriptive; the blind combined score above is the decision metric.</div>${rows.map(row => {
+        return cardc(`<div style="font-size:12px;font-weight:900;color:${C.text};margin-bottom:3px">${label}</div><div style="font-size:9px;color:${C.mute};margin-bottom:8px">Association is descriptive; the held-out combined score above is a retrospective research comparison, not a prospective decision rule.</div>${rows.map(row => {
             const value = row[key], positive = (value || 0) >= 0;
             return `<div style="display:grid;grid-template-columns:minmax(120px,190px) 1fr 50px;gap:7px;align-items:center;margin:5px 0"><div style="font-size:8px;color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(row.feature)}">${esc(row.feature)}</div><div style="height:8px;background:${C.card2}"><div style="height:100%;width:${Math.abs(value || 0) / max * 100}%;background:${positive ? C.cyan : C.orange}"></div></div><div style="font-size:8px;color:${positive ? C.cyan : C.orange};text-align:right">${sgn(value || 0, 2)}</div></div>`;
         }).join('')}`, 12);
@@ -1224,6 +2546,17 @@ const JarvisRetention = (function () {
             return head + cardc(`<div style="padding:22px"><div style="font-size:12px;color:${C.amber};font-weight:900">${esc(status.message || 'The predictor artifact is still building.')}</div><div style="font-size:9px;color:${C.mute};margin-top:5px">stage: ${esc(status.stage || status.status || 'pending')}</div><span data-predictorrefresh style="display:inline-block;cursor:pointer;color:${C.cyan};font-size:9px;margin-top:8px">refresh status →</span></div>`);
         }
         const key = st.rawPredictorTarget || 'keep', target = PREDICTORLAB.targets[key], coverage = PREDICTORLAB.coverage || {}, metrics = target.metrics || {};
+        const availability = target.availability || null;
+        const targetBlocked = !!(
+            availability
+            && availability.state
+            && availability.state !== 'ready'
+        );
+        const diagnosticCoordinates = (
+            target.diagnosticAnalyses
+            && target.diagnosticAnalyses
+                .storedLedgerAllCoordinates
+        ) || null;
         const artifactState = PREDICTORLAB.artifactState || {}, artifactComplete = artifactState.complete === true;
         const status = PREDICTORSTATUS || {}, stale = status.updatedAt && Date.now() - status.updatedAt > 180000 && !['complete', 'idle'].includes(status.stage);
         const embedding = status.embedding || {}, liveScienceComplete = embedding.scienceComplete || {};
@@ -1260,6 +2593,52 @@ const JarvisRetention = (function () {
         const provenance = PREDICTORLAB.provenance || {}, sourceArtifacts = provenance.sourceArtifacts || {};
         const provenanceCard = cardc(`<div style="font-size:12px;font-weight:900;color:${C.text};margin-bottom:4px">Artifact provenance · what is actually frozen?</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px">${predictorMetric('saved ↔ axis overlap', Number(provenance.savedAxisTrainingIdOverlap || 0).toLocaleString(), 'must remain zero', provenance.savedAxisTrainingIdOverlap ? C.red : C.green)}${predictorMetric('feature contract', esc(String(provenance.featureContractSha256 || '').slice(0, 12) || '—'), `version ${provenance.featureContractVersion == null ? 'unrecorded' : provenance.featureContractVersion}`, C.cyan)}${predictorMetric('scorer version per video', provenance.featureScorerVersionPersistedPerVideo ? 'present' : 'missing', 'required before mixing future scorer generations', provenance.featureScorerVersionPersistedPerVideo ? C.green : C.red)}${predictorMetric('exact sources hashed', Number(Object.keys(sourceArtifacts).length).toLocaleString(), 'the bytes actually analyzed, not separately fetched labels', C.green)}</div><details style="margin-top:8px"><summary style="cursor:pointer;color:${C.dim};font-size:9px">exact source-content hashes and runtime</summary>${Object.entries(sourceArtifacts).map(([name, value]) => `<div style="display:grid;grid-template-columns:minmax(150px,1fr) 80px minmax(120px,1fr);gap:8px;border-top:1px solid ${C.border};padding:4px 0;font-size:8px"><span style="overflow:hidden;text-overflow:ellipsis" title="${esc(name)}">${esc(name)}</span><span style="text-align:right;color:${C.faint}">${Number((value || {}).bytes || 0).toLocaleString()} B</span><code style="color:${C.cyan};overflow:hidden;text-overflow:ellipsis" title="${esc((value || {}).sha256 || '')}">${esc(String((value || {}).sha256 || 'missing').slice(0, 16))}</code></div>`).join('')}<div style="border-top:1px solid ${C.border};padding-top:5px;font-size:8px;color:${C.faint}">${Object.entries(provenance.runtime || {}).map(([key, value]) => `${esc(key)} ${esc(value)}`).join(' · ')}</div></details><div style="font-size:8px;color:${C.amber};line-height:1.45;margin-top:7px">${esc(provenance.warning || '')}</div>`, 12);
         const rules = cardc(`<div style="font-size:12px;font-weight:900;color:${C.text};margin-bottom:5px">What was allowed into the score</div>${(PREDICTORLAB.validationRules || []).map(rule => `<div style="font-size:9px;color:${C.dim};line-height:1.45;margin:3px 0"><span style="color:${C.green}">✓</span> ${esc(rule)}</div>`).join('')}<div style="font-size:10px;font-weight:900;color:${C.text};margin:10px 0 4px">Deliberately excluded</div>${(PREDICTORLAB.excludedInputs || []).map(row => `<div style="font-size:9px;color:${C.dim};line-height:1.45;margin:3px 0"><span style="color:${C.red}">×</span> <b style="color:${C.text}">${esc(row.input)}</b> · ${esc(row.reason)}</div>`).join('')}<div style="font-size:9px;color:${C.amber};margin-top:8px;line-height:1.45">${esc(target.warning || '')}</div>`, 12);
+        if (targetBlocked) {
+            const independentGate = availability
+                .minimumIndependentChannels == null
+                ? ''
+                : predictorMetric(
+                    'independent channels',
+                    `${Number(availability.independentChannels || 0).toLocaleString()} / ${Number(availability.minimumIndependentChannels || 0).toLocaleString()}`,
+                    'distinct source groups required before transfer fitting',
+                    Number(availability.independentChannels || 0)
+                        >= Number(availability.minimumIndependentChannels || 0)
+                        ? C.green
+                        : C.red
+                );
+            const foldGate = availability
+                .minimumValidTransferFolds == null
+                ? ''
+                : predictorMetric(
+                    'valid transfer folds',
+                    `${Number(availability.validTransferFolds || 0).toLocaleString()} / ${Number(availability.minimumValidTransferFolds || 0).toLocaleString()}`,
+                    'nested folds remaining after content-family purging',
+                    Number(availability.validTransferFolds || 0)
+                        >= Number(availability.minimumValidTransferFolds || 0)
+                        ? C.green
+                        : C.red
+                );
+            const blockerList = (availability.blockers || [])
+                .map(blocker => `<div style="font-size:8px;color:${C.red};line-height:1.45;margin-top:3px">× ${esc(blocker)}</div>`)
+                .join('');
+            const blockedCard = cardc(`<div data-predictor-target-blocked="${esc(key)}" style="border-left:3px solid ${C.red};padding-left:11px"><div style="font-size:9px;color:${C.red};font-weight:950;text-transform:uppercase">predictor withheld · fail-closed validation</div><div style="font-size:15px;color:${C.text};font-weight:950;margin-top:4px">${esc(String(availability.state || '').replace(/_/g, ' '))}</div><div style="font-size:10px;color:${C.dim};line-height:1.55;margin-top:5px">${esc(availability.reason || target.primaryValidation || '')}</div>${blockerList}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:10px">${predictorMetric('registered row minimum', Number(availability.minimumRows || 0).toLocaleString(), 'must be met before model selection', C.text)}${predictorMetric('eligible raw rows', Number(availability.eligibleRows || 0).toLocaleString(), 'full embeddings + disjoint upstream fit', C.red)}${independentGate}${foldGate}${predictorMetric('diagnostic ledger rows', Number(availability.diagnosticRows || 0).toLocaleString(), 'association only; not predictor input', C.purple)}${predictorMetric('excluded rows', Number(availability.excludedRows || 0).toLocaleString(), 'missing replayable raw embedding evidence', C.amber)}</div></div>`, 12);
+            const diagnosticRows = (
+                diagnosticCoordinates
+                && diagnosticCoordinates.singleFeatures
+            ) || [];
+            const diagnosticNote = diagnosticCoordinates
+                ? note(`<b style="color:${C.purple}">Bound-ledger association atlas only.</b> ${esc(diagnosticCoordinates.reason || '')}`, C.purple)
+                : '';
+            return head + progress + providerBanner + targetTabs
+                + decisionBanner + blockedCard + diagnosticNote
+                + predictorFeatureBars(
+                    diagnosticRows,
+                    'withinSourceSpearman',
+                    'Descriptive 21-ledger associations · not a views predictor'
+                )
+                + predictorFeatureAtlas(diagnosticRows, key)
+                + provenanceCard + rules;
+        }
         return head + progress + providerBanner + targetTabs + decisionBanner + scoreCards + predictorStressTests(target, key) + plotCard + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">${calibrationCard}${predictorFormula(target)}</div>` + allInputsFormula + predictorGroupCalibration(target, key) + predictorMaturitySensitivity(target, key) + predictorTailRisk(target) + foldCard + corpus + predictorFeatureBars(target.singleFeatures, 'withinSourceSpearman', 'Which single outputs add video-level signal within a source?') + predictorFeatureAtlas(target.singleFeatures, key) + registryCard + provenanceCard + rules;
     }
     function renderRaw() {
@@ -1269,9 +2648,14 @@ const JarvisRetention = (function () {
         const chan = st.rawChan || 'visual';
         const chanPill = (id, lab) => `<span data-rawchan="${id}" style="cursor:pointer;border:1px solid ${chan === id ? C.purple : C.border};background:${chan === id ? C.purple + '22' : 'transparent'};color:${chan === id ? C.purple : C.dim};border-radius:8px;padding:5px 13px;font-size:12px;font-weight:700">${lab}</span>`;
         const tabs = `<div style="display:flex;gap:6px;margin-bottom:7px">${chanPill('visual', '🖼 Visual')}${chanPill('text', '🗣 Text')}${chanPill('together', '🔗 Together')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:10px">visual = first-5-second 5-frame montage only · text = extracted first-5-second voiceover only · together = montage + voiceover when voiceover exists</div>`;
-        const head = h2c('🔬 Raw — hook embeddings', 'The first 5 seconds of every stored video, embedded with Gemini, no labels. Three channels — what it LOOKS like, what is SAID, and both. Steer the projection toward views/outliers (held-out scored) and click any dot to see the exact input.');
+        const head = h2c('🔬 Raw — hook embeddings', 'The first 5 seconds of every stored video, embedded with Gemini, no labels. Three channels — what it LOOKS like, what is SAID, and both. Supervised planes are full-fit descriptive geometry; their displayed cv value is a separate 5-fold out-of-fold rank check. Click any dot to inspect the exact input.');
         const R = RAW[chan];
         if (!R) { rawEnsure(chan); return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`); }
+        if (
+            !R.loading
+            && !R.error
+            && Date.now() - Number(R.at || 0) >= 30000
+        ) rawEnsure(chan);
         if (R.loading) return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`);
         if (R.error) return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.red}">${esc(R.error)}<div><span data-rawretry="${chan}" style="display:inline-block;cursor:pointer;color:${C.cyan};font-weight:800;margin-top:10px">retry ${chan} map</span></div></div>`);
         if (!R.n) return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No ${chan} embeddings yet — the pipeline is still running (${chan === 'visual' ? 'visual is first' : 'text/together build over ~1.5h'}). Refresh shortly.</div>`);
@@ -1282,12 +2666,12 @@ const JarvisRetention = (function () {
         // selected account scopes them to its own data; views/outlier/etc. stay shared (library-driven).
         const ACCT = st.channel || (CHANS && CHANS.active) || 'tyler';
         const ACCT_NM = ACCT === 'all' ? 'All pooled' : ((CHANS && (CHANS.channels.find(c => c.id === ACCT) || {}).name) || 'Main');
-        const accKey = key => (['keep', 'ret5', 'realviews', 'swipe'].includes(key) && PJ[key + '__' + ACCT]) ? key + '__' + ACCT : key;
-        const accHas = key => ['keep', 'ret5', 'realviews', 'swipe'].includes(key) && !!PJ[key + '__' + ACCT];
-        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['realviews', '→ realistic views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['swipe', '→ swipe-ratio'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[accKey(p[0])]);
+        const accKey = key => (['keep', 'ret5', 'realviews'].includes(key) && PJ[key + '__' + ACCT]) ? key + '__' + ACCT : key;
+        const accHas = key => ['keep', 'ret5', 'realviews'].includes(key) && !!PJ[key + '__' + ACCT];
+        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['realviews', '→ realistic views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[accKey(p[0])]);
         let pm = st.rawProj || 'both'; if (!PJ[accKey(pm)]) pm = PROJS.length ? PROJS[0][0] : null;
         const proj = (pm && PJ[accKey(pm)]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
-        const isAcctProj = ['keep', 'ret5', 'realviews', 'swipe'].includes(pm);   // this projection is account-specific
+        const isAcctProj = ['keep', 'ret5', 'realviews'].includes(pm);   // this projection is account-specific
         const supervised = pm && !['umap', 'pca'].includes(pm);
         const mode = st.rawColor || 'cluster', k = st.rawK || '10';
         // "mine" highlight follows the selected account (owner tags); 'all' = every account's videos.
@@ -1360,7 +2744,7 @@ const JarvisRetention = (function () {
         const ups = st.rawUploads || [];
         const upColor = i => UPCOLORS[i % UPCOLORS.length];
         const upPos = (u) => {           // centroid of this upload's neighbours in the current channel/proj
-            const uc = u && u.channels ? u.channels[chan] : null;
+            const uc = shortsGeometryChannel(u, chan);
             if (!uc || !uc.neighbors) return null;
             let sx = 0, sy = 0, sw = 0, used = 0;
             for (const nb of uc.neighbors) {
@@ -1374,7 +2758,7 @@ const JarvisRetention = (function () {
                 const p = upPos(u); if (!p) return;
                 const col = upColor(i), ux = X(p.gx).toFixed(1), uy = Yc(p.gy).toFixed(1), selU = st.rawUpSel === i;
                 const sk = STEER_KEY[pm], sEst = sk ? steerOf(u, chan, sk) : null;   // SAME number the Experiment shows
-                const sTxt = sEst ? ` — ${steerDisp(sk, sEst.est)} ${steerLabel(sk)} (${sEst.pctile}th pctile)` : ` — among ${p.used} nearest hooks`;
+                const sTxt = sEst ? ` — ${steerDisp(sk, sEst.value)} ${steerLabel(sk)} (${sEst.percentile100}th · ${sEst.percentileUnit})` : ` — among ${p.used} nearest hooks`;
                 dots += `<line x1="${ux}" y1="${(+uy - 10).toFixed(1)}" x2="${ux}" y2="${(+uy + 10).toFixed(1)}" stroke="${col}" stroke-width="1" opacity="0.55"/>`
                     + `<line x1="${(+ux - 10).toFixed(1)}" y1="${uy}" x2="${(+ux + 10).toFixed(1)}" y2="${uy}" stroke="${col}" stroke-width="1" opacity="0.55"/>`
                     + `<circle data-rawupmark="${i}" cx="${ux}" cy="${uy}" r="${selU ? 9 : 7}" fill="${col}" stroke="#fff" stroke-width="${selU ? 3 : 2}" style="cursor:pointer"><title>⬆ #${i + 1} ${esc(u.title || 'upload')}${sTxt}</title></circle>`
@@ -1517,16 +2901,13 @@ const JarvisRetention = (function () {
             const i = st.rawUpSel, U = ups[i], col = upColor(i);
             const montageSrc = U.montageDataUrl || (U.montage ? 'data:image/jpeg;base64,' + U.montage : '');
             const frozenVisualKeep = visualKeepForecastOf(U);
-            const frozenVisualKeepOrigin = frozenVisualKeep
-                && frozenVisualKeep.source === 'final_model_training_population_backfill'
-                ? 'Current frozen-model backfill'
-                : 'Persisted raw forecast';
-            const frozenVisualKeepHtml = frozenVisualKeep ? `<div data-visual-keep-raw-map-value style="border-left:3px solid ${C.green};background:${C.green}0d;padding:8px 9px;margin:8px 0">
+            const frozenVisualKeepOrigin = 'Persisted raw forecast';
+            const frozenVisualKeepHtml = frozenVisualKeep ? `<div data-visual-keep-raw-map-value${embeddingIdentityAttrs(frozenVisualKeep, rawEmbeddingAssetId(U))} style="border-left:3px solid ${C.green};background:${C.green}0d;padding:8px 9px;margin:8px 0">
                 <div style="font-size:8px;color:${C.green};font-weight:950;text-transform:uppercase">${esc(frozenVisualKeepOrigin)} · raw ledger value</div>
-                <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(frozenVisualKeep.raw, 1)}%</div>
-                <div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The marker above is this opening's visual map placement. This separate percentage applies one immutable pooled full-vector Ridge formula to the same 1,536D vector; it is <b>not</b> the marker's visual keep map estimate. Stored as <b>${esc(frozenVisualKeep.coordinate_id)}</b> · pooled globally · artifact ${esc(String(frozenVisualKeep.model_artifact_sha256 || 'unavailable').slice(0, 12))}.</div>
-                ${coordinateTraceHtml(U, frozenVisualKeep.coordinate_id, frozenVisualKeep, { modelRevision: frozenVisualKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
-            </div>` : `<div data-visual-keep-raw-map-value style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">${esc(U.visual_keep_forecast_error || 'This stored score predates shorts.visual-keep-forecast.v1. Re-score it once to persist the frozen raw forecast.')}</div>`;
+                <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(frozenVisualKeep.value, 1)}%</div>
+                <div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The marker above is geometry only. This separate <code>${esc(frozenVisualKeep.valueUnit)}</code> scalar is <b>${esc(frozenVisualKeep.coordinateId)}</b> · ledger ${frozenVisualKeep.ledgerSha256.slice(0, 12)}… · artifact ${esc(String(frozenVisualKeep.model_artifact_sha256 || 'unavailable').slice(0, 12))}.</div>
+                ${coordinateTraceHtml(U, frozenVisualKeep.coordinateId, frozenVisualKeep, { modelRevision: frozenVisualKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
+            </div>` : `<div data-visual-keep-raw-map-value style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">${esc(U.visual_keep_forecast_error || `This stored score predates ${savedCoordinateIdByFamily('visualKeepForecast') || 'the registered frozen visual keep coordinate'}. Re-score it once to persist the forecast.`)}</div>`;
             const creatorAdaptiveKeep = creatorAdaptiveKeepForecastOf(U);
             const creatorPresentation = creatorAdaptiveKeep
                 ? creatorAdaptiveForecastPresentation(creatorAdaptiveKeep)
@@ -1553,14 +2934,14 @@ const JarvisRetention = (function () {
                 || creatorComponentB == null
                 ? ''
                 : `<br><b>Component A:</b> ${fmtv(creatorComponentA, 1)}% centered-together residual analog · <b>Component B:</b> ${fmtv(creatorComponentB, 1)}% visual+together semantic stack · final = clipped 50/50 mean.`;
-            const creatorAdaptiveKeepHtml = creatorAdaptiveKeep ? `<div data-creator-adaptive-keep-raw-map-value data-revision-status="${esc(creatorPresentation.revisionStatus)}" style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0">
-                <div style="display:flex;justify-content:space-between;gap:7px;align-items:start;flex-wrap:wrap"><div style="font-size:8px;color:${C.amber};font-weight:950;text-transform:uppercase">Causal multimodal mixture · research only · not predictor-eligible</div><span style="border:1px solid ${creatorPresentation.revisionMeta.color};color:${creatorPresentation.revisionMeta.color};padding:2px 6px;font-size:6.5px;font-weight:950;text-transform:uppercase">${esc(creatorPresentation.revisionMeta.label)}</span></div>
-                <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(creatorAdaptiveKeep.raw, 1)}%</div>
-                <div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">Mixture scalar <b style="color:${C.cyan}">${fmtv(creatorAdaptiveKeep.raw, 1)}%</b>${creatorAdaptiveBaseline == null ? '' : ` · matched recent-history baseline <b style="color:${C.text}">${fmtv(creatorAdaptiveBaseline, 1)}%</b> · scalar shift <b style="color:${C.text}">${creatorAdaptiveShift >= 0 ? '+' : ''}${fmtv(creatorAdaptiveShift, 1)} pp</b>`}.${creatorComponentLine}<br><b>Inputs:</b> visual embedding + together (visual + text) embedding + ${esc(creatorPresentation.history)} (30 maximum; 8 minimum)${creatorPresentation.historyEnd ? ` · history through ${esc(creatorPresentation.historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${creatorPresentation.historicalPrequential ? C.cyan : C.amber}">${esc(creatorPresentation.claimBoundary)}</span><br><b>Selected formula:</b> ${esc(creatorAdaptiveKeep.model_formula)}. Frozen after ${Number(creatorAdaptiveKeep.candidate_count || 43360).toLocaleString()} prespecified candidates. Stored as <b>${esc(creatorAdaptiveKeep.coordinate_id)}</b>. This percentage is not a point on either embedding plane.</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep embedding →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep embedding →</button></div>
-                ${coordinateTraceHtml(U, creatorAdaptiveKeep.coordinate_id, creatorAdaptiveKeep, { profile: creatorAdaptiveKeep.profile_account, artifactLabel: 'creator serving artifact', modelRevision: creatorAdaptiveKeep.serving_artifact_sha256 || creatorAdaptiveKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
-            </div>` : `<div data-creator-adaptive-keep-raw-map-value style="border-left:3px solid ${C.faint};background:${C.card};padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">No causal mixture value is shown: this score lacks an explicit creator profile with at least 8 prior labels or is outside the registered causal evaluation window.</div>`;
-            const uc = U.channels ? U.channels[chan] : null, pos = upPos(U);
+            const creatorAdaptiveKeepHtml = creatorAdaptiveKeep ? `<div data-creator-adaptive-keep-raw-map-value data-revision-status="${esc(creatorPresentation.revisionStatus)}"${embeddingIdentityAttrs(creatorAdaptiveKeep, rawEmbeddingAssetId(U))} style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0">
+                <div style="display:flex;justify-content:space-between;gap:7px;align-items:start;flex-wrap:wrap"><div style="font-size:8px;color:${C.amber};font-weight:950;text-transform:uppercase">Prequential multimodal mixture · research only · not predictor-eligible</div><span style="border:1px solid ${creatorPresentation.revisionMeta.color};color:${creatorPresentation.revisionMeta.color};padding:2px 6px;font-size:6.5px;font-weight:950;text-transform:uppercase">${esc(creatorPresentation.revisionMeta.label)}</span></div>
+                <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(creatorAdaptiveKeep.value, 1)}%</div>
+                <div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">Mixture scalar <b style="color:${C.cyan}">${fmtv(creatorAdaptiveKeep.value, 1)}%</b>${creatorAdaptiveBaseline == null ? '' : ` · matched recent-history baseline <b style="color:${C.text}">${fmtv(creatorAdaptiveBaseline, 1)}%</b> · scalar shift <b style="color:${C.text}">${creatorAdaptiveShift >= 0 ? '+' : ''}${fmtv(creatorAdaptiveShift, 1)} pp</b>`}.${creatorComponentLine}<br><b>Inputs:</b> ${esc(creatorAdaptiveKeep.input)}; ${esc(creatorPresentation.history)} (30 maximum; 8 minimum)${creatorPresentation.historyEnd ? ` · history through ${esc(creatorPresentation.historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${creatorPresentation.historicalPrequential ? C.cyan : C.amber}">${esc(creatorPresentation.claimBoundary)}</span><br><b>Selected formula:</b> ${esc(creatorAdaptiveKeep.model_formula)}. Coordinate <b>${esc(creatorAdaptiveKeep.coordinateId)}</b> · ledger ${creatorAdaptiveKeep.ledgerSha256.slice(0, 12)}…. This percentage is not a point on either embedding plane.</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep geometry →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep geometry →</button></div>
+                ${coordinateTraceHtml(U, creatorAdaptiveKeep.coordinateId, creatorAdaptiveKeep, { profile: creatorAdaptiveKeep.profile_account, artifactLabel: 'creator serving artifact', modelRevision: creatorAdaptiveKeep.serving_artifact_sha256 || creatorAdaptiveKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
+            </div>` : `<div data-creator-adaptive-keep-raw-map-value style="border-left:3px solid ${C.faint};background:${C.card};padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">No prequential mixture value is shown: this score lacks an explicit creator profile with at least 8 prior labels or is outside the registered chronological evaluation window.</div>`;
+            const uc = shortsGeometryChannel(U, chan), pos = upPos(U);
             const nbrTitles = (uc && uc.neighbors ? uc.neighbors.slice(0, 4) : []).map(nb => {
                 const idx = (R.id || []).indexOf(nb.id);
                 return `<div style="font-size:10px;color:${C.dim};display:flex;justify-content:space-between;gap:8px"><span>${esc((idx >= 0 ? R.title[idx] : nb.id) || nb.id).slice(0, 44)}</span><span style="color:${C.mute}">sim ${nb.sim}</span></div>`;
@@ -1593,7 +2974,7 @@ const JarvisRetention = (function () {
                   ${frozenVisualKeepHtml}
                   ${creatorAdaptiveKeepHtml}
                   ${placed}
-                  ${(() => { const row = (tn, lab) => { const k = steerBest(U, tn); return k ? `<div${embeddingDataAttrs(U, k.mod, tn, 'stored-production', rawEmbeddingAssetId(U), k)} style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th corpus percentile · ${k.mod} · ${k.sourceKey})</span></span></div>` : ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto the registered private-fit scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same artifact-pinned direction as the map, then quantile-mapped to the exact target population listed in its lineage. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
+                  ${(() => { const row = (tn, lab) => { const k = steerBest(U, tn); return k ? `<div${embeddingDataAttrs(U, k.mod, tn, 'canonical-score-ledger', rawEmbeddingAssetId(U), k)} style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.value}% <span style="color:${C.mute};font-weight:400">(${k.percentile100}th · ${k.percentileUnit} · ${k.coordinateId} · ledger ${k.ledgerSha256.slice(0, 12)}…)</span></span></div>` : ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">canonical ledger coordinates</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">The scalar and map placement are separate. Open <b>→ keep-rate</b> to inspect geometry; the number above remains bound to its ledger coordinate.</div></div>` : ''; })()}
                   ${rawChanGridHtml(U)}
                 </div>`;
         })() : '';
@@ -1603,7 +2984,7 @@ const JarvisRetention = (function () {
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>${st.rawBands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>${[4, 6, 8, 12, 16].map(kk => `<span data-rawbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.rawBandK || 6) === kk ? C.cyan : C.border};background:${(st.rawBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.rawBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('')}` : ''}</div>
             ${isAcctProj ? (() => { const ml = { keep: 'keep-rate', ret5: '5-sec retention', realviews: 'realistic views' }[pm]; return `<div style="font-size:10px;margin-bottom:6px;line-height:1.55;background:${accHas(pm) ? C.green : C.amber}14;border-left:3px solid ${accHas(pm) ? C.green : C.amber};padding:6px 10px;border-radius:4px">${accHas(pm) ? `<b style="color:${C.green}">${esc(ml)} · scoped to ${esc(ACCT_NM)}</b> — fit on ${esc(ACCT_NM)}'s own videos and projected across all ${(R.n || 0).toLocaleString()} hooks${pm === 'realviews' ? ' through the same duration-deconfounded equation as ⑤ Predict' : ''}. Switch accounts in the channel bar to see how the same hooks re-score per account.` : `<b style="color:${C.amber}">${esc(ACCT_NM)} has too few videos</b> (needs ≥40) for its own ${esc(ml)} projection — showing <b>Main</b>'s as a fallback. Pick Account 2 / Account 3 / All pooled for an account-specific view.`}</div>`; })() : ''}
             ${st.rawBands ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${bandNote}</div>` : ''}
-            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${ESTP ? `<b style="color:${C.green}">Steered toward ${metLabel}</b> — the embedding space is rotated using the exact modality-specific labeled population recorded in this map's manifest, so an axis tracks ${metLabel}; then <b>every</b> hook gets an <b>estimated ${metLabel}%</b> (extrapolated; held-out align <b>r=${proj.cv}</b>). Your videos show their <b>actual</b> ${metLabel}; corpus videos fall <b>above and below</b> them on the same 0–100% scale.` : supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${ESTP ? `Coloured by <b>${metLabel}</b> (<span style="color:${rawRamp(0)}">${estLo.toFixed(0)}%</span>→<span style="color:${rawRamp(1)}">${estHi.toFixed(0)}%</span>); your videos use actual, the rest estimated.` : mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
+            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${ESTP ? `<b style="color:${C.green}">Steered toward ${metLabel}</b> — the displayed plane and estimates are fitted on all eligible labels and are <b>descriptive, not held-out predictions</b>. The separate <b>5-fold OOF rank check is r=${proj.cv}</b>. Exact scored values come from the canonical ledger and leakage-controlled retrospective validation.` : supervised ? `<b style="color:${C.accent}">Steered descriptive projection</b> — the displayed axes use all eligible labels. <b>cv=${proj.cv}</b> is the separate 5-fold OOF rank check where available; <b>co=${proj.co}</b> is the secondary alignment diagnostic. Neither plotted coordinate is a canonical scalar score.` : `<b>Raw geometry</b> (no target). Switch to a steered projection to inspect target-aligned descriptive structure.`} ${ESTP ? `Coloured by <b>${metLabel}</b> (<span style="color:${rawRamp(0)}">${estLo.toFixed(0)}%</span>→<span style="color:${rawRamp(1)}">${estHi.toFixed(0)}%</span>); your videos use actual, the rest full-fit estimates.` : mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div><div style="font-size:8px;color:${R.refreshError ? C.amber : C.faint};margin-bottom:5px">Pinned map release ${esc(shortFingerprint(R.release && R.release.manifestSha256))} · artifact ${esc(shortFingerprint(R.release && R.release.artifactSha256))}${R.refreshing ? ' · checking for a newer release…' : ''}${R.refreshError ? ` · refresh failed: ${esc(R.refreshError)}` : ''}</div>${heldline}
             ${upLegend}
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${bandUnder}${dots}${bandOver}</svg>${detail}${upDetail}`, 12);
         return viewTabs + h;
@@ -1693,14 +3074,13 @@ const JarvisRetention = (function () {
         }
         const sel = st.guessSel;
         let gsd = '', selDot = '', placed = 0;
-        rows.forEach(r => { const pos = placeG(r); if (!pos) return; placed++; const isSel = sel === r.id, c = heatCol(r.pctile == null ? 0 : r.pctile);
-            const circ = `<circle data-guessid="${esc(r.id)}" cx="${X(pos[0]).toFixed(1)}" cy="${Yc(pos[1]).toFixed(1)}" r="${isSel ? 7.5 : 4.6}" fill="${c}" opacity="1" stroke="#fff" stroke-width="${isSel ? 2.4 : 1.2}" style="cursor:pointer"><title>${esc((r.brief || '').slice(0, 70) + ' · ' + Math.round((r.pctile || 0) * 100) + 'th pctile')}</title></circle>`;
+        rows.forEach(r => { const pos = placeG(r); if (!pos) return; placed++; const isSel = sel === r.id;
+            const circ = `<circle data-guessid="${esc(r.id)}" cx="${X(pos[0]).toFixed(1)}" cy="${Yc(pos[1]).toFixed(1)}" r="${isSel ? 7.5 : 4.6}" fill="${C.dim}" opacity="1" stroke="#fff" stroke-width="${isSel ? 2.4 : 1.2}" style="cursor:pointer"><title>${esc((r.brief || '').slice(0, 70) + ' · legacy unverified evidence')}</title></circle>`;
             if (isSel) selDot += circ; else gsd += circ; });
         const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${bg}${bandLines}${gsd}${selDot}${bandLabels}</svg>`;
         const pjLabel = (PROJS.find(p => p[0] === proj) || [proj, proj])[1];
-        const scaleLab = `<div style="font-size:10px;color:${C.mute};margin-top:5px;line-height:1.5"><b style="color:${C.dim}">Layout</b>: the <b style="color:${C.accent}">${pjLabel}</b> projection — the IDENTICAL embedding & coordinates shown in 🔬 Raw. Library coloured by that metric; each guess placed at the centroid of its 12 nearest library hooks (same method as a Raw upload), coloured by predicted-views percentile. ${placed}/${rows.length} placed${placed < rows.length ? ' (others awaiting neighbour backfill)' : ''}.</div>`;
-        const PC = rows.map(r => r.pctile || 0).slice().sort((a, b) => a - b), med2 = PC.length ? PC[Math.floor(PC.length / 2)] : 0, mx2 = PC.length ? PC[PC.length - 1] : 0;
-        const stat = `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:7px 2px"><span><b style="color:${C.text}">${rows.length}</b> guesses</span><span>median <b style="color:${C.accent}">${Math.round(med2 * 100)}th</b></span><span>best <b style="color:${C.green}">${Math.round(mx2 * 100)}th</b> pctile</span><span style="color:${C.dim}">run ${esc(run)}</span><span data-guessreload style="cursor:pointer;color:${C.dim};text-decoration:underline">↻ refresh</span></div>`;
+        const scaleLab = `<div style="font-size:10px;color:${C.mute};margin-top:5px;line-height:1.5"><b style="color:${C.dim}">Layout</b>: the <b style="color:${C.accent}">${pjLabel}</b> visualization. Library points retain their registered research colouring; generated records are neutral geometry because this historical manifest has no canonical score ledger. ${placed}/${rows.length} placed${placed < rows.length ? ' (others awaiting neighbour backfill)' : ''}.</div>`;
+        const stat = `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:7px 2px"><span><b style="color:${C.text}">${rows.length}</b> guesses</span><span style="color:${C.amber}">legacy read-only · unverified · non-rankable</span><span style="color:${C.dim}">run ${esc(run)}</span><span data-guessreload style="cursor:pointer;color:${C.dim};text-decoration:underline">↻ refresh</span></div>`;
         let detail = '';
         if (sel) { const r = rows.find(x => x.id === sel); if (r) detail = guessDetail(run, r); }
         return head + controls + cardc(`${legendBar(legLo, legHi)}${svg}${scaleLab}${stat}`, 12) + detail;
@@ -1711,10 +3091,8 @@ const JarvisRetention = (function () {
         if (isG) {
             const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px">${s}</div>`;
             const bgc = C.bg || '#0f172a';
-            const advCol = (r.advantage || 0) > 0 ? C.green : ((r.advantage || 0) < 0 ? '#ef4444' : C.mute);
-            const relBad = r.relevance != null && r.relevance < 0.45;
-            const sibs = ((GUESSES[run] && GUESSES[run].rows) || []).filter(x => x.input_id === r.input_id).sort((a, b) => (b.pctile || 0) - (a.pctile || 0));
-            const sibStrip = sibs.map(x => `<div data-guessid="${x.id}" style="cursor:pointer;flex-shrink:0;width:74px;border:2px solid ${x.id === r.id ? C.accent : 'transparent'};border-radius:6px;overflow:hidden"><img src="/api/hooks/montage/${esc(run)}/${esc(x.id)}" style="width:100%;display:block" loading="lazy"/><div style="font-size:9px;text-align:center;color:${heatCol(x.pctile || 0)};font-weight:800">${Math.round((x.pctile || 0) * 100)}%</div></div>`).join('');
+            const sibs = ((GUESSES[run] && GUESSES[run].rows) || []).filter(x => x.input_id === r.input_id);
+            const sibStrip = sibs.map(x => `<div data-guessid="${x.id}" style="cursor:pointer;flex-shrink:0;width:74px;border:2px solid ${x.id === r.id ? C.accent : 'transparent'};border-radius:6px;overflow:hidden"><img src="/api/hooks/montage/${esc(run)}/${esc(x.id)}" style="width:100%;display:block" loading="lazy"/><div style="font-size:8px;text-align:center;color:${C.dim};font-weight:800">unverified</div></div>`).join('');
             return cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap">
               <div style="flex:1;min-width:300px">
                 ${lab('INPUT — the video idea (no niche, no priors given)')}
@@ -1726,13 +3104,9 @@ const JarvisRetention = (function () {
                 <div style="font-size:11px;color:${C.dim};background:${bgc};border-radius:6px;padding:10px 11px;line-height:1.55;white-space:pre-wrap;max-height:260px;overflow:auto">${esc(r.reasoning || '(no trace)')}</div>
               </div>
               <div style="flex:1;min-width:230px">
-                ${lab('SCORE — keep-rate, gated by relevance, ranked within this input')}
+                ${lab('LEGACY EVIDENCE — no canonical score ledger')}
                 <div style="font-size:12px;color:${C.mute};line-height:2.05">
-                  keep-rate percentile: <b style="color:${heatCol(r.pctile || 0)}">${Math.round((r.pctile || 0) * 100)}th</b><br>
-                  relevance to input: <b style="color:${relBad ? '#ef4444' : C.text}">${r.relevance != null ? fmt(r.relevance, 2) : '—'}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(on-topic ≥0.45; below = penalised)</span><br>
-                  advantage vs its group: <b style="color:${advCol}">${(r.advantage || 0) > 0 ? '+' : ''}${fmt(r.advantage, 2)}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(beats the model's other tries at this idea)</span><br>
-                  reward: <b style="color:${C.text}">${fmt(r.reward, 2)}</b><br>
-                  in-distribution (nn-cos): <b style="color:${C.cyan}">${fmt(r.nn_cos, 3)}</b><br>
+                  <span style="color:${C.amber}">Historical percentile, reward, advantage, and similarity aliases are deliberately hidden. They cannot rank or colour this view without a canonical coordinate and ledger SHA-256.</span><br>
                   what's literally shown: <span style="color:${C.dim};font-style:italic">${esc(r.caption || '—')}</span>
                 </div>
                 ${lab('ALL ' + sibs.length + ' IDEAS IT GENERATED FOR THIS INPUT (click to compare)')}
@@ -1752,12 +3126,9 @@ const JarvisRetention = (function () {
             <div style="background:${bgc};border-radius:6px;padding:10px 11px">${frames || '<span style="color:' + C.dim + '">—</span>'}</div>
           </div>
           <div style="flex:1;min-width:230px">
-            ${lab('③ WHERE IT LANDS — scored on the real views axis')}
+            ${lab('③ WHERE IT LANDS — visualization only')}
             <div style="font-size:12px;color:${C.mute};line-height:2.05">
-              estimated views <b style="color:${C.accent}">${fv(Math.pow(10, r.pred || 0))}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(model estimate = 10^prediction from the views axis — not a label)</span><br>
-              percentile vs 11k library: <b style="color:${C.green}">${Math.round((r.pctile || 0) * 100)}th</b><br>
-              grid position: <b style="color:${C.dim}">(${Math.round(r.x)}, ${Math.round(r.y)})</b> / 1000<br>
-              in-distribution (nn-cos): <b style="color:${C.cyan}">${fmt(r.nn_cos, 3)}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(real hooks: .72–.87)</span><br>
+              <span style="color:${C.amber}">The point is nearest-neighbour geometry only. Historical predicted-view, percentile, and similarity aliases are hidden because this record has no canonical coordinate or ledger SHA-256.</span><br>
               niche: <b style="color:${C.dim}">${esc(r.niche || '—')}</b><br>
               source idea: <b style="color:${C.dim}">${esc(r.source || '—')}</b> · brief #${r.iter != null ? r.iter : '—'}, rank ${r.rank != null ? r.rank : '—'}
             </div>
@@ -1792,27 +3163,22 @@ const JarvisRetention = (function () {
         if (!g || g.loading) return `<div style="color:${C.mute};padding:16px">loading ideas…</div>`;
         if (g.error || !g.attempts) return `<div style="color:${C.mute};padding:16px">could not load this group.</div>`;
         const cards = g.attempts.map(a => {
-            const advCol = a.advantage > 0 ? C.green : (a.advantage < 0 ? '#ef4444' : C.mute);
-            const relBad = a.relevance != null && a.relevance < 0.45;
             const reasoning = a.reasoning ? `<details style="margin-top:6px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">reasoning</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px;white-space:pre-wrap;max-height:220px;overflow:auto">${esc(a.reasoning)}</div></details>` : '';
             return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:8px;background:${C.card2}">
               <img src="/api/hooks/grpo/montage/${run}/${id}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">
               <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">
-                <span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>
-                <span>rel <b style="color:${relBad ? '#ef4444' : C.text}">${a.relevance != null ? a.relevance.toFixed(2) : '—'}</b></span>
-                <span>reward <b style="color:${C.text}">${(a.reward || 0).toFixed(2)}</b></span>
-                <span>adv <b style="color:${advCol}">${a.advantage > 0 ? '+' : ''}${(a.advantage || 0).toFixed(2)}</b></span>
+                <span style="color:${C.amber}">legacy score aliases hidden · non-rankable</span>
                 <span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span>
               </div>
               <div style="font-size:10px;color:${C.mute};margin-top:4px;font-style:italic">${esc(a.caption || '')}</div>
               ${reasoning}</div>`;
         }).join('');
         return `<div style="margin-bottom:8px"><div style="font-size:13px;color:${C.text};font-weight:800">${esc(g.premise || id)}</div>
-          <div style="font-size:10px;color:${C.mute}">group mean reward ${(g.group_mean || 0).toFixed(2)} · best ${(g.best_reward || 0).toFixed(2)} · ${g.n} ideas · winner ringed</div></div>
+          <div style="font-size:10px;color:${C.mute}">${g.n} ideas · historical reward aliases are hidden because this run has no canonical score ledger</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">${cards}</div>`;
     }
     function renderGrpo() {
-        const head = `<div style="font-size:12px;color:${C.dim};margin-bottom:10px;line-height:1.5">🧠 <b style="color:${C.text}">Per-input ideas (GRPO)</b> — for each input the model reasons and proposes several hooks. Each is rendered, scored on keep-rate, gated by relevance to the input, and ranked by advantage vs the group's OWN mean — what beats its other attempts at the same idea, no niche or label.</div>`;
+        const head = `<div style="font-size:12px;color:${C.dim};margin-bottom:10px;line-height:1.5">🧠 <b style="color:${C.text}">Per-input ideas (GRPO)</b> — historical generation evidence remains inspectable, but score aliases are non-authoritative and cannot rank this UI without a canonical coordinate and ledger SHA-256.</div>`;
         grpoEnsureRuns();
         if (GRPORUNS == null || !GRPORUNS.length) return head + `<div style="color:${C.mute};padding:20px">No GRPO runs yet — input-groups appear here as the run produces them.</div>`;
         const runPills = GRPORUNS.map(r => `<button data-grporun="${r}" style="background:${st.grpoRun === r ? C.accent + '22' : 'transparent'};border:1px solid ${st.grpoRun === r ? C.accent : C.border};color:${st.grpoRun === r ? C.accent : C.dim};border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">${r}</button>`).join('');
@@ -1822,14 +3188,14 @@ const JarvisRetention = (function () {
         let body;
         if (!idx || idx.loading) body = `<div style="color:${C.mute};padding:16px">loading…</div>`;
         else {
-            const rows = (idx.rows || []).slice().sort((a, b) => (b.best_keep || 0) - (a.best_keep || 0));
+            const rows = (idx.rows || []).slice();
             const list = rows.map(r => {
                 const sel = st.grpoSel === r.input_id;
                 return `<div data-grpoinput="${r.input_id}" style="cursor:pointer;border:1px solid ${sel ? C.accent : C.border};background:${sel ? C.accent + '15' : C.card2};border-radius:8px;padding:8px 10px;margin-bottom:6px">
                   <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.3">${esc(r.premise || r.input_id)}</div>
-                  <div style="font-size:10px;color:${C.mute};margin-top:3px">best keep <b style="color:${heatCol(r.best_keep || 0)}">${Math.round((r.best_keep || 0) * 100)}%</b> · ${r.n} ideas · spread ${(r.spread || 0).toFixed(2)}</div></div>`;
+                  <div style="font-size:10px;color:${C.mute};margin-top:3px">${r.n} ideas · legacy unverified evidence</div></div>`;
             }).join('');
-            const detail = st.grpoSel ? grpoDetail(run, st.grpoSel) : `<div style="color:${C.mute};padding:16px">Pick an input on the left to see the ideas the model generated for it, ranked by advantage.</div>`;
+            const detail = st.grpoSel ? grpoDetail(run, st.grpoSel) : `<div style="color:${C.mute};padding:16px">Pick an input on the left to inspect its generated ideas.</div>`;
             body = `<div style="font-size:11px;color:${C.mute};margin-bottom:8px">${rows.length} inputs in ${run}</div><div style="display:grid;grid-template-columns:310px 1fr;gap:14px">
               <div style="max-height:660px;overflow:auto">${list || `<div style="color:${C.mute}">no groups yet</div>`}</div>
               <div>${detail}</div></div>`;
@@ -2055,10 +3421,103 @@ const JarvisRetention = (function () {
     }
     // ── 🎯 GRIND: write a hook → the loop generates variants (embedding-differentiated), renders,
     //    scores each on the trained models, and keeps going until one clears your threshold. ──
+    function shortsGrindVerifiedScore(attempt) {
+        if (!attempt || typeof attempt !== 'object') return null;
+        const required = [
+            'score_verified',
+            'score_coordinate_id',
+            'score_ledger_sha256',
+            'score_value',
+            'score_percentile_0_100',
+        ];
+        if (!required.every(key => Object.prototype.hasOwnProperty.call(attempt, key))) return null;
+        if (attempt.score_verified !== true) return null;
+        if (typeof attempt.score_coordinate_id !== 'string' || !attempt.score_coordinate_id.trim()) return null;
+        if (typeof attempt.score_ledger_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(attempt.score_ledger_sha256)) return null;
+        if (typeof attempt.score_value !== 'number' || !Number.isFinite(attempt.score_value)) return null;
+        if (
+            typeof attempt.score_percentile_0_100 !== 'number'
+            || !Number.isFinite(attempt.score_percentile_0_100)
+            || attempt.score_percentile_0_100 < 0
+            || attempt.score_percentile_0_100 > 100
+        ) return null;
+        const coordinateParts = attempt.score_coordinate_id.split('.');
+        if (
+            coordinateParts.length !== 4
+            || coordinateParts[0] !== 'shorts'
+            || coordinateParts[1] !== 'stored'
+            || !['visual', 'text', 'together', 'novelty'].includes(
+                coordinateParts[2]
+            )
+            || !coordinateParts[3]
+        ) return null;
+        return Object.freeze({
+            score_verified: true,
+            score_coordinate_id: attempt.score_coordinate_id,
+            score_ledger_sha256: attempt.score_ledger_sha256,
+            score_value: attempt.score_value,
+            score_percentile_0_100: attempt.score_percentile_0_100,
+        });
+    }
+    function shortsGrindScoreDescriptor(verifiedScore) {
+        const parts = verifiedScore.score_coordinate_id.split('.');
+        const channel = parts[2];
+        return {
+            percentileUnit: 'percentile_0_100',
+            target: parts[3],
+            modality: channel === 'together'
+                ? 'multimodal'
+                : channel === 'novelty'
+                    ? 'derived'
+                    : channel,
+            input: channel === 'visual'
+                ? 'first-five-second five-frame montage only'
+                : channel === 'text'
+                    ? 'first-five-second transcript only'
+                    : channel === 'together'
+                        ? 'first-five-second montage plus transcript'
+                        : 'derived novelty inputs recorded in coordinate provenance',
+        };
+    }
+    function shortsGrindReadoutMatchesVerifiedScore(readout, verifiedScore) {
+        const ledger = readout && readout.score_ledger;
+        if (
+            !verifiedScore
+            || !ledger
+            || typeof ledger !== 'object'
+            || ledger.ledger_sha256 !== verifiedScore.score_ledger_sha256
+            || !Array.isArray(ledger.entries)
+        ) return false;
+        const entry = ledger.entries.find(candidate => (
+            candidate
+            && candidate.coordinate_id === verifiedScore.score_coordinate_id
+        ));
+        return !!(
+            entry
+            && entry.available === true
+            && typeof entry.value === 'number'
+            && Number.isFinite(entry.value)
+            && entry.value === verifiedScore.score_value
+            && typeof entry.percentile === 'number'
+            && Number.isFinite(entry.percentile)
+            && entry.percentile === verifiedScore.score_percentile_0_100
+        );
+    }
+    function shortsGrindUnverifiedMessage(attempt) {
+        if (attempt && Object.prototype.hasOwnProperty.call(attempt, 'pct')) {
+            return 'Historical score unverified: the legacy pct value is not ledger-addressed and cannot be opened, saved, or counted.';
+        }
+        return 'Score unverified: its ledger coordinate, ledger SHA, raw value, or percentile binding is missing or invalid.';
+    }
     function grindPoll(rid, tries) {
         tries = tries || 0;
         const again = ms => { if (tries < 7200 && st.grindRid === rid) setTimeout(() => grindPoll(rid, tries + 1), ms); };
-        fetch('/api/hooks/grind/run/' + rid).then(r => r.ok ? r.json() : null).then(j => {
+        fetch('/api/hooks/grind/run/' + rid).then(async response => {
+            if (response.status === 404) return null;
+            const body = await response.json();
+            if (response.ok || response.status === 409) return body;
+            throw new Error(body.error || `run request failed (${response.status})`);
+        }).then(j => {
             if (j && j.rid) { j._at = Date.now(); GRINDRUN = j; st.grindPolls = (st.grindPolls || 0) + 1; rtgUpdateExp(); }
             // keep polling until the run reaches a TERMINAL state — a 404 just means the worker
             // hasn't written the first snapshot yet (the old code stopped here and froze the UI)
@@ -2094,24 +3553,54 @@ const JarvisRetention = (function () {
         const inp = window.document.getElementById('grind-input');
         const prem = inp ? inp.value.trim() : '';
         if (!prem || st.grindStarting) return;
+        const metric = st.grindMetric || 'keep';
+        const coordinateId = `shorts.stored.together.${metric}`;
         st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile() }) })
+        fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile() }) })
             .then(r => r.json()).then(j => {
                 st.grindStarting = 0;
-                if (j.rid) { st.grindMine = st.grindMine || {}; st.grindMine[j.rid] = 1; st.grindRid = j.rid; st.grindT0 = Date.now(); GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
+                if (j.rid) {
+                    st.grindMine = st.grindMine || {};
+                    st.grindMine[j.rid] = 1;
+                    st.grindRid = j.rid;
+                    st.grindT0 = Date.now();
+                    GRINDRUN = {
+                        rid: j.rid,
+                        premise: prem,
+                        status: 'running',
+                        attempts: [],
+                        threshold_percentile_0_100:
+                            j.threshold_percentile_0_100,
+                        threshold_coordinate_id:
+                            j.threshold_coordinate_id || coordinateId,
+                        attempt_count: 0,
+                        rejected_variant_count: 0,
+                        note: 'queued — the worker picks it up within seconds…',
+                    };
+                    grindPoll(j.rid);
+                }
                 else st.grindErr = j.error || 'could not start';
                 rtgUpdateExp();
             }).catch(e => { st.grindStarting = 0; st.grindErr = e.message; rtgUpdateExp(); });
     }
     async function grindOpen(k) {
         const rid = st.grindRid; if (!rid) return;
+        const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
+        const verifiedScore = shortsGrindVerifiedScore(a);
+        if (!verifiedScore) {
+            st.grindErr = 'open: ' + shortsGrindUnverifiedMessage(a);
+            rtgUpdateExp();
+            return;
+        }
+        st.grindErr = null;
         st.grindOpening = k; rtgUpdateExp();
         try {
             const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => { if (!r.ok) throw new Error('not scored'); return r.json(); });
+            if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
             const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
             score.montage = monUrl.split('base64,').pop();
             score.source = 'grind'; score.montageDataUrl = monUrl;
-            const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
+            Object.assign(score, verifiedScore);
             score.genFrames = (a && a.frames) || [];
             st.rawUploads.push(score); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.grindErr = 'open: ' + e.message; }
@@ -2120,11 +3609,15 @@ const JarvisRetention = (function () {
     }
     async function grindSave(k) {
         const rid = st.grindRid; if (!rid) return;
+        st.grindErr = null;
         try {
             const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
+            const verifiedScore = shortsGrindVerifiedScore(a);
+            if (!verifiedScore) throw new Error(shortsGrindUnverifiedMessage(a));
             const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => r.ok ? r.json() : null);
+            if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
             const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
-            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score && score.indicators, steer: score && score.steer, channels: score && score.channels, emb_preview: score && score.emb_preview, input_manifest: score && score.input_manifest, montage: monUrl });
+            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score.indicators, score_ledger: score.score_ledger, novelty_provenance: score.novelty_provenance, channels: score.channels, emb_preview: score.emb_preview, input_manifest: score.input_manifest, score_verified: verifiedScore.score_verified, score_coordinate_id: verifiedScore.score_coordinate_id, score_ledger_sha256: verifiedScore.score_ledger_sha256, score_value: verifiedScore.score_value, score_percentile_0_100: verifiedScore.score_percentile_0_100, montage: monUrl });
         } catch (e) { st.grindErr = 'save: ' + e.message; rtgUpdateExp(); }
     }
     function grindPanel() {
@@ -2138,33 +3631,78 @@ const JarvisRetention = (function () {
         let runHtml = '';
         if (!g && GRINDLIST && (GRINDLIST.runs || []).length && !st.grindRid) {
             const last = GRINDLIST.runs[0];
-            runHtml = `<div style="font-size:10px;color:${C.mute};margin-top:8px">📁 previous run: “${esc((last.premise || '').slice(0, 60))}” — ${esc(last.status)} · best ${last.best != null ? last.best + 'th' : '—'} vs ${last.threshold}th <span data-grindview="${esc(last.rid)}" style="cursor:pointer;color:${C.cyan};text-decoration:underline">view</span></div>`;
+            const lastStatus = last.status === 'won' ? 'reported threshold result · verification required' : last.status;
+            const lastBest = last.best_score
+                && last.best_score.score_percentile_0_100;
+            const lastThreshold =
+                last.threshold_percentile_0_100;
+            runHtml = `<div style="font-size:10px;color:${C.mute};margin-top:8px">📁 previous run: “${esc((last.premise || '').slice(0, 60))}” — ${esc(lastStatus)} · ${lastBest == null ? 'no verified score' : `best ${fmtv(lastBest, 1)}th vs ${fmtv(lastThreshold, 1)}th`} <span data-grindview="${esc(last.rid)}" style="cursor:pointer;color:${C.cyan};text-decoration:underline">view</span></div>`;
         }
         if (g) {
             const mine = !!((st.grindMine || {})[g.rid]);
             const foreign = !mine ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}14;border:1px solid ${C.amber}44;border-radius:6px;padding:6px 10px;margin:8px 0 0;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>📎 this run was <b>already going</b> when you opened the tab (started earlier or from another window) — this page did NOT launch it. Its hook: “${esc((g.premise || '').slice(0, 70))}”</span><span data-grindhide style="cursor:pointer;color:${C.dim};font-weight:800">✕ hide</span></div>` : '';
             const atts = (g.attempts || []).slice().reverse();
-            const statCol = { running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim;
-            const statLab = { running: '⏳ grinding…', won: '🎯 THRESHOLD CLEARED', stopped: '⏹ stopped', error: '✕ error', deadline: '⏱ time budget spent', maxed: 'attempt budget spent' }[g.status] || g.status;
+            const verifiedAttempts = (g.attempts || []).map(attempt => ({
+                attempt,
+                score: shortsGrindVerifiedScore(attempt),
+            })).filter(item => item.score);
+            const verifiedBest = verifiedAttempts.slice().sort((left, right) => {
+                const scoreDelta = right.score.score_percentile_0_100 - left.score.score_percentile_0_100;
+                return scoreDelta || ((left.attempt.k || 0) - (right.attempt.k || 0));
+            })[0] || null;
+            const threshold = (
+                typeof g.threshold_percentile_0_100 === 'number'
+                && Number.isFinite(
+                    g.threshold_percentile_0_100
+                )
+            ) ? g.threshold_percentile_0_100 : null;
+            const verifiedWinner = threshold == null || !verifiedBest || verifiedBest.score.score_percentile_0_100 < threshold
+                ? null
+                : verifiedBest;
+            const statCol = g.status === 'won' && !verifiedWinner
+                ? C.amber
+                : ({ running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim);
+            const statLab = g.status === 'won' && !verifiedWinner
+                ? 'historical result · score unverified'
+                : ({ running: '⏳ grinding…', won: '🎯 THRESHOLD CLEARED', stopped: '⏹ stopped', error: '✕ error', deadline: '⏱ time budget spent', maxed: 'attempt budget spent' }[g.status] || g.status);
             const card = a => {
-                const sel = false, done = a.status === 'done';
-                const pctBadge = a.pct != null ? `<b style="color:${heatCol((a.pct || 0) / 100)};font-size:14px">${a.pct}</b><span style="font-size:9px;color:${C.mute}">%ile</span>` : (done ? `<span style="font-size:9px;color:#ef4444" title="${esc((a.errs || []).join('\n'))}">no score${(a.errs || []).length ? ' ⚠' : ''}</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring' : `⏳ ${a.frames_done || 0}/5`}</span>`);
-                const win = g.winner === a.k;
-                const img = done && a.pct != null ? `/api/hooks/grind/montage/${esc(g.rid)}_${a.k}` : (a.frame_imgs && a.frame_imgs.find(Boolean) ? `/api/hooks/grind/montage/${esc(a.frame_imgs.find(Boolean))}` : '');
+                const verifiedScore = shortsGrindVerifiedScore(a);
+                const verifiedDescriptor = verifiedScore
+                    ? shortsGrindScoreDescriptor(verifiedScore)
+                    : null;
+                const rendered = a.status === 'done';
+                const scoreClaimed = rendered
+                    || a.status === 'scored'
+                    || Object.prototype.hasOwnProperty.call(a, 'pct')
+                    || Object.prototype.hasOwnProperty.call(a, 'score_verified');
+                const unverifiedMessage = scoreClaimed && !verifiedScore ? shortsGrindUnverifiedMessage(a) : '';
+                const pctBadge = verifiedScore
+                    ? `<b style="color:${heatCol(verifiedScore.score_percentile_0_100 / 100)};font-size:14px">${fmtv(verifiedScore.score_percentile_0_100, 1)}</b><span style="font-size:9px;color:${C.mute}">%ile · verified</span>`
+                    : (scoreClaimed ? `<span style="font-size:9px;color:${C.amber}">historical · unverified</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring' : `⏳ ${a.frames_done || 0}/5`}</span>`);
+                const win = !!(verifiedWinner && verifiedWinner.attempt.k === a.k);
+                const img = verifiedScore ? `/api/hooks/grind/montage/${esc(g.rid)}_${a.k}` : (a.frame_imgs && a.frame_imgs.find(Boolean) ? `/api/hooks/grind/montage/${esc(a.frame_imgs.find(Boolean))}` : '');
                 return `<div style="border:2px solid ${win ? C.green : C.border};border-radius:9px;padding:7px;background:${C.card2};width:250px;flex-shrink:0">
                   <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:10px;font-weight:800;color:${win ? C.green : C.dim}">#${a.k + 1}${win ? ' 🎯 WINNER' : ''}</span>${pctBadge}</div>
                   ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
                   <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
+                  ${verifiedScore ? `<div style="font-size:7px;color:${C.faint};margin-top:3px;overflow-wrap:anywhere"><code>${esc(verifiedScore.score_coordinate_id)}</code> · ${esc(verifiedDescriptor.percentileUnit)} · target ${esc(verifiedDescriptor.target)} · modality ${esc(verifiedDescriptor.modality)} · input ${esc(verifiedDescriptor.input)} · ledger <code>${verifiedScore.score_ledger_sha256.slice(0, 12)}…</code></div>` : ''}
+                  ${unverifiedMessage ? `<div style="font-size:8px;color:${C.amber};line-height:1.35;margin-top:4px">${esc(unverifiedMessage)}</div>` : ''}
                   <div style="display:flex;gap:5px;margin-top:5px;align-items:center">
                     ${a.nov != null ? `<span style="font-size:8.5px;color:${C.purple}" title="TEXT embedding distance from this run's earlier attempts (idea variety)">🆕${a.nov.toFixed(2)}</span>` : ''}
                     ${a.vnov != null ? `<span style="font-size:8.5px;color:${a.vnov < 0.02 ? '#ef4444' : C.cyan}" title="VISUAL embedding distance from the most-similar earlier attempt — how different it LOOKS (red = near-duplicate look; counts as stuck and widens exploration)">👁${a.vnov.toFixed(2)}</span>` : ''}
-                    ${done && a.pct != null ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
+                    ${verifiedScore ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
                   </div></div>`;
             };
+            const runValidation = g.run_validation || null;
+            const runIntegrity = runValidation
+                && runValidation.valid === true
+                ? ''
+                : `<div style="font-size:9px;color:${C.amber};background:${C.amber}12;border:1px solid ${C.amber}55;padding:6px 8px;margin-bottom:7px">Historical or invalid run metadata is read-only. Its old score aliases are deliberately excluded from ranking and threshold decisions.${runValidation && (runValidation.errors || []).length ? ` ${esc(runValidation.errors.join('; '))}` : ''}</div>`;
             runHtml = `${foreign}<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
+                ${runIntegrity}
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar${g.gate != null ? ` · <span title="minimum embedding distance a new variant must keep from every earlier attempt — widens automatically while the score isn't improving (or attempts LOOK alike), snaps back on a new best" style="cursor:help;color:${C.purple}">exploration ≥ ${(+g.gate).toFixed(2)}</span>` : ''}</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} attempts · verified scores ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(verifiedBest.score.score_percentile_0_100 / 100) : C.mute}">${verifiedBest ? fmtv(verifiedBest.score.score_percentile_0_100, 1) + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + 'th'}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.rejected_variant_count || 0} rejected as too-similar${g.minimum_text_embedding_distance != null ? ` · <span title="minimum text-embedding cosine distance a new variant must keep from every earlier attempt" style="cursor:help;color:${C.purple}">exploration ≥ ${(+g.minimum_text_embedding_distance).toFixed(2)}</span>` : ''}</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
@@ -2181,6 +3719,7 @@ const JarvisRetention = (function () {
             ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
             ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? '⏳' : '🎯 Grind'}</span>`}
           </div>
+          <div style="font-size:8px;color:${C.faint};margin-top:5px">Threshold coordinate: <code style="color:${C.dim}">shorts.stored.together.${esc(metric)}</code>. It always uses the image + generated hook text coordinate; no modality fallback is allowed.</div>
           ${st.grindErr ? `<div style="font-size:10px;color:#ef4444;margin-top:6px">${esc(st.grindErr)}</div>` : ''}
           ${runHtml}</div>`;
     }
@@ -2333,20 +3872,20 @@ const JarvisRetention = (function () {
         // (embedding→retention→your 211's view model) on YOUR channel scale. Both steered, both shown.
         const embBox = tn => {
             const b = steerBest(up, tn), ch = b ? b.mod : 'together', pj = projFor[tn], cm = colorFor[tn];
-            const big = b ? steerDisp(tn, b.est) : '—';
+            const big = b ? steerDisp(tn, b.value) : '—';
             let sub = '', foot;
             if (tn === 'realviews') {
                 const durTxt = b && b.dur_s ? (b.dur_assumed ? `assumed ${b.dur_s}s` : `${b.dur_s}s video`) : 'median dur';
                 sub = b ? durTxt : '';
                 const vb = steerBest(up, 'views');
-                foot = `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))} · keep+5s-ret+<b>duration</b> → the artifact-pinned Tyler view model <span style="color:${C.green}">(retention deconfounded — held at fixed length)</span>${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
+                foot = `displayed channel: <b>${ch}</b> = ${esc(b && b.input || rawInputLabel(up, ch))} · target <b>${esc(b && b.target || tn)}</b> · unit <code>${esc(b && b.valueUnit || 'unavailable')}</code>${vb ? ` · library raw: <b>${steerDisp('views', vb.value)}</b>` : ''}`;
             } else {
-                sub = b && b.pctile != null ? `${b.pctile.toFixed(0)}th pctile` : '';
+                sub = b && b.percentile100 != null ? `${b.percentile100.toFixed(0)}th ${b.percentileUnit}` : '';
                 const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
-                foot = mods.length ? `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))}<br>${mods.map(p => `${p.m} (${esc(rawInputLabel(up, p.m))}) ${steerDisp(tn, p.k.est)}`).join(' · ')}` : 'embed not ready';
+                foot = mods.length ? `displayed channel: <b>${ch}</b> = ${esc(b && b.input || rawInputLabel(up, ch))}<br>${mods.map(p => `${p.m} (${esc(p.k.input)}) ${steerDisp(tn, p.k.value)} · ${p.k.coordinateId} · ledger ${p.k.ledgerSha256.slice(0, 10)}…`).join(' · ')}` : 'canonical ledger coordinate unavailable';
             }
             const tag = tn === 'realviews' ? ` <span style="color:${C.green}">(your scale)</span>` : tn === 'views' ? ` <span style="color:${C.mute}">(library)</span>` : '';
-            return cardc(`<div data-expgo="${ch}:${pj}"${b ? embeddingDataAttrs(up, ch, tn, 'stored-production', rawEmbeddingAssetId(up), b) : ''} style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → ${metShort(tn).replace(' (library)', '').replace(' (your scale)', '')}${tag}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${foot} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
+            return cardc(`<div data-expgo="${ch}:${pj}"${b ? embeddingDataAttrs(up, ch, tn, 'canonical-score-ledger', rawEmbeddingAssetId(up), b) : ''} style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → ${metShort(tn).replace(' (library)', '').replace(' (your scale)', '')}${tag}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${foot} · <span style="color:${C.accent}">open geometry →</span></div></div>`, 12);
         };
         // NOVELTY box — the strongest novelty indicator's OWN calibration curve (novelty → this metric), hook marked
         const novCurve = (d, sc) => {
@@ -2359,51 +3898,71 @@ const JarvisRetention = (function () {
             return `<svg viewBox="0 0 ${Wc} ${Hc}" style="width:100%;background:${C.card2};border-radius:6px"><path d="${path}" fill="none" stroke="${C.purple}" stroke-width="2"/>${hook}</svg>`;
         };
         const novBox = tn => {
-            const pool = EXPREG.indicators.filter(d => d.kind === 'novelty' && d.target === tn && up.indicators[keyOf(d)] != null);
-            const dv = pool.filter(d => d.validated).sort((a, b) => Rof(b) - Rof(a)), d = dv[0] || pool.slice().sort((a, b) => Rof(b) - Rof(a))[0];
-            if (!d) return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML('—', 'no novelty signal')}</div>`, 12);
-            const sc = up.indicators[keyOf(d)], est = calib(d, sc), star = d.validated ? '' : `<span style="color:${C.amber}">*</span>`, pc = pctOf(d, sc);
-            const identity = {
-                domain: 'shorts_raw',
-                origin: 'stored-production',
-                channel: 'novelty',
-                target: tn,
-                sourceKey: `novelty.${tn}`,
-                coordinateId: `shorts.stored.novelty.${tn}`,
-                est,
-                pctile: pc == null ? null : pc * 100,
-                kind: 'novelty-calibration',
-                embeddingModel: up.input_manifest && up.input_manifest.embedding_model,
-                scorer: up.input_manifest && up.input_manifest.scorer,
-            };
-            return cardc(`<div${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))}><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div>${coordinateTraceHtml(up, identity.coordinateId, identity, { valueNote: 'novelty calibration output', artifactLabel: 'raw/novelty_models.npz revision', modelRevision: scorerArtifactRevision(up, 'raw/novelty_models.npz') })}</div>`, 12);
+            const coordinateId = `shorts.stored.novelty.${tn}`;
+            const ledger = up && up.score_ledger;
+            const ledgerEntry = scoreLedgerEntry(up, coordinateId);
+            if (
+                !ledger
+                || !ledgerEntry
+                || (
+                    ledgerEntry.available !== true
+                    || ledgerEntry.value == null
+                    || !isFinite(+ledgerEntry.value)
+                )
+            ) {
+                const reason = ledgerEntry && ledgerEntry.unavailable_reason
+                    || 'canonical novelty coordinate unavailable';
+                return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML('—', esc(reason))}<code style="display:block;font-size:6.5px;color:${C.faint};margin-top:5px">${esc(coordinateId)}</code></div>`, 12);
+            }
+            const pool = EXPREG.indicators.filter(
+                d => d.kind === 'novelty' && d.target === tn
+            );
+            const selectedIndicatorKey = ledgerEntry
+                && ledgerEntry.provenance
+                && ledgerEntry.provenance.selectedIndicatorKey;
+            const selectedDefinition = selectedIndicatorKey
+                && pool.find(candidate => keyOf(candidate) === selectedIndicatorKey);
+            const dv = pool.filter(d => d.validated).sort((a, b) => Rof(b) - Rof(a));
+            const d = selectedDefinition || dv[0] || null;
+            const sc = ledgerEntry
+                && ledgerEntry.provenance
+                && ledgerEntry.provenance.rawIndicatorValue != null
+                ? +ledgerEntry.provenance.rawIndicatorValue
+                : null;
+            const est = +ledgerEntry.value;
+            const star = d && !d.validated
+                ? `<span style="color:${C.amber}">*</span>`
+                : '';
+            const pc = ledgerEntry && ledgerEntry.percentile != null
+                ? +ledgerEntry.percentile / 100
+                : null;
+            const identity = shortsRegisteredCoordinate(up, coordinateId);
+            const curve = d && sc != null
+                ? novCurve(d, sc)
+                : `<div style="height:84px;display:flex;align-items:center;justify-content:center;color:${C.faint};font-size:9px;background:${C.card2};border-radius:6px">stored value; matching calibration curve unavailable</div>`;
+            const definition = d
+                ? `${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)})`
+                : coordinateId;
+            return cardc(`<div${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))}><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th ${SHORTS_PERCENTILE_UNIT}` : '')}${curve}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(definition)} — persisted ledger value · ${esc(identity.coordinateId)} · ledger ${identity.ledgerSha256.slice(0, 12)}…; the curve is descriptive only · your hook ◆</div>${coordinateTraceHtml(up, identity.coordinateId, identity, { valueNote: 'novelty calibration output', artifactLabel: 'raw/indicators/registry.json revision', modelRevision: ledger && ledger.registry_revision && ledger.registry_revision.sha256 || scorerArtifactRevision(up, 'raw/indicators/registry.json') })}</div>`, 12);
         };
         const visualForecastBox = () => {
             const forecast = visualKeepForecastOf(up);
             if (!forecast) {
+                const diagnostic = up.runtime_diagnostics
+                    && up.runtime_diagnostics.visual_keep_full_fit;
+                if (diagnostic && isFinite(+diagnostic.raw)) {
+                    return cardc(`<div data-visual-keep-fit-diagnostic data-coordinate-authority="unbound-scalar-suppressed"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Visual keep · in-sample diagnostic</div>${bigNumHTML('—', 'unbound scalar suppressed')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">A fitting-population reconstruction exists, but it has no canonical row-ledger coordinate and ledger hash. Its numeric value is deliberately hidden and cannot be used as a score.</div></div>`, 12);
+                }
                 const reason = up.visual_keep_forecast_error || 'This score artifact predates the frozen model.';
                 return cardc(`<div data-visual-keep-forecast><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML('—', 'current raw value unavailable')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(reason)} ${up.visual_keep_forecast_error ? '' : 'Re-score this opening once to persist the canonical raw forecast.'}</div></div>`, 12);
             }
-            const identity = {
-                domain: 'shorts_raw',
-                origin: 'frozen-model-forecast',
-                channel: 'visual',
-                target: 'keep',
-                sourceKey: 'visual_keep_forecast',
-                coordinateId: forecast.coordinate_id,
-                est: forecast.raw,
-                pctile: null,
-                kind: forecast.kind,
-                embeddingModel: up.input_manifest && up.input_manifest.embedding_model,
-                scorer: up.input_manifest && up.input_manifest.scorer,
-            };
             const scope = forecast.calibration_scope === 'pooled_global'
                 ? 'pooled globally'
                 : 'non-canonical historical scope';
             const revision = forecast.model_artifact_sha256
                 ? String(forecast.model_artifact_sha256).slice(0, 12)
                 : 'revision unavailable';
-            return cardc(`<div data-visual-keep-forecast data-expgo="visual:keep"${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))} style="cursor:pointer"><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML(`${fmtv(forecast.raw, 1)}%`, 'raw predicted keep rate')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">Full 1,536D visual vector → immutable Ridge · ${esc(scope)} · model ${esc(revision)}.<br>This reuses the <b>visual · keep rate</b> map below; the percentage is the separate frozen-model scalar stored as <b>${esc(forecast.coordinate_id)}</b>. <span style="color:${C.amber}">Research-only until unseen-creator transfer validates.</span> · <span style="color:${C.accent}">open normal embedding →</span></div>${coordinateTraceHtml(up, forecast.coordinate_id, forecast, { modelRevision: forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
+            return cardc(`<div data-visual-keep-forecast data-expgo="visual:keep"${embeddingIdentityAttrs(forecast, rawEmbeddingAssetId(up))} style="cursor:pointer"><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML(`${fmtv(forecast.value, 1)}%`, `${esc(forecast.valueUnit)} · no corpus percentile`)}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">Full 1,536D visual vector → immutable Ridge · ${esc(scope)} · model ${esc(revision)}.<br>Coordinate <b>${esc(forecast.coordinateId)}</b> · ledger ${forecast.ledgerSha256.slice(0, 12)}…. The map below is geometry only and cannot replace this scalar. <span style="color:${C.amber}">Research-only until unseen-creator transfer validates.</span> · <span style="color:${C.accent}">open geometry →</span></div>${coordinateTraceHtml(up, forecast.coordinateId, forecast, { modelRevision: forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
         };
         const creatorAdaptiveForecastBox = () => {
             const forecast = creatorAdaptiveKeepForecastOf(up);
@@ -2442,7 +4001,7 @@ const JarvisRetention = (function () {
             const componentLine = componentA == null || componentB == null
                 ? ''
                 : `<b>Component A:</b> ${fmtv(componentA, 1)}% centered-together residual analog · <b>Component B:</b> ${fmtv(componentB, 1)}% visual+together semantic stack · final = clipped 50/50 mean.<br>`;
-            return cardc(`<div data-creator-adaptive-keep-forecast data-revision-status="${esc(revisionStatus)}"${embeddingIdentityAttrs({ domain: 'shorts_raw', origin: 'creator-adaptive-forecast', channel: 'visual+together+creator-history', target: 'keep', sourceKey: 'creator_adaptive_keep_forecast', coordinateId: forecast.coordinate_id, est: forecast.raw, pctile: null, kind: forecast.kind, embeddingModel: up.input_manifest && up.input_manifest.embedding_model, scorer: up.input_manifest && up.input_manifest.scorer }, rawEmbeddingAssetId(up))}><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only · not predictor-eligible</div><span style="border:1px solid ${revisionMeta.color};color:${revisionMeta.color};padding:2px 6px;font-size:7px;font-weight:950;text-transform:uppercase">${esc(revisionMeta.label)}</span></div>${bigNumHTML(`${fmtv(forecast.raw, 1)}%`, 'raw predicted keep rate · not a percentile')}<div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:4px">${baseline == null ? '' : `History-only baseline <b style="color:${C.text}">${fmtv(baseline, 1)}%</b> · mixture shift <b style="color:${C.text}">${modelMinusBaseline >= 0 ? '+' : ''}${fmtv(modelMinusBaseline, 1)} pp</b>.<br>`}${componentLine}<b>Inputs:</b> canonical visual embedding + canonical together (visual + text) embedding + ${esc(profile || 'explicit creator')} ${esc(history)}; ${historyWindow} maximum, ${minimumHistory} minimum${historyEnd ? ` · history through ${esc(historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${historicalPrequential ? C.cyan : C.amber}">${esc(claimBoundary)}</span><br><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified causal candidates. <b>Selected formula:</b> ${esc(forecast.model_formula)}.<br>Stored as <b>${esc(forecast.coordinate_id)}</b>. This is one derived scalar, not a location on either raw plane and is not predictor-eligible.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep embedding →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep embedding →</button></div>${coordinateTraceHtml(up, forecast.coordinate_id, forecast, { profile: forecast.profile_account, artifactLabel: 'creator serving artifact', modelRevision: forecast.serving_artifact_sha256 || forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
+            return cardc(`<div data-creator-adaptive-keep-forecast data-revision-status="${esc(revisionStatus)}"${embeddingIdentityAttrs(forecast, rawEmbeddingAssetId(up))}><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only · not predictor-eligible</div><span style="border:1px solid ${revisionMeta.color};color:${revisionMeta.color};padding:2px 6px;font-size:7px;font-weight:950;text-transform:uppercase">${esc(revisionMeta.label)}</span></div>${bigNumHTML(`${fmtv(forecast.value, 1)}%`, `${esc(forecast.valueUnit)} · no percentile`)}<div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:4px">${baseline == null ? '' : `History-only baseline <b style="color:${C.text}">${fmtv(baseline, 1)}%</b> · mixture shift <b style="color:${C.text}">${modelMinusBaseline >= 0 ? '+' : ''}${fmtv(modelMinusBaseline, 1)} pp</b>.<br>`}${componentLine}<b>Inputs:</b> ${esc(forecast.input)}; ${esc(profile || 'explicit creator')} ${esc(history)}; ${historyWindow} maximum, ${minimumHistory} minimum${historyEnd ? ` · history through ${esc(historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${historicalPrequential ? C.cyan : C.amber}">${esc(claimBoundary)}</span><br><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified time-ordered candidates. <b>Selected formula:</b> ${esc(forecast.model_formula)}.<br>Coordinate <b>${esc(forecast.coordinateId)}</b> · ledger ${forecast.ledgerSha256.slice(0, 12)}…. This is one derived scalar, not a location on either raw plane.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep geometry →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep geometry →</button></div>${coordinateTraceHtml(up, forecast.coordinateId, forecast, { profile: forecast.profile_account, artifactLabel: 'creator serving artifact', modelRevision: forecast.serving_artifact_sha256 || forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
         };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
         const hasTextUp = !!String(up.transcript || up.text || '').trim() && !up.silent;
@@ -2452,10 +4011,13 @@ const JarvisRetention = (function () {
         const CH_TARGETS = ['keep', 'ret5', 'views', 'realviews', 'outlier', 'gt10M'];
         const chanBox = (ch, tn) => {
             const k = steerOf(up, ch, tn), pj = projFor2[tn], cm = colorFor2[tn];
-            const big = k ? steerDisp(tn, k.est) : '—';
-            const sub = k && k.pctile != null ? `${Math.round(k.pctile)}th pctile` : (k ? '' : 'no steer for this output');
-            const coordinateId = `shorts.stored.${ch}.${tn}`;
-            return cardc(`<div data-expgo="${ch}:${pj}"${k ? embeddingDataAttrs(up, ch, tn, 'stored-production', rawEmbeddingAssetId(up), k) : ''} style="cursor:pointer"><div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px"><span style="color:${C.accent}">open graph →</span></div>${coordinateTraceHtml(up, coordinateId, k, { valueNote: 'calibrated map value and separate corpus rank' })}</div>`, 12);
+            const big = k ? steerDisp(tn, k.value) : '—';
+            const sub = k && k.percentile100 != null
+                ? `${Math.round(k.percentile100)}th ${k.percentileUnit}`
+                : (k ? '' : 'canonical coordinate unavailable');
+            const coordinateId = k && k.coordinateId
+                || `shorts.stored.${ch}.${tn}`;
+            return cardc(`<div data-expgo="${ch}:${pj}"${k ? embeddingDataAttrs(up, ch, tn, 'canonical-score-ledger', rawEmbeddingAssetId(up), k) : ''} style="cursor:pointer"><div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px"><span style="color:${C.accent}">open geometry →</span></div>${coordinateTraceHtml(up, coordinateId, k, { valueNote: 'canonical scalar; map placement shown separately' })}</div>`, 12);
         };
         const chanSection = ch => {
             const input = ch === 'visual' ? '5-frame montage only' : ch === 'text' ? 'transcript only' : 'montage + transcript fused';
@@ -2465,7 +4027,7 @@ const JarvisRetention = (function () {
         };
         const nGraphs = CH_TARGETS.length * (hasTextUp ? 3 : 1) + 5;
         const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">${nGraphs} graphs — every channel × every output, plus novelty</div>
-            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">The original channel tiles are unchanged. Two optional keep forecasts reuse existing vectors: a pooled visual diagnostic and a known-creator causal next-upload forecast. Neither mints another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
+            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">The original channel tiles are unchanged. Two optional keep forecasts reuse existing vectors: a pooled visual diagnostic and a known-creator prequential next-upload forecast. Neither mints another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
             <div style="font-size:10px;color:${C.green};font-weight:800;text-transform:uppercase;margin-bottom:5px">Full-vector keep forecasts — 2 derived outputs</div>
             <div style="${gcol};margin-bottom:12px">${visualForecastBox()}${creatorAdaptiveForecastBox()}</div>
             ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
@@ -3096,14 +4658,14 @@ const JarvisRetention = (function () {
         const modCol = m => m === 'visual' ? '#94a3b8' : m === 'text' ? C.cyan : m === 'whole' ? C.purple : C.amber;
         const cell = (v, p) => `<td style="text-align:center;background:${fuHeat(v * 2.8)};color:${Math.abs(v) >= 0.15 ? '#fff' : C.dim};font-size:10px;font-weight:${p < 0.05 ? 700 : 400};padding:4px 7px">${v >= 0 ? '+' : ''}${v.toFixed(2)}${p < 0.05 ? '<sup>*</sup>' : ''}</td>`;
         const card = (lab, m) => `<div style="background:${C.card2};border-radius:8px;padding:8px 14px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase">novelty → ${lab}</div><div style="font-size:22px;font-weight:900;color:${m.r > 0 ? C.green : C.dim}">held-out ρ ${m.r >= 0 ? '+' : ''}${m.r}</div><div style="font-size:9px;color:${C.mute}">± ${m.std} · ${(m.pos_frac * 100).toFixed(0)}% of splits positive</div></div>`;
-        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Does novelty predict RETENTION? — validated, held-out (70/30 × ${E.splits})</div>
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Does novelty associate with retention? — retrospective repeated holdout (70/30 × ${E.splits})</div>
             <div style="display:flex;gap:14px;margin:6px 0 10px;flex-wrap:wrap">${card('keep-rate', mk)}${card('5s retention', mr)}</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:6px">All 13 novelty metrics → ridge, fit on 70% of your 211, scored on the held-out 30%, repeated ${E.splits}×. Both robustly positive → <b style="color:${C.green}">novelty genuinely keeps people watching</b>. Swipe-away = −keep (mirror); views excluded (confounded).</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:6px">All 13 novelty metrics → ridge, fit on 70% of your 211, scored on the held-out 30%, repeated ${E.splits}×. Positive held-out association is evidence inside this retrospective dataset, not proof of causality or future performance. Swipe-away = −keep (mirror); views excluded (confounded).</div>
             <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%">
               <tr><td></td><td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">keep ρ</td><td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">5s-ret ρ</td></tr>
               ${uni.map(u => `<tr><td style="color:${C.text};white-space:nowrap;padding-right:8px"><b style="color:${modCol(u.modality)}">${u.modality}</b> ${u.type}</td>${cell(u.keep_r, u.keep_p)}${cell(u.ret5_r, u.ret5_p)}</tr>`).join('')}
             </table>
-            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">The finding:</b> it's <b style="color:${C.cyan}">script / text novelty</b> (temporal = unlike recent uploads, combinatorial = unusual combination of features) that drives retention. <b style="color:#94a3b8">Visual novelty does NOT predict keep</b> (≈0). So "be novel" means novel in <b>what you say</b>, not just how it looks. <sup>*</sup> = perm-p &lt; 0.05.</div>`, 12);
+            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">Retrospective pattern:</b> <b style="color:${C.cyan}">script / text novelty</b> (temporal = unlike recent uploads, combinatorial = unusual combination of features) has the stronger association with retention in these rows; the tested visual novelty measures are near zero. This is an exploratory comparison, not a causal instruction. <sup>*</sup> = permutation p &lt; 0.05 before any family-wide multiplicity adjustment.</div>`, 12);
     }
     // SWEEP of novelty quantifications (novelty_quantify.py): many ways to measure "distance from
     // typical" × modality, each tested linear AND inverted-U, held-out. The quantification matters.
@@ -3119,7 +4681,7 @@ const JarvisRetention = (function () {
         const humps = res.filter(r => r.hump).length;
         return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">How you QUANTIFY novelty changes everything — all ${res.length} methods, held-out</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Every row = a different way to measure "distance from the dense centre" (mean · kNN-5/15/50 · k-means niche-8/25/80 · Mahalanobis · PCA-residual-10/50 · low-density · distance-to-mode) × visual/text/whole. Each scored LINEAR and for an INVERTED-U (held-out, 70/30 × ${Q.splits}). Sorted by |keep ρ|. <b>Sparkline</b> = mean keep (or 5s-ret) across novelty deciles — the actual shape. <b>U-test</b>: Δ = held-out R² gained by adding novelty², %∩ = how often that term was concave; <b>U</b> only if both clear a bar.</div>
-            <div style="background:${C.card2};border-radius:8px;padding:9px 13px;margin-bottom:9px;font-size:10px;line-height:1.6;color:${C.mute}"><b style="color:${C.green}">Visual novelty hypothesis — CONFIRMED, with the right metric:</b> measured as kNN/niche distance it's ≈0, but as <b style="color:#94a3b8">distance-to-mode (the single most-typical exemplar) it's <b style="color:${C.green}">${visBest ? '+' + visBest.keep_lin : '—'}</b> for keep</b>. The quantification, not the principle, was the problem. <b style="color:${C.amber}">Inverted-U: ${humps}/${res.length}</b> — held-out, no quantification shows a real hump; every relationship is monotonic. The sparklines confirm it.</div>
+            <div style="background:${C.card2};border-radius:8px;padding:9px 13px;margin-bottom:9px;font-size:10px;line-height:1.6;color:${C.mute}"><b style="color:${C.amber}">Exploratory visual-novelty method sweep:</b> kNN/niche distance is near zero, while <b style="color:#94a3b8">distance-to-mode</b> has held-out keep correlation <b style="color:${C.green}">${visBest ? '+' + visBest.keep_lin : '—'}</b>. Because the displayed winner was selected after comparing ${res.length} methods on the same research corpus, it is not confirmatory until frozen and tested on untouched data. <b style="color:${C.amber}">Inverted-U candidates: ${humps}/${res.length}</b>; none clear the sweep's current bar.</div>
             <div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%">
               <tr><td style="font-size:9px;color:${C.mute};text-transform:uppercase">${res.length} methods</td><td style="color:${C.green};text-transform:uppercase;text-align:center;font-size:9px;font-weight:700">keep ρ</td><td style="color:${C.mute};text-transform:uppercase;font-size:9px;padding-left:3px">keep shape</td><td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">keep U-test</td><td style="color:${C.accent};text-transform:uppercase;text-align:center;font-size:9px;font-weight:700">5s-ret ρ</td><td style="color:${C.mute};text-transform:uppercase;font-size:9px;padding-left:3px">5s-ret shape</td></tr>
               ${rows}
@@ -3610,7 +5172,7 @@ const JarvisRetention = (function () {
         }
         return h;
     }
-    // ── Confound falsification audit: does any metadata actually move retention/swipe? ──
+    // ── Exploratory metadata-association audit ──
     function confDef(name) {
         const D = { post_day_of_week: 'Day of week posted (0=Mon). External timing.',
             post_month: 'Calendar month posted. External seasonality.',
@@ -3632,7 +5194,7 @@ const JarvisRetention = (function () {
     function renderNovConfounds() {
         if (!CF) return cardc(`<div style="padding:24px;color:${C.mute}">Run <code>build_confounds.py</code> to generate confounds.json.</div>`);
         const tk = st.cfTarget, isRate = (CF.targets.find(t => t.key === tk) || {}).kind === 'rate';
-        let h = h2c('🧪 Confounds — does any metadata actually move retention / swipe?', `A one-time falsification audit: every external/metadata factor tested against the rate targets (it only measures, never alters the data). Positive control: the same factors vs views — if they hit volume but not the rates, the rates are content-driven. n=${CF.meta.n}.`);
+        let h = h2c('🧪 Confounds — exploratory metadata associations', `Every available external or metadata factor is compared with the rate targets. These retrospective tests can reveal associations worth controlling; they cannot establish that an omitted confound is absent or that content caused the outcome. n=${CF.meta.n}.`);
         // definitions reference — what every variable means
         const TGTDEF = { keep_rate: 'the swipe ratio — % of viewers who stayed instead of swiping away.', ret_5s: '% of the video still being watched at the 5-second mark.', retention: 'average % of the whole video watched.', nonsub_ret: 'average % watched by non-subscribers (cold audience — purest content read).', day1_views: 'views in the first ~day (24h volume proxy).', total_views: 'lifetime views (volume).' };
         const byRole = {}; CF.features.forEach(f => (byRole[f.role] = byRole[f.role] || []).push(f.name));
@@ -3644,18 +5206,23 @@ const JarvisRetention = (function () {
         const rj = CF.role_joint_r2;
         const cell = v => { const c = v > 0.03 ? C.orange : C.mute; return `<td style="text-align:center;padding:4px 8px;font-size:11px;color:${c};font-weight:${v > 0.03 ? 700 : 400}">${v >= 0 ? '+' : ''}${fmtv(v, 2)}</td>`; };
         h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:4px">Joint CV-R²: does each group of factors explain the target <i>at all</i>?</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">≤0 = no real signal (worse than guessing the mean). The <b style="color:${C.orange}">External</b> row is the actual confound test.</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">≤0 means this cross-validation setup did not beat its mean baseline. It is evidence of limited measured signal, not proof that the factor or an unmeasured confound has no effect. The <b style="color:${C.orange}">External</b> row is the prespecified metadata diagnostic.</div>
             <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px"><thead><tr><th style="text-align:left;padding:4px 8px;color:${C.mute}">role</th>${CF.targets.map(t => `<th style="padding:4px 8px;color:${t.kind === 'rate' ? C.green : C.dim};font-size:10px">${esc(t.label)}<div style="font-size:8px;opacity:.7">${t.kind}</div></th>`).join('')}</tr></thead><tbody>
             ${(CF.roles || []).filter(r => rj[r]).map(r => `<tr style="border-top:1px solid ${C.border}"><td style="padding:4px 8px;color:${ROLECOL[r]};font-weight:700">${r}</td>${CF.targets.map(t => cell(rj[r][t.key])).join('')}</tr>`).join('')}</tbody></table></div>`);
         // verdict text for the selected rate target
         const ext = CF.features.filter(f => f.role === 'external');
-        const extSig = ext.filter(f => f.corr[tk] && f.corr[tk].p < 0.05).map(f => f.name);
+        const fdrThreshold = Number(CF.meta.fdr_p);
+        const extSig = ext.filter(f => (
+            f.corr[tk]
+            && Number.isFinite(fdrThreshold)
+            && f.corr[tk].p < fdrThreshold
+        )).map(f => f.name);
         const trendOnly = extSig.every(nm => nm === 'timeline_position' || nm === 'video_age_days');
         if (isRate) h += note(extSig.length === 0
-            ? `<b style="color:${C.green}">Confirmed for ${esc(CF.targets.find(t => t.key === tk).label)}:</b> no external confound is significant. Posting time, cadence and account growth do not move this rate — it's content-driven. No confound control needed.`
+            ? `<b style="color:${C.green}">No FDR-retained external association for ${esc(CF.targets.find(t => t.key === tk).label)} in these rows.</b> This does not establish absence, content causality, or permission to omit confound controls; it only states what this measured feature set detected at its recorded multiplicity threshold.`
             : (trendOnly
-                ? `<b style="color:${C.yellow}">Mostly confirmed:</b> the only external factors that move ${esc(CF.targets.find(t => t.key === tk).label)} are <b>recency / timeline-position</b> (newer videos do better) — almost certainly <i>you improving over time</i>, not a true confound. Worth one stability check: confirm the novelty→rate correlations survive controlling for posting recency. Posting time, cadence, account momentum are all inert.`
-                : `<b style="color:${C.orange}">Watch:</b> external factors significant here: ${extSig.map(esc).join(', ')}. Worth controlling these for this target.`), extSig.length === 0 ? C.green : (trendOnly ? C.yellow : C.orange));
+                ? `<b style="color:${C.yellow}">FDR-retained chronology associations:</b> ${extSig.map(esc).join(', ')}. Their mechanism is unidentified; test stability under chronology controls and future data rather than attributing them to creator improvement.`
+                : `<b style="color:${C.orange}">FDR-retained external associations:</b> ${extSig.map(esc).join(', ')}. Control or stratify these in downstream analyses; association alone does not identify a causal adjustment set.`), extSig.length === 0 ? C.green : (trendOnly ? C.yellow : C.orange));
         // target selector
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 8px"><span style="font-size:10px;color:${C.mute};align-self:center;text-transform:uppercase">vs</span>${CF.targets.map(t => `<button data-cftgt="${t.key}" style="background:${tk === t.key ? (t.kind === 'rate' ? C.green : C.accent) + '22' : 'transparent'};border:1px solid ${tk === t.key ? (t.kind === 'rate' ? C.green : C.accent) : C.border};color:${tk === t.key ? (t.kind === 'rate' ? C.green : C.accent) : C.dim};border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">${esc(t.label)}${t.kind === 'volume' ? ' ⚙' : ''}</button>`).join('')}</div>`;
         // feature detail
@@ -3679,7 +5246,7 @@ const JarvisRetention = (function () {
                     <div style="position:absolute;left:${c.r >= 0 ? mid + len + 4 : mid - len - 30}px;top:0;font-size:10px;color:${C.text};font-weight:700">${sgn(c.r)} <span style="color:${sig ? C.yellow : C.faint}">${sig}</span></div></div></div>`; }).join('');
         h += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px;font-size:10px">${Object.keys(ROLECOL).map(r => `<span style="color:${ROLECOL[r]}">■ ${r}</span>`).join('')}</div>`;
         h += cardc(`<div style="font-size:11px;color:${C.mute};margin-bottom:6px">Every metadata factor vs <b style="color:${C.accent}">${esc(CF.targets.find(t => t.key === tk).label)}</b>, sorted by |r|, coloured by role. Click any for its definition + scatter.</div>${bars}`);
-        h += note(`Only <b style="color:${C.orange}">external</b> factors could be true confounds. <b style="color:${C.faint}">Downstream</b> (likes/shares/comments, subs gained) and <b style="color:${C.purple}">audience</b> (sub-fraction) correlations are expected — they're consequences of the same content that drives retention, not causes, so they don't threaten the novelty findings. <b style="color:${C.cyan}">Content</b> (duration) is intrinsic. The positive-control ⚙ volume targets show metadata barely predicts even views within one account.`, C.dim);
+        h += note(`<b style="color:${C.orange}">External</b> variables are candidate confounds. <b style="color:${C.faint}">Downstream</b> engagement and <b style="color:${C.purple}">audience</b> composition may be outcomes, mediators, colliders, or selection variables, so they are displayed but must not be adjusted mechanically. <b style="color:${C.cyan}">Content</b> duration is intrinsic and can still modify comparisons. The volume targets are descriptive negative-control-style diagnostics, not causal identification.`, C.dim);
         return h;
     }
     // ---- synced YouTube player + playhead that crosses the RTG channels ----
@@ -3882,7 +5449,7 @@ const JarvisRetention = (function () {
         const hitBadge = lab.pairs.length ? `<span style="color:${C.dim}">your labels: <b style="color:${C.green}">${nHit} caught</b> / <b style="color:#f87171">${lab.pairs.length - nHit} missed</b></span>` : '';
         const pk = (arr, base, up, col) => arr.map((r, i) => (r > 0.12 && (i === 0 || r >= arr[i - 1]) && (i === n - 1 || r >= arr[i + 1])) ? `<circle data-rtgnode="${i}" style="cursor:pointer" cx="${x(i).toFixed(1)}" cy="${(base + up * r * amp).toFixed(1)}" r="${(2 + r * 3).toFixed(1)}" fill="${col}" opacity="${(0.35 + r * 0.65).toFixed(2)}"><title>${i}s · ${(r).toFixed(2)}</title></circle>` : '').join('');
         const ph = `<line class="rtg-ph" data-x0="${pad}" data-x1="${x(n - 1)}" data-n="${n}" x1="${pad}" y1="14" x2="${pad}" y2="${H - 10}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>`;
-        // REAL viewer retention overlaid (ground truth) + back-third risk flags from the validated champion
+        // Ground-truth retention overlay plus descriptive flags from the post-selected phase-two signal.
         const rtv = (DATA && DATA.videos) ? DATA.videos.find(o => o.id === v.id) : null;
         let retOv = '', riskMk = '', riskN = 0;
         if (rtv && rtv.curve && rtv.curve.length) {
@@ -3895,12 +5462,12 @@ const JarvisRetention = (function () {
             const cs = champ && v.signals && v.signals[champ] && v.signals[champ].refness;
             if (cs) { const t0 = Math.ceil(0.67 * (n - 1));
                 for (let t = t0; t < n - 1; t++) { if ((rs(Math.min(n - 1, t + 3)) - rs(t)) < 0 && (cs[t] || 0) < 0.2) { riskN++;
-                    riskMk += `<rect x="${(x(t) - 2).toFixed(1)}" y="${H - 9}" width="4" height="5" fill="#f87171" opacity="0.85"><title>${t}s · retention dropping with no open loop — drop-zone risk: open a question here</title></rect>`; } }
+                    riskMk += `<rect x="${(x(t) - 2).toFixed(1)}" y="${H - 9}" width="4" height="5" fill="#f87171" opacity="0.85"><title>${t}s · retrospective flag: retention drops while the selected open-loop score is low</title></rect>`; } }
             }
         }
         const slab = (RTGF.meta && RTGF.meta.signal_labels && RTGF.meta.signal_labels[st.rtgSignal]) || st.rtgSignal;
         return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Reference-ness & payoff-ness — <span style="color:${C.accent}">${esc(slab)}</span> signal &nbsp; <span style="font-weight:400;color:${C.mute};font-size:10px">${links.length}/${allLinks.length} connections${thr > 0 ? ` ≥ ${thr.toFixed(2)}` : ''}</span> &nbsp; ${hitBadge}</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5"><b style="color:${C.cyan}">Reference-ness</b> (top) = this moment points to a <i>specific</i> later moment that isn't present yet (intrinsic & causal — shows even when nothing pays it off). <b style="color:${C.green}">Payoff-ness</b> (bottom) = a later moment fulfils a real earlier reference. <span style="color:${C.purple}">Arcs</span> = the link. ${labOv ? `Your hand-labels are dashed — <b style="color:${C.green}">green = this signal caught it</b>, <b style="color:#f87171">red = missed</b> (a guide, never fit to). ` : ''}Encoder: <b>${esc((RTGF.meta && RTGF.meta.encoder) || '?')}</b>. Flip the signal above to see which one lands where you'd expect.</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5"><b style="color:${C.cyan}">Reference-ness</b> (top) = the selected structural score for whether this moment points to a specific later moment. <b style="color:${C.green}">Payoff-ness</b> (bottom) = the selected score for whether a later moment fulfils an earlier reference. These are post-selected retrospective measurements, not identified causal effects. <span style="color:${C.purple}">Arcs</span> = the scored link. ${labOv ? `Your hand-labels are dashed — <b style="color:${C.green}">green = this signal caught it</b>, <b style="color:#f87171">red = missed</b> (a guide, never fit to). ` : ''}Encoder: <b>${esc((RTGF.meta && RTGF.meta.encoder) || '?')}</b>. Flip the signal above to inspect alternatives.</div>
             <svg viewBox="0 0 ${W} ${H}" style="width:100%">
               <line x1="${pad}" y1="${yR}" x2="${W - 10}" y2="${yR}" stroke="${C.border2}"/><line x1="${pad}" y1="${yP}" x2="${W - 10}" y2="${yP}" stroke="${C.border2}"/>
               <path d="${refA}" fill="${C.cyan}26" stroke="${C.cyan}" stroke-width="1.2"/><path d="${payA}" fill="${C.green}26" stroke="${C.green}" stroke-width="1.2"/>
@@ -3908,7 +5475,7 @@ const JarvisRetention = (function () {
               <text x="${pad}" y="14" fill="${C.cyan}" font-size="10" font-weight="700">reference-ness (anticipation set)</text>
               ${retOv ? `<text x="${W - 10}" y="14" fill="#e879f9" font-size="10" font-weight="700" text-anchor="end">real retention</text>` : ''}
               <text x="${pad}" y="${H - 4}" fill="${C.green}" font-size="10" font-weight="700">payoff-ness (anticipation met)</text></svg>
-            ${retOv ? `<div style="font-size:9.5px;color:${C.mute};margin-top:5px;line-height:1.5"><span style="color:#e879f9">▬ ▬</span> real viewer retention overlaid. ${riskN ? `<span style="color:#f87171">▮</span> <b style="color:#f87171">${riskN} drop-zone risk ${riskN === 1 ? 'spot' : 'spots'}</b> — back-third seconds where retention is falling with <i>no open loop</i> active (the validated entailment champion is quiet). Open an abstract question here.` : `<span style="color:${C.green}">Back third is covered</span> — no drop-zone gaps where retention falls without an open loop.`}</div>` : ''}
+            ${retOv ? `<div style="font-size:9.5px;color:${C.mute};margin-top:5px;line-height:1.5"><span style="color:#e879f9">▬ ▬</span> real viewer retention overlaid. ${riskN ? `<span style="color:#f87171">▮</span> <b style="color:#f87171">${riskN} descriptive ${riskN === 1 ? 'flag' : 'flags'}</b> — back-third seconds where retention falls while the post-selected phase-two open-loop score is low. This is hypothesis-generating, not evidence that adding a question would prevent the drop.` : `<span style="color:${C.green}">No heuristic flags</span> — this selected signal found no back-third retention drop paired with a low open-loop score.`}</div>` : ''}
             ${sg.links && sg.links[0] && sg.links[0].c != null ? `<div style="font-size:9.5px;color:${C.mute};margin-top:5px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
               <span><b style="color:${C.text}">Loop strength</b> = 0.45·consensus + 0.30·intensity + 0.25·fulfilment.</span>
               <span>Thicker arc = <b style="color:${C.text}">stronger</b>.</span>
@@ -4360,9 +5927,12 @@ const JarvisRetention = (function () {
             if (attempt) await new Promise(resolve => window.setTimeout(resolve, retryDelays[attempt - 1] || retryDelays[retryDelays.length - 1] || 6000));
             let r, raw;
             const fetchOpts = { ...(opts || {}) };
+            const captureResponseHeaders =
+                !!fetchOpts._captureResponseHeaders;
             const timeoutMs = Math.max(5000, Number(fetchOpts._timeoutMs) || 45000);
             delete fetchOpts._timeoutMs;
             delete fetchOpts._retryDelays;
+            delete fetchOpts._captureResponseHeaders;
             let timer = null;
             if (!fetchOpts.signal && window.AbortController) {
                 const controller = new window.AbortController();
@@ -4389,6 +5959,28 @@ const JarvisRetention = (function () {
             }
             if (!j) throw new Error('server returned ' + r.status + ' (non-JSON)');
             if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            if (
+                captureResponseHeaders
+                && j
+                && typeof j === 'object'
+            ) {
+                Object.defineProperty(j, '_response_headers', {
+                    value: Object.freeze({
+                        mapReleaseSha256:
+                            r.headers.get('x-map-release-sha256'),
+                        mapPointerSha256:
+                            r.headers.get('x-map-pointer-sha256'),
+                        predictorReleaseSha256:
+                            r.headers.get(
+                                'x-predictor-release-sha256'
+                            ),
+                        artifactSha256:
+                            r.headers.get('x-artifact-sha256'),
+                        etag: r.headers.get('etag'),
+                    }),
+                    enumerable: false,
+                });
+            }
             return j;
         }
         throw last || new Error('server unavailable');
@@ -4457,7 +6049,7 @@ const JarvisRetention = (function () {
     // EVERY channel × EVERY steered output, labelled — the long-quant-style full grid.
     // 5 outputs × visual always + text/together when a transcript exists = up to 15 (+ novelty set).
     function rawChanGridHtml(U) {
-        if (!U || !U.steer) return '';
+        if (!U || !U.score_ledger) return '';
         const TARGETS = [['keep', 'keep rate'], ['ret5', 'past-5s'], ['views', 'view-equivalent (corpus quantile)'], ['realviews', 'forecast views (your channel scale)'], ['outlier', 'outlier'], ['gt10M', '>10M']];
         const CHANS = [['visual', '5-frame montage only'], ['text', 'transcript only'], ['together', 'montage + transcript']];
         const hasText = !!String(U.transcript || U.text || '').trim() && !U.silent;
@@ -4466,17 +6058,18 @@ const JarvisRetention = (function () {
             const present = m === 'visual' || hasText;
             const cells = TARGETS.map(([tn, lab]) => {
                 if (present) possible++;
-                const k = U.steer[`${m}_${tn}`];
+                const k = steerOf(U, m, tn);
                 if (!present) return `<span style="border:1px dashed ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} —</span>`;
                 if (!k) return `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} missing</span>`;
                 found++;
-                const pc = k.pctile != null ? Math.round(k.pctile) : null;
-                const coordinateId = `shorts.stored.${m}.${tn}`;
-                return `<button type="button" data-exp-ledger-coordinate="${esc(coordinateId)}"${embeddingDataAttrs(U, m, tn, 'stored-production', rawEmbeddingAssetId(U), k)} title="${esc(m)} embedding: ${esc(input)}" style="cursor:pointer;text-align:left;background:transparent;border:1px solid ${pc != null && pc >= 80 ? C.green : C.cyan}55;border-radius:5px;padding:3px 6px;font-size:9px;color:${C.dim}">${lab} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${steerDisp(tn, k.est)}</b>${pc != null ? ` <span style="color:${C.faint}">${pc}th</span>` : ''}<code style="display:block;font-size:6.5px;color:${C.faint};margin-top:2px">${esc(coordinateId)}</code></button>`;
+                const pc = k.percentile100 != null ? Math.round(k.percentile100) : null;
+                const coordinateId = k.coordinateId
+                    || `shorts.stored.${m}.${tn}`;
+                return `<button type="button" data-exp-ledger-coordinate="${esc(coordinateId)}"${embeddingDataAttrs(U, m, tn, 'canonical-score-ledger', rawEmbeddingAssetId(U), k)} title="${esc(k.modality)}: ${esc(k.input)} · ${esc(k.valueUnit)} · ledger ${esc(k.ledgerSha256)}" style="cursor:pointer;text-align:left;background:transparent;border:1px solid ${pc != null && pc >= 80 ? C.green : C.cyan}55;border-radius:5px;padding:3px 6px;font-size:9px;color:${C.dim}">${lab} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${steerDisp(tn, k.value)}</b>${pc != null ? ` <span style="color:${C.faint}">${pc}th</span>` : ''}<code style="display:block;font-size:6.5px;color:${C.faint};margin-top:2px">${esc(coordinateId)} · ${esc(k.valueUnit)} · ${k.ledgerSha256.slice(0, 10)}…</code></button>`;
             }).join('');
             return `<div style="display:grid;grid-template-columns:74px minmax(0,1fr);gap:6px;align-items:start;margin-top:4px"><div><div style="font-size:9px;font-weight:900;text-transform:uppercase;color:${m === 'visual' ? C.green : m === 'text' ? C.purple : C.accent}">${m}</div><div style="font-size:7.5px;color:${C.faint};line-height:1.25">${present ? esc(input) : 'no transcript'}</div></div><div style="display:flex;gap:3px;flex-wrap:wrap">${cells}</div></div>`;
         }).join('');
-        return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all embedding outputs</span><span style="color:${found === possible ? C.green : C.amber}">${found}/${possible}${hasText ? '' : ' (visual-only — no transcript; fix it above to unlock text + together)'}</span></div>${rows}</div>`;
+        return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all stored score coordinates</span><span style="color:${found === possible ? C.green : C.amber}">${found}/${possible}${hasText ? '' : ' (visual-only — no transcript; fix it above to unlock text + together)'}</span></div>${rows}</div>`;
     }
     async function rtgScoreYoutube() {
         const inp = window.document.querySelector('[data-rawyturl]'); if (inp) st.rawYtUrl = inp.value;
@@ -4500,8 +6093,10 @@ const JarvisRetention = (function () {
         st.savedBank = 'channels';
         st.savedChannelTab = 'ledger';
         st.savedLedgerCoordinate = coordinateId;
-        st.savedLedgerFamily = coordinateId.indexOf('creator-adaptive') >= 0
-            ? 'creatorAdaptiveKeepForecast'
+        st.savedLedgerFamily = coordinateId.indexOf(
+            'creator-prequential'
+        ) >= 0
+            ? 'creatorAdaptiveKeepPrequential'
             : coordinateId.indexOf('visual-keep-protocol') >= 0
                 ? 'visualKeepProtocolForecast'
             : coordinateId.indexOf('visual-keep-forecast') >= 0
@@ -4537,7 +6132,9 @@ const JarvisRetention = (function () {
         const scdelete = e.target.closest('[data-savedchanneldelete]'); if (scdelete) { savedChannelAction(scdelete.getAttribute('data-savedchanneldelete'), 'delete'); return; }
         const sctab = e.target.closest('[data-savedchanneltab]'); if (sctab) {
             st.savedChannelTab = sctab.getAttribute('data-savedchanneltab');
-            if ((st.savedChannelTab === 'analysis' || st.savedChannelTab === 'atlas') && st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel);
+            if (st.savedChannelTab === 'explore' && st.savedChannelSel) {
+                loadSavedChannelAnalysis(st.savedChannelSel);
+            }
             if (st.savedChannelTab === 'validation' || st.savedChannelTab === 'ledger') {
                 loadSavedChannelValidation();
             }
@@ -4704,7 +6301,7 @@ const JarvisRetention = (function () {
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
         const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
-        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null, visual_keep_forecast: up.visual_keep_forecast || null, creator_adaptive_keep_forecast: up.creator_adaptive_keep_forecast || null, creator_adaptive_keep_forecast_error: up.creator_adaptive_keep_forecast_error || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
+        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montage ? 'data:image/jpeg;base64,' + up.montage : (up.montageDataUrl || ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, score_ledger: up.score_ledger || null, novelty_provenance: up.novelty_provenance || null, visual_keep_forecast: up.visual_keep_forecast || null, creator_adaptive_keep_forecast: up.creator_adaptive_keep_forecast || null, creator_adaptive_keep_forecast_error: up.creator_adaptive_keep_forecast_error || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
@@ -5036,7 +6633,7 @@ const JarvisRetention = (function () {
         try { await rtFetchJson('/api/raw/folder-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fid }) }, 1); if (st.savedFolder === fid) st.savedFolder = 'all'; SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     function savedHookScoreIsComplete(rec) {
-        return !!(rec && rec.emb_preview && rec.channels && rec.steer && rec.visual_keep_forecast);
+        return shortsLedgerState(rec).valid;
     }
     function savedHookScoreIsCurrent(rec, live, creatorProfile) {
         const manifest = rec && rec.input_manifest || {};
@@ -5045,6 +6642,12 @@ const JarvisRetention = (function () {
             && live
             && manifest.revision_fingerprint
             && manifest.revision_fingerprint === live.revision_fingerprint
+            && rec.score_ledger
+            && rec.score_ledger.schema_complete === true
+            && rec.score_ledger.coordinate_governance_sha256
+                === live.coordinate_governance_sha256
+            && rec.score_ledger.feature_contract_sha256
+                === live.feature_contract_sha256
             && String(manifest.creator_profile || '') === String(creatorProfile || '')
         );
     }
@@ -5054,7 +6657,11 @@ const JarvisRetention = (function () {
             silent: rec.silent,
             title: rec.title,
             indicators: rec.indicators,
-            steer: rec.steer,
+            score_ledger: rec.score_ledger || null,
+            score_ledger_validation: rec.score_ledger_validation || null,
+            score_record_sha256: rec.score_record_sha256 || null,
+            score_record_validation: rec.score_record_validation || null,
+            novelty_provenance: rec.novelty_provenance || null,
             visual_keep_forecast: rec.visual_keep_forecast || null,
             creator_adaptive_keep_forecast: rec.creator_adaptive_keep_forecast || null,
             creator_adaptive_keep_forecast_error: rec.creator_adaptive_keep_forecast_error || null,
@@ -5068,8 +6675,9 @@ const JarvisRetention = (function () {
             _uploadWarning: warning || null,
         };
     }
-    // Saved hooks open from a revision-pinned durable score. Legacy or stale records are
-    // re-scored once from their durable montage, then enriched for instant later opens.
+    // Opening a saved hook is read-only. A persisted score keeps the exact
+    // scorer revision that produced it; an unscored idea may be scored for
+    // display, but that transient result is never written over saved evidence.
     async function openSaved(id) {
         if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before opening this saved hook.'); return; }
         st.savedSel = id; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
@@ -5084,13 +6692,33 @@ const JarvisRetention = (function () {
                 while (cachedIds.length > 8) delete SAVEDDETAIL[cachedIds.shift()];
             }
             const rec = stored.rec || {};
-            if (savedHookScoreIsComplete(rec) && !live) {
-                const result = savedHookResult(rec, id, 'The live scorer contract could not be loaded. These persisted historical values are shown, but revision parity could not be verified.');
-                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
-                st.rawUploads.push(result);
-                st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            } else if (savedHookScoreIsCurrent(rec, live, creatorProfile)) {
-                const result = savedHookResult(rec, id, null);
+            if (savedHookScoreIsComplete(rec)) {
+                const current = savedHookScoreIsCurrent(
+                    rec,
+                    live,
+                    creatorProfile
+                );
+                const warning = rec.evidence_state
+                    === 'legacy_unbound_evidence'
+                    ? (
+                        'Historical display evidence: the score ledger was '
+                        + 'not jointly bound to these exact JPEG bytes and '
+                        + 'text, so it is not predictor-eligible.'
+                    )
+                    : !live
+                        ? (
+                            'The live scorer contract could not be loaded. '
+                            + 'The exact persisted score is shown without '
+                            + 'claiming current-revision parity.'
+                        )
+                        : !current
+                            ? (
+                                'This is the exact persisted historical '
+                                + 'score from its recorded scorer revision; '
+                                + 'it was not silently recalculated.'
+                            )
+                            : null;
+                const result = savedHookResult(rec, id, warning);
                 st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(result);
                 st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
@@ -5125,20 +6753,19 @@ const JarvisRetention = (function () {
                     } finally {
                         window.clearInterval(tick);
                     }
-                    j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
+                    j.source = 'saved';
+                    j.savedId = id;
+                    j.genFrames = rec.frames || [];
+                    j.montageDataUrl = j.montage
+                        ? 'data:image/jpeg;base64,' + j.montage
+                        : montage;
+                    j._uploadWarning = (
+                        'This is a new transient score for an unscored '
+                        + 'saved idea. The original record was not changed; '
+                        + 'use Save this hook to create a ledger-bound score.'
+                    );
                     st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                     st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-                    Object.assign(rec, { indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, creator_adaptive_keep_forecast: j.creator_adaptive_keep_forecast, creator_adaptive_keep_forecast_error: j.creator_adaptive_keep_forecast_error, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
-                    SAVEDDETAIL[id] = { rec, montage };
-                    try {
-                        await rtFetchJson('/api/raw/hook-enrich', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id, montage, indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, creator_adaptive_keep_forecast: j.creator_adaptive_keep_forecast, creator_adaptive_keep_forecast_error: j.creator_adaptive_keep_forecast_error, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }),
-                        }, 2);
-                    } catch (persistError) {
-                        j._uploadWarning = `The current score is visible, but saving its migration failed: ${fetchFail(persistError)}. Opening this hook again may need to re-score it.`;
-                    }
                 }
             }
         } catch (e) { st.rawUpErr = fetchFail(e); }
@@ -5157,10 +6784,51 @@ const JarvisRetention = (function () {
         const retrying = !!(SAVEDCHANNELS && SAVEDCHANNELS.error);
         if ((active || retrying) && st.sec === 'experiment') st._savedChannelPoll = window.setTimeout(() => refreshSavedChannels(true), 5000);
     }
-    async function loadSavedChannelDetail(id, force) {
+    async function loadSavedChannelDetail(id, force, summaryOnly) {
         if (!id) return null;
-        if (!force && SAVEDCHANNELDETAIL[id] && !SAVEDCHANNELDETAIL[id].loading) return SAVEDCHANNELDETAIL[id];
         const previous = SAVEDCHANNELDETAIL[id];
+        if (summaryOnly && (!previous || previous.loading)) {
+            return loadSavedChannelDetail(id, true, false);
+        }
+        if (
+            !summaryOnly
+            && !force
+            && previous
+            && !previous.loading
+        ) return previous;
+        if (summaryOnly) {
+            try {
+                const summary = await rtFetchJson(
+                    '/api/raw/saved-channel/' + id + '?summary=1',
+                    { cache: 'no-store' },
+                    4
+                );
+                const sameRevision = !!(
+                    previous.manifestRevision
+                    && summary.manifestRevision
+                    && previous.manifestRevision
+                        === summary.manifestRevision
+                );
+                if (sameRevision) {
+                    SAVEDCHANNELDETAIL[id] = {
+                        ...previous,
+                        ...summary,
+                        videos: previous.videos || [],
+                        summary_only: false,
+                    };
+                    return SAVEDCHANNELDETAIL[id];
+                }
+                return loadSavedChannelDetail(id, true, false);
+            } catch (e) {
+                SAVEDCHANNELDETAIL[id] = {
+                    ...previous,
+                    id,
+                    loading: false,
+                    error: fetchFail(e),
+                };
+                return SAVEDCHANNELDETAIL[id];
+            }
+        }
         SAVEDCHANNELDETAIL[id] = { loading: 1, id };
         try {
             const j = await rtFetchJson('/api/raw/saved-channel/' + id, { cache: 'no-store' }, 4);
@@ -5183,7 +6851,13 @@ const JarvisRetention = (function () {
         try {
             const j = await rtFetchJson('/api/raw/saved-channels', { cache: 'no-store' }, 4);
             SAVEDCHANNELS = j;
-            if (st.savedChannelSel) await loadSavedChannelDetail(st.savedChannelSel, true);
+            if (st.savedChannelSel) {
+                await loadSavedChannelDetail(
+                    st.savedChannelSel,
+                    true,
+                    true
+                );
+            }
         } catch (e) {
             SAVEDCHANNELS = {
                 ...(previous && typeof previous === 'object' ? previous : {}),
@@ -5235,9 +6909,32 @@ const JarvisRetention = (function () {
         if (!id || (SAVEDCHANNELANALYSIS[id] && !force)) return;
         SAVEDCHANNELANALYSIS[id] = { loading: 1 }; rtgUpdateExp();
         try {
-            const j = await rtFetchJson(`/api/raw/saved-channel/${id}/analysis`, { cache: force ? 'reload' : 'default' }, 4);
-            SAVEDCHANNELANALYSIS[id] = j;
-        } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: fetchFail(e) }; }
+            const endpoint =
+                `/api/raw/saved-channel/${id}/analysis`;
+            if (force) {
+                SAVEDCHANNELANALYSIS[id] = await rtFetchJson(
+                    endpoint,
+                    { method: 'POST', cache: 'no-store' },
+                    1
+                );
+            } else {
+                try {
+                    SAVEDCHANNELANALYSIS[id] = await rtFetchJson(
+                        endpoint,
+                        { cache: 'default' },
+                        1
+                    );
+                } catch (_) {
+                    SAVEDCHANNELANALYSIS[id] = await rtFetchJson(
+                        endpoint,
+                        { method: 'POST', cache: 'no-store' },
+                        1
+                    );
+                }
+            }
+        } catch (e) {
+            SAVEDCHANNELANALYSIS[id] = { error: fetchFail(e) };
+        }
         rtgUpdateExp();
     }
     async function loadSavedChannelValidation(force) {
@@ -5252,33 +6949,82 @@ const JarvisRetention = (function () {
     }
     async function openSavedChannelVideo(channelId, videoId, embeddingTarget) {
         if (!channelId || !videoId || st.savedChannelVideoBusy) return;
-        const currentVisualKeepArtifactSha = SAVEDCHANNELVALIDATION
-            && SAVEDCHANNELVALIDATION.visualKeepStudy
-            && SAVEDCHANNELVALIDATION.visualKeepStudy.modelArtifact
-            && SAVEDCHANNELVALIDATION.visualKeepStudy.modelArtifact.artifactSha256
-            || null;
-        const currentCreatorKeepArtifactSha = SAVEDCHANNELVALIDATION
-            && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy
-            && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy.modelArtifact
-            && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy.modelArtifact.artifactSha256
-            || null;
-        const visualKeepRevisionMatches = record => !currentVisualKeepArtifactSha || (
-            record
-            && record.visual_keep_forecast
-            && record.visual_keep_forecast.model_artifact_sha256 === currentVisualKeepArtifactSha
-        );
-        const creatorKeepRevisionMatches = record => !currentCreatorKeepArtifactSha || (
-            record
-            && record.creator_adaptive_keep_release_sha256 === currentCreatorKeepArtifactSha
-            && (
-                !record.creator_adaptive_keep_forecast
-                || record.creator_adaptive_keep_forecast.model_artifact_sha256
-                    === currentCreatorKeepArtifactSha
-            )
-        );
-        const modelRevisionsMatch = record => (
-            visualKeepRevisionMatches(record) && creatorKeepRevisionMatches(record)
-        );
+        let manifestVideo = SAVEDCHANNELDETAIL[channelId]
+            && Array.isArray(SAVEDCHANNELDETAIL[channelId].videos)
+            && SAVEDCHANNELDETAIL[channelId].videos.find(
+                video => video && video.id === videoId
+            ) || null;
+        if (!manifestVideo) {
+            const detail = await loadSavedChannelDetail(
+                channelId,
+                true,
+                false
+            );
+            manifestVideo = detail
+                && Array.isArray(detail.videos)
+                && detail.videos.find(
+                    video => video && video.id === videoId
+                ) || null;
+        }
+        if (!manifestVideo) {
+            st.rawUpErr = (
+                'Saved channel: the current manifest does not contain '
+                + 'that video, so no cached score was opened.'
+            );
+            rtgUpdateExp();
+            return;
+        }
+        const persistedRecordMatchesManifest = record => {
+            if (
+                !record
+                || !record.score_ledger_validation
+                || record.score_ledger_validation.valid !== true
+                || !record.manifest_row_validation
+                || record.manifest_row_validation.valid !== true
+                || !record.record_artifact_validation
+                || record.record_artifact_validation.valid !== true
+                || !record.input_binding_validation
+                || record.input_binding_validation.valid !== true
+            ) return false;
+            const manifestLedgerSha = manifestVideo.score_ledger
+                && manifestVideo.score_ledger.ledger_sha256 || null;
+            const recordLedgerSha = record.score_ledger
+                && record.score_ledger.ledger_sha256 || null;
+            const manifestRevision = manifestVideo.input_manifest
+                && manifestVideo.input_manifest.revision_fingerprint || null;
+            const recordRevision = record.input_manifest
+                && record.input_manifest.revision_fingerprint || null;
+            return !!(
+                manifestVideo.score_ledger_validation
+                && manifestVideo.score_ledger_validation.valid === true
+                && manifestLedgerSha
+                && manifestLedgerSha === recordLedgerSha
+                && (
+                    !manifestRevision
+                    || manifestRevision === recordRevision
+                )
+                && manifestVideo.score_record_sha256
+                    === record.score_record_sha256
+                && manifestVideo.manifest_row_sha256
+                    === record.manifest_row_validation.recorded_sha256
+                && manifestVideo.record_artifact_sha256
+                    === record.record_artifact_validation.actual_sha256
+                && manifestVideo.record_artifact_sha256
+                    === record.record_artifact_validation.recorded_sha256
+                && manifestVideo.record_byte_length
+                    === record.record_artifact_validation.actual_byte_length
+                && manifestVideo.record_byte_length
+                    === record.record_artifact_validation.recorded_byte_length
+                && manifestVideo.evidence_state
+                    === record.evidence_state
+                && manifestVideo.canonical
+                    === record.canonical
+                && manifestVideo.predictor_eligible
+                    === record.predictor_eligible
+            );
+        };
+        const cachedRecordIsCurrent =
+            record => persistedRecordMatchesManifest(record);
         const showLoadedVideo = () => {
             if (embeddingTarget) {
                 const [channel, projection] = String(embeddingTarget).split(':');
@@ -5287,6 +7033,10 @@ const JarvisRetention = (function () {
                 st.rawChan = channel || 'visual';
                 st.rawProj = projection || 'keep';
                 st.rawColor = projection === 'hi10m' ? 'views' : 'cluster';
+                // Keep the persisted score card selected while highlighting
+                // the already-indexed corpus point. This avoids inventing a
+                // second upload-style geometry for the same saved video.
+                st.rawSel = videoId;
                 render();
                 window.setTimeout(() => {
                     const panel = window.document.getElementById('rtg-rawpanel');
@@ -5298,7 +7048,10 @@ const JarvisRetention = (function () {
             window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
         };
         let existingIndex = (st.rawUploads || []).findIndex(upload => upload && upload.savedChannelId === channelId && upload.savedChannelVideoId === videoId);
-        if (existingIndex >= 0 && !modelRevisionsMatch(st.rawUploads[existingIndex])) {
+        if (
+            existingIndex >= 0
+            && !cachedRecordIsCurrent(st.rawUploads[existingIndex])
+        ) {
             st.rawUploads.splice(existingIndex, 1);
             existingIndex = -1;
         }
@@ -5312,7 +7065,7 @@ const JarvisRetention = (function () {
         try {
             const cacheKey = savedChannelMontageKey(channelId, videoId);
             let record = SAVEDCHANNELVIDEOCACHE[cacheKey];
-            if (record && !modelRevisionsMatch(record)) {
+            if (record && !cachedRecordIsCurrent(record)) {
                 delete SAVEDCHANNELVIDEOCACHE[cacheKey];
                 record = null;
             }
@@ -5320,6 +7073,22 @@ const JarvisRetention = (function () {
                 record = await rtFetchJson(`/api/raw/saved-channel/${channelId}/video/${videoId}`, { cache: 'no-store' }, 4);
                 record.montageDataUrl = `/api/raw/saved-channel/${channelId}/montage/${videoId}`;
                 record.source = 'saved-channel'; record.savedChannelId = channelId; record.savedChannelVideoId = videoId;
+                if (
+                    record.evidence_state
+                        === 'historical_unbound_input'
+                ) {
+                    record._uploadWarning =
+                        record.evidence_warning
+                        || (
+                            'Historical display evidence only. This '
+                            + 'score is excluded from model fitting.'
+                        );
+                }
+                if (!cachedRecordIsCurrent(record)) {
+                    throw new Error(
+                        'saved score detail does not match its canonical manifest row'
+                    );
+                }
                 SAVEDCHANNELVIDEOCACHE[cacheKey] = record;
             }
             st.rawUploads = st.rawUploads || []; st.rawUploads.push(record);
@@ -5334,13 +7103,28 @@ const JarvisRetention = (function () {
         return (detail && detail.featureContract) || (SAVEDCHANNELS && SAVEDCHANNELS.featureContract) || { groups: [], features: [] };
     }
     function savedChannelFeatureCell(video, key) {
-        const cell = video && video.features && video.features[key];
-        if (Array.isArray(cell)) return { value: cell[0] == null ? null : +cell[0], percentile: cell[1] == null ? null : +cell[1] };
-        if (cell && typeof cell === 'object') {
-            const rawValue = cell.v != null ? cell.v : cell.value;
-            return { value: rawValue == null || !isFinite(+rawValue) ? null : +rawValue, percentile: cell.p != null ? +cell.p : (cell.percentile != null ? +cell.percentile : null) };
+        const state = shortsLedgerState(video);
+        if (state.present && !state.valid) {
+            return {
+                value: null,
+                percentile: null,
+                invalidLedger: true,
+                errors: state.errors,
+            };
         }
-        return { value: null, percentile: null };
+        const coordinate = shortsRegisteredCoordinate(
+            video,
+            `shorts.stored.${key}`
+        );
+        if (coordinate) return {
+            ...coordinate,
+            percentile: coordinate.percentile100,
+        };
+        return {
+            value: null,
+            percentile: null,
+            missingLedger: true,
+        };
     }
     function savedChannelFeatureDisplay(definition, cell) {
         if (!cell || cell.value == null || !isFinite(cell.value)) return '—';
@@ -5352,10 +7136,7 @@ const JarvisRetention = (function () {
     }
     function savedChannelFeatureAttrs(channelId, video, definition, cell) {
         if (!definition || !cell || cell.value == null || !isFinite(cell.value)) return '';
-        const sourceKey = definition.sourceKey || definition.key;
-        const channel = definition.source === 'steer' ? definition.group : 'novelty';
-        const attr = (name, value) => value == null || value === '' ? '' : ` ${name}="${esc(String(value))}"`;
-        return `${attr('data-embedding-id', `shorts_raw:stored-production:${sourceKey}`)}${attr('data-coordinate-id', `shorts.stored.${definition.key}`)}${attr('data-embedding-asset', `${channelId}:${video.id}`)}${attr('data-embedding-domain', 'shorts_raw')}${attr('data-embedding-origin', 'stored-production')}${attr('data-embedding-channel', channel)}${attr('data-embedding-target', definition.target)}${attr('data-embedding-source-key', sourceKey)}${attr('data-embedding-est', cell.value)}${attr('data-embedding-percentile', cell.percentile)}`;
+        return embeddingIdentityAttrs(cell, `${channelId}:${video.id}`);
     }
     function savedChannelStatusColor(status) {
         return status === 'done' ? C.green : status === 'partial' ? C.orange : status === 'error' ? C.red : status === 'stopped' ? C.amber : status === 'stopping' ? C.amber : C.cyan;
@@ -5641,6 +7422,54 @@ const JarvisRetention = (function () {
         value = +value;
         return definition.unit === 'views' ? Math.log10(Math.max(0, value) + 1) : value;
     }
+    function savedChannelAnalysisEvidenceMeta(analysis) {
+        const evidence = analysis && analysis.evidence || {};
+        const canonical = evidence.inputBoundAnalysisEligible === true;
+        const fixedHorizon = canonical
+            && evidence.fixedOutcomeHorizon === true;
+        return {
+            canonical,
+            fixedHorizon,
+            metricLabel: canonical
+                ? fixedHorizon
+                    ? 'fixed-horizon grouped OOF R²'
+                    : 'right-censored grouped OOF R²'
+                : 'diagnostic OOF R²',
+            title: canonical
+                ? fixedHorizon
+                    ? 'Exact input-bound fixed-horizon retrospective analysis'
+                    : 'Exact input-bound right-censored retrospective analysis'
+                : 'Historical diagnostic only',
+            color: canonical ? C.green : C.amber,
+        };
+    }
+    function savedChannelAdaptivePolicySummary(policy, metricKey, format) {
+        if (!policy || !policy.performance) return '—';
+        const selections = policy.selections || [];
+        const folds = selections.reduce(
+            (sum, selection) => sum + (+selection.folds || 0),
+            0
+        );
+        const value = policy.performance[metricKey];
+        const rendered = value == null || !isFinite(+value)
+            ? '—'
+            : format(+value);
+        return `adaptive across ${folds || 0} folds · ${rendered}`;
+    }
+    function savedChannelAnalysisEvidenceBanner(analysis) {
+        const meta = savedChannelAnalysisEvidenceMeta(analysis);
+        const evidence = analysis && analysis.evidence || {};
+        const eligibility = analysis && analysis.eligibility || {};
+        const canonicalRows =
+            eligibility.canonicalInputBoundWithPublicViews || 0;
+        const historicalRows =
+            eligibility.historicalInputUnboundWithPublicViews || 0;
+        const invalidRows =
+            eligibility.invalidEvidenceStateWithPublicViews || 0;
+        const invalidInputs =
+            eligibility.invalidInputEvidenceWithPublicViews || 0;
+        return `<div data-savedchannelanalysisevidence="${meta.canonical ? 'input-bound' : 'historical'}" style="border-left:3px solid ${meta.color};background:${meta.color}0b;padding:9px;margin:8px 0 11px"><div style="font-size:10px;color:${meta.color};font-weight:950">${esc(meta.title)}</div><div style="font-size:8.5px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(evidence.claimBoundary || 'Evidence boundary unavailable.')}</div><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:8px;color:${C.mute};margin-top:5px"><span>analysis rows <b style="color:${C.text}">${evidence.analysisRows || 0}</b></span><span>exact input-bound <b style="color:${C.green}">${canonicalRows}</b></span><span>upstream fit exclusion <b style="color:${evidence.upstreamFitExclusionVerified ? C.green : C.amber}">${evidence.upstreamFitExclusionVerified ? 'verified' : 'not verified'}</b></span><span>fixed outcome horizon <b style="color:${evidence.fixedOutcomeHorizon ? C.green : C.amber}">${evidence.fixedOutcomeHorizon ? 'yes' : 'no'}</b></span><span>historical unbound <b style="color:${C.amber}">${historicalRows}</b></span><span>invalid state <b style="color:${invalidRows ? C.red : C.dim}">${invalidRows}</b></span><span>invalid input identity <b style="color:${invalidInputs ? C.red : C.dim}">${invalidInputs}</b></span></div></div>`;
+    }
     function savedChannelAtlasPlotCard(analysis, definition, single) {
         const matrix = analysis && analysis.indicatorMatrix, index = matrix && (matrix.columns || []).findIndex(column => column.key === definition.key);
         const available = index < 0 ? 0 : (matrix.rows || []).filter(row => {
@@ -5650,9 +7479,11 @@ const JarvisRetention = (function () {
         const total = matrix && matrix.rows ? matrix.rows.length : 0, missing = Math.max(0, total - available), color = savedChannelFeatureColor(definition.group);
         const rho = single && single.spearmanViews, r2 = single && single.oof && single.oof.r2, logR = single && single.pearsonLogViews;
         const stat = (label, value, statColor) => `<span title="${label}" style="font-size:8px;color:${C.mute}">${label} <b style="color:${statColor || C.text}">${value}</b></span>`;
+        const evidenceMeta =
+            savedChannelAnalysisEvidenceMeta(analysis);
         return `<div data-savedchannelrelationshipcard="${esc(definition.key)}" style="min-width:0;border-top:2px solid ${color};background:${C.card2};padding:8px">
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><div style="min-width:0"><div style="font-size:10px;font-weight:900;color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(definition.label)}</div><div style="font-size:7.5px;color:${C.mute};margin-top:1px">${esc(definition.key)} · exact stored output</div></div><div style="font-size:8px;color:${C.dim};white-space:nowrap">${available}/${total} videos</div></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:5px 0 3px">${stat('rank ρ', rho == null ? '—' : sgn(rho, 3), rho == null ? C.dim : rho >= 0 ? C.green : C.red)}${stat('log r', logR == null ? '—' : sgn(logR, 3), logR == null ? C.dim : logR >= 0 ? C.green : C.red)}${stat('blind R²', r2 == null ? '—' : sgn(r2, 3), r2 == null ? C.dim : r2 > 0 ? C.cyan : C.red)}${missing ? stat('missing', missing, C.amber) : ''}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:5px 0 3px">${stat('rank ρ', rho == null ? '—' : sgn(rho, 3), rho == null ? C.dim : rho >= 0 ? C.green : C.red)}${stat('log r', logR == null ? '—' : sgn(logR, 3), logR == null ? C.dim : logR >= 0 ? C.green : C.red)}${stat(evidenceMeta.metricLabel, r2 == null ? '—' : sgn(r2, 3), r2 == null ? C.dim : r2 > 0 ? C.cyan : C.red)}${missing ? stat('missing', missing, C.amber) : ''}</div>
           <canvas data-savedchannelrelationshipplot="${esc(analysis.channelId)}" data-savedchannelrelationshipfeature="${esc(definition.key)}" width="520" height="285" tabindex="0" role="button" aria-label="${esc(definition.label)} versus actual public views. Tap or click a point to open that saved Short." style="display:block;width:100%;height:auto;min-height:180px;touch-action:manipulation;cursor:crosshair"></canvas>
           <div data-savedchannelrelationshipreadout style="min-height:28px;font-size:8px;line-height:1.35;color:${C.mute};padding-top:3px">Tap or click a point to open its stored montage, transcript, and embedding graphs.</div>
         </div>`;
@@ -5667,7 +7498,11 @@ const JarvisRetention = (function () {
         (analysis.singles || []).forEach(single => { singles[single.key] = single; });
         const scale = st.savedChannelAtlasScale === 'raw' ? 'raw' : 'log';
         const scaleButton = (key, label) => `<span data-savedchannelatlasscale="${key}" role="button" aria-pressed="${scale === key ? 'true' : 'false'}" style="cursor:pointer;border:1px solid ${scale === key ? C.cyan : C.border};background:${scale === key ? C.cyan + '18' : 'transparent'};color:${scale === key ? C.cyan : C.dim};padding:4px 8px;font-size:9px;font-weight:800">${label}</span>`;
-        const trajectory = analysis.signalSummary && analysis.signalSummary.strongestTrajectory, blind = analysis.signalSummary && analysis.signalSummary.strongestBlindSingle;
+        const trajectory = analysis.signalSummary && analysis.signalSummary.strongestTrajectory;
+        const singlePolicy = analysis.signalSummary
+            && analysis.signalSummary.nestedSinglePolicy;
+        const evidenceMeta =
+            savedChannelAnalysisEvidenceMeta(analysis);
         const groupSections = groups.map(group => {
             const items = definitions.filter(definition => definition.group === group.key);
             if (!items.length) return '';
@@ -5676,8 +7511,9 @@ const JarvisRetention = (function () {
         }).join('');
         return `<div data-savedchannelrelationshipatlas>
           <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap;margin-bottom:9px"><div style="max-width:820px"><div style="font-size:15px;font-weight:900;color:${C.text}">Every embedding output × actual views</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:3px">Every point is one scored Short from <b style="color:${C.text}">${esc(detail.name || 'this channel')}</b>. X is that video's exact stored model output. Y is its observed public-view count. View-valued X axes use logarithmic spacing so one extreme estimate cannot flatten the rest; percentages, probabilities, and outlier scores stay on their native scale.</div></div><div style="display:flex;gap:4px;align-items:center"><span style="font-size:8px;color:${C.mute};margin-right:3px">Y axis</span>${scaleButton('log', 'log views')}${scaleButton('raw', 'raw views')}</div></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};margin-bottom:10px"><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">VIDEOS IN EVERY PLANE</div><div style="font-size:15px;font-weight:900;color:${C.text}">${analysis.n}</div><div style="font-size:8px;color:${C.dim}">missing text outputs are left missing</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">CLOSEST HIGH → HIGH</div><div style="font-size:11px;font-weight:900;color:${C.green}">${trajectory ? `${esc(trajectory.key)} · ρ ${sgn(trajectory.spearmanViews, 3)}` : '—'}</div><div style="font-size:8px;color:${C.dim}">descriptive rank relationship</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">BEST BLIND SINGLE</div><div style="font-size:11px;font-weight:900;color:${C.cyan}">${blind && blind.oof ? `${esc(blind.key)} · R² ${sgn(blind.oof.r2, 3)}` : '—'}</div><div style="font-size:8px;color:${C.dim}">out-of-fold log-view prediction</div></div></div>
-          <div style="font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">How to read every plane:</b> the solid line is a descriptive least-squares fit through the displayed points. <b>Rank ρ</b> asks whether higher scores generally accompany higher views. <b>Log r</b> is linear correlation with log views. <b>Blind R²</b> predicts unseen Shorts using only that one indicator; a value at or below zero means it did not beat the training-fold mean. The line is descriptive, while Blind R² is the predictive test.</div>
+          ${savedChannelAnalysisEvidenceBanner(analysis)}
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};margin-bottom:10px"><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">VIDEOS IN EVERY PLANE</div><div style="font-size:15px;font-weight:900;color:${C.text}">${analysis.n}</div><div style="font-size:8px;color:${C.dim}">missing text outputs are left missing</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">CLOSEST HIGH → HIGH</div><div style="font-size:11px;font-weight:900;color:${C.green}">${trajectory ? `${esc(trajectory.key)} · ρ ${sgn(trajectory.spearmanViews, 3)}` : '—'}</div><div style="font-size:8px;color:${C.dim}">descriptive rank relationship</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">${evidenceMeta.canonical ? 'NESTED SINGLE-FEATURE POLICY' : 'HISTORICAL SINGLE-FEATURE POLICY'}</div><div style="font-size:11px;font-weight:900;color:${C.cyan}">${savedChannelAdaptivePolicySummary(singlePolicy, 'r2', value => `policy R² ${sgn(value, 3)}`)}</div><div style="font-size:8px;color:${C.dim}">selection frequencies are diagnostics; no one feature inherits this policy score</div></div></div>
+          <div style="font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">How to read every plane:</b> the solid line is a descriptive least-squares fit through the displayed points. <b>Rank ρ</b> asks whether higher scores generally accompany higher views. <b>Log r</b> is linear correlation with log views. <b>${esc(evidenceMeta.metricLabel)}</b> is fold-separated arithmetic using only that one indicator; a value at or below zero means it did not beat the training-fold mean.${evidenceMeta.canonical ? ` Exact input binding makes the row comparison reproducible${evidenceMeta.fixedHorizon ? ' and every row uses the same explicit outcome horizon' : ', but cumulative lifetime views remain right-censored at unequal horizons'}. Upstream fitted-axis exclusion is still not certified.` : ' Because the source inputs are historically unbound, it is diagnostic and cannot establish predictor performance.'}</div>
           ${groupSections}
         </div>`;
     }
@@ -6117,6 +7953,11 @@ const JarvisRetention = (function () {
     function renderSavedChannelRisk(analysis) {
         const risk = analysis && analysis.risk;
         if (!risk || !(risk.targets || []).length) return '';
+        const evidenceMeta =
+            savedChannelAnalysisEvidenceMeta(analysis);
+        const foldLabel = evidenceMeta.canonical
+            ? 'Input-bound grouped OOF'
+            : 'Historical diagnostic';
         const targetValue = +(st.savedChannelRiskTarget || risk.primaryTargetViews || 10000000);
         const target = risk.targets.find(row => +row.targetViews === targetValue) || risk.targets[0];
         const ageValue = +(st.savedChannelRiskAge || 0);
@@ -6147,17 +7988,18 @@ const JarvisRetention = (function () {
             const conservative = row.ciLow == null ? null : row.ciLow * win - (1 - row.ciLow) * loss;
             const highlight = row.threshold === 30000000 || row.threshold === 50000000;
             const attrs = savedChannelRiskDrillAttrs('threshold', target.targetViews, signal.key, row.threshold, 'passed', ` data-savedchannelriskagevalue="${+cohort.minAgeDays || 0}"`);
-            return `<tr ${attrs} title="Click to inspect the exact ${row.n} videos behind this row" style="cursor:pointer;border-top:1px solid ${C.border};background:${highlight || cutoff === row.threshold ? C.cyan + '0b' : 'transparent'}"><td style="padding:6px;color:${highlight ? C.cyan : C.text};font-weight:${highlight ? 900 : 700}">predicted ≥ ${fv(row.threshold)} <span style="color:${C.cyan}">inspect →</span></td><td style="text-align:right">${row.n} videos</td><td style="text-align:right;color:${row.hitRate != null && row.hitRate >= (breakEven || 0) ? C.green : C.dim}">${row.hitRate == null ? '—' : `${row.hits}/${row.n} · ${(row.hitRate * 100).toFixed(1)}%`}</td><td style="text-align:right">${row.ciLow == null ? '—' : `${(row.ciLow * 100).toFixed(0)}–${(row.ciHigh * 100).toFixed(0)}%`}</td><td style="text-align:right">${row.lift == null ? '—' : row.lift.toFixed(2) + '×'}</td><td style="text-align:right">${row.recall == null ? '—' : (row.recall * 100).toFixed(0) + '%'}</td><td style="text-align:right">${row.n ? `${row.misses}/${row.n} · ${(100 - row.hitRate * 100).toFixed(1)}%` : '—'}</td><td style="text-align:right">${row.actualViewsP25 == null ? '—' : fv(row.actualViewsP25)}</td><td style="text-align:right">${row.actualViewsMedian == null ? '—' : fv(row.actualViewsMedian)}</td><td style="text-align:right;color:${expected != null && expected > 0 ? C.green : C.red}">${expected == null ? '—' : (expected >= 0 ? '+' : '') + expected.toFixed(2)}</td><td style="text-align:right;color:${conservative != null && conservative > 0 ? C.green : C.dim}">${conservative == null ? '—' : (conservative >= 0 ? '+' : '') + conservative.toFixed(2)}</td></tr>`;
+            return `<tr ${attrs} title="Click to inspect the exact ${row.n} videos behind this row" style="cursor:pointer;border-top:1px solid ${C.border};background:${highlight || cutoff === row.threshold ? C.cyan + '0b' : 'transparent'}"><td style="padding:6px;color:${highlight ? C.cyan : C.text};font-weight:${highlight ? 900 : 700}">embedded score ≥ ${fv(row.threshold)} <span style="color:${C.cyan}">inspect →</span></td><td style="text-align:right">${row.n} videos</td><td style="text-align:right;color:${row.hitRate != null && row.hitRate >= (breakEven || 0) ? C.green : C.dim}">${row.hitRate == null ? '—' : `${row.hits}/${row.n} · ${(row.hitRate * 100).toFixed(1)}%`}</td><td style="text-align:right">${row.ciLow == null ? '—' : `${(row.ciLow * 100).toFixed(0)}–${(row.ciHigh * 100).toFixed(0)}%`}</td><td style="text-align:right">${row.lift == null ? '—' : row.lift.toFixed(2) + '×'}</td><td style="text-align:right">${row.recall == null ? '—' : (row.recall * 100).toFixed(0) + '%'}</td><td style="text-align:right">${row.n ? `${row.misses}/${row.n} · ${(100 - row.hitRate * 100).toFixed(1)}%` : '—'}</td><td style="text-align:right">${row.actualViewsP25 == null ? '—' : fv(row.actualViewsP25)}</td><td style="text-align:right">${row.actualViewsMedian == null ? '—' : fv(row.actualViewsMedian)}</td><td style="text-align:right;color:${expected != null && expected > 0 ? C.green : C.red}">${expected == null ? '—' : (expected >= 0 ? '+' : '') + expected.toFixed(2)}</td><td style="text-align:right;color:${conservative != null && conservative > 0 ? C.green : C.dim}">${conservative == null ? '—' : (conservative >= 0 ? '+' : '') + conservative.toFixed(2)}</td></tr>`;
         };
         const best = signal && signal.bestEvidence;
         const model = risk.model || {}, nested = model.nestedSelected, chronological = model.chronological;
         const featureRows = (cohort.featureRankings || []).slice(0, 21);
         const riskCombos = (model.topCombinations || []).slice(0, 12);
         const probabilityRows = target.targetViews === 10000000 ? (risk.probabilityCalibration || []).filter(row => row.metrics) : [];
-        const riskModelCards = model.status === 'ready' ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin:8px 0 10px">${statc('Blind 10M ROC AUC', nested && nested.rocAuc != null ? nested.rocAuc.toFixed(3) : '—', C.green)}${statc('Blind 10M average precision', nested && nested.prAuc != null ? nested.prAuc.toFixed(3) : '—', C.cyan)}${statc('Brier skill vs base rate', nested && nested.brierSkill != null ? nested.brierSkill.toFixed(3) : '—', C.purple)}${statc('Calibration error', nested && nested.calibrationError != null ? (nested.calibrationError * 100).toFixed(1) + ' pts' : '—', C.amber)}${statc('Newer-video ROC AUC', chronological && chronological.rocAuc != null ? chronological.rocAuc.toFixed(3) : '—', C.green)}</div>` : note(`<b>10M combination model needs both outcomes.</b> This channel currently has ${model.positives || 0} hits and ${model.negatives || 0} misses; conditional threshold tables remain valid but a classifier cannot be blind-tested yet.`, C.amber);
-        const riskModelVisuals = model.status === 'ready' && nested ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Every blind 10M prediction, from four angles</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:6px">ROC shows separation, precision–recall shows performance under the observed hit rate, reliability shows whether 70% really means roughly 70%, and the outcome strip exposes every false positive and false negative.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:9px;margin-bottom:10px"><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">ROC curve</div>${savedChannelBinaryCurve(nested.points, 'roc')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Precision–recall curve</div>${savedChannelBinaryCurve(nested.points, 'pr')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Probability reliability</div>${savedChannelBinaryReliability(nested)}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Every held-out hit and miss</div>${savedChannelBinaryOutcomeStrip(nested)}</div></div>` : '';
+        const riskModelAvailable = model.status !== 'insufficient' && !!nested;
+        const riskModelCards = riskModelAvailable ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin:8px 0 10px">${statc(`${foldLabel} 10M ROC AUC`, nested && nested.rocAuc != null ? nested.rocAuc.toFixed(3) : '—', C.green)}${statc(`${foldLabel} 10M average precision`, nested && nested.prAuc != null ? nested.prAuc.toFixed(3) : '—', C.cyan)}${statc('Brier skill vs base rate', nested && nested.brierSkill != null ? nested.brierSkill.toFixed(3) : '—', C.purple)}${statc('Calibration error', nested && nested.calibrationError != null ? (nested.calibrationError * 100).toFixed(1) + ' pts' : '—', C.amber)}${statc('Newer-video ROC AUC', chronological && chronological.rocAuc != null ? chronological.rocAuc.toFixed(3) : '—', C.green)}</div>` : note(`<b>10M combination model needs valid grouped folds containing both outcomes.</b> This channel currently has ${model.positives || 0} hits and ${model.negatives || 0} misses; conditional threshold tables remain descriptive, but a classifier cannot be evaluated yet.`, C.amber);
+        const riskModelVisuals = riskModelAvailable ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Every ${evidenceMeta.canonical ? 'input-bound grouped' : 'historical diagnostic'} 10M fold classification, from four angles</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:6px">ROC shows separation, precision–recall shows performance under the observed hit rate, and the outcome strip exposes every false positive and false negative. The reliability plot is retrospective because ${evidenceMeta.fixedHorizon ? 'all outcomes share one explicit horizon but upstream fitted-axis exclusion is not certified' : 'cumulative lifetime outcomes are right-censored at unequal horizons'}.${evidenceMeta.canonical ? '' : ' Historical input identities are unbound, so these plots are diagnostic only.'}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:9px;margin-bottom:10px"><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">ROC curve</div>${savedChannelBinaryCurve(nested.points, 'roc')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Precision–recall curve</div>${savedChannelBinaryCurve(nested.points, 'pr')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Retrospective reliability</div>${savedChannelBinaryReliability(nested)}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Every fold-held hit and miss</div>${savedChannelBinaryOutcomeStrip(nested)}</div></div>` : '';
         const riskComboTable = riskCombos.length ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Top tail-risk combinations (exploratory OOF ranking)</div><div style="overflow:auto;max-height:300px;margin-bottom:10px"><table style="width:100%;min-width:560px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicators</th><th>Brier skill</th><th>ROC AUC</th><th>average precision</th><th>calibration error</th></tr></thead><tbody>${riskCombos.map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${row.keys.map(esc).join(' + ')}</td><td style="text-align:right">${fmtv(row.brierSkill, 3)}</td><td style="text-align:right">${fmtv(row.rocAuc, 3)}</td><td style="text-align:right">${fmtv(row.prAuc, 3)}</td><td style="text-align:right">${row.calibrationError == null ? '—' : (row.calibrationError * 100).toFixed(1) + ' pts'}</td></tr>`).join('')}</tbody></table></div>` : '';
-        const probabilityTable = probabilityRows.length ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Dedicated &gt;10M class outputs · calibration against actual &gt;10M views</div><div style="font-size:9px;color:${C.mute};margin-bottom:4px">This is the explicit 10M classifier, shown separately from the ordinary views-embedding threshold study above. Click a row to open that indicator's every-video playground.</div><div style="overflow:auto;margin-bottom:10px"><table style="width:100%;min-width:530px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">probability output</th><th>sample</th><th>Brier skill</th><th>ROC AUC</th><th>average precision</th><th>calibration error</th></tr></thead><tbody>${probabilityRows.map(row => `<tr data-savedchannelanalysisfeature="${esc(row.key)}" title="Click to inspect every video's stored ${esc(row.key)} score" style="cursor:pointer;border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)} <span style="color:${C.cyan}">inspect →</span></td><td style="text-align:right">${row.available}</td><td style="text-align:right">${fmtv(row.metrics.brierSkill, 3)}</td><td style="text-align:right">${fmtv(row.metrics.rocAuc, 3)}</td><td style="text-align:right">${fmtv(row.metrics.prAuc, 3)}</td><td style="text-align:right">${row.metrics.calibrationError == null ? '—' : (row.metrics.calibrationError * 100).toFixed(1) + ' pts'}</td></tr>`).join('')}</tbody></table></div>` : '';
+        const probabilityTable = probabilityRows.length ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Dedicated &gt;10M class outputs · retrospective reliability at one fixed outcome horizon</div><div style="font-size:9px;color:${C.mute};margin-bottom:4px">This is the explicit 10M-class coordinate, shown separately from the ordinary views-embedding threshold study above. A common horizon makes the observed rates comparable, but upstream fit overlap still prevents certified future probabilities. Click a row to inspect every video.</div><div style="overflow:auto;margin-bottom:10px"><table style="width:100%;min-width:530px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">probability output</th><th>sample</th><th>Brier skill</th><th>ROC AUC</th><th>average precision</th><th>retrospective calibration error</th></tr></thead><tbody>${probabilityRows.map(row => `<tr data-savedchannelanalysisfeature="${esc(row.key)}" title="Click to inspect every video's stored ${esc(row.key)} score" style="cursor:pointer;border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)} <span style="color:${C.cyan}">inspect →</span></td><td style="text-align:right">${row.available}</td><td style="text-align:right">${fmtv(row.metrics.brierSkill, 3)}</td><td style="text-align:right">${fmtv(row.metrics.rocAuc, 3)}</td><td style="text-align:right">${fmtv(row.metrics.prAuc, 3)}</td><td style="text-align:right">${row.metrics.calibrationError == null ? '—' : (row.metrics.calibrationError * 100).toFixed(1) + ' pts'}</td></tr>`).join('')}</tbody></table></div>` : '';
         const selectedConclusion = selectedThreshold && selectedThreshold.n
             ? `<b>${selectedThreshold.hits} of ${selectedThreshold.n}</b> Shorts with <b>${esc(signal.label)} ≥ ${fv(cutoff)}</b> actually reached <b>${fv(target.targetViews)}</b>: <b>${(selectedThreshold.hitRate * 100).toFixed(1)}%</b> observed, with a 95% range of <b>${(selectedThreshold.ciLow * 100).toFixed(1)}–${(selectedThreshold.ciHigh * 100).toFixed(1)}%</b>. The channel baseline is ${cohort.baseRate == null ? 'unavailable' : `<b>${(cohort.baseRate * 100).toFixed(1)}%</b>`}.`
             : `<b>${cohort.n} Shorts are eligible.</b> None has a ${esc(signal && signal.label || 'selected')} score at or above <b>${fv(cutoff)}</b>, so this channel provides no evidence for that cutoff yet. This is not “zero eligible Shorts.”`;
@@ -6185,7 +8027,7 @@ const JarvisRetention = (function () {
         const pointTable = signal && evidence ? savedChannelViewsEvidenceTable(analysis, evidence.points, signal.key, target.targetViews, cutoff) : '';
         const riskStat = (label, value, color, subset, selectedCutoff) => `<div ${savedChannelRiskDrillAttrs('threshold', target.targetViews, signal && signal.key, selectedCutoff || cutoff, subset, ` data-savedchannelriskagevalue="${+cohort.minAgeDays || 0}"`)} title="Click to inspect the videos behind this number" style="cursor:pointer;background:${C.card2};border:1px solid ${C.border};border-radius:8px;padding:8px 12px"><div style="font-size:10px;color:${C.mute};text-transform:uppercase">${label}</div><div style="font-size:16px;font-weight:800;color:${color || C.text}">${value}</div><div style="font-size:8px;color:${C.cyan};margin-top:2px">inspect videos →</div></div>`;
         return `<div style="border:1px solid ${C.red}66;background:${C.red}08;border-radius:8px;padding:11px;margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap;margin-bottom:5px"><div><div style="font-size:13px;font-weight:900;color:${C.text}">Execution risk · can an embedding score justify making the video?</div><div style="font-size:9px;color:${C.mute};max-width:900px;line-height:1.45">This is separate from the trained “chance over 10M” cluster. It asks whether the Visual, Text, or Both view-equivalent corpus-quantile axes actually precede a public-view outcome, and reports false-positive risk with uncertainty.</div></div><span style="font-size:9px;color:${C.amber}">observed views snapshot · age controlled below</span></div>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap;margin-bottom:5px"><div><div style="font-size:13px;font-weight:900;color:${C.text}">Execution-risk research · does an embedding score separate later view outcomes?</div><div style="font-size:9px;color:${C.mute};max-width:900px;line-height:1.45">This is separate from the trained “chance over 10M” cluster. It asks whether the Visual, Text, or Both view-equivalent axes are associated with a public-view outcome, and reports false-positive risk with uncertainty. It is not decision-eligible until a frozen end-to-end pipeline passes prospective validation.</div></div><span style="font-size:9px;color:${C.amber}">${evidenceMeta.fixedHorizon ? 'fixed-horizon retrospective outcome' : 'right-censored lifetime snapshot'}</span></div>
           ${savedChannelMetricGlossary()}
           ${savedChannelMatchedViewsPanel(risk)}
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:8px 0"><b style="font-size:9px;color:${C.mute}">WIN CONDITION</b>${targetButtons}</div>
@@ -6209,8 +8051,8 @@ const JarvisRetention = (function () {
           <div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">What happens above each ordinary views-embedding cutoff?</div>
           <div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:5px">Every row means: keep videos with <b>${esc(signal && signal.label || '')} at or above the embedded-score cutoff</b>, then count how many actually reached <b>${fv(target.targetViews)}</b>. “Sample” is the number passing the score cutoff. “Hit rate” is hits ÷ sample. Rows overlap because a video above 50M is also above 30M, 10M, and every lower cutoff. <b style="color:${C.cyan}">Click any row to inspect it.</b></div>
           <div data-savedchannelriskthresholdtable style="overflow:auto;max-height:430px;margin-bottom:12px"><table style="width:100%;min-width:980px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">score-qualified cohort</th><th>sample passing cutoff</th><th>actual ≥ ${fv(target.targetViews)}</th><th>95% uncertainty</th><th>vs channel</th><th>winners captured</th><th>actual &lt; ${fv(target.targetViews)}</th><th>actual P25</th><th>actual median</th><th>EV</th><th>conservative EV</th></tr></thead><tbody>${thresholdRows.map(riskRow).join('')}</tbody></table></div>
-          <div style="font-size:11px;font-weight:900;color:${C.text};margin:10px 0 3px">Blind 10M tail model · combinations and future stability</div>
-          <div style="font-size:9px;color:${C.mute};line-height:1.45">${esc(model.validation || '')} ${model.exhaustiveCandidates ? `${model.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations are searched.` : ''}${nested && nested.selections && nested.selections.length ? ` Most frequently selected inside folds: <b style="color:${C.text}">${nested.selections.slice(0, 3).map(selection => selection.features.map(esc).join(' + ') + ` (${selection.folds})`).join(' · ')}</b>.` : ''}${chronological && chronological.features ? ` Forward test used <b style="color:${C.text}">${chronological.features.map(esc).join(' + ')}</b>.` : ''}</div>${riskModelCards}${riskModelVisuals}${riskComboTable}${probabilityTable}
+          <div style="font-size:11px;font-weight:900;color:${C.text};margin:10px 0 3px">${foldLabel} 10M tail model · combinations and retrospective time split</div>
+          <div style="font-size:9px;color:${C.mute};line-height:1.45">${esc(model.validation || '')} ${model.exhaustiveCandidates ? `${model.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations are searched.` : ''}${nested && nested.selections && nested.selections.length ? ` Most frequently selected inside folds: <b style="color:${C.text}">${nested.selections.slice(0, 3).map(selection => selection.features.map(esc).join(' + ') + ` (${selection.folds})`).join(' · ')}</b>.` : ''}${chronological && chronological.features ? ` Retrospective newer-row split used <b style="color:${C.text}">${chronological.features.map(esc).join(' + ')}</b>; this is not a fixed-horizon prospective test.` : ''}</div>${riskModelCards}${riskModelVisuals}${riskComboTable}${probabilityTable}
           <div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Every indicator as a tail classifier for this target</div>
           <div style="overflow:auto;max-height:390px"><table style="width:100%;min-width:650px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicator · click for every video</th><th>direction</th><th>ROC AUC</th><th>average precision</th><th>top 10% hit</th><th>95% CI</th><th>lift</th></tr></thead><tbody>${featureRows.map(row => `<tr data-savedchannelanalysisfeature="${esc(row.key)}" title="Click to inspect every video's stored ${esc(row.key)} score" style="cursor:pointer;border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)} <span style="color:${C.cyan}">inspect →</span></td><td style="text-align:right;color:${row.direction === 'higher' ? C.green : C.amber}">${row.direction} is better</td><td style="text-align:right">${fmtv(row.directionalAuc, 3)}</td><td style="text-align:right">${fmtv(row.prAuc, 3)}</td><td style="text-align:right">${row.topDecile && row.topDecile.hitRate != null ? (row.topDecile.hitRate * 100).toFixed(0) + `% (${row.topDecile.hits}/${row.topDecile.n})` : '—'}</td><td style="text-align:right">${row.topDecile && row.topDecile.ciLow != null ? `${(row.topDecile.ciLow * 100).toFixed(0)}–${(row.topDecile.ciHigh * 100).toFixed(0)}%` : '—'}</td><td style="text-align:right">${row.topDecile && row.topDecile.lift != null ? row.topDecile.lift.toFixed(2) + '×' : '—'}</td></tr>`).join('')}</tbody></table></div>
         </div>`;
@@ -6221,32 +8063,37 @@ const JarvisRetention = (function () {
         if (analysis.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Loading the saved prediction-analysis artifact…</div>`;
         if (analysis.error) return `<div style="padding:18px;color:${C.red}">${esc(analysis.error)} <span data-savedchannelanalysisreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
         if (analysis.status === 'insufficient') return note(`<b>${analysis.n} scored Shorts.</b> ${esc(analysis.message || '')}`, C.amber);
+        const evidenceMeta =
+            savedChannelAnalysisEvidenceMeta(analysis);
         const nested = analysis.models && analysis.models.nestedSelected, all = analysis.models && analysis.models.allIndicators, best = analysis.models && analysis.models.bestExploratory;
-        const metric = (label, model, color) => statc(label, model && model.r2 != null ? model.r2.toFixed(3) + ' OOF R²' : '—', color);
+        const metric = (label, model, color) => statc(label, model && model.r2 != null ? model.r2.toFixed(3) + ` ${evidenceMeta.canonical ? 'input-bound grouped' : 'diagnostic'} OOF R²` : '—', color);
         const combos = (analysis.topCombinations || []).slice(0, 15);
-        const summary = analysis.signalSummary || {}, trajectory = summary.strongestTrajectory, blindSingle = summary.strongestBlindSingle, tailSingle = summary.strongestTail;
+        const summary = analysis.signalSummary || {};
+        const trajectory = summary.strongestTrajectory;
+        const singlePolicy = summary.nestedSinglePolicy;
+        const tailPolicy = summary.nestedTailPolicy;
         const tenMillionTarget = analysis.risk && (analysis.risk.targets || []).find(target => +target.targetViews === 10000000);
         const tenMillionCohort = tenMillionTarget && (tenMillionTarget.cohorts || []).find(cohort => +cohort.minAgeDays === 0);
         const tailByKey = {}; (tenMillionCohort && tenMillionCohort.featureRankings || []).forEach(row => { tailByKey[row.key] = row; });
-        const signalCards = `<div style="font-size:13px;font-weight:900;color:${C.text};margin:12px 0 3px">What actually follows views?</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">These answer different questions instead of hiding them inside an arbitrary weighted score. Rank trajectory asks whether high indicator scores track high actual views. Blind prediction asks whether one indicator predicts unseen log views. Tail separation asks whether it distinguishes actual 10M+ outcomes.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px;margin-bottom:10px">${statc('Closest high → high trajectory', trajectory ? `${esc(trajectory.key)} · ρ ${fmtv(trajectory.spearmanViews, 3)}` : '—', C.green)}${statc('Best blind single indicator', blindSingle && blindSingle.oof ? `${esc(blindSingle.key)} · R² ${fmtv(blindSingle.oof.r2, 3)}` : '—', C.cyan)}${statc('Strongest actual 10M separator', tailSingle ? `${esc(tailSingle.key)} · AUC ${fmtv(tailSingle.directionalAuc, 3)}` : '—', C.red)}${statc('All-signal selection-safe model', nested && nested.r2 != null ? `R² ${nested.r2.toFixed(3)}` : '—', C.purple)}</div>`;
-        const processMap = `<div data-savedchannelprocessmap style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};margin:9px 0 12px"><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.cyan}">1 · STORED INPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">5-frame montage · transcript · public views · publication age</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.purple}">2 · 21 OUTPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">visual · text · both · novelty, using the saved scoring artifact</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.green}">3 · BLIND TESTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">fold-local preprocessing · held-out continuous views · held-out 10M outcomes</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.amber}">4 · DECISION EVIDENCE</b><div style="font-size:8px;color:${C.mute};margin-top:3px">trajectory · prediction error · calibration · uncertainty · false positives</div></div></div>`;
-        const predictionDiagnostics = nested && nested.points ? `<div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Blind-prediction diagnostics · every error stays visible</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">Each point was predicted by a model that did not train on that Short. The six views below expose accuracy, bias, calibration, rank tracking, fold-selection stability, and the geometry of the searched combinations.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Predicted vs actual</div>${savedChannelPredictionScatter(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Residuals · where the model misses</div>${savedChannelResidualChart(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Continuous calibration</div>${savedChannelContinuousCalibration(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Actual and predicted rank trajectory</div>${savedChannelPredictionRankTrace(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Indicators repeatedly selected inside folds</div>${savedChannelSelectionFrequency(nested)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Top exhaustive combination landscape</div>${savedChannelCombinationLandscape(analysis.topCombinations)}</div></div>` : '';
+        const signalCards = `<div style="font-size:13px;font-weight:900;color:${C.text};margin:12px 0 3px">What actually follows views?</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">These answer different questions instead of hiding them inside an arbitrary weighted score. Rank trajectory asks whether high indicator scores track high actual views. Grouped OOF arithmetic asks whether a fold-local adaptive policy separates held content families. It is not end-to-end blind until upstream fitted-axis exclusion and a prospectively frozen evaluation are certified.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px;margin-bottom:10px">${statc('Closest high → high trajectory', trajectory ? `${esc(trajectory.key)} · ρ ${fmtv(trajectory.spearmanViews, 3)}` : '—', C.green)}${statc('Nested single-feature policy', savedChannelAdaptivePolicySummary(singlePolicy, 'r2', value => `R² ${fmtv(value, 3)}`), C.cyan)}${statc('Nested 10M single-feature policy', savedChannelAdaptivePolicySummary(tailPolicy, 'rocAuc', value => `AUC ${fmtv(value, 3)}`), C.red)}${statc('All-signal grouped model', nested && nested.r2 != null ? `R² ${nested.r2.toFixed(3)}` : '—', C.purple)}</div>`;
+        const processMap = `<div data-savedchannelprocessmap style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};margin:9px 0 12px"><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.cyan}">1 · STORED INPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">5-frame montage · transcript · public views · publication time</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.purple}">2 · 21 OUTPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">visual · text · both · novelty, read from the canonical score ledger</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${evidenceMeta.color}">3 · ${evidenceMeta.canonical ? 'GROUPED OOF TESTS' : 'DIAGNOSTIC FOLDS'}</b><div style="font-size:8px;color:${C.mute};margin-top:3px">fold-local preprocessing · content-family-held rows · ${evidenceMeta.fixedHorizon ? 'fixed-horizon outcomes' : 'right-censored lifetime outcomes'}${evidenceMeta.canonical ? ' · upstream axes not certified held out' : ' · historical inputs unbound'}</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.amber}">4 · EVIDENCE</b><div style="font-size:8px;color:${C.mute};margin-top:3px">trajectory · error · calibration · grouped uncertainty · false positives</div></div></div>`;
+        const predictionDiagnostics = nested && nested.points ? `<div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">${evidenceMeta.canonical ? 'Input-bound grouped OOF' : 'Historical diagnostic'} diagnostics · every error stays visible</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">Each point was calculated by a fold model that did not train on that content family. The views below expose accuracy, bias, calibration, rank tracking, fold-selection stability, and the geometry of the searched combinations.${evidenceMeta.canonical ? ` Upstream coordinate fitting remains outside this claim; outcomes are ${evidenceMeta.fixedHorizon ? 'fixed-horizon but retrospective' : 'right-censored cumulative snapshots'}.` : ' This remains nonpredictive evidence because exact historical input bytes are not bound.'}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Fold estimate vs observed outcome</div>${savedChannelPredictionScatter(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Residuals · where the model misses</div>${savedChannelResidualChart(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Retrospective calibration</div>${savedChannelContinuousCalibration(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Actual and estimated rank trajectory</div>${savedChannelPredictionRankTrace(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Indicators repeatedly selected inside folds</div>${savedChannelSelectionFrequency(nested)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Top exhaustive combination landscape</div>${savedChannelCombinationLandscape(analysis.topCombinations)}</div></div>` : '';
         const artifact = analysis.artifact;
         const artifactBanner = artifact ? `<div data-savedchannelanalysisartifact style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid ${artifact.persisted ? C.green : C.amber}55;background:${artifact.persisted ? C.green : C.amber}0b;padding:8px;margin-bottom:10px"><div><b style="font-size:10px;color:${artifact.persisted ? C.green : C.amber}">${artifact.cacheStatus === 'hit' ? 'Loaded saved analysis' : artifact.persisted ? 'Calculated once and saved' : 'Calculated, but not persisted'}</b><div style="font-size:8px;color:${C.mute};margin-top:2px">${esc(artifact.note || '')}${artifact.generatedAt ? ` · generated ${esc(new Date(artifact.generatedAt).toLocaleString())}` : ''}</div></div><span data-savedchannelanalysisreload style="cursor:pointer;border:1px solid ${C.border};padding:4px 8px;font-size:8px;color:${C.dim}">recalculate after source changes</span></div>` : '';
-        return `${artifactBanner}${renderSavedChannelRisk(analysis)}<div style="font-size:13px;font-weight:900;color:${C.text};margin:4px 0">Continuous views forecast</div><div style="font-size:11px;color:${C.dim};line-height:1.5;margin-bottom:10px"><b style="color:${C.text}">${analysis.n} Shorts</b> · outcome: ${esc(analysis.outcome.primary)} · transcript coverage ${(analysis.transcriptCoverage * 100).toFixed(0)}%. ${esc(analysis.outcome.validation)}</div>
+        return `${artifactBanner}${savedChannelAnalysisEvidenceBanner(analysis)}${renderSavedChannelRisk(analysis)}<div style="font-size:13px;font-weight:900;color:${C.text};margin:4px 0">Continuous views ${evidenceMeta.canonical ? 'retrospective association' : 'diagnostic'}</div><div style="font-size:11px;color:${C.dim};line-height:1.5;margin-bottom:10px"><b style="color:${C.text}">${analysis.n} Shorts</b> · outcome: ${esc(analysis.outcome.primary)} · transcript coverage ${(analysis.transcriptCoverage * 100).toFixed(0)}%. ${esc(analysis.outcome.validation)}</div>
           ${processMap}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-bottom:12px">${metric('Selection-safe model', nested, C.green)}${metric('All 21 indicators', all, C.cyan)}${metric('Best exploratory combo', best, C.purple)}${statc('Typical error factor', nested && nested.medianFactor ? nested.medianFactor.toFixed(2) + '×' : '—', C.amber)}</div>
-          ${note(`<b>Search coverage:</b> ${analysis.search.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations tested exhaustively; ${analysis.search.forwardPathModels} forward models cover sizes 1–21; the all-21 ridge model tests every indicator together. The headline model selects inside training folds, then predicts unseen Shorts, so the reported score does not grade a combination on the videos that chose it.`, C.green)}
+          ${note(`<b>Search coverage:</b> ${analysis.search.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations tested exhaustively; ${analysis.search.forwardPathModels} forward models cover sizes 1–21; the all-21 ridge model tests every indicator together. Selection is repeated inside training folds, so no row chooses the combination that scores itself. ${esc(analysis.inference && analysis.inference.note || '')}`, evidenceMeta.color)}
           ${signalCards}
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:12px"><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Actual-view distribution</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">The outcome the model is trying to predict. A wide, skewed range is why views are modeled in log space.</div>${savedChannelOutcomeHistogram(analysis.outcomeProfile)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Publication age vs accumulated views</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">Every point is a Short. This makes right-censoring visible instead of burying it in a correlation number.</div>${savedChannelAgeScatter(analysis)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Which single indicators predict log views?</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">Positive OOF R² adds blind predictive value; negative values are worse than the training-fold mean.</div>${savedChannelBars(analysis.singles)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Does adding indicators improve prediction?</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">The deterministic forward path shows when another signal helps and when redundancy starts to hurt.</div>${savedChannelPathChart(analysis.forwardPath)}</div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:12px"><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Actual-view distribution</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">${evidenceMeta.fixedHorizon ? 'Every view outcome uses the same explicit age.' : 'These are cumulative lifetime snapshots at unequal ages.'} A wide, skewed range is why views are modeled in log space.</div>${savedChannelOutcomeHistogram(analysis.outcomeProfile)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Publication date diagnostic</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">${evidenceMeta.fixedHorizon ? 'Outcome exposure is fixed; this plot checks chronology or distribution drift rather than unequal age.' : 'This exposes unequal outcome horizons; minimum-age filters reduce but do not eliminate right censoring.'}</div>${savedChannelAgeScatter(analysis)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Which single indicators track log views?</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">Positive OOF R² beats the training-fold mean. It remains a grouped retrospective association until upstream fit exclusion and prospective confirmation are certified.</div>${savedChannelBars(analysis.singles)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Does adding indicators improve the fold score?</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">The deterministic forward path shows when another signal helps and when redundancy starts to hurt. It is exploratory and never the headline estimator.</div>${savedChannelPathChart(analysis.forwardPath)}</div></div>
           <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Every indicator · every kind of evidence</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Green means the displayed metric is above its neutral point; red means below. Click an indicator label to inspect every underlying Short. This heatmap does not combine unlike metrics into one arbitrary score.</div>${savedChannelEvidenceHeatmap(analysis, tailByKey)}
           ${savedChannelSignalMatrix(analysis)}
           ${renderSavedChannelIndicatorExplorer(analysis)}
-          <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">All 21 embedding and novelty trajectories</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">These are the original 21 direct/derived score-card coordinates. The frozen full-vector visual forecast is registered separately in Blind validation and the canonical ledger. Each mini-map bins Shorts from low to high on one indicator and plots median actual views. The red guide is 10M.</div>${savedChannelProfileAtlas(analysis)}
+          <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">All 21 embedding and novelty trajectories</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">These are the original 21 direct/derived score-card coordinates. The frozen full-vector visual forecast is registered separately in the validation view and canonical ledger. Each mini-map bins Shorts from low to high on one indicator and plots median actual views. The red guide is 10M.</div>${savedChannelProfileAtlas(analysis)}
           <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Indicator redundancy · 21 × 21</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Pairwise Spearman correlation of the exact values used by the models. Bright teal means two indicators move together; bright red means they move in opposite directions; dark cells are comparatively independent. Hover any cell for Pearson, Spearman, and sample size.</div>${savedChannelRelationshipHeatmap(analysis)}
           ${predictionDiagnostics}
-          <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:3px">21-indicator evidence matrix</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:5px">Continuous correlation, held-out prediction, and actual 10M discrimination are shown side by side. Negative OOF R² means the indicator predicts unseen Shorts worse than the channel mean; it is evidence of noise, not a hidden positive score.</div>
-          <div style="overflow:auto;max-height:430px;margin-bottom:12px"><table style="width:100%;min-width:790px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicator</th><th>coverage</th><th>raw r</th><th>log r</th><th>trajectory ρ</th><th>blind OOF R²</th><th>error factor</th><th>10M AUC</th><th>10M AP</th><th>top-decile lift</th></tr></thead><tbody>${(analysis.singles || []).map(row => { const tail = tailByKey[row.key] || {}; return `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)}</td><td style="text-align:right">${(row.coverage * 100).toFixed(0)}%</td><td style="text-align:right">${fmtv(row.pearsonRawViews, 3)}</td><td style="text-align:right">${fmtv(row.pearsonLogViews, 3)}</td><td style="text-align:right;color:${row.spearmanViews > 0 ? C.green : C.dim}">${fmtv(row.spearmanViews, 3)}</td><td style="text-align:right;color:${row.oof && row.oof.r2 > 0 ? C.green : C.dim}">${row.oof ? fmtv(row.oof.r2, 3) : '—'}</td><td style="text-align:right">${row.oof ? fmtv(row.oof.medianFactor, 2) + '×' : '—'}</td><td style="text-align:right">${fmtv(tail.directionalAuc, 3)}${tail.direction ? ` ${tail.direction === 'higher' ? '↑' : '↓'}` : ''}</td><td style="text-align:right">${fmtv(tail.prAuc, 3)}</td><td style="text-align:right">${tail.topDecile && tail.topDecile.lift != null ? tail.topDecile.lift.toFixed(2) + '×' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
+          <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:3px">21-indicator evidence matrix</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:5px">Continuous correlation, grouped OOF association, and actual 10M discrimination are shown side by side. Negative OOF R² means the fold estimate performs worse than the training-fold mean; it is evidence of noise, not a hidden positive score.</div>
+          <div style="overflow:auto;max-height:430px;margin-bottom:12px"><table style="width:100%;min-width:790px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicator</th><th>coverage</th><th>raw r</th><th>log r</th><th>trajectory ρ</th><th>${esc(evidenceMeta.metricLabel)}</th><th>error factor</th><th>10M AUC</th><th>10M AP</th><th>top-decile lift</th></tr></thead><tbody>${(analysis.singles || []).map(row => { const tail = tailByKey[row.key] || {}; return `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)}</td><td style="text-align:right">${(row.coverage * 100).toFixed(0)}%</td><td style="text-align:right">${fmtv(row.pearsonRawViews, 3)}</td><td style="text-align:right">${fmtv(row.pearsonLogViews, 3)}</td><td style="text-align:right;color:${row.spearmanViews > 0 ? C.green : C.dim}">${fmtv(row.spearmanViews, 3)}</td><td style="text-align:right;color:${row.oof && row.oof.r2 > 0 ? C.green : C.dim}">${row.oof ? fmtv(row.oof.r2, 3) : '—'}</td><td style="text-align:right">${row.oof ? fmtv(row.oof.medianFactor, 2) + '×' : '—'}</td><td style="text-align:right">${fmtv(tail.directionalAuc, 3)}${tail.direction ? ` ${tail.direction === 'higher' ? '↑' : '↓'}` : ''}</td><td style="text-align:right">${fmtv(tail.prAuc, 3)}</td><td style="text-align:right">${tail.topDecile && tail.topDecile.lift != null ? tail.topDecile.lift.toFixed(2) + '×' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
           <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:5px">Top exploratory combinations</div>
           <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicators</th><th>OOF R²</th><th>rank ρ</th><th>error factor</th></tr></thead><tbody>${combos.map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${row.keys.map(esc).join(' + ')}</td><td style="text-align:right;color:${row.r2 > 0 ? C.green : C.dim}">${fmtv(row.r2, 3)}</td><td style="text-align:right">${fmtv(row.spearman, 3)}</td><td style="text-align:right">${fmtv(row.medianFactor, 2)}×</td></tr>`).join('')}</tbody></table></div>`;
     }
@@ -6345,7 +8192,9 @@ const JarvisRetention = (function () {
     function savedValidationOutcomeValue(row, key) {
         const actual = row && row.actual || {};
         if (key === 'keep') return actual.keep;
-        if (key === 'swipe') return actual.swipe != null ? actual.swipe : (actual.keep != null ? 100 - +actual.keep : null);
+        if (key === 'swipe') {
+            return actual.keep != null ? 100 - +actual.keep : null;
+        }
         if (key === 'ret5') return actual.ret5;
         if (key === 'averageRetention') return actual.averageRetention;
         if (key === 'views') return actual.viewsCurrent;
@@ -6373,12 +8222,16 @@ const JarvisRetention = (function () {
         return matrix && (matrix.coordinates || matrix.features) || [];
     }
     function savedValidationLedgerColumn(validation, coordinateId) {
+        const resolved = savedResolveCoordinateId(coordinateId, validation);
         return validation && validation.coordinateRegistry
-            && (validation.coordinateRegistry.columns || []).find(column => column.id === coordinateId) || null;
+            && (validation.coordinateRegistry.columns || []).find(
+                column => column.id === resolved
+            ) || null;
     }
-    function savedValidationLedgerEntry(scope, outcomeKey, coordinateId) {
+    function savedValidationLedgerEntry(scope, outcomeKey, coordinateId, validation = SAVEDCHANNELVALIDATION) {
+        const resolved = savedResolveCoordinateId(coordinateId, validation);
         return savedValidationLedgerEntries(scope, outcomeKey).find(entry => (
-            (entry.coordinateId || entry.id || entry.key) === coordinateId
+            (entry.coordinateId || entry.id || entry.key) === resolved
         )) || null;
     }
     function savedValidationFamilyMeta(column) {
@@ -6393,32 +8246,38 @@ const JarvisRetention = (function () {
             videoHeldout: {
                 label: 'Video held out',
                 color: C.green,
-                summary: 'The deterministic fold containing this video was removed before fitting and calibration; other videos from the same creator may remain.',
+                summary: 'The deterministic fold containing this video was removed upstream before this exact ledger value was fitted; other videos from the same creator may remain.',
                 claim: 'Tests a genuinely unseen video from known creator populations. This is not a chronological or unseen-creator test.',
             },
             accountHeldout: {
                 label: 'Account held out',
                 color: C.purple,
-                summary: 'Every video from this creator was removed before fitting and calibration.',
+                summary: 'Every video from this creator was removed upstream before this exact ledger value was fitted.',
                 claim: 'Tests transfer to a creator the fitted private axis did not see. This is stricter, but creator-level certainty is limited by the number of accounts.',
+            },
+            creatorExcludedPublic: {
+                label: 'Creator-excluded public axis',
+                color: C.cyan,
+                summary: 'One public-corpus scalar fitted after removing private, saved, and validation-creator videos. It has one canonical ledger address.',
+                claim: 'External to the current validation creators, but population calibration remains exploratory until creator-blocked inference is available.',
             },
             videoForecast: {
                 label: 'Video-held-out forecast',
                 color: C.green,
-                summary: 'A calibrated model combines prior held-out coordinates while the evaluated video remains outside the fit.',
+                summary: 'A registered upstream model combines creator-excluded coordinates while the evaluated video remains outside the fit.',
                 claim: 'A forecast, not another embedding direction.',
             },
             accountForecast: {
                 label: 'Account-held-out forecast',
                 color: C.purple,
-                summary: 'A calibrated model combines coordinates while the evaluated creator remains outside the fit.',
+                summary: 'A registered upstream model combines coordinates while the evaluated creator remains outside the fit.',
                 claim: 'The strictest transfer forecast currently available.',
             },
             visualKeepForecast: {
-                label: 'Frozen visual forecast',
+                label: 'Frozen visual model score',
                 color: C.green,
-                summary: 'One frozen pooled Ridge forecast from the existing visual opening embedding.',
-                claim: 'A diagnostic scalar on fitting rows; its separate held-out protocols carry the validation claim.',
+                summary: 'One frozen pooled Ridge scalar from the existing visual opening embedding.',
+                claim: 'Row metadata distinguishes score-time predictions from in-sample reconstructions; separate held-out protocols carry the leakage-controlled retrospective validation claim.',
             },
             visualKeepProtocolForecast: {
                 label: 'Visual protocol prediction',
@@ -6426,11 +8285,11 @@ const JarvisRetention = (function () {
                 summary: 'One exact output from the named visual-only holdout protocol.',
                 claim: 'Already held out and evaluated in target units. It is research evidence, not the frozen production value or a map estimate.',
             },
-            creatorAdaptiveKeepForecast: {
-                label: 'Causal multimodal next-upload mixture',
+            creatorAdaptiveKeepPrequential: {
+                label: 'Historical prequential mixture',
                 color: C.amber,
-                summary: 'A selected 50/50 mixture consumes the visual and together embeddings plus up to 30 strictly earlier creator labels.',
-                claim: 'A causal historical research scalar, not either embedding plane and never eligible for predictor rankings.',
+                summary: 'A row-specific historical replay consumes the visual and together embeddings plus only creator labels available before that row.',
+                claim: 'This validation coordinate is distinct from the live future-upload creator-profile score.',
             },
             observed: {
                 label: 'Observed outcome',
@@ -6517,10 +8376,10 @@ const JarvisRetention = (function () {
     function savedValidationPredictiveMetric(entry, outcome) {
         const metrics = entry && entry.metrics || {};
         if (outcome && outcome.unit === 'binary') {
-            const auc = savedValidationMetricValue(metrics, 'oofAuc');
+            const auc = savedValidationMetricValue(metrics, 'predictionAuc');
             return { key: 'AUC', value: auc, strength: auc == null ? null : (auc - .5) * 2 };
         }
-        const r2 = savedValidationMetricValue(metrics, 'oofR2');
+        const r2 = savedValidationMetricValue(metrics, 'predictionR2');
         return { key: 'R²', value: r2, strength: r2 };
     }
     function savedValidationMetricLine(entry, outcome) {
@@ -6528,54 +8387,84 @@ const JarvisRetention = (function () {
         const metrics = entry.metrics || {};
         if (entry.validationTier === 'outcome_not_predictor') return 'Outcome only · not a predictor';
         const q = metrics.qValue == null ? 'q —' : `global q ${fmtv(metrics.qValue, 4)}`;
-        if (!metrics.oofN && entry.availabilityNote) {
+        if (!metrics.predictionN && entry.availabilityNote) {
             return `${entry.availabilityNote} Raw ρ ${fmtv(metrics.spearman, 3)} · ${q} · n=${metrics.n || 0}`;
         }
-        const calibrationMode = entry.calibration && entry.calibration.mode;
-        const prefix = calibrationMode === 'prequential_time'
-            ? 'Causal'
-            : calibrationMode === 'heldout_protocol_prediction'
-                ? 'Protocol'
-                : 'OOF';
+        const evaluationMode = entry.evaluationMode || entry.evaluation
+            && entry.evaluation.mode || '';
+        const prefix = evaluationMode.includes('prequential')
+            ? 'Prequential'
+            : evaluationMode.includes('heldout')
+                ? 'Held-out'
+                : evaluationMode.includes('creator_excluded')
+                    ? 'Creator-excluded'
+                    : 'Exact-ledger';
         if (outcome && outcome.unit === 'binary') {
-            return `${prefix} AUC ${fmtv(metrics.oofAuc, 3)} · Brier ${fmtv(metrics.oofBrier, 3)} · raw AUC ${fmtv(metrics.auc, 3)} · ${q} · n=${metrics.oofN || metrics.n || 0}`;
+            return `${prefix} AUC ${fmtv(metrics.predictionAuc, 3)} · Brier ${fmtv(metrics.predictionBrier, 3)} · raw AUC ${fmtv(metrics.auc, 3)} · ${q} · n=${metrics.predictionN || metrics.n || 0}`;
         }
         const error = outcome && (outcome.key === 'views' || outcome.key === 'outlier')
-            ? `${fmtv(metrics.oofMedianFactorError, 2)}× median error`
-            : `${fmtv(metrics.oofMae, 2)} pp MAE`;
-        const baseline = metrics.oofBaselineMae == null
+            ? `${fmtv(metrics.predictionMedianFactorError, 2)}× median error`
+            : `${fmtv(metrics.predictionMae, 2)} pp MAE`;
+        const baseline = metrics.predictionBaselineMae == null
             ? ''
-            : ` · honest baseline ${fmtv(metrics.oofBaselineMae, 2)} pp MAE · incremental ${metrics.oofMaeImprovementVsBaseline >= 0 ? '+' : ''}${fmtv(metrics.oofMaeImprovementVsBaseline, 2)} pp`;
-        const skill = metrics.oofProtocolBaselineR2 == null
+            : ` · registered baseline ${fmtv(metrics.predictionBaselineMae, 2)} pp MAE · incremental ${metrics.predictionMaeImprovementVsBaseline >= 0 ? '+' : ''}${fmtv(metrics.predictionMaeImprovementVsBaseline, 2)} pp`;
+        const skill = metrics.predictionProtocolBaselineR2 == null
             ? ''
-            : ` · baseline-relative MSE skill ${metrics.oofProtocolBaselineR2 >= 0 ? '+' : ''}${fmtv(metrics.oofProtocolBaselineR2 * 100, 1)}%`;
+            : ` · protocol-baseline MSE skill ${metrics.predictionProtocolBaselineR2 >= 0 ? '+' : ''}${fmtv(metrics.predictionProtocolBaselineR2 * 100, 1)}%`;
         const eligibility = entry.predictorEligible === false
             ? ' · RESEARCH ONLY'
             : '';
-        return `${prefix} R² ${fmtv(metrics.oofR2, 3)} · ${prefix} ρ ${fmtv(metrics.oofSpearman, 3)} · raw ρ ${fmtv(metrics.spearman, 3)} · ${error}${baseline}${skill} · ${q} · n=${metrics.oofN || metrics.n || 0}${eligibility}`;
+        return `${prefix} R² ${fmtv(metrics.predictionR2, 3)} · ${prefix} ρ ${fmtv(metrics.predictionSpearman, 3)} · raw ρ ${fmtv(metrics.spearman, 3)} · ${error}${baseline}${skill} · ${q} · n=${metrics.predictionN || metrics.n || 0}${eligibility}`;
     }
     function savedValidationEvidenceMeta(entry, outcome) {
         if (!entry || entry.available === false) return { label: 'unavailable', color: C.faint };
         if (entry.validationTier === 'outcome_not_predictor') return { label: 'truth, not predictor', color: C.cyan };
         if (entry.predictorEligible === false) return { label: 'research diagnostic, not promoted', color: C.amber };
-        if (entry.family === 'stored') return { label: 'historical diagnostic, not blind', color: C.amber };
+        if (entry.family === 'stored') return { label: 'historical diagnostic, not held out', color: C.amber };
         if (entry.family === 'legacy') return { label: 'deprecated diagnostic', color: C.faint };
         const metric = savedValidationPredictiveMetric(entry, outcome);
         if (metric.value == null) return { label: 'not enough data', color: C.faint };
         if (outcome && outcome.unit === 'binary') {
-            if (metric.value >= .7) return { label: 'useful blind ranking', color: C.green };
-            if (metric.value >= .6) return { label: 'weak blind ranking', color: C.amber };
+            if (metric.value >= .7) return { label: 'useful held-out ranking', color: C.green };
+            if (metric.value >= .6) return { label: 'weak held-out ranking', color: C.amber };
             return { label: 'not predictive', color: C.red };
         }
-        if (metric.value > .1) return { label: 'adds blind predictive value', color: C.green };
-        if (metric.value > 0) return { label: 'weak blind value', color: C.amber };
+        if (metric.value > .1) return { label: 'adds held-out predictive value', color: C.green };
+        if (metric.value > 0) return { label: 'weak held-out value', color: C.amber };
         return { label: 'worse than baseline', color: C.red };
     }
     function savedValidationCoordinateValue(validation, row, coordinateId) {
-        const columns = validation && validation.coordinateRegistry && validation.coordinateRegistry.columns || [];
-        const index = columns.findIndex(column => column.id === coordinateId);
+        const registry = validation && validation.coordinateRegistry || {};
+        const columns = registry.columns || [];
+        const resolved = savedResolveCoordinateId(coordinateId, validation);
+        const index = columns.findIndex(column => column.id === resolved);
         const values = row && row.scoreLedger && row.scoreLedger.values;
-        return index >= 0 && values && values[index] != null && isFinite(+values[index]) ? +values[index] : null;
+        if (
+            index >= 0
+            && values
+            && values[index] != null
+            && isFinite(+values[index])
+        ) {
+            return +values[index];
+        }
+        const transform = (registry.displayTransforms || []).find(
+            item => item && item.id === resolved
+        );
+        if (
+            !transform
+            || transform.formula !== '100 - source'
+            || transform.sourceCoordinateId === resolved
+        ) {
+            return null;
+        }
+        const sourceValue = savedValidationCoordinateValue(
+            validation,
+            row,
+            transform.sourceCoordinateId
+        );
+        return sourceValue == null || !isFinite(+sourceValue)
+            ? null
+            : 100 - +sourceValue;
     }
     function savedValidationPlotCoordinate(value, target) {
         if (value == null || !isFinite(+value)) return null;
@@ -6605,47 +8494,12 @@ const JarvisRetention = (function () {
         };
         return names[accountId] || fallback || accountId;
     }
-    function savedValidationCalibrationFold(entry, row) {
-        const calibration = entry && entry.calibration;
-        if (calibration && (
-            calibration.mode === 'prequential_time'
-            || calibration.mode === 'heldout_protocol_prediction'
-        )) {
-            return {
-                fold: calibration.mode === 'heldout_protocol_prediction'
-                    ? 'registered-heldout-protocol'
-                    : 'causal-final-window',
-                parameters: { kind: 'identity' },
-            };
-        }
-        if (!calibration || !Array.isArray(calibration.folds)) return null;
-        const fold = calibration.mode === 'leave_account_out'
-            ? String(row.accountId)
-            : String(savedValidationStableHash(`ledger-oof:${row.id}`) % 5);
-        return calibration.folds.find(item => String(item.fold) === fold) || null;
-    }
-    function savedValidationCalibratedCoordinate(entry, row, score, outcomeKey) {
+    function savedValidationRegisteredPrediction(entry, column, score) {
         if (score == null || !isFinite(+score)) return null;
-        if (entry && entry.calibration && (
-            entry.calibration.mode === 'prequential_time'
-            || entry.calibration.mode === 'heldout_protocol_prediction'
-        )) {
-            if (outcomeKey === 'keep') return +score;
-            if (outcomeKey === 'swipe') return 100 - +score;
-            return null;
-        }
-        const fold = savedValidationCalibrationFold(entry, row);
-        const parameters = fold && fold.parameters;
-        if (!parameters) return null;
-        if (parameters.kind === 'linear') {
-            return +parameters.intercept + +parameters.slope * +score;
-        }
-        if (parameters.kind === 'logistic') {
-            const scale = Math.abs(+parameters.xScale) > 1e-12 ? +parameters.xScale : 1;
-            const linear = +parameters.intercept + +parameters.slope * ((+score - +parameters.xMean) / scale);
-            return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, linear))));
-        }
-        return null;
+        if (!entry || !entry.evaluation
+            || entry.evaluation.identity !== true
+            || entry.evaluation.fittedByRelationshipChart !== false) return null;
+        return savedValidationPlotCoordinate(score, column && column.target);
     }
     function savedValidationModelOutput(value, outcomeKey) {
         if (value == null || !isFinite(+value)) return null;
@@ -6654,40 +8508,46 @@ const JarvisRetention = (function () {
             : +value;
     }
     function savedValidationLedgerScatter(validation, rows, column, entry, outcome) {
-        const plotMode = st.savedLedgerPlotMode === 'raw' ? 'raw' : 'oof';
-        const prequential = entry && entry.calibration
-            && entry.calibration.mode === 'prequential_time';
-        const protocolPrediction = entry && entry.calibration
-            && entry.calibration.mode === 'heldout_protocol_prediction';
+        const hasPrediction = entry && entry.evaluation
+            && entry.evaluation.identity === true;
+        const plotMode = st.savedLedgerPlotMode === 'raw' || !hasPrediction
+            ? 'raw'
+            : 'prediction';
+        const evaluationMode = entry && entry.evaluationMode || '';
+        const prequential = evaluationMode.includes('prequential');
+        const protocolPrediction = evaluationMode.includes('heldout');
+        const inSampleModelScore = evaluationMode.includes('in_sample');
         const predictionPhrase = prequential
-            ? `Causal predicted ${outcome.label}`
+            ? `Prequential predicted ${outcome.label}`
             : protocolPrediction
-                ? `Registered protocol prediction of ${outcome.label}`
-            : `Held-out predicted ${outcome.label}`;
+                ? `Registered held-out prediction of ${outcome.label}`
+                : inSampleModelScore
+                    ? `In-sample frozen-model fit for ${outcome.label}`
+                    : `Exact ledger prediction of ${outcome.label}`;
         const points = rows.map(row => {
             const score = savedValidationCoordinateValue(validation, row, column.id);
             const actual = savedValidationOutcomeValue(row, outcome.key);
-            const calibrated = savedValidationCalibratedCoordinate(
+            const prediction = savedValidationRegisteredPrediction(
                 entry,
-                row,
-                score,
-                outcome.key
+                column,
+                score
             );
             return {
                 row,
                 score,
                 actual,
-                calibrated,
+                prediction,
                 x: savedValidationPlotCoordinate(actual, outcome.key),
-                y: plotMode === 'oof'
-                    ? calibrated
+                y: plotMode === 'prediction'
+                    ? prediction
                     : savedValidationPlotCoordinate(score, column.target),
             };
         }).filter(point => point.x != null && point.y != null);
         if (!points.length) return note('No videos contain both this exact ledger coordinate and this observed outcome.', C.amber);
         let x0 = Math.min(...points.map(point => point.x)), x1 = Math.max(...points.map(point => point.x));
         let y0 = Math.min(...points.map(point => point.y)), y1 = Math.max(...points.map(point => point.y));
-        const fixedKeepScale = plotMode === 'oof' && ['keep', 'swipe'].includes(outcome.key);
+        const fixedKeepScale = plotMode === 'prediction'
+            && ['keep', 'swipe'].includes(outcome.key);
         if (fixedKeepScale) {
             x0 = 0; x1 = 100; y0 = 0; y1 = 100;
         } else {
@@ -6700,7 +8560,7 @@ const JarvisRetention = (function () {
         const X = value => left + (value - x0) / (x1 - x0) * (W - left - right);
         const Y = value => H - bottom - (value - y0) / (y1 - y0) * (H - top - bottom);
         let svg = `<rect x="${left}" y="${top}" width="${W - left - right}" height="${H - top - bottom}" fill="${C.card2}"/>`;
-        if (plotMode === 'oof') {
+        if (plotMode === 'prediction') {
             const diagonalLow = Math.max(x0, y0), diagonalHigh = Math.min(x1, y1);
             if (diagonalLow < diagonalHigh) {
                 svg += `<line x1="${X(diagonalLow)}" y1="${Y(diagonalLow)}" x2="${X(diagonalHigh)}" y2="${Y(diagonalHigh)}" stroke="${C.mute}" stroke-dasharray="4 4" opacity=".55"><title>perfect prediction</title></line>`;
@@ -6712,32 +8572,40 @@ const JarvisRetention = (function () {
             const xCoordinate = x0 + tick / 4 * (x1 - x0);
             const yCoordinate = y1 - tick / 4 * (y1 - y0);
             const xRaw = ['views', 'outlier'].includes(outcome.key) ? Math.max(0, 10 ** xCoordinate - 1) : xCoordinate;
-            const yRaw = plotMode === 'oof'
+            const yRaw = plotMode === 'prediction'
                 ? savedValidationModelOutput(yCoordinate, outcome.key)
                 : (['views', 'realviews', 'outlier'].includes(column.target) ? Math.max(0, 10 ** yCoordinate - 1) : yCoordinate);
             svg += `<text x="${x}" y="${H - bottom + 14}" text-anchor="${tick === 0 ? 'start' : tick === 4 ? 'end' : 'middle'}" fill="${C.faint}" font-size="7">${esc(savedValidationOutcomeFormat(xRaw, outcome.key))}</text>`;
-            svg += `<text x="${left - 5}" y="${y + 2.5}" text-anchor="end" fill="${C.faint}" font-size="7">${esc(plotMode === 'oof' ? savedValidationOutcomeFormat(yRaw, outcome.key, outcome.unit === 'binary') : savedLedgerFormat(yRaw, column))}</text>`;
+            svg += `<text x="${left - 5}" y="${y + 2.5}" text-anchor="end" fill="${C.faint}" font-size="7">${esc(plotMode === 'prediction' ? savedValidationOutcomeFormat(yRaw, outcome.key, outcome.unit === 'binary') : savedLedgerFormat(yRaw, column))}</text>`;
         }
-        const creatorMixture = column.id === 'shorts.creator-adaptive-keep.v1';
+        const creatorMixture = (
+            column.family === 'creatorAdaptiveKeepPrequential'
+        );
         points.forEach(point => {
             const color = savedValidationAccountColor(point.row.accountId);
-            const predictedOutput = savedValidationModelOutput(point.calibrated, outcome.key);
+            const predictedOutput = savedValidationModelOutput(
+                point.prediction,
+                outcome.key
+            );
             const title = `${point.row.accountName} · ${point.row.title}\nRaw ${column.label}: ${savedLedgerFormat(point.score, column)}\n${predictionPhrase}: ${savedValidationOutcomeFormat(predictedOutput, outcome.key, outcome.unit === 'binary')}\nActual ${outcome.label}: ${savedValidationOutcomeFormat(point.actual, outcome.key)}\nCoordinate: ${column.id}${creatorMixture ? '\nDerived from visual + together embeddings + strictly earlier creator history; not a point on either raw plane. Click to pin details.' : ''}`;
             const selected = st.savedValidationCurveVideo === point.row.id;
             const pointAction = `data-savedvalidationrow="${esc(point.row.id)}"`;
             svg += `<circle ${pointAction} cx="${X(point.x).toFixed(1)}" cy="${Y(point.y).toFixed(1)}" r="${selected ? 6 : 3.4}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .68}" style="cursor:pointer"><title>${esc(title)}</title></circle>`;
         });
         const xLog = ['views', 'outlier'].includes(outcome.key) ? ' · log scale' : '';
-        const yLog = plotMode === 'oof'
+        const yLog = plotMode === 'prediction'
             ? xLog
             : (['views', 'realviews', 'outlier'].includes(column.target) ? ' · log scale' : '');
-        const yLabel = plotMode === 'oof'
-            ? `${prequential ? 'causal predicted' : protocolPrediction ? 'protocol predicted' : 'held-out predicted'} ${outcome.label}`
+        const yLabel = plotMode === 'prediction'
+            ? `${prequential ? 'prequential predicted' : protocolPrediction ? 'held-out predicted' : inSampleModelScore ? 'in-sample model fit' : 'exact ledger predicted'} ${outcome.label}`
             : `raw ${column.label}`;
         svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">observed ${esc(outcome.label)}${xLog}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(yLabel)}${yLog}</text>`;
         const selectedPoint = points.find(point => point.row.id === st.savedValidationCurveVideo);
-        const selectedPrediction = selectedPoint && savedValidationModelOutput(selectedPoint.calibrated, outcome.key);
-        const frozenVisualForecast = column.id === 'shorts.visual-keep-forecast.v1';
+        const selectedPrediction = selectedPoint && savedValidationModelOutput(
+            selectedPoint.prediction,
+            outcome.key
+        );
+        const frozenVisualForecast = column.family === 'visualKeepForecast';
         const detailActions = selectedPoint && selectedPoint.row.channelId
             ? (creatorMixture
                 ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}" data-savedchannelvideo-embedding="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep embedding →</button><button type="button" data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}" data-savedchannelvideo-embedding="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep embedding →</button></div>`
@@ -6745,35 +8613,33 @@ const JarvisRetention = (function () {
                     ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}" style="min-height:40px;background:transparent;border:1px solid ${C.cyan};color:${C.cyan};padding:6px 9px;cursor:pointer;font-size:8px;font-weight:900">open complete score card →</button><button type="button" data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}" data-savedchannelvideo-embedding="visual:keep" style="min-height:40px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:6px 9px;cursor:pointer;font-size:8px;font-weight:900">open visual keep map →</button></div>`
                     : `<span data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:5px">open the normal score card</span>`))
             : '';
-        const pointDetail = selectedPoint ? `<div data-savedvalidation-point-detail style="border-left:3px solid ${savedValidationAccountColor(selectedPoint.row.accountId)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selectedPoint.row.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">raw ${esc(column.id)} = <b style="color:${C.text}">${esc(savedLedgerFormat(selectedPoint.score, column))}</b><br>${esc(predictionPhrase)} = <b style="color:${C.cyan}">${esc(savedValidationOutcomeFormat(selectedPrediction, outcome.key, outcome.unit === 'binary'))}</b><br>shorts.observed.${esc(outcome.key)} = <b style="color:${C.text}">${esc(savedValidationOutcomeFormat(selectedPoint.actual, outcome.key))}</b><br>${esc(selectedPoint.row.accountName)} · fold ${esc((savedValidationCalibrationFold(entry, selectedPoint.row) || {}).fold || '—')} · ${esc(selectedPoint.row.validationSource === 'predictor_blind_inputs_only' ? 'blind-only private row' : 'saved score + private outcomes')}${creatorMixture ? '<br><b>This scalar is the selected visual + together + creator-history mixture. It is not the visual:keep or together:keep plane.</b>' : ''}</div>${detailActions}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to pin its raw coordinate, exact ${esc(predictionPhrase)}, fold, and measured outcome${creatorMixture ? ', then open either contributing raw embedding separately' : ''}.</div>`;
-        const diagnostics = entry && entry.calibration && entry.calibration.diagnostics || {};
+        const predictionDetail = selectedPrediction == null
+            ? 'not a registered prediction for this outcome'
+            : savedValidationOutcomeFormat(
+                selectedPrediction,
+                outcome.key,
+                outcome.unit === 'binary'
+            );
+        const pointDetail = selectedPoint ? `<div data-savedvalidation-point-detail style="border-left:3px solid ${savedValidationAccountColor(selectedPoint.row.accountId)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selectedPoint.row.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">ledger ${esc(column.id)} = <b style="color:${C.text}">${esc(savedLedgerFormat(selectedPoint.score, column))}</b><br>${esc(predictionPhrase)} = <b style="color:${C.cyan}">${esc(predictionDetail)}</b><br>shorts.observed.${esc(outcome.key)} = <b style="color:${C.text}">${esc(savedValidationOutcomeFormat(selectedPoint.actual, outcome.key))}</b><br>${esc(selectedPoint.row.accountName)} · ${esc(evaluationMode || 'association only')} · ${esc(selectedPoint.row.validationSource === 'predictor_blind_inputs_only' ? 'blind-only private row' : 'saved score + private outcomes')}${creatorMixture ? '<br><b>This scalar is the selected visual + together + creator-history mixture. It is not the visual:keep or together:keep plane.</b>' : ''}</div>${detailActions}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to pin its exact ledger coordinate and measured outcome${creatorMixture ? ', then open either contributing raw embedding separately' : ''}.</div>`;
+        const diagnostics = entry && entry.evaluation
+            && entry.evaluation.diagnostics || {};
         const actualMinimum = savedValidationModelOutput(diagnostics.actualMin, outcome.key);
         const actualMaximum = savedValidationModelOutput(diagnostics.actualMax, outcome.key);
         const predictedMinimum = savedValidationModelOutput(diagnostics.predictedMin, outcome.key);
         const predictedMaximum = savedValidationModelOutput(diagnostics.predictedMax, outcome.key);
-        const rangeLine = diagnostics.n ? `Held-out prediction range ${savedValidationOutcomeFormat(predictedMinimum, outcome.key, outcome.unit === 'binary')}–${savedValidationOutcomeFormat(predictedMaximum, outcome.key, outcome.unit === 'binary')} versus observed ${savedValidationOutcomeFormat(actualMinimum, outcome.key)}–${savedValidationOutcomeFormat(actualMaximum, outcome.key)} · transformed-span coverage ${fmtv((diagnostics.rangeRatio || 0) * 100, 1)}%` : 'No held-out range diagnostic is available.';
-        const toggle = [[
-            'oof',
-            prequential
-                ? 'Causal prediction'
-                : protocolPrediction
-                    ? 'Protocol prediction'
-                    : 'Held-out prediction',
-        ], ['raw', 'Raw coordinate']].map(([key, label]) => `<span data-savedvalidationplotmode="${key}" style="cursor:pointer;border-bottom:2px solid ${plotMode === key ? C.cyan : 'transparent'};color:${plotMode === key ? C.text : C.dim};padding:4px 7px;font-size:8px;font-weight:900">${label}</span>`).join('');
-        const headline = plotMode === 'oof'
-            ? `${prequential ? 'Causal predicted' : protocolPrediction ? 'Protocol predicted' : 'Held-out predicted'} ${outcome.label} vs observed ${outcome.label}`
+        const rangeLine = diagnostics.n ? `Exact ledger prediction range ${savedValidationOutcomeFormat(predictedMinimum, outcome.key, outcome.unit === 'binary')}–${savedValidationOutcomeFormat(predictedMaximum, outcome.key, outcome.unit === 'binary')} versus observed ${savedValidationOutcomeFormat(actualMinimum, outcome.key)}–${savedValidationOutcomeFormat(actualMaximum, outcome.key)} · transformed-span coverage ${fmtv((diagnostics.rangeRatio || 0) * 100, 1)}%` : 'This coordinate/outcome pair is association-only; no numerical prediction range exists.';
+        const toggleOptions = hasPrediction
+            ? [['prediction', 'Exact ledger prediction'], ['raw', 'Raw coordinate']]
+            : [['raw', 'Raw association only']];
+        const toggle = toggleOptions.map(([key, label]) => `<span data-savedvalidationplotmode="${key}" style="cursor:pointer;border-bottom:2px solid ${plotMode === key ? C.cyan : 'transparent'};color:${plotMode === key ? C.text : C.dim};padding:4px 7px;font-size:8px;font-weight:900">${label}</span>`).join('');
+        const headline = plotMode === 'prediction'
+            ? `${prequential ? 'Prequential predicted' : protocolPrediction ? 'Held-out predicted' : inSampleModelScore ? 'In-sample frozen-model fit' : 'Exact ledger predicted'} ${outcome.label} vs observed ${outcome.label}`
             : `Raw ${column.label} vs observed ${outcome.label}`;
-        const explanation = plotMode === 'oof'
-            ? (prequential
-                ? 'Every dot is the registered chronological prediction made before that upload outcome was available. No second outcome-fitted calibration is applied; only keep and its exact inverse, swipe-away, are shown in prediction units.'
-                : protocolPrediction
-                    ? 'Every dot is the exact prediction already emitted by this registered holdout protocol. No second calibration is fitted, and the chart, tooltip, row ledger, metrics, and error all read the same protocol coordinate.'
-                : 'Every dot applies the exact calibration fitted without that video outcome; account-held-out coordinates also exclude every label from the test creator. The plotted values, tooltip, range, and OOF metrics are now the same calculation.')
-            : (column.id === 'shorts.visual-keep-forecast.v1'
-                ? 'This is the frozen pooled raw keep-rate percentage stored in the ledger. It is a production diagnostic, not the held-out protocol prediction used by the OOF metrics.'
-                : (column.id === 'shorts.creator-adaptive-keep.v1'
-                    ? 'This is the raw selected causal multimodal mixture scalar. It combines visual and together embeddings with strictly earlier creator history; it is not a point on either raw embedding plane and no second outcome-fitted calibration is applied.'
-                    : 'This view shows the uncalibrated scalar coordinate. It is useful for inspecting geometry, but it is not a percentage prediction and must not be compared numerically with the OOF metrics.'));
+        const explanation = plotMode === 'prediction'
+            ? `${inSampleModelScore ? 'This is a fitting-population diagnostic, not blind forecast evidence. ' : ''}Every dot, tooltip, row-table value, and error reads the same registered score-ledger cell. The browser fits zero parameters and performs no recalibration.`
+            : (hasPrediction
+                ? 'This is the same registered scalar shown in its native ledger units for geometric inspection.'
+                : `This coordinate is registered for ${entry.nativeOutcomeKey || column.target}, not ${outcome.key}. Only association is shown; no cross-outcome estimator is invented.`);
         return `<div data-savedvalidation-scatter data-plot-mode="${plotMode}" style="border:1px solid ${C.border};background:${C.card};padding:10px;min-width:0"><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div><div style="font-size:12px;color:${C.text};font-weight:950">${esc(headline)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:3px 0 2px;max-width:780px">${esc(explanation)}</div></div><div style="display:flex;border-bottom:1px solid ${C.border}">${toggle}</div></div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:0 0 2px">${esc(savedValidationMetricLine(entry, outcome))}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:6px">${esc(rangeLine)}</div><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${pointDetail}</div>`;
     }
     function savedVisualKeepStudyScatter(
@@ -6792,10 +8658,15 @@ const JarvisRetention = (function () {
             && validation.coordinateRegistry
             && validation.coordinateRegistry.columns || []
         );
-        const visualCoordinateIndex = columns.findIndex(
-            column => column.id === 'shorts.visual-keep-forecast.v1'
+        const visualCoordinate = columns.find(
+            column => column.family === 'visualKeepForecast'
         );
-        const protocolCoordinateId = VISUAL_KEEP_PROTOCOL_IDS[protocolKey];
+        const visualCoordinateIndex = columns.indexOf(visualCoordinate);
+        const observedKeepCoordinate = columns.find(column => (
+            column.family === 'observed' && column.key === 'keep'
+        ));
+        const protocolCoordinateId =
+            savedVisualKeepProtocolIds(validation)[protocolKey];
         const protocolCoordinateIndex = columns.findIndex(
             column => column.id === protocolCoordinateId
         );
@@ -6835,7 +8706,7 @@ const JarvisRetention = (function () {
             const registeredProtocol = protocolForecast(point);
             if (registeredProtocol == null) return;
             const registeredError = registeredProtocol - Number(point.actual);
-            const title = `${savedVisualKeepAccountName(point.account, point.accountName)} · ${point.title}\n${protocolCoordinateId}: ${fmtv(registeredProtocol, 1)}%\nFrozen production ${'shorts.visual-keep-forecast.v1'}: ${raw == null ? 'unavailable' : `${fmtv(raw, 1)}%`}\nActual ${'shorts.observed.keep'}: ${fmtv(point.actual, 1)}%\nExact protocol error: ${registeredError >= 0 ? '+' : ''}${fmtv(registeredError, 1)} pp\nProtocol null: ${fmtv(point.baseline, 1)}%\nClick once to pin the complete coordinate comparison.`;
+            const title = `${savedVisualKeepAccountName(point.account, point.accountName)} · ${point.title}\n${protocolCoordinateId}: ${fmtv(registeredProtocol, 1)}%\nFrozen full-fit model score ${visualCoordinate && visualCoordinate.id || 'unregistered'}: ${raw == null ? 'unavailable' : `${fmtv(raw, 1)}%`} (in-sample diagnostic on fitting rows)\nActual ${observedKeepCoordinate && observedKeepCoordinate.id || 'unregistered'}: ${fmtv(point.actual, 1)}%\nExact protocol error: ${registeredError >= 0 ? '+' : ''}${fmtv(registeredError, 1)} pp\nProtocol null: ${fmtv(point.baseline, 1)}%\nClick once to pin the complete coordinate comparison.`;
             const cx = X(point.actual).toFixed(1), cy = Y(registeredProtocol).toFixed(1);
             svg += `<circle data-savedvalidationrow="${esc(point.id)}" data-coordinate-id="${esc(protocolCoordinateId)}" data-coordinate-value="${registeredProtocol == null ? '' : esc(String(registeredProtocol))}" cx="${cx}" cy="${cy}" r="10" fill="${color}" fill-opacity=".001" pointer-events="all" style="cursor:pointer"><title>${esc(title)}</title></circle><circle cx="${cx}" cy="${cy}" r="${selected ? 6 : 3.6}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .72}" pointer-events="none"/>`;
         });
@@ -6844,11 +8715,11 @@ const JarvisRetention = (function () {
         const selectedRaw = selected && rawForecast(selected);
         const selectedProtocolValue = selected && protocolForecast(selected);
         const selectedRow = selected && rowById.get(String(selected.id));
-        const selectedRawLabel = 'frozen pooled ledger value';
+        const selectedRawLabel = 'frozen pooled full-fit score; in-sample diagnostic on fitting rows';
         const exactSelectedError = selectedProtocolValue == null
             ? null
             : selectedProtocolValue - Number(selected.actual);
-        const detail = selected ? `<div data-savedvisualkeep-point-detail style="border-left:3px solid ${savedValidationAccountColor(selected.account)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selected.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:2px"><code style="color:${C.cyan}">${esc(protocolCoordinateId)}</code> = <b style="color:${C.cyan}">${selectedProtocolValue == null ? '—' : `${fmtv(selectedProtocolValue, 1)}%`}</b><br><code style="color:${C.green}">shorts.visual-keep-forecast.v1</code> = <b style="color:${C.green}">${selectedRaw == null ? '—' : `${fmtv(selectedRaw, 1)}%`}</b> (${esc(selectedRawLabel)})<br><code style="color:${C.text}">shorts.observed.keep</code> = <b style="color:${C.text}">${fmtv(selected.actual, 1)}%</b><br>exact held-out error = <b style="color:${exactSelectedError != null && Math.abs(exactSelectedError) <= 10 ? C.green : C.amber}">${exactSelectedError == null ? '—' : `${fmtv(selectedProtocolValue, 1)} − ${fmtv(selected.actual, 1)} = ${exactSelectedError >= 0 ? '+' : ''}${fmtv(exactSelectedError, 1)} pp`}</b> · legitimate protocol null ${fmtv(selected.baseline, 1)}% · fold ${esc(selected.fold)}<br><span style="color:${C.faint}">The protocol estimate, pooled production forecast, stored map estimate, and observed truth are separate ledger coordinates. None is substituted for another.</span></div>${selectedRow && selectedRow.channelId ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button type="button" data-savedchannelvideo="${esc(selectedRow.channelId)}:${esc(selected.id)}" style="min-height:40px;background:transparent;border:1px solid ${C.cyan};color:${C.cyan};padding:6px 9px;cursor:pointer;font-size:8px;font-weight:900">open complete score card →</button><button type="button" data-savedchannelvideo="${esc(selectedRow.channelId)}:${esc(selected.id)}" data-savedchannelvideo-embedding="visual:keep" style="min-height:40px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:6px 9px;cursor:pointer;font-size:8px;font-weight:900">open visual keep map →</button><button type="button" data-exp-ledger-coordinate="${esc(protocolCoordinateId)}" style="min-height:40px;background:transparent;border:1px solid ${C.border};color:${C.accent};padding:6px 9px;cursor:pointer;font-size:8px;font-weight:900">open exact ledger row →</button></div>` : ''}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point once to pin its exact protocol coordinate, frozen production forecast, observed truth, error equation, null, creator, and fold. Opening a map is a separate explicit action.</div>`;
+        const detail = selected ? `<div data-savedvisualkeep-point-detail style="border-left:3px solid ${savedValidationAccountColor(selected.account)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selected.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:2px"><code style="color:${C.cyan}">${esc(protocolCoordinateId)}</code> = <b style="color:${C.cyan}">${selectedProtocolValue == null ? '—' : `${fmtv(selectedProtocolValue, 1)}%`}</b><br><code style="color:${C.green}">${esc(visualCoordinate && visualCoordinate.id || 'unregistered frozen visual coordinate')}</code> = <b style="color:${C.green}">${selectedRaw == null ? '—' : `${fmtv(selectedRaw, 1)}%`}</b> (${esc(selectedRawLabel)})<br><code style="color:${C.text}">${esc(observedKeepCoordinate && observedKeepCoordinate.id || 'unregistered keep outcome')}</code> = <b style="color:${C.text}">${fmtv(selected.actual, 1)}%</b><br>exact held-out error = <b style="color:${exactSelectedError != null && Math.abs(exactSelectedError) <= 10 ? C.green : C.amber}">${exactSelectedError == null ? '—' : `${fmtv(selectedProtocolValue, 1)} − ${fmtv(selected.actual, 1)} = ${exactSelectedError >= 0 ? '+' : ''}${fmtv(exactSelectedError, 1)} pp`}</b> · legitimate protocol null ${fmtv(selected.baseline, 1)}% · fold ${esc(selected.fold)}<br><span style="color:${C.faint}">The held-out protocol estimate, frozen full-fit model score, stored visual map estimate, and observed truth are separate ledger coordinates or views. None is substituted for another.</span></div>${selectedRow && selectedRow.channelId ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button type="button" data-savedchannelvideo="${esc(selectedRow.channelId)}:${esc(selected.id)}" style="min-height:40px;background:transparent;border:1px solid ${C.cyan};color:${C.cyan};padding:6px 9px;cursor:pointer;font-size:8px;font-weight:900">open complete score card →</button><button type="button" data-savedchannelvideo="${esc(selectedRow.channelId)}:${esc(selected.id)}" data-savedchannelvideo-embedding="visual:keep" style="min-height:40px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:6px 9px;cursor:pointer;font-size:8px;font-weight:900">open visual keep map →</button><button type="button" data-exp-ledger-coordinate="${esc(protocolCoordinateId)}" style="min-height:40px;background:transparent;border:1px solid ${C.border};color:${C.accent};padding:6px 9px;font-size:8px;font-weight:900">open exact ledger row →</button></div>` : ''}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point once to pin its exact held-out protocol coordinate, frozen full-fit model score, observed truth, error equation, null, creator, and fold. Opening a map is a separate explicit action.</div>`;
         return `<div data-savedvisualkeep-scatter style="min-width:0"><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${detail}</div>`;
     }
     function savedVisualKeepStudyHtml(validation) {
@@ -6893,11 +8764,20 @@ const JarvisRetention = (function () {
             return `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${savedValidationAccountColor(item.account)};font-weight:900">${esc(savedVisualKeepAccountName(item.account, item.name))}</td><td>${item.n || 0}</td><td style="color:${beats ? C.green : C.red}">${item.protocolBaselineR2 == null ? '—' : `${item.protocolBaselineR2 >= 0 ? '+' : ''}${fmtv(item.protocolBaselineR2 * 100, 1)}%`}</td><td>${fmtv(item.r2, 3)}</td><td>${fmtv(item.spearman, 3)}</td><td>${fmtv(item.mae, 2)} pp</td><td>${fmtv((item.rangeRatio || 0) * 100, 1)}%</td></tr>`;
         }).join('');
         const promotion = study.promotion || {};
-        const promotionColor = promotion.promoted ? C.green : C.amber;
+        const promotionLabel = promotion.promoted
+            ? 'PROSPECTIVELY VALIDATED'
+            : promotion.retrospectiveMetricThresholdPassed
+                ? 'RETROSPECTIVE CANDIDATE'
+                : 'RESEARCH ONLY';
+        const promotionColor = promotion.promoted
+            ? C.green
+            : promotion.retrospectiveMetricThresholdPassed
+                ? C.cyan
+                : C.amber;
         const formula = study.formula || {}, selected = formula.selected || {};
         const validationNotes = (study.validationNotes || []).map(item => `<li style="margin:3px 0">${esc(item)}</li>`).join('');
         return `<section data-savedvisualkeep-study style="border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:14px 0;margin:12px 0">
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:15px;color:${C.text};font-weight:950">Best tested visual-only keep-rate predictor</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px;max-width:850px">${esc(study.input)} ${esc((study.population && `${study.population.n} videos · ${study.population.accounts.length} creators · ${study.population.embeddingDimensions}D ${study.population.embeddingModel}`) || '')}</div></div><div style="text-align:right"><div style="font-size:8px;color:${promotionColor};font-weight:950">${promotion.promoted ? 'PROMOTED' : 'RESEARCH ONLY'}</div><div style="font-size:7px;color:${C.faint};max-width:330px;line-height:1.35">${esc(promotion.status || '')}</div></div></div>
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:15px;color:${C.text};font-weight:950">Best tested visual-only keep-rate predictor</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px;max-width:850px">${esc(study.input)} ${esc((study.population && `${study.population.n} videos · ${study.population.accounts.length} creators · ${study.population.embeddingDimensions}D ${study.population.embeddingModel}`) || '')}</div></div><div style="text-align:right"><div style="font-size:8px;color:${promotionColor};font-weight:950">${promotionLabel}</div><div style="font-size:7px;color:${C.faint};max-width:330px;line-height:1.35">${esc(promotion.status || '')}</div></div></div>
           <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-top:10px">${protocolButtons}</div>
           <div style="font-size:9px;color:${C.text};font-weight:900;margin-top:8px">${esc(protocol.label)}</div><div style="font-size:7.5px;color:${C.dim};line-height:1.5;margin-top:2px">${esc(protocol.description)}</div>
           <div style="display:flex;gap:4px;overflow:auto;margin:8px 0;-webkit-overflow-scrolling:touch">${accountButtons}</div>
@@ -6910,7 +8790,7 @@ const JarvisRetention = (function () {
     function savedCreatorAdaptiveKeepScatter(study, accountKey, validation) {
         const allPoints = study && study.evaluation && study.evaluation.points || [];
         const points = allPoints.filter(point => accountKey === 'all' || point.account === accountKey);
-        if (!points.length) return note('No causal final-window predictions exist for this creator.', C.amber);
+        if (!points.length) return note('No prequential final-window predictions exist for this creator.', C.amber);
         const validationRows = validation && (validation.validationRows || validation.rows) || [];
         const rowById = new Map(validationRows.map(row => [String(row.id), row]));
         const W = 640, H = 380, left = 55, right = 16, top = 16, bottom = 45;
@@ -6941,11 +8821,11 @@ const JarvisRetention = (function () {
             const componentTitle = point.componentA == null || point.componentB == null
                 ? ''
                 : `\nComponent A: ${fmtv(point.componentA, 1)}%\nComponent B: ${fmtv(point.componentB, 1)}%`;
-            const title = `${savedVisualKeepAccountName(point.account, point.accountName)} · ${point.title}\nCausal multimodal mixture: ${fmtv(point.predicted, 1)}%${componentTitle}\nHistory-only keep: ${fmtv(point.baseline, 1)}%\nActual keep: ${fmtv(point.actual, 1)}%\nMixture error: ${fmtv(Math.abs(point.error), 1)} pp\nHistory-only error: ${fmtv(baselineError, 1)} pp\nIncremental value: ${modelValue >= 0 ? '+' : ''}${fmtv(modelValue, 1)} pp\nHistory: ${point.historyN} strictly earlier uploads${clickHint}`;
+            const title = `${savedVisualKeepAccountName(point.account, point.accountName)} · ${point.title}\nPrequential multimodal mixture: ${fmtv(point.predicted, 1)}%${componentTitle}\nHistory-only keep: ${fmtv(point.baseline, 1)}%\nActual keep: ${fmtv(point.actual, 1)}%\nMixture error: ${fmtv(Math.abs(point.error), 1)} pp\nHistory-only error: ${fmtv(baselineError, 1)} pp\nIncremental value: ${modelValue >= 0 ? '+' : ''}${fmtv(modelValue, 1)} pp\nHistory: ${point.historyN} strictly earlier uploads${clickHint}`;
             const cx = X(+point.actual).toFixed(1), cy = Y(+point.predicted).toFixed(1);
             svg += `<circle ${action} cx="${cx}" cy="${cy}" r="11" fill="${savedValidationAccountColor(point.account)}" fill-opacity=".001" pointer-events="all" style="cursor:pointer"><title>${esc(title)}</title></circle><circle cx="${cx}" cy="${cy}" r="${selected ? 6 : 3.7}" fill="${savedValidationAccountColor(point.account)}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .72}" pointer-events="none"/>`;
         });
-        svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">actual keep rate</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">causal predicted keep rate</text>`;
+        svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">actual keep rate</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">prequential predicted keep rate</text>`;
         const selected = points.find(point => point.id === st.savedValidationCurveVideo);
         const selectedRow = selected && rowById.get(String(selected.id));
         const selectedBaselineError = selected
@@ -6962,7 +8842,7 @@ const JarvisRetention = (function () {
             && selected.componentB != null
             ? `<br>component A <b>${fmtv(selected.componentA, 1)}%</b> centered-together residual analog · component B <b>${fmtv(selected.componentB, 1)}%</b> visual+together semantic stack · clipped 50/50 mean`
             : '';
-        const detail = selected ? `<div style="border-left:3px solid ${savedValidationAccountColor(selected.account)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selected.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">causal multimodal mixture <b style="color:${C.cyan}">${fmtv(selected.predicted, 1)}%</b> · history-only baseline <b style="color:${C.text}">${fmtv(selected.baseline, 1)}%</b> · actual <b style="color:${C.text}">${fmtv(selected.actual, 1)}%</b>${componentDetail}<br>mixture miss <b style="color:${Math.abs(selected.error) <= 10 ? C.green : C.amber}">${fmtv(Math.abs(selected.error), 1)} pp</b> · history miss <b>${fmtv(selectedBaselineError, 1)} pp</b> · incremental <b style="color:${selectedIncrement > 0 ? C.green : C.red}">${selectedIncrement >= 0 ? '+' : ''}${fmtv(selectedIncrement, 1)} pp</b><br>${esc(savedVisualKeepAccountName(selected.account, selected.accountName))} · ${selected.historyN} strictly earlier uploads · history cutoff ${selected.historyEnd ? new Date(selected.historyEnd).toLocaleDateString() : 'recorded in artifact'}<br><b>This scalar combines the visual and together embeddings with creator history. It does not live on either raw embedding plane.</b></div>${detailActions}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to inspect the exact mixture prediction, components, honest baseline, truth, errors, and history, then open either contributing raw embedding separately.</div>`;
+        const detail = selected ? `<div style="border-left:3px solid ${savedValidationAccountColor(selected.account)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selected.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">prequential multimodal mixture <b style="color:${C.cyan}">${fmtv(selected.predicted, 1)}%</b> · history-only baseline <b style="color:${C.text}">${fmtv(selected.baseline, 1)}%</b> · actual <b style="color:${C.text}">${fmtv(selected.actual, 1)}%</b>${componentDetail}<br>mixture miss <b style="color:${Math.abs(selected.error) <= 10 ? C.green : C.amber}">${fmtv(Math.abs(selected.error), 1)} pp</b> · history miss <b>${fmtv(selectedBaselineError, 1)} pp</b> · incremental <b style="color:${selectedIncrement > 0 ? C.green : C.red}">${selectedIncrement >= 0 ? '+' : ''}${fmtv(selectedIncrement, 1)} pp</b><br>${esc(savedVisualKeepAccountName(selected.account, selected.accountName))} · ${selected.historyN} strictly earlier uploads · history cutoff ${selected.historyEnd ? new Date(selected.historyEnd).toLocaleDateString() : 'recorded in artifact'}<br><b>This scalar combines the visual and together embeddings with creator history. It does not live on either raw embedding plane. “Prequential” means future labels were excluded; it does not identify a causal effect.</b></div>${detailActions}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to inspect the exact mixture prediction, components, honest baseline, truth, errors, and history, then open either contributing raw embedding separately.</div>`;
         return `<div data-savedcreatorkeep-scatter style="min-width:0"><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${detail}</div>`;
     }
     function savedCreatorKeepQuantile(sortedValues, quantile) {
@@ -7165,14 +9045,14 @@ const JarvisRetention = (function () {
             ...accountMetrics.map(item => [item.account, `${savedVisualKeepAccountName(item.account, item.name)} ${item.n}`]),
         ].map(([key, label]) => `<button type="button" data-savedcreatorkeepaccount="${esc(key)}" style="cursor:pointer;min-height:44px;background:transparent;border:1px solid ${accountKey === key ? savedValidationAccountColor(key) : C.border};color:${accountKey === key ? C.text : C.dim};padding:8px 10px;font-size:8px;white-space:nowrap">${esc(label)}</button>`).join('');
         const prequentialCards = [
-            ['Account MAE target', `${target.pointEstimatePassCount || 0}/${target.accountCount || 0}`, target.allAccountsPassPointEstimate ? C.green : C.red, 'Creators at or below 10 pp mean absolute error in the causal final window.'],
+            ['Account MAE target', `${target.pointEstimatePassCount || 0}/${target.accountCount || 0}`, target.allAccountsPassPointEstimate ? C.green : C.red, 'Creators at or below 10 pp mean absolute error in the prequential final window.'],
             ['90% uncertainty target', `${target.bootstrap90UpperPassCount || 0}/${target.accountCount || 0}`, target.allAccountsPassBootstrap90Upper ? C.green : C.amber, 'Creators whose bootstrap 90% upper bound is also at or below 10 pp.'],
-            ['Prequential mixture MAE', scopedMetrics.mae == null ? '—' : `${fmtv(scopedMetrics.mae, 2)} pp`, scopedMetrics.mae <= 10 ? C.green : C.red, accountKey === 'all' ? 'Video-weighted across all causal next-upload predictions.' : 'Mean absolute error for this creator.'],
+            ['Prequential mixture MAE', scopedMetrics.mae == null ? '—' : `${fmtv(scopedMetrics.mae, 2)} pp`, scopedMetrics.mae <= 10 ? C.green : C.red, accountKey === 'all' ? 'Video-weighted across all time-ordered next-upload predictions.' : 'Mean absolute error for this creator.'],
             ['History-only MAE', scopedMetrics.baselineMae == null ? '—' : `${fmtv(scopedMetrics.baselineMae, 2)} pp`, C.text, 'The matched null uses the exact strictly earlier creator history available to each prediction.'],
             ['Incremental MAE value', improvement == null ? '—' : `${improvement >= 0 ? '+' : ''}${fmtv(improvement, 2)} pp`, improvement > 0 ? C.green : C.red, 'History-only MAE minus mixture MAE. Positive means the multimodal mixture adds value.'],
             ['MSE skill vs history', squaredErrorSkill == null ? '—' : `${squaredErrorSkill >= 0 ? '+' : ''}${fmtv(squaredErrorSkill * 100, 1)}%`, squaredErrorSkill > 0 ? C.green : C.red, 'Squared-error reduction against the same legitimate history-only null. Positive is better.'],
             ['Prequential ±10 coverage', scopedMetrics.within10PercentagePoints == null ? '—' : `${fmtv(scopedMetrics.within10PercentagePoints, 1)}%`, scopedMetrics.within10PercentagePoints >= 80 ? C.green : C.amber, `${scopedPoints.filter(point => Math.abs(+point.error) <= 10).length}/${scopedPoints.length} predictions landed within ten percentage points.`],
-            ['Prequential p90 miss', scopedMetrics.p90AbsoluteError == null ? '—' : `${fmtv(scopedMetrics.p90AbsoluteError, 2)} pp`, scopedMetrics.p90AbsoluteError <= 10 ? C.green : C.amber, 'Nine out of ten causal replay misses were at or below this size.'],
+            ['Prequential p90 miss', scopedMetrics.p90AbsoluteError == null ? '—' : `${fmtv(scopedMetrics.p90AbsoluteError, 2)} pp`, scopedMetrics.p90AbsoluteError <= 10 ? C.green : C.amber, 'Nine out of ten chronological replay misses were at or below this size.'],
             ['Prequential prediction span', scopedMetrics.predictedRange == null ? '—' : `${fmtv(scopedMetrics.predictedRange, 1)} pp`, C.cyan, `Observed span ${fmtv(scopedMetrics.actualRange, 1)} pp; no forced range expansion.`],
         ].map(metricCard).join('');
         const frozenCards = [
@@ -7228,14 +9108,14 @@ const JarvisRetention = (function () {
             || study.benchmark && study.benchmark.artifactSha256
             || null;
         return `<section data-savedcreatorkeep-study style="border-top:1px solid ${C.cyan};border-bottom:1px solid ${C.cyan};padding:14px 0;margin:12px 0">
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div style="min-width:0"><div style="font-size:15px;color:${C.text};font-weight:950">Known-creator causal multimodal keep mixture</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px;max-width:850px">${esc(inputSummary)} ${esc(study.population ? `${study.population.n} videos · ${study.population.accounts.length} creators · two ${study.population.embeddingDimensions}D ${study.population.embeddingModel} representations` : '')}</div></div><div style="text-align:right"><div style="font-size:8px;color:${C.amber};font-weight:950">RESEARCH ONLY · NOT PREDICTOR-ELIGIBLE</div><div style="font-size:8px;color:${target.allAccountsPassPointEstimate ? C.green : C.red};font-weight:950;margin-top:2px">${target.allAccountsPassPointEstimate ? `${esc(accountTargetLabel)} ACCOUNT-MAE CEILING MET` : `${esc(accountTargetLabel)} ACCOUNT-MAE CEILING NOT MET`}</div><div style="font-size:7px;color:${C.faint};max-width:360px;line-height:1.35">${esc(statusSummary)}</div></div></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:7px;margin-top:9px"><div style="border-left:3px solid ${C.green};background:${C.green}08;padding:8px;min-width:0"><div style="font-size:8px;color:${C.green};font-weight:950">INPUT 1 · VISUAL</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">Canonical 1,536D visual opening embedding. Open it independently on the normal <b>visual:keep</b> map.</div></div><div style="border-left:3px solid ${C.accent};background:${C.accent}08;padding:8px;min-width:0"><div style="font-size:8px;color:${C.accent};font-weight:950">INPUT 2 · TOGETHER</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">Canonical 1,536D together embedding: visual opening plus transcript text. Open it independently on the normal <b>together:keep</b> map.</div></div><div style="border-left:3px solid ${C.amber};background:${C.amber}08;padding:8px;min-width:0"><div style="font-size:8px;color:${C.amber};font-weight:950">CAUSAL HISTORY</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">At most ${historyWindow} same-creator keep labels with timestamps strictly earlier than the target; at least ${minimumHistory} required.</div></div></div>
-          <div style="font-size:8px;color:${C.cyan};line-height:1.55;margin-top:8px;overflow-wrap:anywhere"><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified causal candidates evaluated only on the chronological 50%–80% selection window; equal timestamps remain one batch. <b>Selected formula:</b> ${esc(lockedFormula)}. The final 20% did not select the formula.</div>
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div style="min-width:0"><div style="font-size:15px;color:${C.text};font-weight:950">Known-creator prequential multimodal keep mixture</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px;max-width:850px">${esc(inputSummary)} ${esc(study.population ? `${study.population.n} videos · ${study.population.accounts.length} creators · two ${study.population.embeddingDimensions}D ${study.population.embeddingModel} representations` : '')}</div></div><div style="text-align:right"><div style="font-size:8px;color:${C.amber};font-weight:950">RESEARCH ONLY · NOT PREDICTOR-ELIGIBLE</div><div style="font-size:8px;color:${target.allAccountsPassPointEstimate ? C.green : C.red};font-weight:950;margin-top:2px">${target.allAccountsPassPointEstimate ? `${esc(accountTargetLabel)} ACCOUNT-MAE CEILING MET` : `${esc(accountTargetLabel)} ACCOUNT-MAE CEILING NOT MET`}</div><div style="font-size:7px;color:${C.faint};max-width:360px;line-height:1.35">${esc(statusSummary)}</div></div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:7px;margin-top:9px"><div style="border-left:3px solid ${C.green};background:${C.green}08;padding:8px;min-width:0"><div style="font-size:8px;color:${C.green};font-weight:950">INPUT 1 · VISUAL</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">Canonical 1,536D visual opening embedding. Open it independently on the normal <b>visual:keep</b> map.</div></div><div style="border-left:3px solid ${C.accent};background:${C.accent}08;padding:8px;min-width:0"><div style="font-size:8px;color:${C.accent};font-weight:950">INPUT 2 · TOGETHER</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">Canonical 1,536D together embedding: visual opening plus transcript text. Open it independently on the normal <b>together:keep</b> map.</div></div><div style="border-left:3px solid ${C.amber};background:${C.amber}08;padding:8px;min-width:0"><div style="font-size:8px;color:${C.amber};font-weight:950">PRIOR-OUTCOME HISTORY</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">At most ${historyWindow} same-creator keep labels with timestamps strictly earlier than the target; at least ${minimumHistory} required.</div></div></div>
+          <div style="font-size:8px;color:${C.cyan};line-height:1.55;margin-top:8px;overflow-wrap:anywhere"><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified time-ordered candidates evaluated only on the chronological 50%–80% selection window; equal timestamps remain one batch. <b>Selected formula:</b> ${esc(lockedFormula)}. The final 20% did not select the formula.</div>
           <div style="display:flex;gap:4px;overflow:auto;margin:8px 0;-webkit-overflow-scrolling:touch">${accountButtons}</div>
-          <div style="font-size:10px;color:${C.text};font-weight:950;margin:10px 0 4px">Causal prequential final tail · one next upload at a time</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:5px">${esc(evaluation.protocol || '')}</div>
+          <div style="font-size:10px;color:${C.text};font-weight:950;margin:10px 0 4px">Prequential final tail · one next upload at a time</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:5px">${esc(evaluation.protocol || '')} “Prequential” means each row used only information available earlier in time; it does not estimate a causal treatment effect.</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:7px">${prequentialCards}</div>
           <div style="margin-top:10px;min-width:0">${savedCreatorAdaptiveKeepScatter(study, accountKey, validation)}</div>
-          ${savedCreatorKeepErrorDistribution(scopedPoints, accountKey, 'prequential', 'Causal prequential')}
+          ${savedCreatorKeepErrorDistribution(scopedPoints, accountKey, 'prequential', 'Prequential')}
           <div style="font-size:10px;color:${C.text};font-weight:950;margin:12px 0 4px">Frozen final-tail stress · no tail outcomes consumed</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:5px">${esc(frozen.protocol || '')} ${esc(frozen.claimBoundary || '')}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:7px">${frozenCards}</div>
           ${savedCreatorKeepErrorDistribution(scopedFrozenPoints, accountKey, 'frozen', 'Frozen final-tail')}
@@ -7248,7 +9128,7 @@ const JarvisRetention = (function () {
     function savedValidationCoordinateFilter(column, entry, filter) {
         if (filter === 'all') return true;
         if (filter === 'strict') {
-            return ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepForecast'].includes(column.family)
+            return ['creatorExcludedPublic', 'videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepPrequential'].includes(column.family)
                 && column.predictorEligible !== false
                 && !!entry
                 && entry.available !== false
@@ -7257,6 +9137,7 @@ const JarvisRetention = (function () {
         if (filter === 'stored') return column.family === 'stored';
         if (filter === 'video') return ['videoHeldout', 'videoForecast'].includes(column.family);
         if (filter === 'account') return ['accountHeldout', 'accountForecast'].includes(column.family);
+        if (filter === 'public') return column.family === 'creatorExcludedPublic';
         if (filter === 'derived') return column.valueClass === 'embedding_derived_transform';
         if (filter === 'forecast') return column.valueClass === 'combined_forecast';
         if (filter === 'outcome') return column.family === 'observed';
@@ -7274,7 +9155,7 @@ const JarvisRetention = (function () {
         const evidence = savedValidationEvidenceMeta(entry, outcome);
         const metric = savedValidationPredictiveMetric(entry, outcome);
         const rawRho = entry.metrics && entry.metrics.spearman;
-        return `<td data-savedvalidationcell data-savedvalidationcoordinate="${esc(coordinateId)}" data-savedvalidationoutcome="${esc(outcome.key)}" style="padding:6px;border-left:1px solid ${C.border};background:${evidence.color}09;cursor:pointer"><div style="font-size:10px;color:${evidence.color};font-weight:950">${metric.value == null ? '—' : `${metric.key} ${fmtv(metric.value, 2)}`}</div><div style="font-size:6.8px;color:${C.dim}">ρ ${fmtv(rawRho, 2)} · n=${entry.metrics && (entry.metrics.oofN || entry.metrics.n) || 0}</div></td>`;
+        return `<td data-savedvalidationcell data-savedvalidationcoordinate="${esc(coordinateId)}" data-savedvalidationoutcome="${esc(outcome.key)}" style="padding:6px;border-left:1px solid ${C.border};background:${evidence.color}09;cursor:pointer"><div style="font-size:10px;color:${evidence.color};font-weight:950">${metric.value == null ? 'association' : `${metric.key} ${fmtv(metric.value, 2)}`}</div><div style="font-size:6.8px;color:${C.dim}">ρ ${fmtv(rawRho, 2)} · n=${entry.metrics && (entry.metrics.predictionN || entry.metrics.n) || 0}</div></td>`;
     }
     function renderSavedChannelValidation(detail) {
         const validation = SAVEDCHANNELVALIDATION;
@@ -7302,7 +9183,7 @@ const JarvisRetention = (function () {
         let selectedEntry = selectedEntries.find(entry => (entry.coordinateId || entry.id || entry.key) === st.savedValidationFeature);
         if (!selectedEntry || selectedEntry.available === false) {
             selectedEntry = selectedEntries.find(entry => (
-                ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepForecast'].includes(entry.family)
+                ['creatorExcludedPublic', 'videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepPrequential'].includes(entry.family)
                 && entry.available !== false
                 && entry.predictorEligible !== false
             )) || selectedEntries.find(entry => entry.available !== false);
@@ -7315,23 +9196,16 @@ const JarvisRetention = (function () {
         const query = String(st.savedValidationQuery || '').trim().toLowerCase();
         const filterOptions = [
             ['all', `All ${allColumns.length}`],
-            ['strict', 'Blind predictors'],
+            ['strict', 'Held-out predictors'],
+            ['public', 'Creator-excluded public'],
             ['video', 'Video held out'],
             ['account', 'Account held out'],
             ['stored', 'Stored'],
             ['derived', 'Derived'],
             ['forecast', 'Forecasts'],
             ['outcome', 'Outcomes'],
-            ['legacy', 'Legacy'],
         ];
         const selectedById = new Map(selectedEntries.map(entry => [entry.coordinateId || entry.id || entry.key, entry]));
-        const axisAddresses = new Map();
-        allColumns.forEach(column => {
-            const fingerprint = column.coordinateIdentity && column.coordinateIdentity.axisFingerprint;
-            if (!fingerprint || column.valueClass !== 'direct_embedding_axis') return;
-            if (!axisAddresses.has(fingerprint)) axisAddresses.set(fingerprint, []);
-            axisAddresses.get(fingerprint).push(column.id);
-        });
         const visibleColumns = allColumns.filter(column => {
             const entry = selectedById.get(column.id);
             if (!savedValidationCoordinateFilter(column, entry, filter)) return false;
@@ -7339,15 +9213,22 @@ const JarvisRetention = (function () {
             return [column.id, column.label, column.family, column.group, column.target, savedValidationPlainMeaning(column, entry)]
                 .join(' ').toLowerCase().includes(query);
         });
-        const strictFamilies = new Set(['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepForecast']);
-        const blindColumnCount = allColumns.filter(column => (
+        const strictFamilies = new Set(['creatorExcludedPublic', 'videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepPrequential']);
+        const heldoutColumnCount = allColumns.filter(column => (
             strictFamilies.has(column.family)
             && column.predictorEligible !== false
         )).length;
-        const aliasColumnCount = totals.shortsDirectAxisAliasColumns == null ? 0 : +totals.shortsDirectAxisAliasColumns;
-        const uniqueBlindPredictionCount = Math.max(0, blindColumnCount - aliasColumnCount);
+        const activeAliasColumnCount = totals.shortsDirectAxisAliasColumns == null
+            ? 0
+            : +totals.shortsDirectAxisAliasColumns;
+        const compatibilityAliasCount = registry.aliases
+            && registry.aliases.length || 0;
+        const uniqueHeldoutPredictionCount = registry.classification
+            && registry.classification.blind
+            && registry.classification.blind.uniquePredictions
+            || heldoutColumnCount;
         const diagnosticCount = allColumns.filter(column => (
-            ['stored', 'visualKeepForecast', 'visualKeepProtocolForecast', 'legacy'].includes(column.family)
+            ['stored', 'visualKeepForecast', 'visualKeepProtocolForecast'].includes(column.family)
             || column.predictorEligible === false
         )).length;
         const observedCount = allColumns.filter(column => column.family === 'observed').length;
@@ -7375,32 +9256,35 @@ const JarvisRetention = (function () {
             const entry = selectedById.get(column.id);
             const family = savedValidationFamilyMeta(column);
             const selected = selectedId === column.id;
-            const fingerprint = column.coordinateIdentity && column.coordinateIdentity.axisFingerprint;
-            const aliases = fingerprint && axisAddresses.get(fingerprint) || [];
-            const aliasLabel = aliases.length > 1 ? ` · shared-axis alias (${aliases.length} ledger addresses)` : '';
-            return `<tr data-savedvalidationfeature="${esc(column.id)}" style="border-top:1px solid ${selected ? family.color : C.border};background:${selected ? family.color + '09' : 'transparent'}"><td style="position:sticky;left:0;z-index:1;background:${selected ? C.card2 : C.card};padding:7px;min-width:265px;cursor:pointer"><div style="font-size:9px;color:${savedChannelFeatureColor(column.group)};font-weight:950">${esc(column.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all;margin-top:2px">${esc(column.id)}</div><div style="font-size:6.8px;color:${family.color};margin-top:2px">${esc(family.label)} · ${esc(savedLedgerClassMeta(column.valueClass).label)}${esc(aliasLabel)}</div></td>${heatmapOutcomes.map(item => savedValidationHeatCell(savedValidationLedgerEntry(scope, item.key, column.id), item, column.id)).join('')}</tr>`;
+            return `<tr data-savedvalidationfeature="${esc(column.id)}" style="border-top:1px solid ${selected ? family.color : C.border};background:${selected ? family.color + '09' : 'transparent'}"><td style="position:sticky;left:0;z-index:1;background:${selected ? C.card2 : C.card};padding:7px;min-width:265px;cursor:pointer"><div style="font-size:9px;color:${savedChannelFeatureColor(column.group)};font-weight:950">${esc(column.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all;margin-top:2px">${esc(column.id)}</div><div style="font-size:6.8px;color:${family.color};margin-top:2px">${esc(family.label)} · ${esc(savedLedgerClassMeta(column.valueClass).label)}</div></td>${heatmapOutcomes.map(item => savedValidationHeatCell(savedValidationLedgerEntry(scope, item.key, column.id, validation), item, column.id)).join('')}</tr>`;
         }).join('');
         const selectedFamily = savedValidationFamilyMeta(selectedColumn);
         const selectedEvidence = savedValidationEvidenceMeta(selectedEntry, outcome);
         const selectedMetrics = selectedEntry && selectedEntry.metrics || {};
         const selectedMeaning = selectedColumn ? savedValidationPlainMeaning(selectedColumn, selectedEntry) : '';
-        const selectedIsPrequential = selectedEntry && selectedEntry.calibration
-            && selectedEntry.calibration.mode === 'prequential_time';
-        const selectedIsProtocolPrediction = selectedEntry
-            && selectedEntry.calibration
-            && selectedEntry.calibration.mode === 'heldout_protocol_prediction';
+        const selectedEvaluationMode = selectedEntry
+            && selectedEntry.evaluationMode || '';
+        const selectedIsPrequential =
+            selectedEvaluationMode.includes('prequential');
+        const selectedIsProtocolPrediction =
+            selectedEvaluationMode.includes('heldout');
+        const selectedHasPrediction = selectedEntry
+            && selectedEntry.evaluation
+            && selectedEntry.evaluation.identity === true;
         const selectedPredictionLabel = selectedIsPrequential
-            ? 'CAUSAL NEXT-UPLOAD PREDICTION'
+            ? 'HISTORICAL PREQUENTIAL PREDICTION'
             : selectedIsProtocolPrediction
                 ? 'REGISTERED PROTOCOL PREDICTION'
-            : 'OOF PREDICTION';
+                : selectedHasPrediction
+                    ? 'EXACT LEDGER PREDICTION'
+                    : 'ASSOCIATION ONLY';
         const selectedPair = selectedColumn ? `<div data-savedvalidation-selected style="border:1px solid ${selectedFamily.color};background:${selectedFamily.color}08;padding:11px;margin:12px 0">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:8px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div><div style="font-size:15px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:7px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div></div><div style="text-align:right"><div style="font-size:8px;color:${C.mute}">Prediction verdict for ${esc(outcome.label)}</div><div style="font-size:14px;color:${selectedEvidence.color};font-weight:950">${esc(selectedEvidence.label)}</div></div></div>
           <div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:8px">${esc(selectedMeaning)}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px;margin-top:9px">
             <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">${esc(selectedPredictionLabel)}</div><div style="font-size:15px;color:${selectedEvidence.color};font-weight:950">${esc(savedValidationMetricLine(selectedEntry, outcome))}</div></div>
             <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">RAW ASSOCIATION</div><div style="font-size:15px;color:${C.text};font-weight:950">ρ ${fmtv(selectedMetrics.spearman, 3)}</div><div style="font-size:7px;color:${C.dim}">relationship only; not calibrated accuracy</div></div>
-            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE</div><div style="font-size:15px;color:${C.text};font-weight:950">${selectedMetrics.oofN || selectedMetrics.n || 0} videos</div><div style="font-size:7px;color:${C.dim}">${fmtv(selectedEntry && selectedEntry.coverage && selectedEntry.coverage.pairedFraction != null ? selectedEntry.coverage.pairedFraction * 100 : null, 1)}% of eligible scope · ${selectedEntry && selectedEntry.coverage && selectedEntry.coverage.accountCount || 0} creator accounts</div></div>
+            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE</div><div style="font-size:15px;color:${C.text};font-weight:950">${selectedMetrics.predictionN || selectedMetrics.n || 0} videos</div><div style="font-size:7px;color:${C.dim}">${fmtv(selectedEntry && selectedEntry.coverage && selectedEntry.coverage.pairedFraction != null ? selectedEntry.coverage.pairedFraction * 100 : null, 1)}% of eligible scope · ${selectedEntry && selectedEntry.coverage && selectedEntry.coverage.accountCount || 0} creator accounts</div></div>
             <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">VALIDATION CLAIM</div><div style="font-size:8px;color:${selectedFamily.color};font-weight:900;line-height:1.4">${esc(selectedFamily.claim)}</div></div>
           </div>
         </div>` : '';
@@ -7410,32 +9294,35 @@ const JarvisRetention = (function () {
         const selectedRows = selectedColumn ? rows.map(row => ({
             row,
             score: savedValidationCoordinateValue(validation, row, selectedColumn.id),
-            predicted: savedValidationCalibratedCoordinate(
+            predicted: savedValidationRegisteredPrediction(
                 selectedEntry,
-                row,
-                savedValidationCoordinateValue(validation, row, selectedColumn.id),
-                outcome.key,
+                selectedColumn,
+                savedValidationCoordinateValue(
+                    validation,
+                    row,
+                    selectedColumn.id
+                )
             ),
             actual: savedValidationOutcomeValue(row, outcome.key),
-            baseline: selectedColumn.family === 'creatorAdaptiveKeepForecast'
-                && ['keep', 'swipe'].includes(outcome.key)
+            baseline: selectedColumn.family === 'creatorAdaptiveKeepPrequential'
+                && outcome.key === 'keep'
                 && row.predictions
                 && row.predictions.creatorAdaptiveKeepBaseline != null
-                ? (outcome.key === 'swipe'
-                    ? 100 - +row.predictions.creatorAdaptiveKeepBaseline
-                    : +row.predictions.creatorAdaptiveKeepBaseline)
+                ? +row.predictions.creatorAdaptiveKeepBaseline
                 : null,
         })).filter(item => item.score != null && item.actual != null).sort((left, right) => {
-            if (st.savedLedgerPlotMode === 'raw') return right.score - left.score;
+            if (st.savedLedgerPlotMode === 'raw' || !selectedHasPrediction) {
+                return right.score - left.score;
+            }
             const rightPrediction = Number.isFinite(+right.predicted) ? +right.predicted : -Infinity;
             const leftPrediction = Number.isFinite(+left.predicted) ? +left.predicted : -Infinity;
             return rightPrediction - leftPrediction;
         }) : [];
         const rowLimit = st.savedValidationShow || 60;
         const selectedShowsHistoryBaseline = selectedColumn
-            && selectedColumn.family === 'creatorAdaptiveKeepForecast'
-            && ['keep', 'swipe'].includes(outcome.key);
-        const rowTable = selectedColumn ? `<div data-savedvalidation-video-table style="overflow:auto;max-height:620px"><table style="width:100%;min-width:${selectedShowsHistoryBaseline ? 1040 : 820}px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="text-align:left;color:${C.mute}"><th style="padding:6px">Video</th><th>Raw ${esc(selectedColumn.label)}</th>${selectedShowsHistoryBaseline ? '<th>History-only baseline</th><th>Incremental absolute-error value</th>' : ''}<th>${selectedIsPrequential ? 'Causal' : 'Held-out'} predicted ${esc(outcome.label)}</th><th>Actual ${esc(outcome.label)}</th><th>Error</th><th>Account</th><th>Availability</th></tr></thead><tbody>${selectedRows.slice(0, rowLimit).map(item => {
+            && selectedColumn.family === 'creatorAdaptiveKeepPrequential'
+            && outcome.key === 'keep';
+        const rowTable = selectedColumn ? `<div data-savedvalidation-video-table style="overflow:auto;max-height:620px"><table style="width:100%;min-width:${selectedShowsHistoryBaseline ? 1040 : 820}px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="text-align:left;color:${C.mute}"><th style="padding:6px">Video</th><th>Ledger ${esc(selectedColumn.label)}</th>${selectedShowsHistoryBaseline ? '<th>History-only baseline</th><th>Incremental absolute-error value</th>' : ''}<th>${selectedHasPrediction ? (selectedIsPrequential ? 'Prequential' : 'Registered') + ' predicted ' + esc(outcome.label) : 'Cross-outcome prediction'}</th><th>Actual ${esc(outcome.label)}</th><th>Error</th><th>Account</th><th>Availability</th></tr></thead><tbody>${selectedRows.slice(0, rowLimit).map(item => {
             const blindOnly = item.row.validationSource === 'predictor_blind_inputs_only';
             const predictedOutput = savedValidationModelOutput(item.predicted, outcome.key);
             const error = outcome.unit === 'binary' || predictedOutput == null ? null : predictedOutput - item.actual;
@@ -7452,14 +9339,14 @@ const JarvisRetention = (function () {
             ['Account held out', 'Every video from that creator is excluded before fitting. Tests transfer to an unseen creator; certainty depends on how many independent creator accounts are available.'],
             ['Direct axis', 'One fitted direction through the embedding space.'],
             ['Derived score', 'A formula over prior coordinates or metadata, not a new embedding.'],
-            ['Forecast', 'A calibrated model that combines coordinates; still separately held out.'],
+            ['Forecast', 'A registered upstream model that combines coordinates. The matrix evaluates its exact ledger output and never fits another chart-specific model.'],
             ['Prequential next upload', 'The prediction is made from strictly earlier uploads in time. Once the current upload outcome is observed, it may enter the next prediction. It is not a frozen-backlog or cold-start claim.'],
-            ['Alias', 'A second ledger address for the exact same fitted axis. It is visible for protocol traceability but does not count as independent evidence.'],
+            ['Compatibility alias', 'An old ID that resolves to one active canonical coordinate. Aliases are outside the active ledger and never enter testing or multiple-comparison counts.'],
             ['Observed outcome', 'Independent measured truth. It cannot be used as a predictor of itself.'],
-            ['OOF R²', 'Out-of-fold predictive value versus the training-fold mean. Above 0 helps; below 0 hurts.'],
+            ['Prediction R²', 'Conventional R² of the exact registered prediction against displayed outcomes. Protocol-baseline skill is reported separately when a real upstream baseline exists.'],
             ['ρ', 'Spearman rank correlation. It says whether higher scores tend to rank higher outcomes, not whether the numeric prediction is accurate.'],
-            ['MAE / factor error', 'Typical held-out miss: percentage points for retention, multiplicative factor for views.'],
-            ['Global q', 'False-discovery-rate adjustment across every eligible coordinate × outcome test on this screen. It prevents the best-looking result among many searches from receiving an easy significance claim.'],
+            ['MAE / factor error', 'Typical exact-ledger miss: percentage points for retention, multiplicative factor for views.'],
+            ['Global exploratory q', 'False-discovery-rate adjustment across unique coordinate axes × outcome families. Exact inverses and compatibility aliases count once. It remains exploratory until creator-blocked inference and enough independent creators are available.'],
         ].map(([label, body]) => `<div style="padding:7px 0;border-top:1px solid ${C.border}"><b style="font-size:8px;color:${C.text}">${esc(label)}</b><div style="font-size:7.5px;color:${C.dim};line-height:1.4">${esc(body)}</div></div>`).join('');
         const scopeButtons = [
             ['pooled', `All validation videos (${scopes.pooled && (scopes.pooled.validationN || scopes.pooled.n) || 0})`],
@@ -7467,11 +9354,11 @@ const JarvisRetention = (function () {
             ['hafu', `Hafu (${scopes.hafu && (scopes.hafu.validationN || scopes.hafu.n) || 0})`],
         ].map(([key, label]) => `<span data-savedvalidationscope="${key}" style="cursor:pointer;border-bottom:2px solid ${scopeKey === key ? C.cyan : 'transparent'};color:${scopeKey === key ? C.text : C.dim};padding:5px 9px;font-size:9px;font-weight:900;white-space:nowrap">${esc(label)}</span>`).join('');
         return `<div data-savedvalidation-canonical data-coordinate-count="${allColumns.length}" data-outcome-count="${outcomes.length}" style="min-width:0">
-          <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">What predicts performance?</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">One canonical ledger. ${allColumns.length} registered columns × ${outcomes.length} independently defined outcomes. Every graph is exactly one coordinate ID versus one observed outcome ID.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${blindColumnCount} blind columns · ${uniqueBlindPredictionCount} unique blind predictions · ${aliasColumnCount} alias columns · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
+          <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">What predicts performance?</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">One canonical ledger. ${allColumns.length} registered columns × ${outcomes.length} defined outcomes. Native prediction cells evaluate the exact ledger value; every other cell is association-only.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${heldoutColumnCount} leakage-controlled held-out columns · ${uniqueHeldoutPredictionCount} unique held-out predictions · ${activeAliasColumnCount} active aliases · ${compatibilityAliasCount} compatibility aliases outside the ledger · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
           <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:10px">${scopeButtons}</div>
           ${creatorAdaptiveKeepStudy}
           ${visualKeepStudy}
-          ${note(`<b>Read this first:</b> ${allColumns.length} ledger columns do not mean ${allColumns.length} independent embeddings. The frozen visual forecast reuses the existing 1,536D visual embedding. The causal creator mixture combines the existing visual and together (visual + text) embeddings with strictly earlier creator history; it is one research scalar, not either raw plane and never predictor-eligible. Direct axes, derived formulas, forecasts, measured outcomes, aliases, and legacy diagnostics are all kept in one ledger so names cannot drift. “Leakage audit passed” means the recorded train/test IDs do not overlap; it does not mean every individual prediction is within 10 points.`, C.cyan)}
+          ${note(`<b>Read this first:</b> ${allColumns.length} ledger columns do not mean ${allColumns.length} independent embeddings. Direct axes, deterministic transforms, forecasts, diagnostics, and outcomes are explicitly classified. Old aliases and retired IDs live only in compatibility metadata, so they cannot duplicate tests or values. A prediction graph is available only for a coordinate's registered target; cross-target pairings remain association-only. “Leakage audit passed” means the recorded upstream train/test IDs do not overlap; it does not imply universal creator transfer.`, C.cyan)}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;margin-bottom:12px">${summaryCards}</div>
           <div style="font-size:12px;color:${C.text};font-weight:950;margin:12px 0 4px">All ${allColumns.length} coordinates × all ${outcomes.length} observed outcomes</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">Each of the ${allColumns.length * outcomes.length} cells reports the exact registered coordinate against one independently defined outcome. Scroll sideways for retention-curve checkpoints; click any cell to see its scatter, definition, videos, coverage, and lineage.</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:190px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:8px"/></div>
@@ -8022,7 +9909,7 @@ const JarvisRetention = (function () {
             shortsDirectHeldout: 0,
             shortsCombinedForecasts: 0,
             shortsObservedOutcomes: 0,
-            longStoredOutputs: 12,
+            longStoredOutputs: 21,
         };
         const audit = model.validation && model.validation.ledgerAudit;
         const rowProvenance = audit && audit.rowProvenance || {};
@@ -8033,8 +9920,8 @@ const JarvisRetention = (function () {
         return `<div data-savedledger data-saved-channel-ledger data-selected-coordinate-id="${esc(selectedColumn && selectedColumn.id || '')}" style="min-width:0">
           <div style="border:1px solid ${audit && !audit.passed ? C.red : C.green};background:${audit && !audit.passed ? C.red : C.green}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Canonical score ledger</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:2px">One row per Short. One stable ID per interpretation. A graph may compare two IDs, but it cannot create a third number.</div></div><div style="text-align:right"><div style="font-size:9px;color:${audit && !audit.passed ? C.red : C.green};font-weight:950">${audit ? audit.passed ? 'LEDGER PARITY AUDIT PASSED' : 'LEDGER PARITY AUDIT FAILED' : '21 STORED COORDINATES AVAILABLE'}</div><div style="font-size:7px;color:${C.faint}">${audit ? `${audit.rows} matched rows · ${audit.columns} registered scalar columns` : `${model.rows.length} scored rows`}</div></div></div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;margin-bottom:10px">${classSummaryCards}</div>
-          <div style="background:${C.card2};border-left:3px solid ${C.amber};padding:9px;margin-bottom:8px;font-size:8.8px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">${totals.shortsRowColumns || model.columns.length} columns are not ${totals.shortsRowColumns || model.columns.length} embedding spaces.</b> The registry separates <b style="color:${C.cyan}">${classCounts.find(item => item.key === 'direct_embedding_axis').count} direct-axis columns representing ${registry.totals && registry.totals.shortsDistinctDirectEmbeddingAxes || 36} distinct fitted axes</b> (${registry.totals && registry.totals.shortsDirectAxisAliasColumns || 9} public-axis aliases appear in both holdout views), <b style="color:${C.purple}">${classCounts.find(item => item.key === 'embedding_derived_transform').count} embedding-derived transforms</b>, <b style="color:${C.amber}">${classCounts.find(item => item.key === 'combined_forecast').count} combined forecasts</b>, <b style="color:${C.green}">${classCounts.find(item => item.key === 'observed_outcome').count} observed outcomes</b>, and <b style="color:${C.orange}">${classCounts.find(item => item.key === 'legacy_diagnostic').count} legacy diagnostics</b>. The visual keep forecast is one combined forecast derived from the existing visual vector.</div>
-          <div style="background:${C.card2};border-left:3px solid ${C.cyan};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Identity rule:</b> ${esc(registry && registry.rules && registry.rules[1] || 'A relationship plot pairs a score coordinate with an observed outcome; it never creates a new score.')} ${registry ? `Shorts and Long Quant expose ${(totals.shortsStoredProduction || 0) + (totals.shortsVisualKeepForecasts || 0) + (totals.shortsCreatorAdaptiveKeepForecasts || 0) + (totals.longStoredOutputs || 0)} current persisted, frozen, or registered causal outputs total; map projections are views of those data, not new scores.` : ''}</div>
+          <div style="background:${C.card2};border-left:3px solid ${C.amber};padding:9px;margin-bottom:8px;font-size:8.8px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">${totals.shortsRowColumns || model.columns.length} columns are not ${totals.shortsRowColumns || model.columns.length} embedding spaces.</b> The registry separates <b style="color:${C.cyan}">${classCounts.find(item => item.key === 'direct_embedding_axis').count} direct-axis columns representing ${registry.totals && registry.totals.shortsDistinctDirectEmbeddingAxes || 36} distinct fitted axes</b>. Historical public-axis addresses are ${registry.totals && registry.totals.shortsCompatibilityAliases || 0} compatibility aliases outside the active row, so they cannot double-count a model. The row also contains <b style="color:${C.purple}">${classCounts.find(item => item.key === 'embedding_derived_transform').count} embedding-derived transforms</b>, <b style="color:${C.amber}">${classCounts.find(item => item.key === 'combined_forecast').count} combined model outputs</b>, and <b style="color:${C.green}">${classCounts.find(item => item.key === 'observed_outcome').count} observed outcomes</b>. The frozen visual keep model score is one scalar derived from the existing visual vector; row metadata determines whether its evaluation is score-time or in-sample.</div>
+          <div style="background:${C.card2};border-left:3px solid ${C.cyan};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Identity rule:</b> ${esc(registry && registry.rules && registry.rules[1] || 'A relationship plot pairs a score coordinate with an observed outcome; it never creates a new score.')} ${registry ? `Shorts and Long Quant expose ${(totals.shortsStoredProduction || 0) + (totals.shortsVisualKeepForecasts || 0) + (totals.shortsCreatorAdaptiveKeepForecasts || 0) + (totals.longStoredOutputs || 0)} current persisted, frozen, or registered prequential outputs total; map projections are views of those data, not new scores.` : ''}</div>
           <div style="background:${C.card2};border-left:3px solid ${C.purple};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Evidence rule:</b> Exact row counts, video-ID hashes, exclusions, artifact hashes, and revisions are displayed when they were persisted. A historical fit manifest that was never saved is labeled unknown; this screen does not infer a training population from a newer map revision. <b style="color:${C.green}">${rowProvenance.exactScorerManifestRows || 0}</b> rows have exact scorer manifests and <b style="color:${C.green}">${rowProvenance.exactNoveltySelectionRows || 0}</b> pin all three novelty selections; ${rowProvenance.historicalOrIncompleteScorerManifestRows || 0} / ${rowProvenance.historicalOrIncompleteNoveltySelectionRows || 0} historical rows remain explicitly incomplete.</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${familyButtons}<input data-savedledgerquery value="${esc(st.savedLedgerQuery || '')}" placeholder="filter videos…" style="margin-left:auto;min-width:160px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:9px"/><span data-savedledgerexport title="Exports every registered coordinate value, regardless of the visible family filter" style="cursor:pointer;border:1px solid ${C.green};color:${C.green};padding:4px 8px;font-size:8px;font-weight:900">download value CSV</span><span data-savedledger-provenance-export title="Exports every coordinate and its complete resolved lineage" style="cursor:pointer;border:1px solid ${C.purple};color:${C.purple};padding:4px 8px;font-size:8px;font-weight:900">download provenance CSV</span></div>
           ${renderSavedLedgerPipeline(selectedColumn, registry)}
@@ -8048,7 +9935,7 @@ const JarvisRetention = (function () {
               {
                   key: 'long',
                   title: 'Long Quant output provenance',
-                  description: 'The 12 registered Long outputs disclose thumbnail/title inputs, direct versus derived origin, fitting population, scalar formula, calibration, artifact, and map view.',
+                  description: 'The 21 registered Long scalar addresses disclose visual/text/together inputs, fitting population, scalar formula, calibration, artifact, and related map view. Nullable scalar outputs and map placements remain distinct.',
               }
           ) : ''}
           ${registry ? `<div style="font-size:8px;color:${C.faint};line-height:1.5;margin-top:8px">Shorts map views: ${esc(registry.shortsMapProjections.keys.join(', '))}. Long map views: ${esc(registry.longQuant.mapProjections.join(', '))}. These projection names are registered visualization modes and do not add scalar columns.</div>` : ''}
@@ -8060,7 +9947,11 @@ const JarvisRetention = (function () {
         if (detail.error) return cardc(`<div style="padding:16px;color:${C.red}">${esc(detail.error)}</div>`, 10);
         const statusColor = savedChannelStatusColor(detail.status), total = detail.discovered || 0, completed = detail.completed || 0, failed = detail.failed || 0;
         const progress = total ? completed / total * 100 : 0, active = ['queued', 'running', 'stopping'].includes(detail.status);
-        const tab = st.savedChannelTab || 'library';
+        const requestedTab = st.savedChannelTab || 'library';
+        const tab = requestedTab === 'analysis' || requestedTab === 'atlas'
+            ? 'explore'
+            : requestedTab;
+        if (tab !== requestedTab) st.savedChannelTab = tab;
         const validationSupported = detail.id === 'chd3f5a3dae83f3382' || detail.id === 'ch87ccaa3dd3383515';
         const tabButton = (key, label) => `<span data-savedchanneltab="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:5px 10px;font-size:11px;font-weight:800">${label}</span>`;
         const actionBusy = st.savedChannelActionBusy;
@@ -8069,8 +9960,8 @@ const JarvisRetention = (function () {
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:6px;margin-bottom:8px">${statc('Status', String(detail.status || 'queued'), statusColor)}${statc('Scored', `${completed}/${total}`, C.green)}${statc('Queued', detail.queued || 0, C.cyan)}${statc('Errors', failed, failed ? C.red : C.dim)}</div>
           <div style="height:7px;background:${C.border};border-radius:5px;overflow:hidden;margin-bottom:5px"><span style="display:block;width:${progress.toFixed(1)}%;height:100%;background:${statusColor}"></span></div>
           <div style="font-size:9px;color:${C.dim};margin-bottom:10px">${detail.current ? `Running now: <b style="color:${C.cyan}">${esc(detail.current.title || detail.current.id)}</b> · ${completed + failed + 1} of ${total}` : unfinished ? `Incomplete: <b style="color:${C.orange}">${completed}/${total} stored</b> · ${unfinished} can continue from the server button above` : detail.status === 'done' ? `Finished: ${completed}/${total} scored and stored` : `Phase: ${esc(detail.phase || detail.status || 'queued')}`}</div>
-          <div style="display:flex;border-bottom:1px solid ${C.border};margin-bottom:10px;overflow-x:auto">${tabButton('library', `Library (${total})`)}${tabButton('ledger', 'Score ledger')}${tabButton('analysis', 'Prediction analysis')}${tabButton('atlas', 'Relationship atlas (21)')}${validationSupported ? tabButton('validation', 'Blind validation') : ''}</div>
-          ${tab === 'ledger' ? renderSavedChannelLedger(detail) : tab === 'analysis' ? renderSavedChannelAnalysis(detail) : tab === 'atlas' ? renderSavedChannelRelationshipAtlas(detail) : tab === 'validation' && validationSupported ? renderSavedChannelValidation(detail) : renderSavedChannelLibrary(detail)}`, 12);
+          <div style="display:flex;border-bottom:1px solid ${C.border};margin-bottom:10px;overflow-x:auto">${tabButton('library', `Library (${total})`)}${tabButton('ledger', 'Score ledger')}${tabButton('explore', 'Exploratory public analysis')}${validationSupported ? tabButton('validation', 'Leakage-controlled retrospective validation') : ''}</div>
+          ${tab === 'ledger' ? renderSavedChannelLedger(detail) : tab === 'explore' ? `<div data-savedchannel-exploratory-public><div style="border-left:3px solid ${C.amber};background:${C.amber}0b;padding:8px;margin-bottom:10px;font-size:8.7px;color:${C.dim};line-height:1.5"><b style="color:${C.amber}">Exploratory only:</b> these two chart groups share one cached 21-feature public-data artifact. They describe within-channel relationships to public views and do not create ledger coordinates or held-out predictions.</div>${renderSavedChannelAnalysis(detail)}${renderSavedChannelRelationshipAtlas(detail)}</div>` : tab === 'validation' && validationSupported ? renderSavedChannelValidation(detail) : renderSavedChannelLibrary(detail)}`, 12);
     }
     function savedChannelsPanel() {
         const channels = (SAVEDCHANNELS && SAVEDCHANNELS.channels) || [];
@@ -8100,14 +9991,43 @@ const JarvisRetention = (function () {
         // filter on any combination of metrics; sort by the chosen sort metric (default keep)
         const METRICS = [['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'embed views ≥', 50, 'M'], ['sviews', 'scaled views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
         const thr = k => F[k] || 0;
+        const metricIdentity = (hook, key) => {
+            if (!hook || hook.predictor_eligible === false
+                || hook.evidence_state === 'legacy_unbound_evidence') return null;
+            const identities = hook.m_identity || {};
+            const identity = identities[key === 'sviews' ? 'realviews' : key];
+            return identity
+                && SHORTS_LEDGER_SHA256.test(String(identity.ledgerSha256 || ''))
+                && /^shorts\.stored\./.test(String(identity.coordinateId || ''))
+                && identity.value != null
+                && isFinite(+identity.value)
+                && identity.valueUnit
+                && identity.target
+                && identity.modality
+                && identity.input
+                ? identity
+                : null;
+        };
+        const metricValue = (hook, key) => {
+            const identity = metricIdentity(hook, key);
+            if (!identity) return null;
+            if (key === 'keep' || key === 'ret5' || key === 'outlier') {
+                return identity.percentile100 == null
+                    ? null
+                    : +identity.percentile100;
+            }
+            if (key === 'gt10M') {
+                return identity.value == null ? null : +identity.value * 100;
+            }
+            return identity.value == null ? null : +identity.value;
+        };
         const pass = h => {
-            const m = h.m || {};
-            if (thr('keep') && !(m.keep >= thr('keep'))) return false;
-            if (thr('ret5') && !(m.ret5 >= thr('ret5'))) return false;
-            if (thr('views') && !(m.views >= thr('views') * 1e6)) return false;
-            if (thr('sviews') && !((m.sviews || 0) >= thr('sviews') * 1e6)) return false;
-            if (thr('gt10M') && !((m.gt10M || 0) * 100 >= thr('gt10M'))) return false;
-            if (thr('outlier') && !(m.outlier >= thr('outlier'))) return false;
+            if (thr('keep') && !(metricValue(h, 'keep') >= thr('keep'))) return false;
+            if (thr('ret5') && !(metricValue(h, 'ret5') >= thr('ret5'))) return false;
+            if (thr('views') && !(metricValue(h, 'views') >= thr('views') * 1e6)) return false;
+            if (thr('sviews') && !(metricValue(h, 'sviews') >= thr('sviews') * 1e6)) return false;
+            if (thr('gt10M') && !(metricValue(h, 'gt10M') >= thr('gt10M'))) return false;
+            if (thr('outlier') && !(metricValue(h, 'outlier') >= thr('outlier'))) return false;
             return true;
         };
         const folders = SAVED.folders || [];
@@ -8117,7 +10037,10 @@ const JarvisRetention = (function () {
         const hooks = all.filter(h => pass(h) && inFolder(h));
         if (sortK === 'recent') hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
         else if (sortK === 'oldest') hooks.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
-        else hooks.sort((a, b) => ((b.m || {})[sortK] || 0) - ((a.m || {})[sortK] || 0));
+        else hooks.sort((a, b) => (
+            (metricValue(b, sortK) ?? -Infinity)
+            - (metricValue(a, sortK) ?? -Infinity)
+        ));
         const SHOW = st.savedShow || (window.innerWidth < 700 ? 20 : 60);
         const fbar = METRICS.map(([k, lab, mx, u]) => `<div style="display:flex;flex-direction:column;gap:1px;min-width:118px">
             <span style="font-size:9px;color:${C.mute}">${lab} ≥ <b style="color:${thr(k) ? C.accent : C.dim}">${thr(k)}${u}</b></span>
@@ -8130,26 +10053,17 @@ const JarvisRetention = (function () {
         const folderOpts = h => `<option value="">📁 —</option>` + folders.map(f => `<option value="${f.id}" ${h.folder === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
         const card = h => {
             const thumb = h.hasMontage ? `/api/raw/saved-montage/${h.id}` : (h.frame_imgs && h.frame_imgs[0] ? `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}` : '');
-            const fullKeep = h.steer ? steerBest(h, 'keep') : null;
-            const keepIdentity = h.m_identity && h.m_identity.keep ? h.m_identity.keep : (fullKeep ? {
-                domain: (h.input_manifest && h.input_manifest.domain) || 'shorts_raw',
-                origin: 'stored-production',
-                channel: fullKeep.mod,
-                target: 'keep',
-                sourceKey: fullKeep.sourceKey,
-                est: fullKeep.est,
-                pctile: fullKeep.pctile,
-                kind: fullKeep.kind,
-                embeddingModel: h.input_manifest && h.input_manifest.embedding_model,
-                scorer: h.input_manifest && h.input_manifest.scorer,
-            } : null);
-            const kpct = keepIdentity && keepIdentity.pctile != null ? keepIdentity.pctile : ((h.m && h.m.keep != null) ? h.m.keep : null);
-            const kraw = keepIdentity && keepIdentity.est != null
-                ? +keepIdentity.est
-                : h.m && h.m.keep_est != null ? +h.m.keep_est : null;
-            const coordinateId = keepIdentity && keepIdentity.channel
-                ? `shorts.stored.${keepIdentity.channel}.keep`
-                : '';
+            const canonicalKeepIdentity = metricIdentity(h, 'keep');
+            const kpct = canonicalKeepIdentity
+                && canonicalKeepIdentity.percentile100 != null
+                ? canonicalKeepIdentity.percentile100
+                : null;
+            const kraw = canonicalKeepIdentity
+                && canonicalKeepIdentity.value != null
+                ? +canonicalKeepIdentity.value
+                : null;
+            const coordinateId = canonicalKeepIdentity
+                && canonicalKeepIdentity.coordinateId || '';
             const liveRevision = SCORECONTRACT && SCORECONTRACT.live
                 && SCORECONTRACT.live.revision_fingerprint || '';
             const storedRevision = h.score_revision_fingerprint
@@ -8164,7 +10078,7 @@ const JarvisRetention = (function () {
             const coordinateLine = coordinateId
                 ? esc(coordinateId)
                 : 'legacy coordinate unavailable';
-            const badge = (kpct != null || kraw != null) ? `<span${embeddingIdentityAttrs(keepIdentity, `saved:${h.id}`)} title="${esc((keepIdentity && keepIdentity.sourceKey) || 'legacy keep identity unavailable')} · raw calibrated percentage and separate corpus rank" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${keepIdentity && keepIdentity.channel === 'together' ? 'Both' : keepIdentity && keepIdentity.channel ? keepIdentity.channel : 'Legacy'} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${Math.round(kpct)}th corpus rank`} · ${coordinateLine}</small><small style="display:block;font-size:6.6px;color:${revisionColor};font-weight:850">${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}</small></span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
+            const badge = (kpct != null || kraw != null) ? `<span${embeddingIdentityAttrs(canonicalKeepIdentity, `saved:${h.id}`)} title="${esc(canonicalKeepIdentity.sourceKey || coordinateId)} · ${esc(canonicalKeepIdentity.input)} · ${esc(canonicalKeepIdentity.valueUnit)} · ledger ${esc(canonicalKeepIdentity.ledgerSha256)}" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${canonicalKeepIdentity.channel === 'together' ? 'Both' : canonicalKeepIdentity.channel} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${Math.round(kpct)}th ${canonicalKeepIdentity.percentileUnit}`} · ${coordinateLine} · ${canonicalKeepIdentity.ledgerSha256.slice(0, 10)}…</small><small style="display:block;font-size:6.6px;color:${revisionColor};font-weight:850">${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}</small></span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'score hidden: canonical ledger binding unavailable' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
             const sel = st.savedSel === h.id;
             return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
               <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>

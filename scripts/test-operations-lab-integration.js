@@ -73,8 +73,11 @@ assert(
     'Saved-hook analysis JSON must not bypass authentication',
 );
 assert(
-    server.includes('redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`'),
-    'Saved montages must use signed R2 redirects instead of entering Render memory',
+    server.includes('const stored = await cloud.getR2SmallObject(')
+        && server.includes('reference.byte_length')
+        && server.includes('16 * 1024 * 1024'),
+    'Saved montages must use an exact canonical byte ceiling (or a bounded '
+        + 'legacy ceiling) before entering Render memory',
 );
 
 assert(

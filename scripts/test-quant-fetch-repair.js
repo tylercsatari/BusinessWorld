@@ -26,8 +26,23 @@ function excludes(source, needle, message) {
 excludes(server, 'redirectR2Object(', 'browser-readable quant media must not use signed R2 redirects');
 includes(
     server,
+    "const SAVED_HOOK_MEDIA_ROOT = 'raw/saved-hooks/media/by-sha256/';",
+    'canonical saved Shorts hook media must use a content-addressed namespace',
+);
+includes(
+    server,
+    'const bytes = await savedHookMontageBytes(',
+    'saved Shorts hook montages must resolve through their ledger-bound media reference',
+);
+includes(
+    server,
+    "? 'public, max-age=31536000, immutable'",
+    'canonical saved Shorts hook media must be served immutably from the app origin',
+);
+excludes(
+    server,
     "serveR2ObjectForRequest(req, res, `raw/saved-hooks/${savedMon[1]}.jpg`, 'image/jpeg'",
-    'saved Shorts hook montages must be streamed from the app origin',
+    'canonical saved Shorts media must not bypass its content-addressed ledger binding',
 );
 includes(
     server,
@@ -51,12 +66,12 @@ includes(server, 'runHeavyScore(() => new Promise(resolve => {', 'raw prewarm mu
 
 // Shorts jobs must be persisted and polled in the Shorts namespace. Polling the
 // Long Quant endpoint happened to work only while both sides used the default.
-includes(server, "quantJobSubmit('raw-embed-youtube', relayRunner, 'shorts', quantRequestId(req))", 'link scoring must create an idempotent Shorts job');
+includes(server, "'raw-embed-youtube',\n                    relayRunner,\n                    'shorts',\n                    quantRequestId(req),\n                    requestFingerprint", 'link scoring must create an exact-input idempotent Shorts job');
 includes(youtubeRelay, 'out = acquire_link(url, rid)', 'the residential relay must acquire media without scoring it');
 includes(server, "'--file', relayTemp", 'relayed media must be scored by the canonical server runtime');
 includes(server, 'validateRawScoreResult(scored)', 'the server must validate a relayed score before returning it');
 excludes(youtubeRelay, 'out = score_link(url, title, creator_profile=creator_profile)', 'one-off link scoring must not run a second scorer environment on the Mac');
-includes(server, "}, 'shorts', quantRequestId(req));", 'upload scoring must create an idempotent Shorts job');
+includes(server, "}, 'shorts', requestId, requestFingerprint);", 'upload scoring must create an exact-input idempotent Shorts job');
 includes(shorts, "'/api/shortsquant/jobs/' + j.jobId", 'Shorts UI must poll the Shorts job namespace');
 excludes(shorts, "'/api/longquant/jobs/' + j.jobId", 'Shorts UI must never poll Long Quant jobs');
 includes(server, 'instance: QUANT_JOB_INSTANCE', 'jobs must record the process instance that owns them');
@@ -73,19 +88,21 @@ for (const marker of [
     includes(shorts, marker, `Shorts scorer must use async jobs: ${marker}`);
 }
 includes(long, "lqxJob('/api/raw-long/embed-montage'", 'Long Quant montage scoring must use async jobs');
-includes(server, "quantJobSubmit('raw-long-embed-image', scoreRunner, 'longform', quantRequestId(req))", 'Long Raw image scoring must use the Long Quant model job');
+includes(server, "'raw-long-embed-image',\n                            scoreRunner,\n                            'longform',\n                            quantRequestId(req),\n                            requestFingerprint", 'Long Raw image scoring must use the exact-input Long Quant model job');
 includes(server, 'const scoreRunner = () => longQuantScoreThumbnail(imageBuffer, title, idea, true);', 'Long Raw image scoring must use the trained Long Quant thumbnail scorer');
-includes(long, "lqxJob('/api/longquant/thumbs/save', payload)", 'Long Quant saves must be durable async jobs');
-includes(server, "quantJobSubmit('thumb-save', saveRunner, 'longform', quantRequestId(req))", 'Long Quant save jobs must be idempotent');
+includes(long, "await lqxJob('/api/longquant/thumbs/save', canonicalPayload)", 'Long Quant saves must be durable async jobs');
+includes(server, "'thumb-save',\n                    saveRunner,\n                    'longform',\n                    quantRequestId(req),\n                    requestFingerprint", 'Long Quant save jobs must be exact-input idempotent');
 includes(shorts, "rtFetchJson('/api/raw/saved-hook/' + id", 'saved hook details must use retrying JSON transport');
 includes(shorts, "rtFetchJson('/api/raw/saved-hooks'", 'saved hook indexes must use retrying JSON transport');
-includes(shorts, 'currentScorerContract(true)', 'opening a saved hook must refresh the live scorer revision before trusting persisted values');
-includes(shorts, "await rtFetchJson('/api/raw/hook-enrich'", 'saved-score migrations must await durable persistence and surface failures');
-includes(shorts, 'montageFromFrameIds(rec.frame_imgs || [])', 'legacy saved hooks must rebuild a missing montage from durable generated frames');
+includes(shorts, 'currentScorerContract(true)', 'opening a saved hook must compare its persisted scorer revision with the live contract');
+includes(shorts, "'Historical display evidence: the score ledger was '", 'legacy saved hooks must be labeled as unbound display evidence');
+includes(shorts, "'This is a new transient score for an unscored '", 'an unscored saved idea may be evaluated only as an explicit transient result');
+excludes(shorts, "await rtFetchJson('/api/raw/hook-enrich'", 'opening saved evidence must never mutate or silently migrate it');
 includes(server, 'surfaceSourceErrors: true', 'map and status routes must surface backing-storage failures');
-includes(server, 'savedChannelValidationCacheIsCompatible', 'saved-channel ledgers must verify a cached artifact before source-failure fallback');
-includes(server, "cacheStatus: 'source-unavailable-hit'", 'ordinary saved channels must remain readable from the last contract-matched ledger when private validation sources are temporarily unavailable');
-includes(server, 'runtimeArtifact.scoredWithContractSha256 === contractSha256', 'a cached ledger must match the exact score contract before fallback');
+includes(server, 'cached.sourceFingerprint === fingerprint', 'saved-channel validation may reuse an artifact only after every source byte matches');
+includes(server, 'return buildFreshSavedChannelValidationBuffer(', 'saved-channel validation must rebuild from current exact sources or fail closed');
+includes(server, 'allowStaleOnSourceError: false', 'validation claims must never fall back to stale source data');
+excludes(server, "cacheStatus: 'source-unavailable-hit'", 'validation claims must not survive unavailable sources through an unverifiable fallback');
 includes(server, 'readPredictorLabReleaseManifest', 'saved-channel validation must begin from the atomic predictor-lab release pointer');
 includes(server, "raw/predictor-lab/release-v1.json", 'the atomic predictor-lab release key must be pinned in the server');
 includes(server, 'The predictor manifest pinned by the atomic release is not available.', 'an atomic release must fail closed when its immutable predictor manifest is missing');
@@ -97,14 +114,22 @@ includes(shorts, 'if (pj.result && pj.result.error) throw new Error(pj.result.er
 includes(long, 'if (j.result && j.result.error) throw new Error(j.result.error);', 'Long Quant jobs must surface scorer error payloads');
 assert((server.match(/validateRawScoreResult\(JSON\.parse\(await (?:upRunner|monRunner)\(\)\)\)/g) || []).length >= 2,
     'upload and montage workers must convert scorer error payloads into failed jobs through the shared validator');
-const passiveLongScores = (long.match(/lqxScoreFor\([^\n]+,\s*false\)/g) || []).length;
-const activeLongScores = (long.match(/lqxScoreFor\([^\n]+,\s*true\)/g) || []).length;
-assert(passiveLongScores >= 6, `Long Quant summary cards must never rescore on render (found ${passiveLongScores} passive calls)`);
-assert(activeLongScores === 5, `only five explicitly opened detail surfaces may repair legacy scores (found ${activeLongScores})`);
+const passiveLongScores = (
+    long.match(/lqxScoreFor\([\s\S]{0,320}?,\s*false\s*\)/g)
+    || []
+).length;
+const activeLongScores = (
+    long.match(
+        /lqxScoreFor\([\s\S]{0,320}?,\s*true\s*,\s*imageSource\s*\)/g
+    )
+    || []
+).length;
+assert(passiveLongScores >= 8, `Long Quant summary cards must never rescore on render (found ${passiveLongScores} passive calls)`);
+assert(activeLongScores === 4, `only four explicitly opened detail surfaces may score exact recovered image bytes (found ${activeLongScores})`);
 
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
-includes(index, 'jarvis-retention.js?v=creator-keep-v2', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=keep-coordinate-ledger-v1', 'Shorts bundle cache key must be bumped');
 includes(index, 'jarvis-longquant.js?v=coordinate-lineage-1', 'Long Quant bundle cache key must be bumped');
 
 console.log(JSON.stringify({
@@ -119,7 +144,7 @@ console.log(JSON.stringify({
         correctLongScorer: true,
         surfacedStorageErrors: true,
         memorySerialized: true,
-        boundedLegacyRepair: true,
+        passiveHistoricalEvidence: true,
         cacheBustedClients: true,
     },
 }, null, 2));

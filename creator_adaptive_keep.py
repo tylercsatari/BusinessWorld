@@ -1,13 +1,17 @@
-"""Deterministic serving math for shorts.creator-adaptive-keep.v1."""
+"""Deterministic serving math for the governed creator keep coordinate."""
 
 import io
 import json
 
 import numpy as np
 
+from shorts_score_ledger import GOVERNANCE
+
 
 EPSILON = 1e-9
-COORDINATE_ID = 'shorts.creator-adaptive-keep.v1'
+COORDINATE_ID = GOVERNANCE['coordinates'][
+    'creatorAdaptiveKeepForecast'
+]['id']
 FEATURE_NAMES = (
     'ct12',
     'ct24',

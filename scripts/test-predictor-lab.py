@@ -192,9 +192,52 @@ def assert_target_contract(target: dict, target_name: str) -> None:
         "allInputsMetrics",
         "allInputsFormula",
         "stressTests",
+        "leakageReview",
+        "validationEligibility",
+        "promotion",
         "warning",
     }
     assert required <= set(target), f"{target_name} is missing {sorted(required - set(target))}"
+    availability = target.get("availability") or {}
+    blocked = str(availability.get("state") or "").startswith(
+        "blocked_"
+    )
+    if blocked:
+        assert availability.get("predictorEligible") is False
+        assert isinstance(availability.get("blockers"), list)
+        assert availability["blockers"]
+        assert availability.get("validTransferFolds", 0) < availability.get(
+            "minimumValidTransferFolds",
+            1,
+        )
+        assert "blocked" in target["primaryValidation"].lower()
+        assert target["prospectiveMetrics"] is None
+        assert target["decisionStatus"] == "validation blocked"
+        assert target["n"] == 0
+        assert target["points"] == []
+        assert target["folds"] == []
+        assert target["stressTests"] == []
+        assert target["formula"]["intercept"] is None
+        assert target["formula"]["terms"] == []
+        assert target["allInputsFormula"] is None
+        assert target["validationEligibility"]["predictorEligible"] is False
+        assert target["promotion"]["eligible"] is False
+        assert (
+            target["promotion"]["status"]
+            == "diagnostic_only_non_promotable"
+        )
+        leakage_review = target["leakageReview"]
+        assert leakage_review["passed"] is False
+        for key in (
+            "upstreamAxisDisjoint",
+            "wholeCreatorExclusionResolved",
+            "strongContentLineagePassed",
+        ):
+            assert isinstance(leakage_review.get(key), bool)
+        assert target["metrics"]["n"] == 0
+        assert target["contentOnlyMetrics"]["n"] == 0
+        assert target["allInputsMetrics"]["n"] == 0
+        return
     assert "retrospective" in target["primaryValidation"].lower()
     assert "published earlier" in target["prospectiveValidation"].lower()
     assert isinstance(target["prospectiveMetrics"], dict)
@@ -210,6 +253,24 @@ def assert_target_contract(target: dict, target_name: str) -> None:
     assert isinstance(target["allInputsMetrics"], dict)
     assert_formula(target["allInputsFormula"])
     assert isinstance(target["allInputsFormula"].get("alpha"), (int, float))
+    leakage_review = target["leakageReview"]
+    assert isinstance(leakage_review.get("passed"), bool)
+    assert isinstance(
+        leakage_review.get("upstreamAxisDisjoint"),
+        bool,
+    )
+    assert isinstance(
+        leakage_review.get("wholeCreatorExclusionResolved"),
+        bool,
+    )
+    assert isinstance(
+        leakage_review.get("strongContentLineagePassed"),
+        bool,
+    )
+    promotion = target["promotion"]
+    assert promotion["eligible"] is False
+    assert promotion["status"] == "diagnostic_only_non_promotable"
+    assert target["validationEligibility"]["predictorEligible"] is False
 
     stress_tests = target["stressTests"]
     assert isinstance(stress_tests, list) and len(stress_tests) >= 1
@@ -232,10 +293,17 @@ def assert_target_contract(target: dict, target_name: str) -> None:
         blind = target.get("blindInputs")
         assert isinstance(blind, dict), "keep target must persist row-level leakage-safe inputs"
         assert blind.get("featureNames") == predictor.PRIVATE_FEATURE_NAMES
+        assert blind.get("foldAlgorithm") == "content-family-grouped-balanced-v1"
+        assert re.fullmatch(
+            r"[a-f0-9]{64}",
+            blind.get("rowFoldManifestSha256") or "",
+        )
         assert "evaluated video" in blind.get("videoHeldOutProtocol", "")
         assert "evaluated account" in blind.get("accountHeldOutProtocol", "")
         assert isinstance(blind.get("rows"), list)
         for row in blind["rows"]:
+            assert row.get("contentFamilyId")
+            assert isinstance(row.get("videoFold"), int)
             assert len(row.get("videoHeldOut", [])) == len(predictor.PRIVATE_FEATURE_NAMES)
             assert len(row.get("accountHeldOut", [])) == len(predictor.PRIVATE_FEATURE_NAMES)
         visual_study = target.get("visualOnlyStudy")
@@ -248,6 +316,17 @@ def assert_target_contract(target: dict, target_name: str) -> None:
                 "accountHoldout",
             }
             assert visual_study.get("promotion", {}).get("status")
+            assert isinstance(
+                visual_study.get("promotion", {}).get(
+                    "leakageGatePassed"
+                ),
+                bool,
+            )
+            if not target["leakageReview"]["passed"]:
+                assert (
+                    visual_study["promotion"]["promoted"]
+                    is False
+                )
             assert visual_study.get("formula", {}).get("input")
             production = visual_study.get("production")
             assert isinstance(production, dict)
@@ -383,6 +462,25 @@ def assert_target_contract(target: dict, target_name: str) -> None:
         )
     else:
         assert isinstance(stress.get("points"), list), "unseen-channel stress must persist every held-out prediction"
+        blind = target.get("blindInputs")
+        assert isinstance(blind, dict)
+        assert (
+            blind.get("featureNames")
+            == predictor.leakage_safe_views_feature_names()
+        )
+        assert set(blind["allowlist"]["forbiddenTargets"]) == {
+            "keep",
+            "ret5",
+            "realviews",
+        }
+        assert blind["upstreamAxisAudit"]
+        diagnostic = (
+            target.get("diagnosticAnalyses", {})
+            .get("storedLedgerAllCoordinates")
+        )
+        assert diagnostic
+        assert diagnostic["predictorEligible"] is False
+        assert diagnostic["promotionEligible"] is False
 
 
 def assert_result_contract(result: dict, candidate_hash: str) -> None:
@@ -400,6 +498,11 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
         "excludedInputs",
     }
     assert top_level <= set(result), f"result is missing {sorted(top_level - set(result))}"
+    assert (
+        result["version"]
+        == predictor.PREDICTOR_RESULT_SCHEMA_VERSION
+        == 3
+    )
 
     coverage = result["coverage"]
     coverage_keys = {
@@ -437,17 +540,49 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
         "4": 34775,
     }
     assert registry["targets"]["keep"]["featureCount"] == 45
-    assert registry["targets"]["views"]["featureCount"] == 45
+    assert registry["targets"]["views"]["featureCount"] == len(
+        predictor.leakage_safe_views_feature_names()
+    )
     assert registry["targets"]["keep"]["candidateHash"] == candidate_hash
+    assert (
+        registry["targets"]["views"]["candidateHash"]
+        == "c09449c37cee41a8"
+    )
     assert sum(registry["targets"]["views"]["subsetSizes"].values()) == 50_000
 
     provenance = result["provenance"]
     assert provenance["privateAxisTrainingIdOverlap"] == 0
     assert provenance["savedAxisTrainingIdOverlap"] == 0
-    assert provenance["validationCreatorAxisTrainingIdOverlap"] == 0
+    creator_overlap_verified = bool(
+        provenance["privateCreatorLineage"]["allGroupsResolved"]
+        and provenance["savedCreatorLineage"]["allGroupsResolved"]
+    )
+    assert (
+        provenance["validationCreatorAxisTrainingOverlapVerified"]
+        is creator_overlap_verified
+    )
+    assert (
+        provenance["validationCreatorAxisTrainingIdOverlap"]
+        == (
+            provenance[
+                "validationCreatorAxisTrainingResolvedSubsetOverlap"
+            ]
+            if creator_overlap_verified
+            else None
+        )
+    )
+    assert (
+        provenance[
+            "validationCreatorAxisTrainingResolvedSubsetOverlap"
+        ]
+        == 0
+    )
     assert isinstance(provenance["validationCreatorChannelIds"], list)
-    assert provenance["validationCreatorChannelIds"]
     assert len(provenance["validationCreatorChannelIdHash"]) == 64
+    assert provenance["privateCreatorLineage"]["groupKey"] == "account"
+    assert provenance["savedCreatorLineage"]["groupKey"] == "channel"
+    assert provenance["privateUpstreamAxisAudit"]
+    assert provenance["savedViewsUpstreamAxisAudit"]
     assert provenance["validationCreatorVideoCountExcluded"] >= 0
     assert provenance["publicAxisExcludedVideoCount"] >= coverage["privateRetentionRows"]
     assert len(provenance["publicAxisExcludedVideoIdHash"]) == 64
@@ -455,9 +590,23 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
     assert len(provenance["featureContractSha256"]) == 64
     assert len(provenance["savedVideoIdHash"]) == 64
     assert len(provenance["rawAxisCorpusIdHash"]) == 64
+    saved_score_population = provenance["savedScorePopulation"]
+    assert "rows" not in saved_score_population
+    assert saved_score_population["rowStorage"].startswith(
+        "hash_and_summary_only"
+    )
+    assert len(saved_score_population["rowsSha256"]) == 64
+    assert (
+        sum(saved_score_population["ledgerStateCounts"].values())
+        == saved_score_population["rowCount"]
+    )
     assert provenance["featureScorerVersionPersistedPerVideo"] is False
     assert "rank quantile-mapped" in provenance["publicAxisEstimator"]
-    assert "scorer/model version" in provenance["warning"]
+    assert "exact input-bound evidence declaration" in provenance["warning"]
+    assert (
+        "prior ledger revisions are excluded rather than repaired"
+        in provenance["warning"]
+    )
     assert provenance["sourceArtifacts"]
     assert set(provenance["rawStoreShape"]) == {"visual", "text", "together"}
     assert provenance["runtime"]["scikitLearn"]
@@ -479,6 +628,9 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
     joined_rules = "\n".join(rules).lower()
     for required_rule in (
         "no target-aligned keep or ret5 score",
+        "freshly rebuilt views, outlier, and 10m axes",
+        "internal account and saved-channel ids",
+        "title-only duplicate families",
         "retrospective interpolation",
         "forward-time and whole-source tests",
         "creator-group training folds",
@@ -510,6 +662,45 @@ assert subset_sizes == {1: 45, 2: 990, 3: 14190, 4: 34775}
 assert set(first_registry[:45]) == set(itertools.combinations(range(45), 1))
 candidate_hash = hashlib.sha256(json.dumps(first_registry).encode()).hexdigest()[:16]
 assert candidate_hash == "a3d4ad284c40c669", "the deterministic experiment registry changed"
+
+views_feature_names = predictor.leakage_safe_views_feature_names()
+assert len(views_feature_names) == 18
+views_feature_definitions = (
+    predictor.leakage_safe_views_feature_definitions()
+)
+assert [
+    definition["feature"]
+    for definition in views_feature_definitions
+] == views_feature_names
+assert all(
+    definition["preUploadInput"] is True
+    and definition["upstreamOutcomeFit"] is True
+    for definition in views_feature_definitions
+)
+assert all(
+    f".{target}." not in feature
+    for feature in views_feature_names
+    for target in predictor.VIEWS_VALIDATION_FORBIDDEN_TARGETS
+)
+views_registry = predictor.candidate_registry(
+    len(views_feature_names)
+)
+assert len(views_registry) == predictor.EXPERIMENT_COUNT
+assert (
+    hashlib.sha256(
+        json.dumps(views_registry).encode()
+    ).hexdigest()[:16]
+    == "c09449c37cee41a8"
+)
+assert Counter(map(len, views_registry)) == {
+    1: 18,
+    2: 153,
+    3: 816,
+    4: 3060,
+    5: 8568,
+    6: 18564,
+    7: 18821,
+}
 
 
 # The visual-only study preserves three genuinely different claims. Its plotted
@@ -547,10 +738,174 @@ visual_study_fixture = predictor.run_visual_keep_study(
     visual_rows,
     {"visual": visual_store},
 )
+pooled_registry = predictor.visual_keep_pooled_candidate_registry()
+assert len(pooled_registry) == 3
+assert tuple(
+    candidate["pooledAlpha"]
+    for candidate in pooled_registry
+) == predictor.VISUAL_KEEP_POOLED_ALPHAS
+assert all(
+    candidate["estimatorId"] == predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID
+    and candidate["accountWeight"] == 0
+    for candidate in pooled_registry
+)
+for protocol in visual_study_fixture["protocols"].values():
+    assert protocol["candidateRegistry"]["pooledAlphas"] == list(
+        predictor.VISUAL_KEEP_POOLED_ALPHAS
+    )
+    assert protocol["candidateRegistry"]["count"] == len(
+        predictor.VISUAL_KEEP_POOLED_ALPHAS
+    )
+    assert all(
+        float(fold["selected"]["pooledAlpha"])
+        in predictor.VISUAL_KEEP_POOLED_ALPHAS
+        for fold in protocol["folds"]
+    )
+assert visual_study_fixture["promotion"]["promoted"] is False
+assert visual_study_fixture["promotion"]["predictorEligible"] is False
+assert isinstance(
+    visual_study_fixture["promotion"][
+        "retrospectiveMetricThresholdPassed"
+    ],
+    bool,
+)
+registered_formula_fixture = {
+    "estimatorId": predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID,
+    "scope": "pooled_global",
+    "selected": {
+        "estimatorId": predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID,
+        "pooledAlpha": 1,
+        "accountWeight": 0,
+    },
+    "accountInputs": [],
+    "outputTransform": predictor.VISUAL_KEEP_OUTPUT_TRANSFORM,
+    "outputBounds": list(predictor.VISUAL_KEEP_OUTPUT_BOUNDS),
+    "pooled": {
+        "intercept": -50,
+        "coefficients": [200],
+    },
+}
+assert predictor.score_visual_keep_formula(
+    predictor.np.asarray([[0], [0.5], [1]], dtype=float),
+    registered_formula_fixture,
+).tolist() == [0, 50, 100]
+for invalid_formula in (
+    {
+        **registered_formula_fixture,
+        "outputTransform": "linear_prediction",
+    },
+    {
+        **registered_formula_fixture,
+        "outputBounds": [-100, 100],
+    },
+):
+    try:
+        predictor.score_visual_keep_formula(
+            predictor.np.asarray([[0]], dtype=float),
+            invalid_formula,
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unregistered visual keep output semantics were accepted")
+try:
+    predictor.fit_visual_keep_candidate(
+        predictor.np.asarray(visual_vectors, dtype=float),
+        predictor.np.asarray([row["keep"] for row in visual_rows], dtype=float),
+        predictor.np.asarray([row["account"] for row in visual_rows]),
+        predictor.np.arange(60),
+        predictor.np.arange(60, 80),
+        {
+            **pooled_registry[0],
+            "accountWeight": 0.25,
+        },
+    )
+except ValueError:
+    pass
+else:
+    raise AssertionError("creator-blended candidate entered the deployed pooled path")
+try:
+    predictor.validate_visual_keep_candidate({
+        "estimatorId": predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID,
+        "pooledAlpha": 100.0,
+        "accountWeight": 0.0,
+    })
+except ValueError:
+    pass
+else:
+    raise AssertionError(
+        "an alpha outside the production registry entered validation"
+    )
+temporal_clip_predictions = predictor.predict_visual_time_candidate(
+    predictor.np.asarray(
+        [[value] for value in range(10)] + [[-100], [100]],
+        dtype=float,
+    ),
+    predictor.np.asarray([value * 10 for value in range(10)], dtype=float),
+    predictor.np.arange(10),
+    predictor.np.asarray([10, 11]),
+    {"kind": "ridge", "recentN": 10, "alpha": 0.1},
+)
+assert temporal_clip_predictions.tolist() == [0, 100]
+
+
+class ExtremeVisualKeepRidge:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def fit(self, features, outcomes):
+        self.intercept_ = -25.0
+        self.coef_ = predictor.np.zeros(
+            predictor.np.asarray(features).shape[1],
+            dtype=float,
+        )
+        self.coef_[0] = 150.0
+        return self
+
+    def predict(self, features):
+        return (
+            self.intercept_
+            + predictor.np.asarray(features) @ self.coef_
+        )
+
+
+with mock.patch.object(predictor, "Ridge", ExtremeVisualKeepRidge):
+    forced_account_holdout = predictor.run_visual_keep_account_holdout(
+        visual_rows,
+        predictor.np.asarray(visual_vectors, dtype=float),
+        predictor.np.asarray(
+            [row["keep"] for row in visual_rows],
+            dtype=float,
+        ),
+        predictor.np.asarray(
+            [row["account"] for row in visual_rows],
+        ),
+    )
+forced_account_predictions = [
+    point["predicted"]
+    for point in forced_account_holdout["points"]
+]
+assert min(forced_account_predictions) == 0
+assert max(forced_account_predictions) == 100
+assert all(0 <= value <= 100 for value in forced_account_predictions)
 assert visual_study_fixture["population"]["n"] == len(visual_rows)
 assert visual_study_fixture["schemaVersion"] == 2
 assert visual_study_fixture["coordinateId"] == predictor.VISUAL_KEEP_COORDINATE_ID
 assert visual_study_fixture["population"]["embeddingDimensions"] == 8
+assert (
+    visual_study_fixture["formula"]["estimatorId"]
+    == predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID
+)
+assert visual_study_fixture["formula"]["scope"] == "pooled_global"
+assert visual_study_fixture["formula"]["selected"]["accountWeight"] == 0
+assert visual_study_fixture["formula"]["accountInputs"] == []
+assert (
+    visual_study_fixture["formula"]["outputTransform"]
+    == predictor.VISUAL_KEEP_OUTPUT_TRANSFORM
+)
+assert visual_study_fixture["formula"]["outputBounds"] == list(
+    predictor.VISUAL_KEEP_OUTPUT_BOUNDS
+)
 assert len(visual_study_fixture["formula"]["pooled"]["coefficients"]) == 8
 assert len(visual_study_fixture["production"]["points"]) == len(visual_rows)
 assert all(
@@ -571,10 +926,29 @@ assert set(visual_study_fixture["protocols"]) == {
 }
 for visual_protocol in visual_study_fixture["protocols"].values():
     assert visual_protocol["points"]
+    assert all(
+        0 <= point["predicted"] <= 100
+        for point in visual_protocol["points"]
+    )
     assert visual_protocol["metrics"]["actualRange"] > 0
     assert visual_protocol["metrics"]["predictedRange"] >= 0
     assert visual_protocol["metrics"]["rangeRatio"] is not None
     assert visual_protocol["metrics"]["protocolBaselineR2"] is not None
+video_holdout_fixture = visual_study_fixture["protocols"]["videoHoldout"]
+assert (
+    video_holdout_fixture["estimator"]["id"]
+    == predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID
+)
+assert video_holdout_fixture["estimator"]["accountWeight"] == 0
+assert video_holdout_fixture["candidateRegistry"]["count"] == 3
+assert all(
+    fold["selected"]["accountWeight"] == 0
+    and all(
+        candidate["accountWeight"] == 0
+        for candidate in fold["candidateLeaderboard"]
+    )
+    for fold in video_holdout_fixture["folds"]
+)
 
 def creator_adaptive_benchmark_fixture(
     rows: list[dict],
@@ -1046,18 +1420,56 @@ def leakage_store(validation_views: float) -> dict:
         "silent": predictor.np.zeros(len(leak_ids), dtype=bool),
     }
 
+leakage_library = {
+    video_id: {
+        "channelId": (
+            "UCvalidationCreator"
+            if video_id in {"validation-video", "public-0"}
+            else "UCdisjointPublicCreator"
+        ),
+        "sourceContentId": f"source-{video_id}",
+    }
+    for video_id in leak_ids
+}
+validation_row_fixture = {
+    "id": "validation-video",
+    "channel": "internal-validation-id",
+    "sourceContentId": "source-validation-video",
+}
 axes_before = predictor.fit_public_axes(
     {modality: leakage_store(1) for modality in predictor.MODALITIES},
     {"validation-video"},
     {},
+    leakage_library,
+    {"UCvalidationCreator"},
+    {"declared:source-validation-video"},
 )
 axes_after = predictor.fit_public_axes(
     {modality: leakage_store(1_000_000_000_000) for modality in predictor.MODALITIES},
     {"validation-video"},
     {},
+    leakage_library,
+    {"UCvalidationCreator"},
+    {"declared:source-validation-video"},
 )
 probe = leak_vectors[-1:]
 for modality in predictor.MODALITIES:
+    fit_manifest = axes_before[modality]["fitManifests"]["views"]
+    assert len(fit_manifest["rows"]) == len(leak_ids) - 2
+    assert fit_manifest["rowCount"] == len(
+        fit_manifest["rows"]
+    )
+    assert (
+        fit_manifest["axisTarget"]
+        == "views"
+    )
+    assert fit_manifest["rowsSha256"] == predictor.stable_json_sha256(
+        fit_manifest["rows"]
+    )
+    assert all(
+        row["channelId"] == "UCdisjointPublicCreator"
+        for row in fit_manifest["rows"]
+    )
     assert predictor.np.array_equal(
         axes_before[modality]["views"].predict(probe),
         axes_after[modality]["views"].predict(probe),
@@ -1066,6 +1478,478 @@ for modality in predictor.MODALITIES:
         axes_before[modality]["hit10m"].predict_proba(probe),
         axes_after[modality]["hit10m"].predict_proba(probe),
     ), f"excluded {modality} validation outcome changed the blind 10M axis"
+
+resolved_lineage = predictor.resolve_external_creator_lineage(
+    [
+        validation_row_fixture
+    ],
+    "channel",
+    leakage_library,
+)
+assert resolved_lineage["allGroupsResolved"] is True
+assert resolved_lineage["resolvedYoutubeChannelIds"] == [
+    "UCvalidationCreator"
+]
+safe_axis_audit = predictor.audit_public_axis_provenance(
+    axes_before,
+    [validation_row_fixture],
+    resolved_lineage,
+)
+assert safe_axis_audit["requiredAxesPassed"] is True
+assert safe_axis_audit["wholeCreatorExclusionPassed"] is True
+assert safe_axis_audit["strongFitContentLineagePassed"] is True
+assert safe_axis_audit["upstreamLeakagePassed"] is True
+assert safe_axis_audit["eligibleFeatureNames"] == views_feature_names
+assert all(
+    not item["eligible"]
+    for item in safe_axis_audit["conditionalCoordinates"]
+)
+
+creator_leaky_axes = predictor.fit_public_axes(
+    {
+        modality: leakage_store(1)
+        for modality in predictor.MODALITIES
+    },
+    {"validation-video"},
+    {},
+    leakage_library,
+)
+creator_leak_audit = predictor.audit_public_axis_provenance(
+    creator_leaky_axes,
+    [validation_row_fixture],
+    resolved_lineage,
+)
+assert creator_leak_audit["requiredAxesPassed"] is False
+assert any(
+    coordinate["evaluationCreatorOverlapCount"] == 1
+    for coordinate in creator_leak_audit["requiredCoordinates"]
+)
+
+weak_fit_library = json.loads(json.dumps(leakage_library))
+weak_fit_library["public-1"].pop("sourceContentId")
+weak_fit_axes = predictor.fit_public_axes(
+    {
+        modality: leakage_store(1)
+        for modality in predictor.MODALITIES
+    },
+    {"validation-video"},
+    {},
+    weak_fit_library,
+    {"UCvalidationCreator"},
+    {"declared:source-validation-video"},
+)
+weak_fit_audit = predictor.audit_public_axis_provenance(
+    weak_fit_axes,
+    [validation_row_fixture],
+    resolved_lineage,
+)
+assert weak_fit_audit["requiredAxesPassed"] is True
+assert weak_fit_audit["strongFitContentLineagePassed"] is False
+assert weak_fit_audit["upstreamLeakagePassed"] is False
+
+# Poisoning every stored outcome-derived coordinate must have no effect because
+# the promotable views matrix is rebuilt from disjoint public axes.
+safe_store_rows = {
+    modality: leakage_store(1)
+    for modality in predictor.MODALITIES
+}
+poisoned_row = {
+    "id": "validation-video",
+    "sourceContentId": "source-validation-video",
+    "features": [1e30] * 45,
+}
+safe_rows_before, excluded_rows = (
+    predictor.leakage_safe_views_rows(
+        [poisoned_row],
+        safe_store_rows,
+        axes_before,
+        safe_axis_audit,
+    )
+)
+assert not excluded_rows
+poisoned_row["features"] = [-1e30] * 45
+safe_rows_after, _ = predictor.leakage_safe_views_rows(
+    [poisoned_row],
+    safe_store_rows,
+    axes_before,
+    safe_axis_audit,
+)
+assert safe_rows_before[0]["features"] == safe_rows_after[0]["features"]
+assert len(safe_rows_before[0]["features"]) == len(views_feature_names)
+
+feature_contract = json.loads(
+    (
+        ROOT
+        / "buildings/jarvis/saved-channel-feature-contract.json"
+    ).read_text(encoding="utf-8")
+)
+blocked_source_row = {
+    **poisoned_row,
+    "title": "Disjoint views fixture",
+    "channel": "fixture-channel",
+    "channelName": "Fixture Channel",
+    "ageDays": 90,
+    "publishedAt": 1_700_000_000_000,
+    "views": 100_000,
+    "logViews": 5.0,
+    "features": [0.0] * len(
+        predictor.saved_channel_feature_names(feature_contract)
+    ),
+}
+blocked_views = predictor.run_views_track(
+    [blocked_source_row],
+    feature_contract,
+    [],
+    safe_store_rows,
+    axes_before,
+    safe_axis_audit,
+    resolved_lineage,
+)
+assert (
+    blocked_views["availability"]["state"]
+    == "blocked_insufficient_validation_population"
+)
+assert blocked_views["availability"]["eligibleRows"] == 1
+assert blocked_views["availability"]["independentChannels"] == 1
+assert blocked_views["availability"]["validTransferFolds"] == 0
+assert blocked_views["metrics"]["n"] == 0
+assert blocked_views["formula"]["terms"] == []
+assert (
+    blocked_views["diagnosticAnalyses"][
+        "storedLedgerAllCoordinates"
+    ]["predictorEligible"]
+    is False
+)
+predictor.apply_validation_promotion_gates(
+    blocked_views,
+    [blocked_source_row],
+    resolved_lineage,
+    safe_axis_audit,
+)
+assert blocked_views["promotion"]["eligible"] is False
+assert any(
+    "registered public-views validation population" in blocker
+    for blocker in blocked_views["promotion"]["blockers"]
+)
+
+# A manifest hash mismatch closes validation even if its labels claim the right
+# target and the evaluation ID is absent.
+tampered_axes = {
+    modality: {
+        **axes_before[modality],
+        "fitManifests": {
+            **axes_before[modality]["fitManifests"],
+            "views": {
+                **axes_before[modality]["fitManifests"]["views"],
+                "rowsSha256": "0" * 64,
+            },
+        },
+    }
+    for modality in predictor.MODALITIES
+}
+tampered_axis_audit = predictor.audit_public_axis_provenance(
+    tampered_axes,
+    [validation_row_fixture],
+    resolved_lineage,
+)
+assert tampered_axis_audit["requiredAxesPassed"] is False
+try:
+    predictor.leakage_safe_views_rows(
+        [poisoned_row],
+        safe_store_rows,
+        tampered_axes,
+        tampered_axis_audit,
+    )
+except RuntimeError as error:
+    assert "closed" in str(error)
+else:
+    raise AssertionError(
+        "tampered upstream provenance entered views validation"
+    )
+
+# An internal ID is never accepted as an external YouTube creator identity,
+# even when it happens to look like one.
+unresolved_lineage = predictor.resolve_external_creator_lineage(
+    [{"id": "missing-video", "account": "UClooksExternal"}],
+    "account",
+    {},
+)
+assert unresolved_lineage["allGroupsResolved"] is False
+assert unresolved_lineage["resolvedYoutubeChannelIds"] == []
+assert (
+    unresolved_lineage["groups"][0]["internalId"]
+    == "UClooksExternal"
+)
+assert (
+    unresolved_lineage["groups"][0]["youtubeChannelId"]
+    is None
+)
+unresolved_saved_channel = (
+    predictor.resolve_external_creator_lineage(
+        [
+            {
+                "id": "missing-saved-video",
+                "channel": "UCinternalSavedChannelId",
+            }
+        ],
+        "channel",
+        {},
+    )
+)
+assert unresolved_saved_channel["allGroupsResolved"] is False
+assert (
+    unresolved_saved_channel["resolvedYoutubeChannelIds"]
+    == []
+)
+conflicting_lineage = predictor.resolve_external_creator_lineage(
+    [
+        {
+            "id": "validation-video",
+            "account": "private-a",
+            "youtubeChannelId": "UCconflictingExplicit",
+        }
+    ],
+    "account",
+    leakage_library,
+)
+assert conflicting_lineage["allGroupsResolved"] is False
+assert (
+    conflicting_lineage["groups"][0][
+        "videoJoinYoutubeChannelIds"
+    ]
+    == ["UCvalidationCreator"]
+)
+partial_private_lineage = (
+    predictor.resolve_external_creator_lineage(
+        [
+            {
+                "id": "validation-video",
+                "account": "resolved-private",
+            },
+            {
+                "id": "missing-private-video",
+                "account": "unresolved-private",
+            },
+        ],
+        "account",
+        leakage_library,
+    )
+)
+assert partial_private_lineage["groupCount"] == 2
+assert partial_private_lineage["resolvedGroupCount"] == 1
+assert partial_private_lineage["unresolvedGroupCount"] == 1
+assert partial_private_lineage["allGroupsResolved"] is False
+
+artifact_channel_id = "ch0000000000000001"
+artifact_video_id = "artifact-video"
+artifact_montage_bytes = b"canonical-saved-channel-montage"
+artifact_montage_sha256 = hashlib.sha256(
+    artifact_montage_bytes
+).hexdigest()
+artifact_transcript = "Exact saved channel transcript"
+artifact_embedding_input = {
+    "schema": "shorts-embedding-input-v2",
+    "montage_sha256": artifact_montage_sha256,
+    "transcript": artifact_transcript,
+    "channels": {
+        "visual": "5-frame-montage",
+        "text": "normalized-transcript",
+        "together": "5-frame-montage+normalized-transcript",
+    },
+}
+artifact_embedding_fingerprint = hashlib.sha256(
+    predictor.ledger_json_bytes(artifact_embedding_input)
+).hexdigest()
+artifact_score_input = {
+    "schema": "shorts-score-input-v2",
+    "embedding_input_fingerprint":
+        artifact_embedding_fingerprint,
+    "embedding_input": artifact_embedding_input,
+    "duration_ms": 5000,
+    "creator_profile": "tyler",
+}
+artifact_score_fingerprint = hashlib.sha256(
+    predictor.ledger_json_bytes(artifact_score_input)
+).hexdigest()
+artifact_input_manifest = {
+    "domain": "shorts_raw",
+    "canonical_montage": {
+        "montage_sha256": artifact_montage_sha256,
+    },
+    "transcript_used": True,
+    "duration_s": 5,
+    "creator_profile": "tyler",
+    "embedding_input_fingerprint":
+        artifact_embedding_fingerprint,
+    "score_input_fingerprint": artifact_score_fingerprint,
+    "input_fingerprint": artifact_score_fingerprint,
+    "channels": {
+        "text": {
+            "text": artifact_transcript,
+        },
+    },
+}
+artifact_record = {
+    "id": artifact_video_id,
+    "savedChannelVideoId": artifact_video_id,
+    "title": "Exact artifact fixture",
+    "text": artifact_transcript,
+    "score_ledger": {
+        "ledger_sha256": "a" * 64,
+    },
+    "input_manifest": artifact_input_manifest,
+}
+artifact_record["score_record_sha256"] = (
+    predictor.score_record_binding_sha256(artifact_record)
+)
+artifact_record_bytes = predictor.ledger_json_bytes(
+    artifact_record
+)
+artifact_record_sha256 = hashlib.sha256(
+    artifact_record_bytes
+).hexdigest()
+artifact_row = {
+    "id": artifact_video_id,
+    "score_record_sha256":
+        artifact_record["score_record_sha256"],
+    "record_artifact_sha256": artifact_record_sha256,
+    "record_byte_length": len(artifact_record_bytes),
+    "score_ledger": artifact_record["score_ledger"],
+    "input_manifest": artifact_input_manifest,
+}
+artifact_record_key = (
+    f"raw/saved-channels/{artifact_channel_id}/"
+    f"video-artifacts/by-sha256/{artifact_record_sha256}.json"
+)
+artifact_montage_key = (
+    f"raw/saved-channels/{artifact_channel_id}/"
+    f"montages/{artifact_video_id}.jpg"
+)
+artifact_objects = {
+    artifact_record_key: artifact_record_bytes,
+    artifact_montage_key: artifact_montage_bytes,
+}
+original_r2_bytes = predictor.r2_bytes
+try:
+    predictor.r2_bytes = lambda key: artifact_objects.get(key)
+    artifact_validation = (
+        predictor.validate_saved_channel_record_artifact(
+            artifact_channel_id,
+            artifact_row,
+        )
+    )
+    assert artifact_validation["valid"] is True
+    artifact_objects[artifact_montage_key] = (
+        b"swapped-saved-channel-montage"
+    )
+    swapped_montage_validation = (
+        predictor.validate_saved_channel_record_artifact(
+            artifact_channel_id,
+            artifact_row,
+        )
+    )
+    assert swapped_montage_validation["valid"] is False
+    assert any(
+        "montage bytes" in error
+        for error in swapped_montage_validation["errors"]
+    )
+finally:
+    predictor.r2_bytes = original_r2_bytes
+
+strong_family = predictor.validation_content_family_evidence(
+    {
+        "id": "strong",
+        "title": "A shared title",
+        "input_manifest": {
+            "canonical_montage": {
+                "montage_sha256": "a" * 64,
+            }
+        },
+    }
+)
+weak_family = predictor.validation_content_family_evidence(
+    {"id": "weak", "title": "A shared title"}
+)
+assert strong_family["promotionEligible"] is True
+assert strong_family["strength"] == "strong"
+assert weak_family["promotionEligible"] is False
+assert weak_family["strength"] == "weak"
+family_audit = predictor.content_family_evidence_audit(
+    [
+        {
+            "id": "strong",
+            "title": "A shared title",
+            "input_manifest": {
+                "canonical_montage": {
+                    "montage_sha256": "a" * 64,
+                }
+            },
+        },
+        {"id": "weak", "title": "A shared title"},
+    ]
+)
+assert family_audit["allRowsHaveStrongLineage"] is False
+assert family_audit["strongRowCount"] == 1
+assert family_audit["nonPromotableRowCount"] == 1
+purged_rows, purge_audit = predictor.purge_content_family_rows(
+    [
+        {
+            "id": "train-duplicate",
+            "sourceContentId": "source-a",
+        },
+        {
+            "id": "train-independent",
+            "sourceContentId": "source-b",
+        },
+    ],
+    [
+        {
+            "id": "test-duplicate",
+            "sourceContentId": "source-a",
+        }
+    ],
+)
+assert [row["id"] for row in purged_rows] == [
+    "train-independent"
+]
+assert purge_audit["purgedTrainN"] == 1
+gate_fixture = {
+    "decisionStatus": "not prospectively validated",
+}
+predictor.apply_validation_promotion_gates(
+    gate_fixture,
+    [
+        {
+            "id": "weak",
+            "title": "A shared title",
+            "account": "UClooksExternal",
+        }
+    ],
+    unresolved_lineage,
+    safe_axis_audit,
+)
+assert gate_fixture["leakageReview"]["passed"] is False
+assert gate_fixture["promotion"]["eligible"] is False
+assert any(
+    "canonical YouTube channel ID" in blocker
+    for blocker in gate_fixture["leakageReview"]["blockers"]
+)
+assert any(
+    "duplicate-family evidence" in blocker
+    for blocker in gate_fixture["leakageReview"]["blockers"]
+)
+
+family_rows = [
+    {"id": "a", "title": "Shared opening", "account": "one"},
+    {"id": "b", "title": "Shared opening", "account": "two"},
+    {"id": "c", "title": "Different opening", "account": "one"},
+    {"id": "d", "title": "Another opening", "account": "two"},
+]
+family_folds = predictor.within_group_folds(family_rows, "account", 3)
+assert family_folds[0] == family_folds[1], (
+    "identical content families must never cross a train/evaluation boundary"
+)
+assert len(set(family_folds.tolist())) >= 2
 
 tail_rows = predictor.threshold_diagnostics(
     predictor.np.asarray([50_000, 250_000, 2_000_000, 20_000_000], dtype=float),
@@ -1144,7 +2028,8 @@ views_source = inspect.getsource(predictor.run_views_track)
 main_source = inspect.getsource(predictor.main)
 public_axis_source = inspect.getsource(predictor.fit_public_axes)
 assert "excluded_axis_ids = private_ids | saved_ids | validation_creator_video_ids" in main_source
-assert "fit_public_axes(stores, excluded_axis_ids" in main_source
+assert "fit_public_axes(" in main_source
+assert "publicAxisFitManifests" in main_source
 assert "QuantileMappedRegressor.fit" in public_axis_source
 assert "RankCalibratedBinaryAxis.fit" in public_axis_source
 assert "(views > 10_000_000).astype(int)" in public_axis_source
@@ -1156,6 +2041,9 @@ assert '"stressTests": [transfer_stress]' in keep_source
 assert '"warning":' in keep_source
 
 assert "operational = run_views_known_video" in views_source
+assert "leakage_safe_views_rows(" in views_source
+assert "diagnostic_single_features" in views_source
+assert '"predictorEligible": False' in views_source
 assert '"label": "Unseen-channel transfer"' in views_source
 assert 'predicted = operational["prediction"]' in views_source
 assert "metrics = log_view_metrics(y_valid, predicted_valid)" in views_source
@@ -1245,9 +2133,44 @@ def synthetic_target(kind: str) -> dict:
         )
         target["blindInputs"] = {
             "featureNames": predictor.PRIVATE_FEATURE_NAMES,
+            "foldAlgorithm": "content-family-grouped-balanced-v1",
+            "rowFoldManifestSha256": "0" * 64,
             "videoHeldOutProtocol": "The evaluated video is excluded from this synthetic fit.",
             "accountHeldOutProtocol": "The evaluated account is excluded from this synthetic fit.",
             "rows": [],
+        }
+    else:
+        target["blindInputs"] = {
+            "featureNames": (
+                predictor.leakage_safe_views_feature_names()
+            ),
+            "featureCount": len(
+                predictor.leakage_safe_views_feature_names()
+            ),
+            "allowlist": {
+                "requiredTargets": list(
+                    predictor.VIEWS_VALIDATION_AXIS_TARGETS
+                ),
+                "featureDefinitions": (
+                    predictor.leakage_safe_views_feature_definitions()
+                ),
+                "forbiddenTargets": sorted(
+                    predictor.VIEWS_VALIDATION_FORBIDDEN_TARGETS
+                ),
+                "conditionalCoordinates": [],
+            },
+            "upstreamAxisAudit": {"requiredAxesPassed": False},
+            "excludedRows": [],
+            "contentFamilyEvidence": {},
+            "rows": [],
+        }
+        target["diagnosticAnalyses"] = {
+            "storedLedgerAllCoordinates": {
+                "predictorEligible": False,
+                "promotionEligible": False,
+                "featureNames": [],
+                "singleFeatures": [],
+            }
         }
     return target
 
@@ -1281,11 +2204,41 @@ with tempfile.TemporaryDirectory() as temporary_directory:
         mock.patch.object(
             predictor,
             "load_saved_channel_rows",
-            lambda contract: [
-                {"id": "saved-1", "channel": "c1", "channelName": "Tyler Csatari"},
-                {"id": "saved-2", "channel": "c1", "channelName": "Tyler Csatari"},
-                {"id": "saved-3", "channel": "c2", "channelName": "Hafu Go"},
-            ],
+            lambda contract: (
+                [
+                    {
+                        "id": video_id,
+                        "channel": channel,
+                        "channelName": channel_name,
+                        "scoreLedgerSha256": str(index) * 64,
+                        "scoreLedgerState": "current",
+                        "scoreRecordSha256": str(index + 3) * 64,
+                        "manifestRowSha256": str(index + 6) * 64,
+                        "inputRevisionFingerprint": str(index + 1) * 64,
+                        "historicalMaterialized": False,
+                        "priorScoreLedgerSha256": None,
+                    }
+                    for index, (
+                        video_id,
+                        channel,
+                        channel_name,
+                    ) in enumerate(
+                        (
+                            ("saved-1", "c1", "Tyler Csatari"),
+                            ("saved-2", "c1", "Tyler Csatari"),
+                            ("saved-3", "c2", "Hafu Go"),
+                        )
+                    )
+                ],
+                {
+                    "doneRows": 3,
+                    "canonicalEligibleRows": 3,
+                    "historicalUnboundRows": 0,
+                    "invalidBindingRows": 0,
+                    "canonicalNonPredictiveRows": 0,
+                    "excludedRows": 0,
+                },
+            ),
         ),
         mock.patch.object(predictor, "load_novelty_models", lambda: {}),
         mock.patch.object(predictor, "fit_public_axes", lambda *args, **kwargs: {}),
@@ -1314,6 +2267,35 @@ with tempfile.TemporaryDirectory() as temporary_directory:
     assert assembled_visual_model["coordinateId"] == predictor.VISUAL_KEEP_COORDINATE_ID
     assert assembled_visual_model["formula"]["scope"] == "pooled_global"
     assert "accounts" not in assembled_visual_model["formula"]
+    assert (
+        assembled_visual_model["formula"]["estimatorId"]
+        == predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID
+    )
+    assert (
+        assembled_visual_model["formula"]["outputTransform"]
+        == predictor.VISUAL_KEEP_OUTPUT_TRANSFORM
+    )
+    assert assembled_visual_model["formula"]["outputBounds"] == list(
+        predictor.VISUAL_KEEP_OUTPUT_BOUNDS
+    )
+    assert assembled_visual_model["formula"]["selected"]["accountWeight"] == 0
+    assert assembled_visual_model["formula"]["accountInputs"] == []
+    assert assembled_visual_model["formula"] == {
+        key: assembled_result["targets"]["keep"]["visualOnlyStudy"]["formula"].get(
+            key
+        )
+        for key in (
+            "estimatorId",
+            "scope",
+            "input",
+            "outputUnit",
+            "outputTransform",
+            "outputBounds",
+            "selected",
+            "pooled",
+            "accountInputs",
+        )
+    }
     assert len(assembled_visual_model["trainingPredictions"]) == len(visual_rows)
     assert all(
         point["calibrationScope"] == "pooled_global"
@@ -1321,6 +2303,30 @@ with tempfile.TemporaryDirectory() as temporary_directory:
         for point in assembled_visual_model["trainingPredictions"]
     )
     assert len(assembled_visual_model["formula"]["pooled"]["coefficients"]) == 8
+    assembled_formula_predictions = predictor.score_visual_keep_formula(
+        predictor.np.asarray(visual_vectors, dtype=float),
+        assembled_visual_model["formula"],
+    )
+    assert all(
+        abs(float(point["predicted"]) - float(predicted)) <= 1e-5
+        for point, predicted in zip(
+            assembled_visual_model["trainingPredictions"],
+            assembled_formula_predictions,
+        )
+    )
+    assert (
+        assembled_visual_model["validationSummary"]["videoHoldout"][
+            "estimator"
+        ]["accountWeight"]
+        == 0
+    )
+    assert (
+        assembled_visual_model["validationSummary"]["videoHoldout"][
+            "estimator"
+        ]["id"]
+        == predictor.VISUAL_KEEP_POOLED_ESTIMATOR_ID
+    )
+    assert "creatorAdaptive" not in assembled_visual_model["validationSummary"]
     assert (
         assembled_result["targets"]["keep"]["visualOnlyStudy"]["modelArtifact"][
             "artifactSha256"
@@ -1371,12 +2377,21 @@ with tempfile.TemporaryDirectory() as temporary_directory:
     )
 
 
-# When a local production artifact exists, validate its complete live target
-# payload too. The test remains portable because the main assembly above is the
-# required contract source of truth.
+# A checked-in production artifact is part of the serving contract. It must
+# match the current producer and pass the complete live target validation;
+# silently skipping a stale artifact would let code and results drift apart.
 validated_live_artifact = False
 if RESULT_PATH.exists():
     live_result = json.loads(RESULT_PATH.read_text(encoding="utf-8"))
+    current_producer_sha256 = hashlib.sha256(
+        RUNNER_PATH.read_bytes()
+    ).hexdigest()
+    assert (
+        (live_result.get("provenance") or {}).get(
+            "producerSourceSha256"
+        )
+        == current_producer_sha256
+    ), "checked-in Predictor Lab artifact is stale"
     assert_result_contract(live_result, candidate_hash)
     validated_live_artifact = True
 

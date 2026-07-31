@@ -12,6 +12,12 @@ const { chromium, webkit } = require('playwright');
 const ROOT = path.resolve(__dirname, '..');
 const helperPath = path.join(ROOT, 'buildings/jarvis/jarvis-upload-utils.js');
 const retentionPath = path.join(ROOT, 'buildings/jarvis/jarvis-retention.js');
+const scoreLedgerContract = require(
+    '../buildings/jarvis/shorts-score-ledger'
+);
+const {
+    scoreLedgerFromFeatures,
+} = require('./fixtures/score-ledger-fixture');
 
 function makeFixture(folder) {
     const output = path.join(folder, 'phone-opening.mp4');
@@ -66,35 +72,120 @@ function startStaticServer(root) {
 
 function mockScore(title, visualOnly) {
     const montage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIA5QH7WQAAAABJRU5ErkJggg==';
-    const metric = value => ({ est: value, pctile: value, kind: 'pct' });
-    const steer = {
-        visual_keep: metric(71),
-        visual_ret5: metric(68),
-        visual_views: { est: 1200000, pctile: 74, kind: 'logcount' },
-        visual_outlier: { est: 2.1, pctile: 70, kind: 'logx' },
-        visual_gt10M: { est: 0.18, pctile: 69, kind: 'binary' },
+    const values = {
+        keep: [71, 71],
+        ret5: [68, 68],
+        views: [1_200_000, 74],
+        realviews: [900_000, null],
+        outlier: [2.1, 70],
+        gt10M: [0.18, 69],
     };
-    if (!visualOnly) {
-        Object.assign(steer, {
-            text_keep: metric(75),
-            text_ret5: metric(72),
-            together_keep: metric(79),
-            together_ret5: metric(76),
-        });
-    }
-    return {
+    const features = Object.fromEntries(
+        scoreLedgerContract.FEATURE_DEFINITIONS.map(
+            definition => {
+                const unavailable = (
+                    visualOnly && definition.group === 'text'
+                );
+                const base = values[definition.target];
+                const offset = definition.group === 'together'
+                    ? 4
+                    : definition.group === 'text'
+                        ? 2
+                        : 0;
+                return [
+                    definition.key,
+                    unavailable
+                        ? null
+                        : [
+                            base[0] + (
+                                definition.target === 'views'
+                                || definition.target === 'realviews'
+                                    ? offset * 100_000
+                                    : definition.target === 'gt10M'
+                                        ? offset / 100
+                                    : offset
+                            ),
+                            base[1] == null
+                                ? null
+                                : base[1] + offset,
+                        ],
+                ];
+            }
+        )
+    );
+    const scoreLedger = scoreLedgerFromFeatures(features);
+    const steer = Object.fromEntries(
+        scoreLedger.entries
+            .filter(entry => entry.source === 'steer')
+            .map(entry => [
+                entry.source_key,
+                {
+                    coordinate_id: entry.coordinate_id,
+                    feature_key: entry.feature_key,
+                    group: entry.group,
+                    target: entry.target,
+                    est: entry.value,
+                    pctile: entry.percentile,
+                    kind: 'fixture',
+                },
+            ])
+    );
+    const result = {
         title,
         montage,
         transcript: visualOnly ? '' : 'This is the exact opening voiceover.',
         silent: !!visualOnly,
-        indicators: { content_visual__keep: 0.71 },
+        indicators: {
+            nov_vis_global: 0.11,
+            nov_txt_global: 0.22,
+            nov_tog_global: 0.33,
+        },
         steer,
-        emb_preview: { visual: [0.1, 0.2], text: visualOnly ? null : [0.2, 0.3], together: [0.3, 0.4] },
+        features,
+        score_ledger: scoreLedger,
+        score_ledger_validation: {
+            state: 'canonical-valid',
+            valid: true,
+            ledger_sha256: scoreLedger.ledger_sha256,
+            errors: [],
+        },
+        emb_preview: {
+            visual: Array(48).fill(0.1),
+            text: visualOnly ? null : Array(48).fill(0.2),
+            together: Array(48).fill(0.3),
+        },
+        visual_keep_forecast: {
+            coordinate_id:
+                scoreLedgerContract.GOVERNANCE.coordinates
+                    .visualKeepForecast.id,
+            raw: 72.5,
+            est: 72.5,
+            calibration_scope: 'pooled_global',
+            account_model: null,
+            model_artifact_sha256: 'a'.repeat(64),
+            model_manifest_sha256: 'b'.repeat(64),
+        },
+        creator_adaptive_keep_forecast: {
+            coordinate_id:
+                scoreLedgerContract.GOVERNANCE.coordinates
+                    .creatorAdaptiveKeepForecast.id,
+            profile_account: 'tyler',
+            raw: 74.5,
+            model_artifact_sha256: 'c'.repeat(64),
+        },
         input_manifest: {
             domain: 'shorts_raw',
             source_window: 'first 5 seconds',
             display_preference: ['together', 'text', 'visual'],
             transcript_used: !visualOnly,
+            creator_profile: 'tyler',
+            revision_fingerprint: '1'.repeat(64),
+            embedding_input_fingerprint: '2'.repeat(64),
+            score_input_fingerprint: '3'.repeat(64),
+            feature_contract_sha256:
+                scoreLedgerContract.FEATURE_CONTRACT_SHA256,
+            coordinate_governance_sha256:
+                scoreLedgerContract.GOVERNANCE_SHA256,
             channels: {
                 visual: { present: true, input: '5-frame montage only', image: 'five frames', text: '' },
                 text: { present: !visualOnly, input: 'first-5-second transcript only', image: '', text: visualOnly ? '' : 'This is the exact opening voiceover.' },
@@ -102,11 +193,26 @@ function mockScore(title, visualOnly) {
             },
         },
         channels: {
-            visual: { neighbors: [] },
-            text: visualOnly ? null : { neighbors: [] },
-            together: { neighbors: [] },
+            visual: {
+                neighbors: [{ id: 'visual-neighbor', sim: 0.9 }],
+            },
+            text: visualOnly ? null : {
+                neighbors: [{ id: 'text-neighbor', sim: 0.8 }],
+            },
+            together: {
+                neighbors: [{ id: 'together-neighbor', sim: 0.85 }],
+            },
         },
     };
+    const validation = scoreLedgerContract.validateScoreLedger(
+        result.score_ledger
+    );
+    assert.strictEqual(
+        validation.valid,
+        true,
+        validation.errors.join('; ')
+    );
+    return result;
 }
 
 async function runUiFlow(browser, origin, fixture, failVideoScore, emulateNoCapture) {
@@ -180,6 +286,15 @@ async function runUiFlow(browser, origin, fixture, failVideoScore, emulateNoCapt
                 warning: state.rawUploads[0]._uploadWarning || null,
                 mode: state.rawUploads[0]._uploadMode || null,
                 silent: state.rawUploads[0].silent,
+                ledgerSha256:
+                    state.rawUploads[0].score_ledger
+                    && state.rawUploads[0].score_ledger.ledger_sha256,
+                ledgerValid:
+                    state.rawUploads[0].score_ledger_validation
+                    && state.rawUploads[0].score_ledger_validation.valid,
+                ledgerCoordinates:
+                    state.rawUploads[0].score_ledger
+                    && state.rawUploads[0].score_ledger.entries.length,
             },
             requests: window.__mobileUploadRequests,
         };
@@ -273,6 +388,8 @@ async function main() {
             assert.strictEqual(normalUi.upload.mode, 'sparse');
         }
         assert.strictEqual(normalUi.upload.silent, false);
+        assert.strictEqual(normalUi.upload.ledgerValid, true);
+        assert.strictEqual(normalUi.upload.ledgerCoordinates, 21);
 
         const recoveryUi = await runUiFlow(browser, staticServer.origin, fixture, true, emulateNoCapture);
         assert.strictEqual(recoveryUi.error, null, 'visual recovery should produce a usable score');
@@ -280,6 +397,13 @@ async function main() {
         assert(recoveryUi.requests.some(request => request.pathname === '/api/raw/embed-montage'), 'codec failure did not automatically use the visual recovery');
         assert(recoveryUi.upload.warning && recoveryUi.upload.warning.includes('five visual frames'), 'visual-only recovery was not clearly disclosed');
         assert.strictEqual(recoveryUi.upload.silent, true);
+        assert.strictEqual(recoveryUi.upload.ledgerValid, true);
+        assert.strictEqual(recoveryUi.upload.ledgerCoordinates, 21);
+        assert.notStrictEqual(
+            normalUi.upload.ledgerSha256,
+            recoveryUi.upload.ledgerSha256,
+            'visual-only recovery must not masquerade as the full audiovisual score'
+        );
 
         console.log(JSON.stringify({
             ok: true,

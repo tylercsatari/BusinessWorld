@@ -19,6 +19,13 @@ from creator_adaptive_keep import (
     load_serving_state,
     score_creator_adaptive_keep,
 )
+from shorts_score_ledger import (
+    EXPECTED_COORDINATE_IDS as SHORTS_STORED_COORDINATE_IDS,
+    FEATURE_CONTRACT_DOCUMENT_SHA256,
+    FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+    FEATURE_CONTRACT_SHA256,
+    materialize_score_bundle,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DISPLAY_CONTRACT_PATH = os.path.join(
@@ -26,6 +33,12 @@ DISPLAY_CONTRACT_PATH = os.path.join(
     'buildings',
     'jarvis',
     'saved-channel-feature-contract.json',
+)
+COORDINATE_GOVERNANCE_PATH = os.path.join(
+    HERE,
+    'buildings',
+    'jarvis',
+    'quant-coordinate-governance.json',
 )
 
 def _load_display_contract_version():
@@ -36,6 +49,16 @@ def _load_display_contract_version():
             'saved-channel feature contract must declare a positive integer version'
         )
     return version
+
+
+def _load_coordinate_governance():
+    with open(COORDINATE_GOVERNANCE_PATH, encoding='utf-8') as handle:
+        governance = json.load(handle)
+    if not isinstance(governance.get('schemaVersion'), int):
+        raise RuntimeError(
+            'coordinate governance must declare an integer schemaVersion'
+        )
+    return governance
 
 def env(k):
     v = os.environ.get(k)
@@ -53,12 +76,23 @@ TRANSCRIPTION_MODEL = env('RAW_TRANSCRIPTION_MODEL') or 'gemini-2.5-flash'
 EMB_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent'
 SCORE_CACHE_VERSION = 2
 DISPLAY_CONTRACT_VERSION = _load_display_contract_version()
+COORDINATE_GOVERNANCE = _load_coordinate_governance()
+COORDINATE_GOVERNANCE_SHA256 = hashlib.sha256(
+    open(COORDINATE_GOVERNANCE_PATH, 'rb').read()
+).hexdigest()
 SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v2').strip('/')
 VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json'
 VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json'
-VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1'
+VISUAL_KEEP_COORDINATE_ID = (
+    COORDINATE_GOVERNANCE['coordinates']['visualKeepForecast']['id']
+)
+VISUAL_KEEP_ESTIMATOR_ID = 'shorts.visual-keep.pooled-ridge.v1'
+VISUAL_KEEP_POOLED_ALPHAS = (0.1, 1.0, 10.0)
 CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY = (
     'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json'
+)
+CREATOR_ADAPTIVE_KEEP_MODEL_KEY = (
+    'raw/predictor-lab/creator-adaptive-keep-model-v1.json'
 )
 CREATOR_ADAPTIVE_KEEP_SERVING_KEY = (
     'raw/predictor-lab/creator-adaptive-keep-serving-v1.npz'
@@ -66,7 +100,9 @@ CREATOR_ADAPTIVE_KEEP_SERVING_KEY = (
 CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY = (
     'raw/predictor-lab/creator-adaptive-keep-serving-v1.manifest.json'
 )
-CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = 'shorts.creator-adaptive-keep.v1'
+CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = (
+    COORDINATE_GOVERNANCE['coordinates']['creatorAdaptiveKeepForecast']['id']
+)
 CANONICAL_MONTAGE_WIDTH = 1600
 CANONICAL_MONTAGE_HEIGHT = 568
 CANONICAL_MONTAGE_QUALITY = 90
@@ -83,13 +119,121 @@ SCORE_REVISION_KEYS = (
     'raw/together/embeddings.npz',
 )
 
+class ScoreArtifactIntegrityError(RuntimeError):
+    pass
+
+
 def coherent(txt):
     toks = re.findall(r"[a-z']{2,}", (txt or '').lower())
     return len(toks) >= 2
 
 def r2_get(key):
-    try: return s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
-    except Exception: return None
+    expected = globals().get(
+        '_PINNED_ARTIFACT_REVISIONS',
+        {},
+    ).get(key)
+    request = {'Bucket': BUCKET, 'Key': key}
+    if expected:
+        state = expected.get('state')
+        if state == 'missing':
+            try:
+                s3.get_object(**request)
+            except Exception as error:
+                code = str(
+                    getattr(error, 'response', {})
+                    .get('Error', {})
+                    .get('Code', '')
+                )
+                if code in ('404', 'NoSuchKey', 'NotFound'):
+                    return None
+                raise ScoreArtifactIntegrityError(
+                    f'could not verify pinned missing artifact {key}: {error}'
+                ) from error
+            raise ScoreArtifactIntegrityError(
+                f'artifact appeared after scoring snapshot: {key}'
+            )
+        if state != 'present':
+            raise ScoreArtifactIntegrityError(
+                f'artifact revision is not scoreable ({state}): {key}'
+            )
+        expected_etag = str(expected.get('etag') or '').strip('"')
+        if not expected_etag:
+            raise ScoreArtifactIntegrityError(
+                f'pinned artifact has no immutable ETag: {key}'
+            )
+        request['IfMatch'] = expected_etag
+    try:
+        response = s3.get_object(**request)
+        payload = response['Body'].read()
+    except ScoreArtifactIntegrityError:
+        raise
+    except Exception as error:
+        if expected:
+            raise ScoreArtifactIntegrityError(
+                f'pinned artifact could not be read unchanged: {key}: {error}'
+            ) from error
+        return None
+    if expected:
+        actual_etag = str(response.get('ETag') or '').strip('"')
+        expected_etag = str(expected.get('etag') or '').strip('"')
+        if actual_etag and actual_etag != expected_etag:
+            raise ScoreArtifactIntegrityError(
+                f'pinned artifact ETag changed: {key}'
+            )
+        expected_size = expected.get('size')
+        if (
+            expected_size is not None
+            and int(expected_size) != len(payload)
+        ):
+            raise ScoreArtifactIntegrityError(
+                f'pinned artifact byte length changed: {key}'
+            )
+        expected_sha256 = str(expected.get('sha256') or '').lower()
+        if (
+            expected_sha256
+            and hashlib.sha256(payload).hexdigest() != expected_sha256
+        ):
+            raise ScoreArtifactIntegrityError(
+                f'pinned artifact content hash changed: {key}'
+            )
+    return payload
+
+
+def _indicator_registry_snapshot():
+    key = 'raw/indicators/registry.json'
+    expected = _PINNED_ARTIFACT_REVISIONS.get(key)
+    try:
+        payload = r2_get(key)
+        if not payload:
+            raise RuntimeError('indicator registry is unavailable')
+        registry = json.loads(payload)
+        if not isinstance(registry, dict) or not isinstance(
+            registry.get('indicators'),
+            list,
+        ):
+            raise RuntimeError('indicator registry is malformed')
+        revision = {
+            'source': key,
+            'sha256': hashlib.sha256(payload).hexdigest(),
+            'bytes': len(payload),
+            'etag': (
+                str((expected or {}).get('etag') or '').strip('"')
+                or None
+            ),
+            'versionId': (
+                str((expected or {}).get('version_id') or '')
+                or None
+            ),
+        }
+        return registry, revision
+    except ScoreArtifactIntegrityError:
+        raise
+    except Exception as error:
+        return {}, {
+            'source': key,
+            'state': 'unavailable',
+            'error': f'{type(error).__name__}: {str(error)[:200]}',
+        }
 
 _VISUAL_KEEP_MODEL_CACHE = None
 _CREATOR_ADAPTIVE_KEEP_STATE_CACHE = None
@@ -110,7 +254,29 @@ def _visual_keep_forecast_from_payload(
         raise RuntimeError('visual keep predictor coordinate does not match the scorer contract')
     formula = payload.get('formula') or {}
     pooled = formula.get('pooled') or {}
-    if formula.get('scope') != 'pooled_global' or formula.get('accounts'):
+    selected = formula.get('selected') or {}
+    try:
+        selected_alpha = float(selected.get('pooledAlpha'))
+        selected_account_weight = float(
+            selected.get('accountWeight')
+        )
+        pooled_intercept = float(pooled.get('intercept'))
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            'visual keep predictor selected candidate is invalid'
+        )
+    if (
+        formula.get('estimatorId') != VISUAL_KEEP_ESTIMATOR_ID
+        or formula.get('scope') != 'pooled_global'
+        or formula.get('accountInputs') != []
+        or formula.get('accounts') not in (None, [])
+        or selected.get('estimatorId') != VISUAL_KEEP_ESTIMATOR_ID
+        or selected_alpha not in VISUAL_KEEP_POOLED_ALPHAS
+        or selected_account_weight != 0
+        or formula.get('outputTransform')
+        != 'clip(linear_prediction, 0, 100)'
+        or formula.get('outputBounds') != [0, 100]
+    ):
         raise RuntimeError('visual keep predictor must contain one pooled-global formula')
     coefficients = np.asarray(pooled.get('coefficients') or [], dtype=float)
     vector = np.asarray(embedding, dtype=float).reshape(-1)
@@ -119,8 +285,19 @@ def _visual_keep_forecast_from_payload(
             f'visual keep predictor expects {DIM} dimensions '
             f'(model={len(coefficients)}, input={len(vector)})'
         )
+    if (
+        not np.isfinite(coefficients).all()
+        or not np.isfinite(pooled_intercept)
+    ):
+        raise RuntimeError(
+            'visual keep predictor formula contains non-finite values'
+        )
     vector = vector / (np.linalg.norm(vector) + 1e-9)
-    raw_prediction = float(pooled.get('intercept')) + float(vector @ coefficients)
+    linear_prediction = (
+        pooled_intercept
+        + float(vector @ coefficients)
+    )
+    raw_prediction = float(np.clip(linear_prediction, 0, 100))
     if not np.isfinite(raw_prediction):
         raise RuntimeError('visual keep predictor returned a non-finite value')
     return {
@@ -237,6 +414,13 @@ def creator_adaptive_keep_forecast(visual, together, profile):
         model_artifact_sha256 = str(
             model_manifest.get('artifactSha256') or ''
         ).lower()
+        model_artifact_key = str(
+            model_manifest.get('archiveKey') or ''
+        )
+        expected_model_key = (
+            'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/'
+            f'{model_artifact_sha256}.json'
+        )
         if (
             serving_manifest.get('coordinateId')
             != CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
@@ -247,6 +431,27 @@ def creator_adaptive_keep_forecast(visual, together, profile):
             or not _exact_sha256(model_artifact_sha256)
             or serving_manifest.get('modelArtifactSha256')
             != model_artifact_sha256
+            or model_manifest.get('coordinateId')
+            != CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+            or model_manifest.get('canonicalKey')
+            != CREATOR_ADAPTIVE_KEEP_MODEL_KEY
+            or model_artifact_key != expected_model_key
+            or not _exact_sha256(
+                model_manifest.get('producerSourceSha256')
+            )
+            or not _exact_sha256(
+                model_manifest.get('featureContractSha256')
+            )
+            or not _exact_sha256(
+                serving_manifest.get('producerSourceSha256')
+            )
+            or not _exact_sha256(
+                serving_manifest.get('servingScorerSourceSha256')
+            )
+            or serving_manifest.get('featureContractVersion')
+            != model_manifest.get('featureContractVersion')
+            or serving_manifest.get('featureContractSha256')
+            != model_manifest.get('featureContractSha256')
         ):
             raise RuntimeError(
                 'creator-adaptive keep serving manifest failed integrity validation'
@@ -274,6 +479,12 @@ def creator_adaptive_keep_forecast(visual, together, profile):
             != scorer_source_sha256
             or serving_manifest.get('servingScorerSourceSha256')
             != scorer_source_sha256
+            or metadata.get('producerSourceSha256')
+            != serving_manifest.get('producerSourceSha256')
+            or metadata.get('featureContractVersion')
+            != serving_manifest.get('featureContractVersion')
+            or metadata.get('featureContractSha256')
+            != serving_manifest.get('featureContractSha256')
         ):
             raise RuntimeError(
                 'creator-adaptive keep serving code or model revision is incompatible'
@@ -287,9 +498,24 @@ def creator_adaptive_keep_forecast(visual, together, profile):
             ).hexdigest(),
             'manifest_key': CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY,
             'model_artifact_sha256': model_artifact_sha256,
+            'model_artifact_key': model_artifact_key,
             'model_manifest_sha256': hashlib.sha256(
                 model_manifest_bytes
             ).hexdigest(),
+            'model_manifest_key':
+                CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY,
+            'model_producer_source_sha256':
+                model_manifest.get('producerSourceSha256'),
+            'serving_producer_source_sha256':
+                serving_manifest.get('producerSourceSha256'),
+            'serving_scorer_source_sha256':
+                serving_manifest.get('servingScorerSourceSha256'),
+            'feature_contract_version':
+                serving_manifest.get('featureContractVersion'),
+            'feature_contract_sha256':
+                serving_manifest.get('featureContractSha256'),
+            'candidate_registry_sha256':
+                metadata.get('candidateRegistrySha256'),
         }
     cached = _CREATOR_ADAPTIVE_KEEP_STATE_CACHE
     result = score_creator_adaptive_keep(
@@ -301,10 +527,33 @@ def creator_adaptive_keep_forecast(visual, together, profile):
     result.update({
         'serving_artifact_sha256': cached['artifact_sha256'],
         'serving_artifact_key': cached['artifact_key'],
+        'serving_artifact_canonical_key':
+            CREATOR_ADAPTIVE_KEEP_SERVING_KEY,
         'serving_manifest_sha256': cached['manifest_sha256'],
         'serving_manifest_key': cached['manifest_key'],
+        'serving_producer_source_sha256':
+            cached['serving_producer_source_sha256'],
+        'serving_scorer_source_sha256':
+            cached['serving_scorer_source_sha256'],
         'model_artifact_sha256': cached['model_artifact_sha256'],
+        'model_artifact_key': cached['model_artifact_key'],
+        'model_artifact_canonical_key':
+            CREATOR_ADAPTIVE_KEEP_MODEL_KEY,
         'model_manifest_sha256': cached['model_manifest_sha256'],
+        'model_manifest_key': cached['model_manifest_key'],
+        'model_producer_source_sha256':
+            cached['model_producer_source_sha256'],
+        'feature_contract_version':
+            cached['feature_contract_version'],
+        'feature_contract_sha256':
+            cached['feature_contract_sha256'],
+        'candidate_registry_sha256':
+            cached['candidate_registry_sha256'],
+        'calibration_scope': 'creator_profile_snapshot',
+        'input': (
+            'canonical visual embedding + canonical together embedding '
+            '+ registered strictly-earlier creator profile history'
+        ),
     })
     return result
 
@@ -415,12 +664,40 @@ def _r2_error_code(error):
 def _object_revision(key):
     try:
         head = s3.head_object(Bucket=BUCKET, Key=key)
-        return {
+        etag = str(head.get('ETag') or '').strip('"')
+        size = int(head.get('ContentLength') or 0)
+        if not etag:
+            raise ScoreArtifactIntegrityError(
+                f'artifact has no immutable ETag: {key}'
+            )
+        revision = {
             'state': 'present',
-            'etag': str(head.get('ETag') or '').strip('"'),
+            'etag': etag,
             'version_id': str(head.get('VersionId') or ''),
-            'size': int(head.get('ContentLength') or 0),
+            'size': size,
         }
+        if key.endswith('.json') and size <= 2 * 1024 * 1024:
+            response = s3.get_object(
+                Bucket=BUCKET,
+                Key=key,
+                IfMatch=etag,
+            )
+            payload = response['Body'].read()
+            actual_etag = str(
+                response.get('ETag') or ''
+            ).strip('"')
+            if actual_etag and actual_etag != etag:
+                raise ScoreArtifactIntegrityError(
+                    f'JSON artifact changed during revision capture: {key}'
+                )
+            if len(payload) != size:
+                raise ScoreArtifactIntegrityError(
+                    f'JSON artifact size changed during revision capture: {key}'
+                )
+            revision['sha256'] = hashlib.sha256(
+                payload
+            ).hexdigest()
+        return revision
     except Exception as error:
         if _r2_error_code(error) in ('404', 'NoSuchKey', 'NotFound'):
             return {'state': 'missing'}
@@ -429,6 +706,14 @@ def _object_revision(key):
 def _score_code_sha256():
     try:
         return hashlib.sha256(open(__file__, 'rb').read()).hexdigest()
+    except Exception:
+        return None
+
+def _score_ledger_code_sha256():
+    try:
+        return hashlib.sha256(
+            open(os.path.join(HERE, 'shorts_score_ledger.py'), 'rb').read()
+        ).hexdigest()
     except Exception:
         return None
 
@@ -469,6 +754,8 @@ def _score_revisions():
         'scorer': {
             'name': 'raw_upload.py',
             'sha256': _score_code_sha256(),
+            'score_ledger_module_sha256':
+                _score_ledger_code_sha256(),
             'creator_adaptive_module_sha256':
                 _creator_scorer_code_sha256(),
         },
@@ -692,16 +979,29 @@ def _score_replay_prepare(
     return {'score': score, 'meta': meta}
 
 def _scorer_contract():
+    global _PINNED_ARTIFACT_REVISIONS
     revisions = _score_revisions()
+    _PINNED_ARTIFACT_REVISIONS = dict(
+        revisions.get('artifacts') or {}
+    )
     creator_profiles = []
+    visual_manifest_bytes = r2_get(
+        VISUAL_KEEP_MODEL_MANIFEST_KEY
+    )
     serving_manifest_bytes = r2_get(
         CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY
     )
     model_manifest_bytes = r2_get(
         CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY
     )
+    visual_manifest = None
     serving_manifest = None
     model_manifest = None
+    if visual_manifest_bytes:
+        try:
+            visual_manifest = json.loads(visual_manifest_bytes)
+        except Exception:
+            visual_manifest = None
     if serving_manifest_bytes:
         try:
             serving_manifest = json.loads(serving_manifest_bytes)
@@ -723,6 +1023,13 @@ def _scorer_contract():
         'revision_fingerprint': _revision_fingerprint(revisions),
         'scorer_revisions': revisions,
         'display_contract_version': DISPLAY_CONTRACT_VERSION,
+        'feature_contract_identity_schema_version':
+            FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+        'feature_contract_sha256': FEATURE_CONTRACT_SHA256,
+        'feature_contract_document_sha256':
+            FEATURE_CONTRACT_DOCUMENT_SHA256,
+        'coordinate_governance_version': COORDINATE_GOVERNANCE['schemaVersion'],
+        'coordinate_governance_sha256': COORDINATE_GOVERNANCE_SHA256,
         'embedding_model': EMBEDDING_MODEL,
         'embedding_dimensions': DIM,
         'source_window': 'first 5 seconds',
@@ -734,12 +1041,26 @@ def _scorer_contract():
             'subsampling': '4:2:0',
         },
         'coordinates': {
-            'stored_pattern': 'shorts.stored.{channel}.{target}',
+            'stored_pattern':
+                COORDINATE_GOVERNANCE['coordinates']['storedPattern'],
+            'stored': list(SHORTS_STORED_COORDINATE_IDS),
             'visual_keep_forecast': VISUAL_KEEP_COORDINATE_ID,
             'creator_adaptive_keep_forecast':
                 CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
         },
         'creator_profiles': creator_profiles,
+        'visual_keep_model_manifest_sha256': (
+            hashlib.sha256(visual_manifest_bytes).hexdigest()
+            if visual_manifest_bytes else None
+        ),
+        'visual_keep_model_artifact_sha256': (
+            visual_manifest.get('artifactSha256')
+            if visual_manifest else None
+        ),
+        'visual_keep_model_producer_source_sha256': (
+            visual_manifest.get('producerSourceSha256')
+            if visual_manifest else None
+        ),
         'creator_serving_manifest_sha256': (
             hashlib.sha256(serving_manifest_bytes).hexdigest()
             if serving_manifest_bytes else None
@@ -748,12 +1069,24 @@ def _scorer_contract():
             serving_manifest.get('artifactSha256')
             if serving_manifest else None
         ),
+        'creator_serving_producer_source_sha256': (
+            serving_manifest.get('producerSourceSha256')
+            if serving_manifest else None
+        ),
+        'creator_serving_scorer_source_sha256': (
+            serving_manifest.get('servingScorerSourceSha256')
+            if serving_manifest else None
+        ),
         'creator_model_manifest_sha256': (
             hashlib.sha256(model_manifest_bytes).hexdigest()
             if model_manifest_bytes else None
         ),
         'creator_model_artifact_sha256': (
             model_manifest.get('artifactSha256')
+            if model_manifest else None
+        ),
+        'creator_model_producer_source_sha256': (
+            model_manifest.get('producerSourceSha256')
             if model_manifest else None
         ),
         'parity_rule': (
@@ -1050,14 +1383,17 @@ _CDIR = tempfile.gettempdir()
 _NBR = {}
 _PINNED_ARTIFACT_REVISIONS = {}
 
-class ScoreArtifactIntegrityError(RuntimeError):
-    pass
-
-def _zip_central_dir(key, size):
+def _zip_central_dir(key, size, etag=None):
     """Member table of a remote zip (npz) from ONE small ranged read of its central directory."""
     import struct
     tl = min(size, 65536)
-    tail = s3.get_object(Bucket=BUCKET, Key=key, Range=f'bytes={size - tl}-')['Body'].read()
+    conditional = {'IfMatch': etag} if etag else {}
+    tail = s3.get_object(
+        Bucket=BUCKET,
+        Key=key,
+        Range=f'bytes={size - tl}-',
+        **conditional,
+    )['Body'].read()
     out = {}
     for m in re.finditer(rb'PK\x01\x02', tail):
         e = tail[m.start():m.start() + 46]
@@ -1135,7 +1471,7 @@ def _norm_emb(c):
     except Exception: pass
     try:
         print(f'[warm] {c}: streaming {round(size / 1e6)}MB library from R2', file=sys.stderr, flush=True)
-        members = _zip_central_dir(key, size)
+        members = _zip_central_dir(key, size, etag)
         vi, ii = members.get('vecs.npy'), members.get('ids.npy')
         if not vi or not ii: raise RuntimeError('npz missing vecs/ids members')
         with open(tmp, 'wb') as f:
@@ -1200,8 +1536,16 @@ def _score_input_manifest(
         'embedding_model': EMBEDDING_MODEL,
         'embedding_dimensions': DIM,
         'display_contract_version': DISPLAY_CONTRACT_VERSION,
+        'feature_contract_identity_schema_version':
+            FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+        'feature_contract_sha256': FEATURE_CONTRACT_SHA256,
+        'feature_contract_document_sha256':
+            FEATURE_CONTRACT_DOCUMENT_SHA256,
+        'coordinate_governance_version': COORDINATE_GOVERNANCE['schemaVersion'],
+        'coordinate_governance_sha256': COORDINATE_GOVERNANCE_SHA256,
         'canonical_output_contract': {
-            'canonical_embedding_outputs': 21,
+            'canonical_embedding_outputs': len(SHORTS_STORED_COORDINATE_IDS),
+            'canonical_coordinate_ids': list(SHORTS_STORED_COORDINATE_IDS),
             'universal_raw_scorer_total': 22,
             'creator_profile_enriched_maximum': 23,
             'steer_coordinates': 18,
@@ -1210,7 +1554,8 @@ def _score_input_manifest(
             'frozen_model_forecasts': 1,
             'conditional_creator_forecasts': 1,
             'visual_keep_forecast_coordinate_id': VISUAL_KEEP_COORDINATE_ID,
-            'creator_adaptive_keep_forecast_coordinate_id': 'shorts.creator-adaptive-keep.v1',
+            'creator_adaptive_keep_forecast_coordinate_id':
+                CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
             'creator_adaptive_availability': 'registered known creator with at least eight strictly earlier labeled uploads; unavailable in anonymous raw scoring',
             'novelty_derivation': 'cached indicator state + revision-pinned indicator registry',
         },
@@ -1281,6 +1626,22 @@ def _score_output(
     creator_profile=None,
     source_mode=None,
 ):
+    registry, registry_revision = _indicator_registry_snapshot()
+    bundle = materialize_score_bundle(
+        score,
+        registry,
+        registry_revision,
+    )
+    ledger = bundle['score_ledger']
+    if not ledger.get('schema_complete'):
+        raise RuntimeError(
+            'canonical Shorts score ledger failed structural validation'
+        )
+    served_score = {
+        **score,
+        'steer': bundle['addressed_steer'],
+        'score_ledger': ledger,
+    }
     return {
         **extra,
         'montage': b64,
@@ -1288,8 +1649,11 @@ def _score_output(
         'silent': (not good),
         'dur_s': dur_s,
         'title': title,
-        'indicators': score.get('indicators') or {},
-        'steer': score.get('steer') or {},
+        'indicators': served_score.get('indicators') or {},
+        'steer': served_score.get('steer') or {},
+        'features': bundle['features'],
+        'score_ledger': ledger,
+        'novelty_provenance': bundle['novelty_provenance'],
         'visual_keep_forecast': score.get('visual_keep_forecast') or None,
         'creator_adaptive_keep_forecast': (
             score.get('creator_adaptive_keep_forecast') or None
@@ -1302,7 +1666,7 @@ def _score_output(
             txt,
             good,
             dur_s,
-            score,
+            served_score,
             replay_meta,
             creator_profile,
             source_mode,
@@ -1312,6 +1676,12 @@ def _score_output(
 
 def _run():
     global _PINNED_ARTIFACT_REVISIONS
+    global _VISUAL_KEEP_MODEL_CACHE
+    global _CREATOR_ADAPTIVE_KEEP_STATE_CACHE
+    _PINNED_ARTIFACT_REVISIONS = {}
+    _VISUAL_KEEP_MODEL_CACHE = None
+    _CREATOR_ADAPTIVE_KEEP_STATE_CACHE = None
+    _NBR.clear()
     args = {}
     a = sys.argv[1:]
     for i in range(0, len(a) - 1, 2):
@@ -1390,14 +1760,16 @@ def _run():
         dur_s,
         creator_profile,
     )
+    _PINNED_ARTIFACT_REVISIONS = dict(
+        ((replay.get('meta') or {}).get('scorer_revisions') or {}).get(
+            'artifacts'
+        ) or {}
+    )
     if replay.get('score') is not None:
         print(json.dumps(_score_output(
             extra, args.get('title', 'My hook'), b64, txt, good, dur_s,
             replay['score'], replay['meta'], creator_profile, source_mode)))
         return
-    _PINNED_ARTIFACT_REVISIONS = dict(
-        ((replay.get('meta') or {}).get('scorer_revisions') or {}).get('artifacts') or {}
-    )
 
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
@@ -1439,7 +1811,10 @@ def _run():
                 if eg is not None:
                     gn = np.asarray(eg, float); gn /= (np.linalg.norm(gn) + 1e-9); mix = (vn + tn); mix /= (np.linalg.norm(mix) + 1e-9)
                     indicators['nov_fusion_combinatorial'] = round(float(1 - gn @ mix), 4)
-    except Exception: pass
+    except ScoreArtifactIntegrityError:
+        raise
+    except Exception:
+        pass
     # STEERED estimate — the ONE global number. Project the upload onto the same linear
     # direction the 11k map uses for each (channel × metric), then map it exactly the way
     # the map does: keep/ret5 quantile-map onto your 211's actual outcomes; views/outlier
@@ -1484,7 +1859,20 @@ def _run():
                     else:
                         ysort = SM[f'{mod}_{tgt}_ysort']; yv = float(ysort[int(round(rank * (len(ysort) - 1)))])
                         est = float(max(0.0, 10 ** yv - 1)) if kind in ('logcount', 'logx') else yv
-                    steer[f'{mod}_{tgt}'] = {'est': round(est, 4) if est < 100 else round(est), 'pctile': round(rank * 100, 1), 'kind': kind}
+                    steer[f'{mod}_{tgt}'] = {
+                        'coordinate_id': COORDINATE_GOVERNANCE[
+                            'coordinates'
+                        ]['storedPattern'].replace(
+                            '{featureKey}',
+                            f'{mod}.{tgt}',
+                        ),
+                        'feature_key': f'{mod}.{tgt}',
+                        'group': mod,
+                        'target': tgt,
+                        'est': round(est, 4) if est < 100 else round(est),
+                        'pctile': round(rank * 100, 1),
+                        'kind': kind,
+                    }
             # REALISTIC VIEWS (predict-scope): feed the steered keep/ret5 ests + this video's real
             # duration through the 211's retention→views model → views on Tyler's channel scale.
             if 'PSCOPE' in keys:
@@ -1497,7 +1885,22 @@ def _run():
                     kk = steer.get(f'{mod}_keep'); rr = steer.get(f'{mod}_ret5')
                     if kk and rr:
                         rv = float(max(0.0, 10 ** (PS[0] * kk['est'] + PS[1] * rr['est'] + PS[2] * ld + PS[3]) - 1))
-                        steer[f'{mod}_realviews'] = {'est': round(rv), 'pctile': None, 'kind': 'realviews', 'dur_s': round(dv), 'dur_assumed': not have_dur}
+                        steer[f'{mod}_realviews'] = {
+                            'coordinate_id': COORDINATE_GOVERNANCE[
+                                'coordinates'
+                            ]['storedPattern'].replace(
+                                '{featureKey}',
+                                f'{mod}.realviews',
+                            ),
+                            'feature_key': f'{mod}.realviews',
+                            'group': mod,
+                            'target': 'realviews',
+                            'est': round(rv),
+                            'pctile': None,
+                            'kind': 'realviews',
+                            'dur_s': round(dv),
+                            'dur_assumed': not have_dur,
+                        }
     except ScoreArtifactIntegrityError:
         raise
     except Exception:

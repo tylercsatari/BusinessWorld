@@ -58,9 +58,11 @@ only a few independent channels and views are lifetime snapshots. The artifact
 reports Brier skill against the base-rate null, but it does not frame the
 current calibration as decision-grade financial risk.
 
-Every source object read by a run is content-hashed. Raw arrays are rejected
-when IDs, vectors, labels, metadata, or flags are misaligned, and a run aborts
-if it observes two byte generations for the same source.
+Every source object read by a run is content-hashed. Mutable NPZ inputs are
+copied to create-only, content-addressed R2 snapshots and read back byte for
+byte before fitting, so a concurrent backfill cannot change the evidence
+under a long run. Raw arrays are rejected when IDs, vectors, labels, metadata,
+or flags are misaligned.
 
 ## Science Center backfill
 

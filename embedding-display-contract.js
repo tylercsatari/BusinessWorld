@@ -1,9 +1,218 @@
 'use strict';
 
-const SAVED_HOOK_INDEX_VERSION = 2;
+const {
+    GOVERNANCE: coordinateGovernance,
+    ledgerFeatureCell,
+    scoreRecordBindingSha256,
+    sha256Canonical,
+} = require('./buildings/jarvis/shorts-score-ledger');
+const longScoreLedger = require(
+    './buildings/jarvis/long-score-ledger'
+);
+const SAVED_HOOK_INDEX_VERSION = 9;
 const SHORTS_DISPLAY_PREFERENCE = Object.freeze(['together', 'text', 'visual']);
 const LONGQUANT_DISPLAY_PREFERENCE = Object.freeze(['visual', 'together', 'text']);
 const SAVED_HOOK_METRICS = Object.freeze(['keep', 'ret5', 'views', 'realviews', 'gt10M', 'outlier']);
+const LONGQUANT_SAVED_METRICS = longScoreLedger.OUTPUT_METRICS;
+
+function savedHookScoreRecordSha256(record) {
+    return scoreRecordBindingSha256(record);
+}
+
+function savedHookRecordReference(record, scoreRecordSha256) {
+    const id = record && record.id || null;
+    return {
+        schema: 'saved-hook-source-reference-v1',
+        storage_key: id ? `raw/saved-hooks/${id}.json` : null,
+        record_id: id,
+        score_record_sha256: scoreRecordSha256 || null,
+    };
+}
+
+function compactSavedHookBindingPayload(record) {
+    return {
+        schema: 'saved-hook-compact-binding-v2',
+        id: record && record.id || null,
+        title: record && record.title || null,
+        kind: record && record.kind || null,
+        savedAt: record && record.savedAt || null,
+        score_domain: record && record.score_domain || null,
+        hasMontage: !!(record && record.hasMontage),
+        folder: record && record.folder || null,
+        input_manifest: record && record.input_manifest || null,
+        embedding_input_fingerprint:
+            record && record.embedding_input_fingerprint || null,
+        score_input_fingerprint:
+            record && record.score_input_fingerprint || null,
+        creator_profile:
+            record && record.creator_profile || null,
+        score_record_sha256:
+            record && record.score_record_sha256 || null,
+        score_ledger_sha256:
+            record && record.score_ledger_sha256 || null,
+        output_contract_sha256:
+            record && record.output_contract_sha256 || null,
+        score_revision_fingerprint:
+            record && record.score_revision_fingerprint || null,
+        record_ref: record && record.record_ref || null,
+        m_identity: record && record.m_identity || null,
+        selection_policy: record && record.selection_policy || null,
+        derived_identity: record && record.derived_identity || null,
+    };
+}
+
+function validateCompactSavedHookRecord(record) {
+    const expected = record && record.compact_score_sha256;
+    const domain = record && record.score_domain;
+    if (!['shorts', 'longquant'].includes(domain)) return false;
+    const scoreRecordSha256 =
+        record && record.score_record_sha256;
+    if (
+        typeof scoreRecordSha256 !== 'string'
+        || !/^[a-f0-9]{64}$/.test(scoreRecordSha256)
+    ) return false;
+    const recordRef = record && record.record_ref;
+    if (
+        !recordRef
+        || recordRef.schema !== 'saved-hook-source-reference-v1'
+        || recordRef.record_id !== record.id
+        || recordRef.storage_key !== `raw/saved-hooks/${record.id}.json`
+        || recordRef.score_record_sha256 !== scoreRecordSha256
+    ) return false;
+    const manifest = record && record.input_manifest;
+    if (
+        record.score_revision_fingerprint
+            !== (
+                manifest && manifest.revision_fingerprint
+                || null
+            )
+        || record.embedding_input_fingerprint
+            !== (
+                manifest && manifest.embedding_input_fingerprint
+                || null
+            )
+        || record.score_input_fingerprint
+            !== (
+                manifest && (
+                    manifest.score_input_fingerprint
+                    || manifest.input_fingerprint
+                )
+                || null
+            )
+        || record.creator_profile
+            !== (
+                manifest && manifest.creator_profile
+                || null
+            )
+    ) return false;
+    if (
+        record.kind === 'scored'
+        && (
+            typeof record.score_ledger_sha256 !== 'string'
+            || !/^[a-f0-9]{64}$/.test(
+                record.score_ledger_sha256
+            )
+        )
+    ) return false;
+    const identity = record && record.m_identity;
+    if (!identity || typeof identity !== 'object') return false;
+    if (Object.prototype.hasOwnProperty.call(record, 'm')) {
+        return false;
+    }
+    const expectedPattern = domain === 'longquant'
+        ? coordinateGovernance.coordinates.longOutputPattern
+        : coordinateGovernance.coordinates.storedPattern;
+    const expectedPrefix = expectedPattern.split('{')[0];
+    if (Object.values(identity).some(cell => (
+        cell
+        && (
+            typeof cell.coordinateId !== 'string'
+            || !cell.coordinateId.startsWith(expectedPrefix)
+            || Object.prototype.hasOwnProperty.call(cell, 'est')
+            || Object.prototype.hasOwnProperty.call(cell, 'pctile')
+            || !Number.isFinite(Number(cell.value))
+            || typeof cell.valueUnit !== 'string'
+            || !cell.valueUnit
+            || (
+                cell.percentile100 != null
+                && (
+                    !Number.isFinite(Number(cell.percentile100))
+                    || Number(cell.percentile100) < 0
+                    || Number(cell.percentile100) > 100
+                )
+            )
+            || cell.percentileUnit
+                !== coordinateGovernance.percentileStorageUnit
+            || typeof cell.channel !== 'string'
+            || typeof cell.target !== 'string'
+            || typeof cell.modality !== 'string'
+            || typeof cell.input !== 'string'
+            || !cell.input
+            || typeof cell.ledgerSha256 !== 'string'
+            || !/^[a-f0-9]{64}$/.test(cell.ledgerSha256)
+            || cell.ledgerSha256 !== record.score_ledger_sha256
+        )
+    ))) return false;
+    return !!(
+        typeof expected === 'string'
+        && /^[a-f0-9]{64}$/.test(expected)
+        && expected === sha256Canonical(
+            compactSavedHookBindingPayload(record)
+        )
+    );
+}
+
+function validateCompactSavedHookSource(compact, sourceRecord) {
+    if (
+        !validateCompactSavedHookRecord(compact)
+        || !sourceRecord
+        || typeof sourceRecord !== 'object'
+        || sourceRecord.id !== compact.id
+    ) return false;
+    const calculatedRecordSha256 =
+        savedHookScoreRecordSha256(sourceRecord);
+    if (
+        sourceRecord.score_record_sha256
+        && sourceRecord.score_record_sha256
+            !== calculatedRecordSha256
+    ) return false;
+    if (
+        calculatedRecordSha256
+        !== compact.score_record_sha256
+    ) return false;
+    let expected;
+    try {
+        expected = compactSavedHookRecord(sourceRecord, {
+            scoreDomain: compact.score_domain,
+        });
+    } catch (_) {
+        return false;
+    }
+    return (
+        expected.compact_score_sha256
+            === compact.compact_score_sha256
+        && sha256Canonical(
+            compactSavedHookBindingPayload(expected)
+        ) === sha256Canonical(
+            compactSavedHookBindingPayload(compact)
+        )
+    );
+}
+
+function scoreDomainForRecord(record, requestedDomain) {
+    const manifestDomain = String(
+        record && record.input_manifest
+        && record.input_manifest.domain || ''
+    ).toLowerCase();
+    const requested = String(requestedDomain || '').toLowerCase();
+    if (
+        requested === 'longquant'
+        || record && record.score_domain === 'longquant'
+        || record && record.long_score_ledger
+        || manifestDomain.includes('longquant')
+    ) return 'longquant';
+    return 'shorts';
+}
 
 function embeddingDisplayPreference(record, fallbackDomain) {
     const manifest = record && record.input_manifest && typeof record.input_manifest === 'object'
@@ -20,32 +229,204 @@ function embeddingDisplayPreference(record, fallbackDomain) {
     return valid;
 }
 
+function channelInputIdentity(record, channel, domain) {
+    const manifest = record && record.input_manifest;
+    const manifestChannel = manifest && manifest.channels
+        && manifest.channels[channel];
+    const longInputs = record && record.output_contract
+        && record.output_contract.channel_inputs;
+    const defaults = domain === 'longquant'
+        ? {
+            visual: 'thumbnail image only',
+            text: 'title or idea text only',
+            together: 'thumbnail image plus title or idea',
+        }
+        : {
+            visual: 'first-five-second five-frame montage only',
+            text: 'first-five-second transcript only',
+            together: 'first-five-second montage plus transcript',
+        };
+    return {
+        modality: channel === 'together' ? 'multimodal' : channel,
+        input: String(
+            domain === 'longquant'
+                ? longInputs && longInputs[channel]
+                    || defaults[channel]
+                : manifestChannel && manifestChannel.input
+                    || defaults[channel]
+        ),
+        inputPresent: domain === 'longquant'
+            ? channel === 'visual'
+                ? !!(
+                    manifest
+                    && manifest.query_input
+                    && manifest.query_input.thumbnail
+                    && manifest.query_input.thumbnail.present
+                )
+                : !!(
+                    manifest
+                    && manifest.query_input
+                    && manifest.query_input.text
+                    && manifest.query_input.text.present
+                )
+            : !!(manifestChannel && manifestChannel.present === true),
+    };
+}
+
 function embeddingSteerSelection(record, target, fallbackDomain) {
-    const steer = record && record.steer && typeof record.steer === 'object' ? record.steer : {};
     for (const channel of embeddingDisplayPreference(record, fallbackDomain)) {
         const sourceKey = `${channel}_${target}`;
-        const metric = steer[sourceKey];
-        if (!metric || metric.est == null || !isFinite(Number(metric.est))) continue;
+        const coordinateId = coordinateGovernance.coordinates.storedPattern
+            .replace('{featureKey}', `${channel}.${target}`);
+        const ledgerCell = ledgerFeatureCell(
+            record,
+            `${channel}.${target}`
+        );
+        if (ledgerCell.ledgerPresent) {
+            if (ledgerCell.value != null) {
+                const entry = ledgerCell.entry;
+                const inputIdentity = channelInputIdentity(
+                    record,
+                    channel,
+                    'shorts'
+                );
+                const historical = entry.provenance
+                    && entry.provenance.status
+                        === 'historical_materialization';
+                return {
+                    domain: String((record.input_manifest && record.input_manifest.domain) || fallbackDomain || 'shorts_raw'),
+                    origin: historical
+                        ? 'historical-materialized-ledger'
+                        : 'canonical-score-ledger',
+                    channel,
+                    target,
+                    sourceKey: entry.source_key || sourceKey,
+                    coordinateId,
+                    value: Number(entry.value),
+                    valueUnit: entry.unit,
+                    displayUnit: entry.display_unit || entry.unit,
+                    percentile100: entry.percentile == null
+                        || !isFinite(Number(entry.percentile))
+                        ? null
+                        : Number(entry.percentile),
+                    percentileUnit:
+                        coordinateGovernance.percentileStorageUnit,
+                    modality: inputIdentity.modality,
+                    input: inputIdentity.input,
+                    inputPresent: inputIdentity.inputPresent,
+                    kind: entry.provenance && entry.provenance.kind || null,
+                    scorer: (record.input_manifest && record.input_manifest.scorer) || null,
+                    embeddingModel: (record.input_manifest && record.input_manifest.embedding_model) || null,
+                    selectionPolicyId: 'policy.shorts.display-preference.v1',
+                    selectionPreference: embeddingDisplayPreference(record, fallbackDomain),
+                    ledgerSha256: ledgerCell.ledgerSha256,
+                };
+            }
+            continue;
+        }
+    }
+    return null;
+}
+
+function longQuantEmbeddingSelection(record, target) {
+    const contractValidation =
+        longScoreLedger.validateLongOutputContract(record);
+    if (!contractValidation.valid) return null;
+    for (const channel of embeddingDisplayPreference(
+        record,
+        'longquant'
+    )) {
+        const cell = longScoreLedger.longLedgerCell(
+            record,
+            channel,
+            target
+        );
+        if (!cell.valid || !cell.entry) continue;
+        const definition = longScoreLedger.METRIC_DEFINITIONS.find(
+            candidate => candidate.key === target
+        );
+        const inputIdentity = channelInputIdentity(
+            record,
+            channel,
+            'longquant'
+        );
         return {
-            domain: String((record.input_manifest && record.input_manifest.domain) || fallbackDomain || 'shorts_raw'),
-            origin: 'stored-production',
+            domain: 'longquant',
+            origin: 'canonical-long-score-ledger',
             channel,
             target,
-            sourceKey,
-            est: Number(metric.est),
-            pctile: metric.pctile == null || !isFinite(Number(metric.pctile)) ? null : Number(metric.pctile),
-            kind: metric.kind || null,
-            scorer: (record.input_manifest && record.input_manifest.scorer) || null,
-            embeddingModel: (record.input_manifest && record.input_manifest.embedding_model) || null,
+            sourceKey: null,
+            coordinateId: cell.coordinateId,
+            value: cell.value,
+            valueUnit: definition && definition.unit || 'number',
+            displayUnit: definition && definition.unit || 'number',
+            percentile100: cell.percentile,
+            percentileUnit: longScoreLedger.PERCENTILE_STORAGE_UNIT,
+            modality: inputIdentity.modality,
+            input: inputIdentity.input,
+            inputPresent: inputIdentity.inputPresent,
+            kind: cell.entry.kind || null,
+            projection: cell.entry.projection || null,
+            scorer:
+                record.input_manifest
+                && record.input_manifest.scorer || null,
+            embeddingModel:
+                record.input_manifest
+                && record.input_manifest.embedding_model || null,
+            selectionPolicyId:
+                'policy.longquant.display-preference.v1',
+            selectionPreference: embeddingDisplayPreference(
+                record,
+                'longquant'
+            ),
+            ledgerSha256: cell.ledgerSha256,
         };
     }
     return null;
 }
 
-function compactSavedHookRecord(record) {
+function compactSavedHookRecord(record, options = {}) {
+    const scoreDomain = scoreDomainForRecord(
+        record,
+        options.scoreDomain
+    );
     const selected = {};
-    for (const target of SAVED_HOOK_METRICS) selected[target] = embeddingSteerSelection(record, target, 'shorts_raw');
-    const metric = target => selected[target];
+    const targets = scoreDomain === 'longquant'
+        ? LONGQUANT_SAVED_METRICS
+        : SAVED_HOOK_METRICS;
+    const scoredLongRecord = scoreDomain === 'longquant' && !!(
+        record && record.kind === 'scored'
+        || record && record.long_score_ledger
+        || record && record.output_contract
+    );
+    if (scoredLongRecord) {
+        const contractValidation =
+            longScoreLedger.validateLongOutputContract(record);
+        const inputValidation =
+            longScoreLedger.validateLongInputManifest(record);
+        if (
+            !contractValidation.valid
+            || !inputValidation.valid
+        ) {
+            throw new Error(
+                contractValidation.errors
+                    .concat(inputValidation.errors)
+                    .join('; ')
+                || 'canonical Long score contract is invalid'
+            );
+        }
+    }
+    for (const target of targets) {
+        selected[target] = scoredLongRecord
+            ? longQuantEmbeddingSelection(record, target)
+            : scoreDomain === 'longquant'
+                ? null
+                : embeddingSteerSelection(
+                    record,
+                    target,
+                    'shorts_raw'
+                );
+    }
     const manifest = record && record.input_manifest && typeof record.input_manifest === 'object'
         ? record.input_manifest
         : {};
@@ -55,10 +436,21 @@ function compactSavedHookRecord(record) {
     const creatorForecast = record && record.creator_adaptive_keep_forecast && typeof record.creator_adaptive_keep_forecast === 'object'
         ? record.creator_adaptive_keep_forecast
         : null;
-    return {
+    const scoreRecordSha256 =
+        savedHookScoreRecordSha256(record);
+    if (
+        record && record.score_record_sha256
+        && record.score_record_sha256 !== scoreRecordSha256
+    ) {
+        throw new Error(
+            'saved hook score record binding does not match its source record'
+        );
+    }
+    const compact = {
         id: record.id,
         title: record.title,
         kind: record.kind,
+        score_domain: scoreDomain,
         hasMontage: !!record.hasMontage,
         savedAt: record.savedAt,
         folder: record.folder || null,
@@ -67,27 +459,52 @@ function compactSavedHookRecord(record) {
         embedding_input_fingerprint: manifest.embedding_input_fingerprint || null,
         score_input_fingerprint: manifest.score_input_fingerprint || manifest.input_fingerprint || null,
         creator_profile: manifest.creator_profile || null,
-        keep: metric('keep') && metric('keep').pctile,
-        m: {
-            keep: metric('keep') && metric('keep').pctile,
-            keep_est: metric('keep') && metric('keep').est,
-            ret5: metric('ret5') && metric('ret5').pctile,
-            views: metric('views') && metric('views').est,
-            sviews: metric('realviews') && metric('realviews').est,
-            gt10M: metric('gt10M') && metric('gt10M').est,
-            outlier: metric('outlier') && metric('outlier').pctile,
-            visual_keep_forecast: visualForecast && isFinite(Number(visualForecast.raw)) ? Number(visualForecast.raw) : null,
-            creator_adaptive_keep: creatorForecast && isFinite(Number(creatorForecast.raw)) ? Number(creatorForecast.raw) : null,
-        },
+        score_record_sha256: scoreRecordSha256,
+        score_ledger_sha256:
+            scoreDomain === 'longquant'
+                ? record.long_score_ledger
+                    && record.long_score_ledger.ledger_sha256 || null
+                : record && record.score_ledger
+                    && record.score_ledger.ledger_sha256 || null,
+        output_contract_sha256:
+            scoreDomain === 'longquant'
+                ? sha256Canonical(record.output_contract)
+                : null,
+        record_ref: savedHookRecordReference(
+            record,
+            scoreRecordSha256
+        ),
         m_identity: selected,
-        derived_identity: {
+        selection_policy: {
+            id: scoreDomain === 'longquant'
+                ? 'policy.longquant.display-preference.v1'
+                : 'policy.shorts.display-preference.v1',
+            preference: embeddingDisplayPreference(
+                record,
+                scoreDomain === 'longquant'
+                    ? 'longquant'
+                    : 'shorts_raw'
+            ),
+            role: 'non_authoritative_hash_bound_materialized_view',
+            source_ledger_sha256:
+                scoreDomain === 'longquant'
+                    ? record.long_score_ledger
+                        && record.long_score_ledger.ledger_sha256 || null
+                    : record && record.score_ledger
+                        && record.score_ledger.ledger_sha256 || null,
+            meaning: 'A compact navigation view only. Every selected value retains its canonical coordinateId and source ledger hash; the policy does not create a generic metric coordinate or a second score authority.',
+        },
+        derived_identity: scoreDomain === 'longquant' ? null : {
             visual_keep_forecast: visualForecast ? {
-                coordinateId: visualForecast.coordinate_id || 'shorts.visual-keep-forecast.v1',
+                coordinateId: visualForecast.coordinate_id
+                    || coordinateGovernance.coordinates.visualKeepForecast.id,
                 raw: visualForecast.raw == null ? null : Number(visualForecast.raw),
                 artifactSha256: visualForecast.model_artifact_sha256 || null,
             } : null,
             creator_adaptive_keep: creatorForecast ? {
-                coordinateId: creatorForecast.coordinate_id || 'shorts.creator-adaptive-keep.v1',
+                coordinateId: creatorForecast.coordinate_id
+                    || coordinateGovernance.coordinates
+                        .creatorAdaptiveKeepForecast.id,
                 raw: creatorForecast.raw == null ? null : Number(creatorForecast.raw),
                 profile: creatorForecast.profile_account || manifest.creator_profile || null,
                 modelArtifactSha256: creatorForecast.model_artifact_sha256 || null,
@@ -95,14 +512,25 @@ function compactSavedHookRecord(record) {
             } : null,
         },
     };
+    compact.compact_score_sha256 = sha256Canonical(
+        compactSavedHookBindingPayload(compact)
+    );
+    return compact;
 }
 
 module.exports = {
     SAVED_HOOK_INDEX_VERSION,
     SHORTS_DISPLAY_PREFERENCE,
     LONGQUANT_DISPLAY_PREFERENCE,
+    LONGQUANT_SAVED_METRICS,
     SAVED_HOOK_METRICS,
+    compactSavedHookBindingPayload,
     embeddingDisplayPreference,
     embeddingSteerSelection,
+    longQuantEmbeddingSelection,
     compactSavedHookRecord,
+    scoreDomainForRecord,
+    savedHookScoreRecordSha256,
+    validateCompactSavedHookRecord,
+    validateCompactSavedHookSource,
 };

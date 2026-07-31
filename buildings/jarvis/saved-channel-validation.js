@@ -4,40 +4,35 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const contract = require('./saved-channel-feature-contract.json');
+const coordinateGovernance = require('./quant-coordinate-governance.json');
+const {
+    validateVisualKeepForecast,
+} = require('./visual-keep-forecast-contract');
+const {
+    FEATURE_CONTRACT_SHA256,
+    scoreRecordBindingSha256,
+    scoreFeatureCell,
+    scoreLedgerValidationSummary,
+} = require('./shorts-score-ledger');
+const {
+    validateManifestRowBinding,
+} = require('./saved-channel-manifest-binding');
 
-const VERSION = 10;
-const LEDGER_VERSION = 7;
-const VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1';
-const VISUAL_KEEP_PROTOCOL_COORDINATES = Object.freeze({
-    videoHoldout: Object.freeze({
-        id: 'shorts.visual-keep-protocol.video-heldout.v1',
-        protocol: 'visual_video_holdout',
-        label: 'Visual-only protocol · known-creator video-held-out keep',
-        familyId: 'family.shorts.visual-keep-video-holdout.v1',
-        datasetId: 'dataset.shorts.visual-keep-video-holdout.v1',
-        algorithmId: 'algorithm.shorts.visual-keep-video-holdout-nested-blend.v1',
-        description: 'Leakage-controlled research prediction made after excluding this video while retaining other labeled videos from the same creator.',
-    }),
-    forwardTime: Object.freeze({
-        id: 'shorts.visual-keep-protocol.forward-time.v1',
-        protocol: 'visual_forward_time',
-        label: 'Visual-only protocol · future-upload keep',
-        familyId: 'family.shorts.visual-keep-forward-time.v1',
-        datasetId: 'dataset.shorts.visual-keep-forward-time.v1',
-        algorithmId: 'algorithm.shorts.visual-keep-forward-time-ridge.v1',
-        description: 'Chronological research prediction fitted and selected from strictly earlier videos by the same creator.',
-    }),
-    accountHoldout: Object.freeze({
-        id: 'shorts.visual-keep-protocol.account-heldout.v1',
-        protocol: 'visual_account_holdout',
-        label: 'Visual-only protocol · unseen-creator keep',
-        familyId: 'family.shorts.visual-keep-account-holdout.v1',
-        datasetId: 'dataset.shorts.visual-keep-account-holdout.v1',
-        algorithmId: 'algorithm.shorts.visual-keep-account-holdout-ridge.v1',
-        description: 'Cold-start research prediction made after excluding every labeled video from this creator.',
-    }),
-});
-const CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = 'shorts.creator-adaptive-keep.v1';
+const VERSION = 15;
+const LEDGER_VERSION = coordinateGovernance.ledgerVersion;
+const VISUAL_KEEP_COORDINATE_ID =
+    coordinateGovernance.coordinates.visualKeepForecast.id;
+const VISUAL_KEEP_PROTOCOL_COORDINATES = Object.freeze(Object.fromEntries(
+    Object.entries(coordinateGovernance.coordinates.visualKeepProtocols).map(
+        ([key, value]) => [key, Object.freeze({ ...value })]
+    )
+));
+const CREATOR_ADAPTIVE_KEEP_MODEL_COORDINATE_ID =
+    coordinateGovernance.coordinates.creatorAdaptiveKeepForecast.id;
+const CREATOR_ADAPTIVE_KEEP_PREQUENTIAL_COORDINATE_ID =
+    coordinateGovernance.coordinates.forecastPattern
+        .replace('{protocol}', 'creator-prequential')
+        .replace('{outcomeKey}', 'keep');
 const CURVE_SECONDS = Object.freeze(Array.from({ length: 21 }, (_, second) => second));
 const SUPPORTED_CHANNELS = Object.freeze([
     { channelId: 'chd3f5a3dae83f3382', accountId: 'tyler', accountName: 'Tyler Csatari' },
@@ -137,21 +132,29 @@ function regressionMetrics(points, options = {}) {
     const residual = predicted.map((value, index) => value - actual[index]);
     const actualMean = average(actual);
     const sse = residual.reduce((sum, value) => sum + value * value, 0);
-    const baselineSse = observed.reduce((sum, point) => {
-        const baseline = finite(point.baseline) ? point.baseline : actualMean;
-        return sum + (point.actual - baseline) ** 2;
-    }, 0);
-    const baselineAbsoluteErrors = observed.map(point => Math.abs(
-        point.actual
-        - (finite(point.baseline) ? point.baseline : actualMean)
-    ));
+    const totalSumSquares = observed.reduce(
+        (sum, point) => sum + (point.actual - actualMean) ** 2,
+        0
+    );
+    const hasProtocolBaseline = observed.every(point => finite(point.baseline));
+    const baselineSse = hasProtocolBaseline
+        ? observed.reduce(
+            (sum, point) => sum + (point.actual - point.baseline) ** 2,
+            0
+        )
+        : null;
+    const baselineAbsoluteErrors = hasProtocolBaseline
+        ? observed.map(point => Math.abs(point.actual - point.baseline))
+        : [];
     const modelMae = average(residual.map(Math.abs));
-    const baselineMae = average(baselineAbsoluteErrors);
+    const baselineMae = hasProtocolBaseline
+        ? average(baselineAbsoluteErrors)
+        : null;
     const fit = calibration(actual, predicted);
     const metrics = {
         n: observed.length,
         coverage: options.total ? observed.length / options.total : null,
-        r2: baselineSse > 0 ? 1 - sse / baselineSse : null,
+        r2: totalSumSquares > 0 ? 1 - sse / totalSumSquares : null,
         pearson: pearson(actual, predicted),
         spearman: spearman(actual, predicted),
         mae: modelMae,
@@ -159,7 +162,9 @@ function regressionMetrics(points, options = {}) {
         maeImprovementVsBaseline: finite(modelMae) && finite(baselineMae)
             ? baselineMae - modelMae
             : null,
-        protocolBaselineR2: baselineSse > 0 ? 1 - sse / baselineSse : null,
+        protocolBaselineR2: finite(baselineSse) && baselineSse > 0
+            ? 1 - sse / baselineSse
+            : null,
         rmse: Math.sqrt(sse / observed.length),
         bias: average(residual),
         calibrationSlope: fit.slope,
@@ -201,6 +206,7 @@ function aucInference(points, stratified) {
         groups.get(key).push(point);
     }
     let weightedAuc = 0, totalPairs = 0, weightedVariance = 0;
+    let contributingRows = 0;
     for (const group of groups.values()) {
         const actual = group.map(point => Number(point.actual) >= 0.5 ? 1 : 0);
         const predicted = group.map(point => Number(point.predicted));
@@ -219,8 +225,17 @@ function aucInference(points, stratified) {
         weightedAuc += auc * pairCount;
         weightedVariance += Math.max(0, variance) * pairCount * pairCount;
         totalPairs += pairCount;
+        contributingRows += group.length;
     }
-    if (!totalPairs) return { auc: null, p: null, ci95: [null, null], pairs: 0 };
+    if (!totalPairs) {
+        return {
+            auc: null,
+            p: null,
+            ci95: [null, null],
+            pairs: 0,
+            n: 0,
+        };
+    }
     const auc = weightedAuc / totalPairs;
     const standardError = Math.sqrt(weightedVariance) / totalPairs;
     const z = standardError > 0 ? Math.abs((auc - 0.5) / standardError) : null;
@@ -231,6 +246,7 @@ function aucInference(points, stratified) {
         p: z == null ? null : round(2 * (1 - normalCdf(z)), 8),
         ci95: [round((low - 0.5) * 2), round((high - 0.5) * 2)],
         pairs: totalPairs,
+        n: contributingRows,
     };
 }
 
@@ -272,20 +288,11 @@ function rankMetrics(points, total) {
 }
 
 function featureCell(video, key) {
-    const cell = video && video.features && video.features[key];
-    if (Array.isArray(cell)) {
-        return {
-            raw: number(cell[0]),
-            percentile: number(cell[1]),
-        };
-    }
-    if (cell && typeof cell === 'object') {
-        return {
-            raw: number(cell.v != null ? cell.v : cell.value),
-            percentile: number(cell.p != null ? cell.p : cell.percentile),
-        };
-    }
-    return { raw: null, percentile: null };
+    const cell = scoreFeatureCell(video, key);
+    return {
+        raw: cell.value,
+        percentile: cell.percentile,
+    };
 }
 
 function actualKeep(video) {
@@ -307,44 +314,101 @@ function parseDate(value) {
     return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function retentionCurveValues(value) {
+function retentionCurveSeries(value, duration) {
     let source = value;
     if (typeof source === 'string') {
-        try { source = JSON.parse(source); } catch (_) { return []; }
+        try { source = JSON.parse(source); } catch (_) {
+            return { points: [], timebase: 'invalid-json' };
+        }
     }
     if (source && !Array.isArray(source) && typeof source === 'object') {
         source = source.values || source.curve || source.retention || [];
     }
-    if (!Array.isArray(source)) return [];
-    const values = source.map(item => {
+    if (!Array.isArray(source)) {
+        return { points: [], timebase: 'missing' };
+    }
+    const rows = source.map((item, index) => {
         if (item && typeof item === 'object') {
-            return number(item.retention != null ? item.retention : (item.value != null ? item.value : item.y));
+            const explicitSecond = number(
+                item.second != null ? item.second
+                    : item.seconds != null ? item.seconds
+                        : item.elapsedSeconds != null ? item.elapsedSeconds
+                            : item.elapsed_s != null ? item.elapsed_s
+                                : item.timeSeconds
+            );
+            const fraction = number(
+                item.fraction != null ? item.fraction
+                    : item.progress != null ? item.progress
+                        : item.percentOfDuration != null
+                            ? Number(item.percentOfDuration) / 100
+                            : null
+            );
+            return {
+                index,
+                second: finite(explicitSecond)
+                    ? Number(explicitSecond)
+                    : (
+                        finite(fraction) && finite(duration)
+                            ? Number(fraction) * Number(duration)
+                            : null
+                    ),
+                value: number(
+                    item.retention != null ? item.retention
+                        : item.value != null ? item.value
+                            : item.y
+                ),
+            };
         }
-        return number(item);
+        return { index, second: null, value: number(item) };
     });
-    if (values.filter(finite).length < 2) return [];
-    const finiteValues = values.filter(finite);
+    const finiteRows = rows.filter(row => finite(row.value));
+    if (finiteRows.length < 2) {
+        return { points: [], timebase: 'insufficient' };
+    }
+    const finiteValues = finiteRows.map(row => Number(row.value));
     const scale = Math.max(...finiteValues.map(Math.abs)) <= 3 ? 100 : 1;
-    return values.map(item => finite(item) ? Number(item) * scale : null);
+    const allTimed = finiteRows.every(row => finite(row.second));
+    const points = finiteRows.map(row => ({
+        second: allTimed
+            ? Number(row.second)
+            : (
+                finite(duration) && rows.length > 1
+                    ? row.index / (rows.length - 1) * Number(duration)
+                    : null
+            ),
+        value: Number(row.value) * scale,
+    })).filter(point => finite(point.second))
+        .sort((left, right) => left.second - right.second);
+    return {
+        points,
+        timebase: allTimed ? 'explicit-seconds' : 'declared-uniform-grid',
+    };
 }
 
-function interpolate(values, position) {
-    if (!values.length || !finite(position) || position < 0 || position > values.length - 1) return null;
-    const low = Math.floor(position), high = Math.ceil(position);
-    const left = values[low], right = values[high];
-    if (!finite(left) || !finite(right)) return null;
-    if (low === high) return Number(left);
-    const weight = position - low;
-    return Number(left) + (Number(right) - Number(left)) * weight;
+function interpolateTimed(points, second) {
+    if (!points.length || !finite(second)) return null;
+    if (Number(second) < points[0].second
+        || Number(second) > points[points.length - 1].second) {
+        return null;
+    }
+    const exact = points.find(point => point.second === Number(second));
+    if (exact) return exact.value;
+    let upper = points.findIndex(point => point.second > Number(second));
+    if (upper <= 0) return null;
+    const left = points[upper - 1], right = points[upper];
+    const span = right.second - left.second;
+    if (!(span > 0)) return null;
+    const weight = (Number(second) - left.second) / span;
+    return left.value + (right.value - left.value) * weight;
 }
 
 function retentionCurveSnapshot(curve, duration) {
-    const values = retentionCurveValues(curve);
-    if (values.length < 2 || !finite(duration) || Number(duration) <= 0) return null;
+    const series = retentionCurveSeries(curve, duration);
+    if (series.points.length < 2 || !finite(duration) || Number(duration) <= 0) return null;
     const seconds = CURVE_SECONDS.slice();
     const observed = seconds.map(second => {
         if (second > Number(duration)) return null;
-        return round(interpolate(values, second / Number(duration) * (values.length - 1)), 4);
+        return round(interpolateTimed(series.points, second), 4);
     });
     const opening = observed[0];
     if (!finite(opening) || Number(opening) <= 0) return null;
@@ -356,8 +420,9 @@ function retentionCurveSnapshot(curve, duration) {
         normalized,
         drop,
         opening: round(opening, 4),
-        sourcePoints: values.length,
+        sourcePoints: series.points.length,
         sourceDuration: round(duration, 4),
+        sourceTimebase: series.timebase,
     };
 }
 
@@ -367,6 +432,7 @@ function curveValue(row, field, second) {
     return index >= 0 && Array.isArray(curve[field]) ? number(curve[field][index]) : null;
 }
 
+const outcomeSelectionRepresentativeByFamily = new Map();
 const OUTCOME_DEFINITIONS = Object.freeze([
     { key: 'keep', label: 'Stayed to watch', unit: 'percent', accessor: row => row.actual.keep },
     { key: 'swipe', label: 'Swiped away', unit: 'percent', accessor: row => finite(row.actual.keep) ? 100 - Number(row.actual.keep) : null, derived: '100 - stayed to watch' },
@@ -381,69 +447,577 @@ const OUTCOME_DEFINITIONS = Object.freeze([
     { key: 'drop5', label: 'Observed drop by 5s', unit: 'percentage_points', accessor: row => curveValue(row, 'drop', 5), derived: 'observed opening retention - observed retention at 5s' },
     { key: 'drop10', label: 'Observed drop by 10s', unit: 'percentage_points', accessor: row => curveValue(row, 'drop', 10), derived: 'observed opening retention - observed retention at 10s' },
     { key: 'drop20', label: 'Observed drop by 20s', unit: 'percentage_points', accessor: row => curveValue(row, 'drop', 20), derived: 'observed opening retention - observed retention at 20s' },
-]);
+].map(definition => {
+    const hypothesisFamily =
+        coordinateGovernance.inference.outcomeHypothesisFamilies[definition.key];
+    const selectionDuplicateOf =
+        outcomeSelectionRepresentativeByFamily.get(hypothesisFamily) || null;
+    if (!selectionDuplicateOf) {
+        outcomeSelectionRepresentativeByFamily.set(
+            hypothesisFamily,
+            definition.key
+        );
+    }
+    return Object.freeze({
+        ...definition,
+        hypothesisFamily,
+        selectionRepresentative: !selectionDuplicateOf,
+        selectionDuplicateOf,
+    });
+}));
+
+const MIN_CONFIRMATORY_ACCOUNT_COUNT = Math.max(
+    1,
+    Number(
+        coordinateGovernance.inference
+            .minimumIndependentAccountsForConfirmatoryClaim
+    ) || 5
+);
+const MIN_CONFIRMATORY_ROWS_PER_ACCOUNT = 20;
+
+function nestedValue(value, pathParts) {
+    return pathParts.reduce(
+        (current, key) => current == null ? null : current[key],
+        value
+    );
+}
+
+function evaluatedAccounts(study, studyKind) {
+    if (!study) return [];
+    const candidates = studyKind === 'visual_keep'
+        ? [
+            {
+                rows: nestedValue(study, ['validationSummary', 'accountHoldout', 'metrics', 'perAccount']),
+                kind: 'per_account_metrics',
+            },
+            {
+                rows: nestedValue(study, ['protocols', 'accountHoldout', 'metrics', 'perAccount']),
+                kind: 'per_account_metrics',
+            },
+            {
+                rows: nestedValue(study, ['validationSummary', 'accountHoldout', 'points']),
+                kind: 'prediction_points',
+            },
+            {
+                rows: nestedValue(study, ['protocols', 'accountHoldout', 'points']),
+                kind: 'prediction_points',
+            },
+        ]
+        : [
+            {
+                rows: nestedValue(study, ['evaluation', 'metrics', 'perAccount']),
+                kind: 'per_account_metrics',
+            },
+            {
+                rows: nestedValue(study, ['evaluation', 'points']),
+                kind: 'prediction_points',
+            },
+        ];
+    for (const candidate of candidates) {
+        if (!Array.isArray(candidate.rows) || !candidate.rows.length) continue;
+        const counts = new Map();
+        for (const entry of candidate.rows) {
+            if (!entry) continue;
+            const id = String(
+                entry.channelId || entry.accountId || entry.account || entry.id || ''
+            );
+            if (!id) continue;
+            if (candidate.kind === 'per_account_metrics') {
+                if (!finite(entry.n) || Number(entry.n) <= 0) continue;
+                counts.set(id, Math.max(counts.get(id) || 0, Number(entry.n)));
+            } else if (finite(entry.actual) && finite(entry.predicted)) {
+                counts.set(id, (counts.get(id) || 0) + 1);
+            }
+        }
+        if (counts.size) {
+            return [...counts.entries()].map(([id, n]) => ({
+                id,
+                n,
+                meetsMinimumRows: n >= MIN_CONFIRMATORY_ROWS_PER_ACCOUNT,
+            })).sort((left, right) => left.id.localeCompare(right.id));
+        }
+    }
+    return [];
+}
+
+function prospectiveEvidenceFlags(study) {
+    if (!study) return [];
+    return [
+        ['evaluation.target.prospectiveValidated',
+            nestedValue(study, ['evaluation', 'target', 'prospectiveValidated'])],
+        ['promotion.prospectiveValidated',
+            nestedValue(study, ['promotion', 'prospectiveValidated'])],
+        ['prospectiveValidation.confirmed',
+            nestedValue(study, ['prospectiveValidation', 'confirmed'])],
+        ['status.prospectiveValidated',
+            nestedValue(study, ['status', 'prospectiveValidated'])],
+    ].filter(([, value]) => typeof value === 'boolean')
+        .map(([field, value]) => ({ field, value }));
+}
+
+function exactSha256(value) {
+    return /^[a-f0-9]{64}$/i.test(String(value || ''));
+}
+
+function canonicalYoutubeChannelId(value) {
+    const candidate = String(value || '').trim();
+    return /^UC[A-Za-z0-9_-]{22}$/.test(candidate)
+        ? candidate
+        : null;
+}
+
+function immutableJsonEvidenceAudit(record, label, requiredFields) {
+    const blockers = [];
+    const artifactSha256 = String(
+        record && record.artifactSha256 || ''
+    ).toLowerCase();
+    const archiveKey = record && record.archiveKey;
+    const bytesText = record && record.artifactBytes;
+    const bytesBase64 = record && record.artifactBytesBase64;
+    let bytes = null;
+    let encoding = null;
+    if (typeof bytesText === 'string' && bytesText.length) {
+        bytes = Buffer.from(bytesText, 'utf8');
+        encoding = 'utf8';
+    } else if (typeof bytesBase64 === 'string' && bytesBase64.length) {
+        const normalized = bytesBase64.replace(/\s+/g, '');
+        const decoded = Buffer.from(normalized, 'base64');
+        if (
+            decoded.length
+            && decoded.toString('base64').replace(/=+$/, '')
+                === normalized.replace(/=+$/, '')
+        ) {
+            bytes = decoded;
+            encoding = 'base64';
+        } else {
+            blockers.push(`${label} artifactBytesBase64 is malformed.`);
+        }
+    } else {
+        blockers.push(
+            `${label} has no immutable evidence bytes; hash-shaped metadata alone is not evidence.`
+        );
+    }
+    if (!exactSha256(artifactSha256)) {
+        blockers.push(`${label} artifactSha256 is missing or malformed.`);
+    }
+    const computedSha256 = bytes
+        ? crypto.createHash('sha256').update(bytes).digest('hex')
+        : null;
+    if (
+        computedSha256
+        && exactSha256(artifactSha256)
+        && computedSha256 !== artifactSha256
+    ) {
+        blockers.push(`${label} evidence bytes do not match artifactSha256.`);
+    }
+    if (
+        typeof archiveKey !== 'string'
+        || !exactSha256(artifactSha256)
+        || !archiveKey.includes(artifactSha256)
+    ) {
+        blockers.push(
+            `${label} archiveKey is not content-addressed by the verified artifact hash.`
+        );
+    }
+    let payload = null;
+    if (bytes) {
+        try {
+            payload = JSON.parse(bytes.toString('utf8'));
+        } catch (_) {
+            blockers.push(`${label} evidence bytes are not valid JSON.`);
+        }
+    }
+    if (!payload || Array.isArray(payload) || typeof payload !== 'object') {
+        if (bytes) blockers.push(`${label} evidence payload is not a JSON object.`);
+    } else {
+        for (const field of requiredFields) {
+            if (!Object.prototype.hasOwnProperty.call(payload, field)) {
+                blockers.push(`${label} evidence payload omits ${field}.`);
+            } else if (stableJson(payload[field]) !== stableJson(record[field])) {
+                blockers.push(
+                    `${label} mutable ${field} does not match its immutable evidence bytes.`
+                );
+            }
+        }
+    }
+    return {
+        passed: blockers.length === 0,
+        artifactSha256: exactSha256(artifactSha256)
+            ? artifactSha256
+            : null,
+        computedSha256,
+        archiveKey: typeof archiveKey === 'string' ? archiveKey : null,
+        encoding,
+        byteLength: bytes ? bytes.length : 0,
+        payload,
+        blockers,
+    };
+}
+
+function visualKeepModelOutputAudit(visualKeepStudy) {
+    const formula = visualKeepStudy
+        && visualKeepStudy.formula
+        && typeof visualKeepStudy.formula === 'object'
+        ? visualKeepStudy.formula
+        : {};
+    const outputBounds = formula.outputBounds;
+    const selected = formula.selected
+        && typeof formula.selected === 'object'
+        ? formula.selected
+        : {};
+    const accounts = formula.accounts;
+    const blockers = [];
+    if (formula.scope !== 'pooled_global') {
+        blockers.push('active visual keep model is not pooled_global');
+    }
+    if (
+        formula.outputTransform
+            !== 'clip(linear_prediction, 0, 100)'
+        || !Array.isArray(outputBounds)
+        || outputBounds.length !== 2
+        || Number(outputBounds[0]) !== 0
+        || Number(outputBounds[1]) !== 100
+    ) {
+        blockers.push(
+            'active visual keep model does not declare the exact [0,100] clipping contract'
+        );
+    }
+    const accountFormulaCount = accounts == null
+        ? 0
+        : Array.isArray(accounts)
+            ? accounts.length
+            : typeof accounts === 'object'
+                ? Object.keys(accounts).length
+                : 1;
+    if (accountFormulaCount > 0) {
+        blockers.push(
+            'active visual keep model contains creator-specific account formulas'
+        );
+    }
+    if (
+        finite(selected.accountWeight)
+        && Number(selected.accountWeight) !== 0
+    ) {
+        blockers.push(
+            'active visual keep model selected a nonzero creator-account weight'
+        );
+    }
+    return {
+        valid: blockers.length === 0,
+        scope: formula.scope || null,
+        outputTransform: formula.outputTransform || null,
+        outputBounds: Array.isArray(outputBounds)
+            ? outputBounds.map(Number)
+            : null,
+        selectedAccountWeight: number(selected.accountWeight),
+        blockers,
+    };
+}
+
+function persistedVisualKeepForecastAudit(
+    record,
+    expectedArtifactSha256,
+    expectedManifestSha256,
+    visualKeepStudy,
+    expectedFeatureContractVersion,
+    expectedFeatureContractSha256
+) {
+    const forecast = record
+        && record.visual_keep_forecast
+        && typeof record.visual_keep_forecast === 'object'
+        ? record.visual_keep_forecast
+        : null;
+    const manifest = record
+        && record.input_manifest
+        && typeof record.input_manifest === 'object'
+        ? record.input_manifest
+        : null;
+    const blockers = [];
+    const requireExact = (value, message) => {
+        if (!exactSha256(value)) blockers.push(message);
+    };
+    if (!forecast) {
+        blockers.push('no persisted visual keep score-time forecast exists');
+    } else {
+        const modelArtifact = visualKeepStudy
+            && visualKeepStudy.modelArtifact || {};
+        const audit = validateVisualKeepForecast(
+            forecast,
+            {
+                coordinateId: VISUAL_KEEP_COORDINATE_ID,
+                modelArtifactSha256: expectedArtifactSha256,
+                modelManifestSha256: expectedManifestSha256,
+                producerSourceSha256:
+                    modelArtifact.producerSourceSha256,
+                featureContractVersion:
+                    expectedFeatureContractVersion,
+                featureContractSha256:
+                    expectedFeatureContractSha256,
+            }
+        );
+        blockers.push(...audit.errors.map(
+            error => `forecast ${error}`
+        ));
+    }
+    if (!manifest) {
+        blockers.push('score input manifest is missing');
+    } else {
+        requireExact(
+            manifest.input_fingerprint,
+            'score input fingerprint is missing or malformed'
+        );
+        requireExact(
+            manifest.score_input_fingerprint,
+            'exact score_input_fingerprint is missing or malformed'
+        );
+        requireExact(
+            manifest.embedding_input_fingerprint,
+            'embedding input fingerprint is missing or malformed'
+        );
+        requireExact(
+            manifest.revision_fingerprint,
+            'input revision fingerprint is missing or malformed'
+        );
+        requireExact(
+            manifest.canonical_montage
+                && manifest.canonical_montage.montage_sha256,
+            'canonical montage SHA is missing or malformed'
+        );
+        if (
+            exactSha256(manifest.input_fingerprint)
+            && exactSha256(manifest.score_input_fingerprint)
+            && manifest.input_fingerprint
+                !== manifest.score_input_fingerprint
+        ) {
+            blockers.push(
+                'input_fingerprint and score_input_fingerprint disagree'
+            );
+        }
+    }
+    const recordedScoreRecordSha256 =
+        record && record.score_record_sha256;
+    requireExact(
+        recordedScoreRecordSha256,
+        'score-record binding SHA is missing or malformed'
+    );
+    const calculatedScoreRecordSha256 = record
+        ? scoreRecordBindingSha256(record)
+        : null;
+    if (
+        exactSha256(recordedScoreRecordSha256)
+        && recordedScoreRecordSha256
+            !== calculatedScoreRecordSha256
+    ) {
+        blockers.push(
+            'score-record binding does not bind this forecast to this exact input manifest'
+        );
+    }
+    const outputAudit = visualKeepModelOutputAudit(visualKeepStudy);
+    blockers.push(...outputAudit.blockers);
+    return {
+        valid: blockers.length === 0,
+        state: blockers.length
+            ? forecast
+                ? 'rejected_persisted_forecast'
+                : 'missing_persisted_forecast'
+            : 'canonical_persisted_score_time_forecast',
+        coordinateId: forecast && forecast.coordinate_id || null,
+        source: forecast && forecast.source || null,
+        modelArtifactSha256:
+            forecast && forecast.model_artifact_sha256 || null,
+        modelManifestSha256:
+            forecast && forecast.model_manifest_sha256 || null,
+        inputFingerprint:
+            manifest && manifest.score_input_fingerprint || null,
+        inputRevisionFingerprint:
+            manifest && manifest.revision_fingerprint || null,
+        recordedScoreRecordSha256:
+            exactSha256(recordedScoreRecordSha256)
+                ? recordedScoreRecordSha256
+                : null,
+        calculatedScoreRecordSha256,
+        outputAudit,
+        blockers: [...new Set(blockers)],
+    };
+}
+
+function timestampMilliseconds(value) {
+    if (finite(value)) return Number(value);
+    const parsed = Date.parse(String(value || ''));
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function prospectiveRegistrationAudit(study) {
+    const prospective = study && study.prospectiveValidation;
+    const registration = prospective && prospective.registrationArtifact;
+    const result = prospective && prospective.result;
+    const modelArtifact = study && study.modelArtifact;
+    const blockers = [];
+    if (!registration || typeof registration !== 'object') {
+        blockers.push('No immutable prospective registration artifact is recorded.');
+    }
+    if (!result || typeof result !== 'object') {
+        blockers.push('No prospective result linked to a registration artifact is recorded.');
+    }
+    const registrationArtifactSha256 = registration && registration.artifactSha256;
+    const registeredAt = timestampMilliseconds(registration && registration.registeredAt);
+    const completedAt = timestampMilliseconds(result && result.completedAt);
+    const modelGeneratedAt = timestampMilliseconds(modelArtifact && modelArtifact.generatedAt);
+    const lockedFields = [
+        'modelArtifactSha256',
+        'protocolSha256',
+        'outcomeDefinitionSha256',
+        'evaluationPopulationSha256',
+    ];
+    const registrationEvidenceAudit = immutableJsonEvidenceAudit(
+        registration,
+        'Prospective registration',
+        ['registeredAt', ...lockedFields]
+    );
+    const resultEvidenceAudit = immutableJsonEvidenceAudit(
+        result,
+        'Prospective result',
+        ['completedAt', 'registrationArtifactSha256', ...lockedFields]
+    );
+    blockers.push(
+        ...registrationEvidenceAudit.blockers,
+        ...resultEvidenceAudit.blockers
+    );
+    for (const field of lockedFields) {
+        if (registration && !exactSha256(registration[field])) {
+            blockers.push(`Prospective registration ${field} is missing or malformed.`);
+        }
+        if (registration && result && result[field] !== registration[field]) {
+            blockers.push(`Prospective result ${field} does not match the preregistered value.`);
+        }
+    }
+    if (!modelArtifact || !exactSha256(modelArtifact.artifactSha256)) {
+        blockers.push('The evaluated model artifact has no immutable artifact hash.');
+    } else if (registration
+        && registration.modelArtifactSha256 !== modelArtifact.artifactSha256) {
+        blockers.push('The preregistered model hash does not match the evaluated model artifact.');
+    }
+    if (result && result.registrationArtifactSha256 !== registrationArtifactSha256) {
+        blockers.push('The prospective result is not linked to the immutable registration artifact.');
+    }
+    if (!finite(registeredAt)) {
+        blockers.push('Prospective registration has no valid registration timestamp.');
+    }
+    if (!finite(modelGeneratedAt)) {
+        blockers.push('The frozen model artifact has no valid generation timestamp.');
+    }
+    if (!finite(completedAt) || (finite(registeredAt) && completedAt <= registeredAt)) {
+        blockers.push('Prospective evaluation completion must be later than registration.');
+    }
+    if (finite(modelGeneratedAt) && finite(registeredAt)
+        && registeredAt < modelGeneratedAt) {
+        blockers.push('Prospective registration predates the frozen model artifact.');
+    }
+    return {
+        passed: blockers.length === 0,
+        registrationArtifactSha256:
+            exactSha256(registrationArtifactSha256)
+                ? registrationArtifactSha256
+                : null,
+        resultArtifactSha256:
+            resultEvidenceAudit.artifactSha256,
+        registeredAt,
+        completedAt,
+        lockedFields,
+        immutableEvidencePassed:
+            registrationEvidenceAudit.passed
+            && resultEvidenceAudit.passed,
+        registrationEvidenceAudit,
+        resultEvidenceAudit,
+        blockers,
+    };
+}
+
+function promotionEligibilityAudit(study, studyKind) {
+    if (!study) return null;
+    const evaluated = evaluatedAccounts(study, studyKind);
+    const qualifyingAccounts = evaluated.filter(account => account.meetsMinimumRows);
+    const accountIds = qualifyingAccounts.map(account => account.id);
+    const flags = prospectiveEvidenceFlags(study);
+    const registrationAudit = prospectiveRegistrationAudit(study);
+    const prospectiveConfirmed = flags.length > 0
+        && flags.every(flag => flag.value === true)
+        && registrationAudit.passed;
+    const creatorDiversityPassed =
+        accountIds.length >= MIN_CONFIRMATORY_ACCOUNT_COUNT;
+    const status = study.status && typeof study.status === 'object'
+        ? study.status
+        : {};
+    const promotion = study.promotion && typeof study.promotion === 'object'
+        ? study.promotion
+        : {};
+    const promotionClaimFlags = [
+        ['status.promoted', status.promoted],
+        ['promotion.promoted', promotion.promoted],
+    ].filter(([, value]) => typeof value === 'boolean')
+        .map(([field, value]) => ({ field, value }));
+    const artifactClaimsPromoted =
+        promotionClaimFlags.some(flag => flag.value === true);
+    const artifactClaimsPredictorEligible =
+        status.predictorEligible === true;
+    const evidenceBlockers = [];
+    if (promotionClaimFlags.length > 1
+        && !promotionClaimFlags.every(
+            flag => flag.value === promotionClaimFlags[0].value
+        )) {
+        evidenceBlockers.push(
+            'Artifact promotion claims are internally inconsistent.'
+        );
+    }
+    if (!creatorDiversityPassed) {
+        evidenceBlockers.push(
+            `Only ${accountIds.length} independently evaluated creator account${
+                accountIds.length === 1 ? '' : 's'
+            } have at least ${MIN_CONFIRMATORY_ROWS_PER_ACCOUNT} evaluation rows; at least ${MIN_CONFIRMATORY_ACCOUNT_COUNT} are required.`
+        );
+    }
+    if (!prospectiveConfirmed) {
+        evidenceBlockers.push(flags.length
+            ? 'Prospective confirmation is false, internally inconsistent, or lacks immutable preregistration evidence.'
+            : 'No explicit prospective confirmation is recorded.');
+        evidenceBlockers.push(...registrationAudit.blockers);
+    }
+    const evidenceGatePassed = evidenceBlockers.length === 0;
+    return {
+        failClosed: true,
+        studyKind,
+        minimumIndependentAccounts: MIN_CONFIRMATORY_ACCOUNT_COUNT,
+        minimumRowsPerIndependentAccount:
+            MIN_CONFIRMATORY_ROWS_PER_ACCOUNT,
+        evaluatedAccounts: evaluated,
+        independentlyEvaluatedAccounts: accountIds,
+        independentAccountCount: accountIds.length,
+        creatorDiversityPassed,
+        prospectiveEvidenceFlags: flags,
+        prospectiveConfirmed,
+        prospectiveRegistrationAudit: registrationAudit,
+        evidenceGatePassed,
+        artifactClaimsPromoted,
+        promotionClaimFlags,
+        artifactClaimsPredictorEligible,
+        effectivePromoted: artifactClaimsPromoted && evidenceGatePassed,
+        effectivePredictorEligible:
+            artifactClaimsPromoted
+            && artifactClaimsPredictorEligible
+            && evidenceGatePassed,
+        evidenceBlockers,
+        rule: `Promotion requires the artifact to mark itself promoted, at least ${MIN_CONFIRMATORY_ACCOUNT_COUNT} independent creators with at least ${MIN_CONFIRMATORY_ROWS_PER_ACCOUNT} evaluation rows each, and a prospectively completed result whose immutable result and preregistration bytes reproduce their declared hashes and lock the model, protocol, outcome, and evaluation population. Hash-shaped strings without the corresponding evidence bytes cannot promote. Predictor ranking additionally requires the artifact to mark itself predictor-eligible. Missing or conflicting evidence fails closed.`,
+    };
+}
 
 const LONG_QUANT_METRICS = Object.freeze(
-    (contract.crossDomainInventory && contract.crossDomainInventory.longQuant
-        && contract.crossDomainInventory.longQuant.metrics || []).map(metric => Object.freeze({ ...metric }))
+    (coordinateGovernance.expansions.longMetrics || []).map(
+        metric => Object.freeze({ ...metric })
+    )
 );
-
-const LEGACY_DIAGNOSTIC_COORDINATES = Object.freeze([
-    {
-        key: 'keep-video-heldout-model',
-        label: 'Legacy multi-input keep forecast · video held out',
-        target: 'keep',
-        unit: 'percent',
-        path: ['predictions', 'keepVideoHeldOut'],
-        replacement: 'shorts.video-forecast.keep',
-    },
-    {
-        key: 'keep-account-heldout-model',
-        label: 'Legacy multi-input keep forecast · account held out',
-        target: 'keep',
-        unit: 'percent',
-        path: ['predictions', 'keepAccountHeldOut'],
-        replacement: 'shorts.account-forecast.keep',
-    },
-    {
-        key: 'keep-forward-time-model',
-        label: 'Legacy multi-input keep forecast · forward time',
-        target: 'keep',
-        unit: 'percent',
-        path: ['predictions', 'keepForwardTime'],
-    },
-    {
-        key: 'views-public-axis-ensemble',
-        label: 'Creator-excluded visual + text + both views-axis ensemble',
-        target: 'views',
-        unit: 'views',
-        path: ['predictions', 'viewsPublicAxisEnsemble'],
-        replacement: 'shorts.video-forecast.views',
-    },
-    {
-        key: 'views-video-heldout-model',
-        label: 'Legacy multi-input views forecast · video held out',
-        target: 'views',
-        unit: 'views',
-        path: ['predictions', 'viewsVideoHeldOut'],
-        replacement: 'shorts.video-forecast.views',
-    },
-    {
-        key: 'views-account-heldout-model',
-        label: 'Legacy multi-input views forecast · account held out',
-        target: 'views',
-        unit: 'views',
-        path: ['predictions', 'viewsChannelHeldOut'],
-        replacement: 'shorts.account-forecast.views',
-    },
-    {
-        key: 'views-forward-time-model',
-        label: 'Legacy multi-input views forecast · forward time',
-        target: 'views',
-        unit: 'views',
-        path: ['predictions', 'viewsForwardTime'],
-    },
-]);
+const LONG_QUANT_GROUPS = Object.freeze(
+    (coordinateGovernance.expansions.longGroups || []).slice()
+);
 
 function displayTargetForOutcome(key) {
     if (key === 'hit10M') return 'gt10M';
@@ -452,15 +1026,683 @@ function displayTargetForOutcome(key) {
     return key;
 }
 
+function coordinatePattern(pattern, replacements) {
+    return Object.entries(replacements).reduce(
+        (value, [key, replacement]) => value.replace(
+            `{${key}}`,
+            String(replacement)
+        ),
+        String(pattern)
+    );
+}
+
+function buildCoordinateAliases() {
+    const aliases = [];
+    const patterns = coordinateGovernance.compatibility.aliasPatterns || [];
+    for (const definition of contract.features) {
+        if (definition.group === 'novelty') continue;
+        for (const alias of patterns) {
+            if (!(alias.targets || []).includes(definition.target)) continue;
+            aliases.push({
+                id: coordinatePattern(alias.from, { featureKey: definition.key }),
+                canonicalId: coordinatePattern(alias.to, {
+                    featureKey: definition.key,
+                }),
+                status: 'compatibility_alias',
+                reason: alias.reason,
+            });
+        }
+    }
+    return aliases;
+}
+
+function resolveCoordinateId(registry, coordinateId) {
+    const activeIds = new Set(
+        ((registry && registry.columns) || []).map(column => column.id)
+    );
+    let current = String(coordinateId || '');
+    const visited = new Set();
+    while (current && !activeIds.has(current)) {
+        if (visited.has(current)) return null;
+        visited.add(current);
+        current = registry && registry.aliasMap
+            && registry.aliasMap[current] || '';
+    }
+    return activeIds.has(current) ? current : null;
+}
+
 function sha256Ids(ids) {
     return crypto.createHash('sha256').update(
         (ids || []).map(String).sort().join('\n')
     ).digest('hex');
 }
 
+function normalizedContentText(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/https?:\/\/\S+/g, ' ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function normalizedContentEvidence(value) {
+    return String(value || '').normalize('NFKC').trim().toLowerCase();
+}
+
+function validationContentFamilyEvidence(row) {
+    const manifest = row && (row.inputManifest || row.input_manifest) || {};
+    const explicitFamily = row && (
+        row.contentFamilyId || row.content_family_id
+    );
+    const explicitSource = row && (
+        row.sourceContentId || row.source_content_id
+    ) || manifest.source_content_id
+        || manifest.sourceContentId
+        || manifest.source_video_id
+        || manifest.sourceVideoId;
+    const montageSha256 = row && (
+        row.montageSha256 || row.montage_sha256
+    ) || manifest.canonical_montage
+        && manifest.canonical_montage.montage_sha256;
+    const perceptualHash = row && (
+        row.perceptualHash || row.perceptual_hash
+    ) || manifest.perceptual_hash
+        || manifest.perceptualHash;
+    const normalizedFamily = normalizedContentEvidence(explicitFamily);
+    if (normalizedFamily && !normalizedFamily.startsWith('title:')) {
+        const identityOnly = normalizedFamily.startsWith('video:');
+        return {
+            familyId: identityOnly
+                ? normalizedFamily
+                : normalizedFamily.startsWith('declared:')
+                    ? normalizedFamily
+                    : `declared:${normalizedFamily}`,
+            source: identityOnly
+                ? 'explicit_video_identity'
+                : 'explicit_content_family',
+            strength: identityOnly ? 'identity_only' : 'strong',
+            duplicateProtection: identityOnly
+                ? 'same declared video identity only; reuploads are not protected'
+                : 'explicit source-family lineage',
+            fallback: identityOnly,
+            strongEvidencePresent: !identityOnly,
+        };
+    }
+    const normalizedSource = normalizedContentEvidence(explicitSource);
+    if (normalizedSource) {
+        return {
+            familyId: normalizedSource.startsWith('declared:')
+                ? normalizedSource
+                : `declared:${normalizedSource}`,
+            source: 'explicit_source_content',
+            strength: 'strong',
+            duplicateProtection: 'exact source-content lineage',
+            fallback: false,
+            strongEvidencePresent: true,
+        };
+    }
+    if (exactSha256(montageSha256)) {
+        return {
+            familyId: `declared:${String(montageSha256).toLowerCase()}`,
+            source: 'canonical_montage_sha256',
+            strength: 'strong',
+            duplicateProtection: 'byte-identical canonical montage',
+            fallback: false,
+            strongEvidencePresent: true,
+        };
+    }
+    const normalizedPerceptualHash =
+        normalizedContentEvidence(perceptualHash);
+    if (normalizedPerceptualHash) {
+        return {
+            familyId: `declared:${normalizedPerceptualHash}`,
+            source: 'perceptual_hash',
+            strength: 'moderate',
+            duplicateProtection: 'exact perceptual-hash equality only; no near-hash radius is inferred',
+            fallback: false,
+            strongEvidencePresent: false,
+        };
+    }
+    const title = normalizedFamily.startsWith('title:')
+        ? normalizedContentText(normalizedFamily.slice(6))
+        : normalizedContentText(row && row.title);
+    if (title) {
+        return {
+            familyId: `title:${title}`,
+            source: 'normalized_title_fallback',
+            strength: 'weak',
+            duplicateProtection: 'weak title equality only; this is not duplicate-content protection',
+            fallback: true,
+            strongEvidencePresent: false,
+        };
+    }
+    return {
+        familyId: `video:${String(row && row.id || '')}`,
+        source: 'row_identity_fallback',
+        strength: 'none',
+        duplicateProtection: 'none; each row is treated as unrelated',
+        fallback: true,
+        strongEvidencePresent: false,
+    };
+}
+
+function validationContentFamilyId(row) {
+    return validationContentFamilyEvidence(row).familyId;
+}
+
+function contentFamilyEvidenceAudit(rows) {
+    const evidence = (rows || []).map(row => (
+        row && row.contentFamilyEvidence
+        && row.contentFamilyEvidence.familyId
+            ? row.contentFamilyEvidence
+            : validationContentFamilyEvidence(row)
+    ));
+    const countBy = field => Object.fromEntries(
+        [...new Set(evidence.map(item => item[field]))].sort().map(value => [
+            value,
+            evidence.filter(item => item[field] === value).length,
+        ])
+    );
+    const weakRows = (rows || []).filter((row, index) => (
+        evidence[index].strength === 'weak'
+    )).map(row => String(row && row.id || '')).filter(Boolean);
+    const noProtectionRows = (rows || []).filter((row, index) => (
+        evidence[index].strength === 'none'
+        || evidence[index].strength === 'identity_only'
+    )).map(row => String(row && row.id || '')).filter(Boolean);
+    const strongRows = evidence.filter(item => item.strength === 'strong').length;
+    const moderateRows = evidence.filter(item => item.strength === 'moderate').length;
+    const fallbackRows = evidence.filter(item => item.fallback).length;
+    return {
+        rows: evidence.length,
+        bySource: countBy('source'),
+        byStrength: countBy('strength'),
+        strongRows,
+        moderateRows,
+        fallbackRows,
+        titleFallbackRows: weakRows.length,
+        identityOnlyOrMissingRows: noProtectionRows.length,
+        strongOrPerceptualCoverage: evidence.length
+            ? round((strongRows + moderateRows) / evidence.length, 6)
+            : null,
+        strongDuplicateProtectionPassed:
+            evidence.length > 0 && strongRows === evidence.length,
+        strongOrPerceptualProtectionPassed:
+            evidence.length > 0
+            && strongRows + moderateRows === evidence.length,
+        fallbackStrength: weakRows.length
+            ? 'weak_title_equality_not_duplicate_protection'
+            : noProtectionRows.length
+                ? 'identity_only_or_missing'
+                : null,
+        weakFallbackExamples: weakRows.slice(0, 25),
+        missingProtectionExamples: noProtectionRows.slice(0, 25),
+        warning: fallbackRows
+            ? 'Some rows lack source lineage, canonical montage SHA, or perceptual hash. Title/row-identity fallbacks preserve deterministic folds but do not provide strong duplicate-content protection.'
+            : null,
+    };
+}
+
+function contentFamilyFoldAssignments(rows, requested = 5, salt = 'outer') {
+    const evidence = (rows || []).map(validationContentFamilyEvidence);
+    const families = new Set(evidence.map(item => item.familyId));
+    const foldCount = Math.max(0, Math.min(
+        Number(requested) || 5,
+        5,
+        families.size
+    ));
+    if (foldCount < 2) {
+        return {
+            folds: 0,
+            assignments: new Array((rows || []).length).fill(null),
+            contentFamilies: families.size,
+            evidenceAudit: contentFamilyEvidenceAudit(rows),
+        };
+    }
+    const groups = new Map();
+    (rows || []).forEach((row, index) => {
+        const familyId = evidence[index].familyId;
+        if (!groups.has(familyId)) {
+            groups.set(familyId, {
+                familyId,
+                indices: [],
+                accounts: new Map(),
+                hash: stableHash(`${salt}:${familyId}`),
+            });
+        }
+        const group = groups.get(familyId);
+        const accountId = String(
+            row && (row.accountId || row.account) || 'unknown'
+        );
+        group.indices.push(index);
+        group.accounts.set(
+            accountId,
+            (group.accounts.get(accountId) || 0) + 1
+        );
+    });
+    const assignments = new Array((rows || []).length);
+    const states = Array.from(
+        { length: foldCount },
+        () => ({ rows: 0, accounts: new Map() })
+    );
+    [...groups.values()].sort((left, right) => (
+        right.indices.length - left.indices.length
+        || left.hash - right.hash
+        || left.familyId.localeCompare(right.familyId)
+    )).forEach(group => {
+        let selected = 0, selectedCost = Infinity;
+        for (let fold = 0; fold < foldCount; fold++) {
+            const state = states[fold];
+            const accountCost = [...group.accounts.entries()].reduce(
+                (sum, [accountId, count]) => (
+                    sum + (state.accounts.get(accountId) || 0) + count
+                ),
+                0
+            );
+            const cost = state.rows + group.indices.length + accountCost;
+            if (cost < selectedCost
+                || (cost === selectedCost
+                    && state.rows < states[selected].rows)
+                || (cost === selectedCost
+                    && state.rows === states[selected].rows
+                    && fold < selected)) {
+                selected = fold;
+                selectedCost = cost;
+            }
+        }
+        group.indices.forEach(index => { assignments[index] = selected; });
+        states[selected].rows += group.indices.length;
+        for (const [accountId, count] of group.accounts) {
+            states[selected].accounts.set(
+                accountId,
+                (states[selected].accounts.get(accountId) || 0) + count
+            );
+        }
+    });
+    return {
+        folds: foldCount,
+        assignments,
+        contentFamilies: groups.size,
+        evidenceAudit: contentFamilyEvidenceAudit(rows),
+    };
+}
+
+function blindFoldManifestRows(rows) {
+    return (rows || []).map(row => ({
+        id: String(row && row.id || ''),
+        accountId: String(
+            row && (row.account || row.accountId) || ''
+        ),
+        contentFamilyId: validationContentFamilyId(row),
+        videoFold: number(row && row.videoFold),
+    })).sort((left, right) => (
+        left.id.localeCompare(right.id)
+        || left.accountId.localeCompare(right.accountId)
+    ));
+}
+
+function auditBlindFoldLineage(blindInputs) {
+    const rows = blindInputs && Array.isArray(blindInputs.rows)
+        ? blindInputs.rows
+        : [];
+    const assignment = contentFamilyFoldAssignments(rows, 5, 'outer');
+    const mismatches = [];
+    rows.forEach((row, index) => {
+        const recorded = number(row && row.videoFold);
+        const expected = assignment.assignments[index];
+        if (!finite(recorded) || Number(recorded) !== Number(expected)) {
+            mismatches.push(String(row && row.id || index));
+        }
+    });
+    const manifestRows = blindFoldManifestRows(rows);
+    const computedSha256 = sha256Json(manifestRows);
+    const recordedSha256 = String(
+        blindInputs && blindInputs.rowFoldManifestSha256 || ''
+    ).toLowerCase();
+    const contentAddressed = /^[a-f0-9]{64}$/.test(recordedSha256)
+        && recordedSha256 === computedSha256;
+    return {
+        passed: rows.length > 0
+            && assignment.folds >= 2
+            && mismatches.length === 0
+            && contentAddressed
+            && assignment.evidenceAudit
+                .strongDuplicateProtectionPassed,
+        rows: rows.length,
+        contentFamilies: assignment.contentFamilies,
+        foldAlgorithm: 'content-family-grouped-balanced-v1',
+        contentFamilyEvidenceAudit: assignment.evidenceAudit,
+        strongDuplicateProtectionPassed:
+            assignment.evidenceAudit.strongDuplicateProtectionPassed,
+        recordedSha256: recordedSha256 || null,
+        computedSha256,
+        mismatches: mismatches.slice(0, 50),
+        contentAddressed,
+        warning: assignment.evidenceAudit.warning,
+        rule: 'A blind fold is valid only when every row has strong duplicate-family evidence, the deterministic grouped assignment matches every recorded fold, and the exact row/fold manifest hash verifies. Title equality, row identity, and exact perceptual hashes remain visible diagnostics but cannot promote a fold audit.',
+    };
+}
+
+function validationCreatorChannelIdentityAudit(
+    channels,
+    predictorProvenance
+) {
+    const rawMappings = predictorProvenance
+        && predictorProvenance.validationCreatorChannelMappings;
+    const explicitMappings = new Map();
+    const addExplicitMapping = (key, value) => {
+        if (key == null || !String(key)) return;
+        const normalizedKey = String(key);
+        if (!explicitMappings.has(normalizedKey)) {
+            explicitMappings.set(normalizedKey, []);
+        }
+        explicitMappings.get(normalizedKey).push(
+            value == null ? '' : String(value)
+        );
+    };
+    if (Array.isArray(rawMappings)) {
+        for (const mapping of rawMappings) {
+            if (!mapping || typeof mapping !== 'object') continue;
+            const youtubeChannelId =
+                mapping.youtubeChannelId
+                || mapping.youtube_channel_id
+                || mapping.channelId
+                || mapping.channel_id;
+            for (const key of [
+                mapping.accountId,
+                mapping.account_id,
+                mapping.internalChannelId,
+                mapping.internal_channel_id,
+            ]) {
+                addExplicitMapping(key, youtubeChannelId);
+            }
+        }
+    } else if (
+        rawMappings
+        && typeof rawMappings === 'object'
+    ) {
+        for (const [key, value] of Object.entries(rawMappings)) {
+            const candidate = value && typeof value === 'object'
+                ? value.youtubeChannelId
+                    || value.youtube_channel_id
+                    || value.channelId
+                    || value.channel_id
+                : value;
+            addExplicitMapping(key, candidate);
+        }
+    }
+    const resolved = (channels || []).map(source => {
+        const manifest = source
+            && source.manifest
+            && typeof source.manifest === 'object'
+            ? source.manifest
+            : {};
+        const candidates = [
+            ['source.youtubeChannelId', source && source.youtubeChannelId],
+            ['source.youtube_channel_id', source && source.youtube_channel_id],
+            ['manifest.youtubeChannelId', manifest.youtubeChannelId],
+            ['manifest.youtube_channel_id', manifest.youtube_channel_id],
+            ['manifest.channelId', manifest.channelId],
+            ['manifest.channel_id', manifest.channel_id],
+            ...(explicitMappings.get(
+                String(source && source.accountId || '')
+            ) || []).map(value => ['mapping.accountId', value]),
+            ...(explicitMappings.get(
+                String(source && source.channelId || '')
+            ) || []).map(value => ['mapping.internalChannelId', value]),
+        ].map(([field, value]) => ({
+            field,
+            original: value == null ? null : String(value),
+            canonical: canonicalYoutubeChannelId(value),
+        })).filter(candidate => candidate.original);
+        const canonicalIds = [...new Set(
+            candidates.map(candidate => candidate.canonical).filter(Boolean)
+        )];
+        const invalidCandidates = candidates.filter(
+            candidate => !candidate.canonical
+        );
+        return {
+            accountId: String(source && source.accountId || ''),
+            internalChannelId: String(source && source.channelId || ''),
+            youtubeChannelId:
+                canonicalIds.length === 1 ? canonicalIds[0] : null,
+            sources: candidates,
+            invalidCandidates,
+            conflict: canonicalIds.length > 1,
+            resolved: canonicalIds.length === 1
+                && invalidCandidates.length === 0,
+        };
+    });
+    const declaredRaw = predictorProvenance
+        && predictorProvenance.validationCreatorChannelIds;
+    const declared = Array.isArray(declaredRaw)
+        ? declaredRaw.map(value => ({
+            original: String(value || ''),
+            canonical: canonicalYoutubeChannelId(value),
+        }))
+        : [];
+    const invalidDeclared = declared.filter(item => !item.canonical);
+    const declaredIds = [...new Set(
+        declared.map(item => item.canonical).filter(Boolean)
+    )].sort();
+    const resolvedIds = [...new Set(
+        resolved.map(item => item.youtubeChannelId).filter(Boolean)
+    )].sort();
+    const mappingsComplete = resolved.length > 0
+        && resolved.every(item => item.resolved);
+    const declaredSetMatches = declaredIds.length > 0
+        && stableJson(declaredIds) === stableJson(resolvedIds);
+    const blockers = [];
+    for (const item of resolved) {
+        if (!item.youtubeChannelId) {
+            blockers.push(
+                `${item.accountId || item.internalChannelId || 'unknown creator'} has no unambiguous canonical YouTube channel ID mapping.`
+            );
+        }
+        for (const invalid of item.invalidCandidates) {
+            blockers.push(
+                `${item.accountId || item.internalChannelId || 'unknown creator'} ${invalid.field} uses a non-YouTube channel-ID namespace (${invalid.original}).`
+            );
+        }
+        if (item.conflict) {
+            blockers.push(
+                `${item.accountId || item.internalChannelId || 'unknown creator'} resolves to conflicting canonical YouTube channel IDs.`
+            );
+        }
+    }
+    if (!declared.length) {
+        blockers.push(
+            'Predictor provenance does not declare the canonical validationCreatorChannelIds exclusion set.'
+        );
+    }
+    if (invalidDeclared.length) {
+        blockers.push(
+            'Predictor provenance validationCreatorChannelIds contains non-canonical YouTube channel IDs.'
+        );
+    }
+    if (declared.length && !declaredSetMatches) {
+        blockers.push(
+            'Predictor exclusion channel IDs do not exactly match the canonical IDs resolved from explicit mappings or manifest metadata.'
+        );
+    }
+    return {
+        passed: mappingsComplete
+            && invalidDeclared.length === 0
+            && declaredSetMatches
+            && blockers.length === 0,
+        mappingsComplete,
+        declaredSetMatches,
+        canonicalChannelIds: resolvedIds,
+        declaredCanonicalChannelIds: declaredIds,
+        resolved,
+        invalidDeclaredChannelIds: invalidDeclared.map(
+            item => item.original
+        ),
+        blockers: [...new Set(blockers)],
+        rule: 'Validation creators are compared only in the canonical YouTube UC… channel-ID namespace. IDs must resolve from explicit account/internal-ID mappings or channel manifest metadata, and must exactly match the producer-declared exclusion set. Internal ch… IDs and unknown mappings fail closed.',
+    };
+}
+
+function canonicalFitManifestRows(rows) {
+    return (rows || []).map(row => ({
+        id: String(row && row.id || ''),
+        channelId: String(
+            row && (row.channelId || row.channel_id) || ''
+        ),
+    })).sort((left, right) => (
+        left.id.localeCompare(right.id)
+        || left.channelId.localeCompare(right.channelId)
+    ));
+}
+
+function auditPublicAxisOverlap(
+    predictorProvenance,
+    privateEvaluationIds,
+    savedEvaluationIds,
+    validationCreatorChannelIdentity
+) {
+    const manifests = predictorProvenance
+        && predictorProvenance.publicAxisFitManifests;
+    const populations = predictorProvenance
+        && predictorProvenance.publicAxisFitPopulations;
+    const expectedKeys = STRICT_FORECAST_RAW_FEATURES.map(name => (
+        name.replace(/\.raw$/, '')
+    ));
+    const privateIds = new Set((privateEvaluationIds || []).map(String));
+    const savedIds = new Set((savedEvaluationIds || []).map(String));
+    const creatorIdentityAudit = validationCreatorChannelIdentity
+        && typeof validationCreatorChannelIdentity === 'object'
+        ? validationCreatorChannelIdentity
+        : {
+            passed: false,
+            canonicalChannelIds: [],
+            blockers: [
+                'Canonical validation-creator channel identity audit is missing.',
+            ],
+        };
+    const validationChannels = new Set(
+        (creatorIdentityAudit.canonicalChannelIds || []).map(String)
+    );
+    const results = expectedKeys.map(key => {
+        const manifest = manifests && manifests[key];
+        const populationSha256 = String(
+            manifest && (
+                manifest.populationSha256
+                || manifest.rowsSha256
+            ) || ''
+        ).toLowerCase();
+        const population = populations && populations[populationSha256];
+        const usesPopulation = !!(
+            manifest
+            && manifest.populationSha256
+        );
+        const populationHashValid = !usesPopulation || !!(
+            population
+            && String(population.rowsSha256 || '').toLowerCase()
+                === populationSha256
+        );
+        const rows = canonicalFitManifestRows(
+            manifest && manifest.rows
+                || population && population.rows
+        );
+        const computedSha256 = sha256Json(rows);
+        const recordedSha256 = String(
+            manifest && manifest.rowsSha256 || ''
+        ).toLowerCase();
+        const hashValid = /^[a-f0-9]{64}$/.test(recordedSha256)
+            && recordedSha256 === computedSha256
+            && (
+                !populationSha256
+                || populationSha256 === recordedSha256
+            )
+            && populationHashValid
+            && (
+                !manifest
+                || !finite(manifest.rowCount)
+                || Number(manifest.rowCount) === rows.length
+            );
+        const privateOverlap = rows.filter(row => privateIds.has(row.id));
+        const savedOverlap = rows.filter(row => savedIds.has(row.id));
+        const invalidChannelIdentityRows = rows.filter(
+            row => !canonicalYoutubeChannelId(row.channelId)
+        );
+        const creatorOverlap = rows.filter(
+            row => validationChannels.has(row.channelId)
+        );
+        return {
+            key,
+            rows: rows.length,
+            computedSha256,
+            recordedSha256: recordedSha256 || null,
+            populationSha256: populationSha256 || null,
+            populationHashValid,
+            hashValid,
+            privateOverlap: privateOverlap.map(row => row.id),
+            savedOverlap: savedOverlap.map(row => row.id),
+            validationCreatorOverlap: creatorOverlap.map(row => row.id),
+            invalidChannelIdentityRows:
+                invalidChannelIdentityRows.map(row => row.id),
+        };
+    });
+    const privateOverlap = [...new Set(results.flatMap(
+        result => result.privateOverlap
+    ))];
+    const savedOverlap = [...new Set(results.flatMap(
+        result => result.savedOverlap
+    ))];
+    const validationCreatorOverlap = [...new Set(results.flatMap(
+        result => result.validationCreatorOverlap
+    ))];
+    const invalidFitChannelIdentityRows = [...new Set(results.flatMap(
+        result => result.invalidChannelIdentityRows
+    ))];
+    const manifestsComplete = results.every(
+        result => result.rows > 0
+            && result.hashValid
+            && result.invalidChannelIdentityRows.length === 0
+    );
+    const referencedPopulationSha256 = new Set(results.map(
+        result => result.populationSha256
+    ).filter(Boolean));
+    const orphanPopulationSha256 = Object.keys(populations || {}).filter(
+        sha256 => !referencedPopulationSha256.has(sha256)
+    );
+    return {
+        passed: manifestsComplete
+            && creatorIdentityAudit.passed === true
+            && privateOverlap.length === 0
+            && savedOverlap.length === 0
+            && validationCreatorOverlap.length === 0
+            && orphanPopulationSha256.length === 0,
+        manifestsComplete,
+        expectedManifestCount: expectedKeys.length,
+        validManifestCount: results.filter(
+            result => result.rows > 0 && result.hashValid
+        ).length,
+        privateOverlap,
+        savedOverlap,
+        validationCreatorOverlap,
+        invalidFitChannelIdentityRows,
+        validationCreatorChannelIdentityAudit:
+            creatorIdentityAudit,
+        uniqueFitPopulations: referencedPopulationSha256.size,
+        orphanPopulationSha256,
+        manifests: results,
+        rule: 'Every creator-excluded public coordinate must resolve to one exact content-addressed fit population whose rows use canonical YouTube channel IDs. Validation creators resolve from explicit mappings or manifest metadata in that same namespace. Identical populations are stored once and referenced by hash. Train/evaluation overlap is recomputed locally; caller-supplied overlap counters and unknown ID mappings are rejected.',
+    };
+}
+
 function featureContractFileSha256() {
     return crypto.createHash('sha256').update(
         fs.readFileSync(path.join(__dirname, 'saved-channel-feature-contract.json'))
+    ).digest('hex');
+}
+
+function coordinateGovernanceFileSha256() {
+    return crypto.createHash('sha256').update(
+        fs.readFileSync(path.join(__dirname, 'quant-coordinate-governance.json'))
     ).digest('hex');
 }
 
@@ -480,22 +1722,20 @@ function lineagePopulationSnapshot(rows, accountAccessor) {
         String(row.id),
         String(accountAccessor(row) || 'unknown'),
     ]));
-    const idsByAccount = Object.fromEntries(Object.keys(byAccount).map(account => [
-        account,
-        byAccount[account].slice(),
-    ]));
-    const videoFoldById = new Map();
-    for (const accountIds of Object.values(idsByAccount)) {
-        accountIds.sort((left, right) => {
-            const leftHash = crypto.createHash('sha256').update(String(left)).digest('hex').slice(0, 16);
-            const rightHash = crypto.createHash('sha256').update(String(right)).digest('hex').slice(0, 16);
-            return leftHash.localeCompare(rightHash) || String(left).localeCompare(String(right));
-        });
-        accountIds.forEach((id, index) => videoFoldById.set(id, index % 5));
-    }
-    const videoFolds = Array.from({ length: 5 }, (_, fold) => {
-        const testingIds = ids.filter(id => videoFoldById.get(id) === fold);
-        const trainingIds = ids.filter(id => videoFoldById.get(id) !== fold);
+    const foldAssignment = contentFamilyFoldAssignments(
+        rows || [],
+        5,
+        'outer'
+    );
+    const videoFolds = Array.from(
+        { length: foldAssignment.folds },
+        (_, fold) => {
+        const testingIds = ids.filter(
+            (_, index) => foldAssignment.assignments[index] === fold
+        );
+        const trainingIds = ids.filter(
+            (_, index) => foldAssignment.assignments[index] !== fold
+        );
         return {
             fold,
             trainingRowCount: trainingIds.length,
@@ -522,6 +1762,8 @@ function lineagePopulationSnapshot(rows, accountAccessor) {
             account,
             { count: accountIds.length, idSha256: sha256Ids(accountIds) },
         ])),
+        contentFamilyCount: foldAssignment.contentFamilies,
+        foldAlgorithm: 'content-family-grouped-balanced-v1',
         videoFolds,
         accountHoldouts,
     };
@@ -549,6 +1791,14 @@ function lineageRuntimeContext(
         && typeof predictorProvenance.publicAxisPopulations === 'object'
         ? predictorProvenance.publicAxisPopulations
         : null;
+    const visualKeepPromotionAudit = promotionEligibilityAudit(
+        visualKeepStudy,
+        'visual_keep'
+    );
+    const creatorAdaptivePromotionAudit = promotionEligibilityAudit(
+        creatorAdaptiveStudy,
+        'creator_adaptive_keep'
+    );
     const modalityTargetPopulations = {};
     for (const modality of ['visual', 'text', 'together']) {
         modalityTargetPopulations[modality] = {};
@@ -605,6 +1855,7 @@ function lineageRuntimeContext(
                 && visualKeepStudy.formula.selected || null,
             population: visualKeepStudy.population || null,
             promotion: visualKeepStudy.promotion || null,
+            promotionAudit: visualKeepPromotionAudit,
             artifact: {
                 ...(visualKeepStudy.modelArtifact
                     || predictorProvenance.visualKeepModelArtifact
@@ -621,7 +1872,7 @@ function lineageRuntimeContext(
         } : null,
         creatorAdaptiveKeepModel: creatorAdaptiveStudy ? {
             coordinateId: creatorAdaptiveStudy.coordinateId
-                || CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+                || CREATOR_ADAPTIVE_KEEP_MODEL_COORDINATE_ID,
             selected: creatorAdaptiveStudy.selection
                 && creatorAdaptiveStudy.selection.selected || null,
             candidateRegistrySha256: creatorAdaptiveStudy.selection
@@ -642,9 +1893,15 @@ function lineageRuntimeContext(
                     promoted: creatorAdaptiveStudy.status.promoted === true,
                     predictorEligible:
                         creatorAdaptiveStudy.status.predictorEligible === true,
+                    effectivePromoted:
+                        creatorAdaptivePromotionAudit.effectivePromoted,
+                    effectivePredictorEligible:
+                        creatorAdaptivePromotionAudit
+                            .effectivePredictorEligible,
                     promotionBlocker:
                         creatorAdaptiveStudy.status.promotionBlocker || null,
                 },
+            promotionAudit: creatorAdaptivePromotionAudit,
             artifact: {
                 ...(creatorAdaptiveStudy.modelArtifact
                     || predictorProvenance.creatorAdaptiveKeepModelArtifact
@@ -681,6 +1938,8 @@ function lineageRuntimeContext(
         artifactFeatureContractSha256: predictorProvenance.featureContractSha256 || null,
         currentFeatureContractVersion: contract.version,
         currentFeatureContractSha256: featureContractFileSha256(),
+        coordinateGovernanceVersion: coordinateGovernance.schemaVersion,
+        coordinateGovernanceSha256: coordinateGovernanceFileSha256(),
     };
 }
 
@@ -944,7 +2203,7 @@ function buildLineageCatalog(runtime) {
             },
             'algorithm.shorts.combined-nested-ridge': {
                 label: 'Combined nine-axis forecast',
-                formula: 'Standardized multi-target ridge over exactly nine creator-excluded public axes; lambda is selected inside each outer holdout from [0.01, 0.1, 1, 10, 100, 1000].',
+                formula: 'A separate standardized Ridge is fit for each outcome over exactly nine creator-excluded public axes. Each target keeps its own eligible population. Lambda is selected inside each outer holdout from [0.01, 0.1, 1, 10, 100, 1000] by 75% creator-macro standardized MSE plus 25% worst-creator standardized MSE.',
             },
             'algorithm.shorts.legacy': {
                 label: 'Legacy diagnostic algorithm',
@@ -1028,11 +2287,11 @@ function buildLineageCatalog(runtime) {
             },
             'validation.nested-video-fivefold': {
                 label: 'Nested video-fold forecast',
-                rule: 'Outer deterministic video folds estimate performance; ridge penalty selection occurs only inside each outer training fold.',
+                rule: 'Outer deterministic video folds estimate performance; ridge penalty selection occurs only inside each outer training fold and gives each outcome family equal total selection weight.',
             },
             'validation.nested-account-holdout': {
                 label: 'Nested account-transfer forecast',
-                rule: 'The evaluated account is excluded from the outer fit and all inner model selection.',
+                rule: 'The evaluated account is excluded from the outer fit and all inner model selection; correlated outcomes cannot gain extra hyperparameter-selection weight by appearing under multiple labels.',
             },
             'validation.legacy': {
                 label: 'Legacy diagnostic',
@@ -1184,7 +2443,7 @@ function buildCanonicalLineageCatalog(runtime) {
         id: 'family.shorts.visual-keep-production.v1',
         label: 'Frozen visual-only keep forecast',
         fitDatasetId: 'dataset.shorts.visual-keep-final-fit.v1',
-        selectionRule: 'The pooled Ridge setting is selected inside training-only folds, then one pooled formula is frozen on every eligible labeled training row. Its production value is diagnostic on those fitting rows; leakage-controlled protocol predictions remain separate evidence.',
+        selectionRule: 'The pooled Ridge setting is selected inside training-only folds, then one pooled-global formula is frozen. The canonical row coordinate accepts only a score-time value cryptographically bound to the exact input and active release. Final-fit reconstructions remain separate study metadata; leakage-controlled protocol predictions remain separate evidence.',
     };
     for (const definition of Object.values(VISUAL_KEEP_PROTOCOL_COORDINATES)) {
         families[definition.familyId] = {
@@ -1200,30 +2459,30 @@ function buildCanonicalLineageCatalog(runtime) {
         fitDatasetId: 'dataset.shorts.creator-adaptive-keep-prequential.v1',
         selectionRule: 'A 43,360-candidate staged registry is selected only on each creator’s chronological 50%-80% window. The locked 50/50 visual+together mixture is then evaluated on the final 20% with equal timestamps batched and only strictly earlier outcomes available.',
     };
+    families['family.shorts.creator-excluded.public-axis.v1'] = {
+        id: 'family.shorts.creator-excluded.public-axis.v1',
+        label: 'Shared creator-excluded public axis',
+        fitDatasetId: 'dataset.shorts.creator-excluded-public.v1',
+        selectionRule: 'Fit one public views, outlier, or over-10M axis per modality after excluding every private row, saved row, and validation-creator row. The resulting scalar has one canonical ledger address regardless of which downstream validation protocol consumes it.',
+    };
+    families['family.long.outlier-neighbor.v1'] = {
+        id: 'family.long.outlier-neighbor.v1',
+        label: 'Long views-per-subscriber neighbor diagnostic',
+        fitDatasetId: 'dataset.long.raw-manifold.v1',
+        selectionRule: 'Resolve views per subscriber from the ID-aligned Long reference manifold. This is an in-corpus diagnostic, not a held-out prediction protocol.',
+    };
 
-    inputSets['input.runtime.shorts.nine-blind-axes.v1'] = {
+    inputSets['input.runtime.shorts.creator-excluded-nine-public-axes.v1'] = {
         domain: 'shorts',
         kind: 'registered-coordinate-vector',
-        members: [
-            'shorts.{video|account}-heldout.{visual|text|together}.{views|outlier|gt10M}',
-        ],
-        construction: 'Exactly nine creator-excluded direct public coordinates, never private-label-aligned keep/ret5/realviews or stored novelty.',
-        sourceCode: 'buildings/jarvis/saved-channel-validation.js',
+        members: ['visual', 'text', 'together'].flatMap(modality => (
+            ['views', 'outlier', 'gt10M'].map(target => (
+                `shorts.creator-excluded.${modality}.${target}`
+            ))
+        )),
+        construction: 'Exactly nine unique creator-excluded direct public coordinates. Validation protocol is attached to a downstream forecast, never represented by copying these nine values to a second ledger address.',
+        sourceCode: 'buildings/jarvis/saved-channel-validation.js:STRICT_FORECAST_RAW_FEATURES',
     };
-    for (const protocol of ['video', 'account']) {
-        const inputId = `input.runtime.shorts.${protocol}-nine-public-axes.v1`;
-        inputSets[inputId] = {
-            domain: 'shorts',
-            kind: 'registered-coordinate-vector',
-            members: ['visual', 'text', 'together'].flatMap(modality => (
-                ['views', 'outlier', 'gt10M'].map(target => (
-                    `shorts.${protocol}-heldout.${modality}.${target}`
-                ))
-            )),
-            construction: `Exactly nine concrete ${protocol}-view ledger references. The video/account public-axis members point to the same nine underlying fitted axes, but the concrete IDs preserve which evaluation view fed this forecast.`,
-            sourceCode: 'buildings/jarvis/saved-channel-validation.js:STRICT_FORECAST_RAW_FEATURES',
-        };
-    }
     representations['representation.runtime.shorts.novelty-primitives.v1'] = {
         domain: 'shorts',
         kind: 'derived embedding representation',
@@ -1239,27 +2498,12 @@ function buildCanonicalLineageCatalog(runtime) {
         ],
         construction: 'Derive query primitives from the live visual/text/together embeddings, but compare neighbor, centroid, temporal, and PCA terms against corpus embeddings built by raw_embed.py. The live text path may use Gemini transcription fallback; the corpus text path does not.',
     };
-    representations['representation.runtime.shorts.nine-axis-vector.v1'] = {
+    representations['representation.runtime.shorts.creator-excluded-nine-axis-vector.v1'] = {
         domain: 'shorts',
         kind: 'combined registered-coordinate representation',
         dimensions: 9,
+        rawInputSetIds: ['input.runtime.shorts.creator-excluded-nine-public-axes.v1'],
         construction: 'For each outer training fold, subtract each coordinate mean and divide by its training standard deviation. A missing coordinate is encoded as standardized zero, which is exactly training-mean imputation.',
-    };
-    for (const protocol of ['video', 'account']) {
-        representations[`representation.runtime.shorts.${protocol}-nine-axis-vector.v1`] = {
-            domain: 'shorts',
-            kind: 'combined registered-coordinate representation',
-            dimensions: 9,
-            rawInputSetIds: [`input.runtime.shorts.${protocol}-nine-public-axes.v1`],
-            construction: `Read the nine concrete ${protocol}-view public coordinates. Within each outer forecast fold, standardize with training-only means and standard deviations; encode missing coordinates as standardized zero (training-mean imputation).`,
-        };
-    }
-    representations['representation.runtime.shorts.three-public-view-axes.v1'] = {
-        domain: 'shorts',
-        kind: 'derived registered-coordinate representation',
-        dimensions: 3,
-        rawInputSetIds: ['input.shorts.public-view-axis-trio.v1'],
-        construction: 'Read the visual, text, and together shared creator-excluded public log-view coordinates without refitting them.',
     };
     datasets['dataset.runtime.shorts.observed-joined.v1'] = {
         domain: 'shorts',
@@ -1323,8 +2567,8 @@ function buildCanonicalLineageCatalog(runtime) {
         ...(datasets['dataset.shorts.creator-adaptive-keep-prequential.v1'] || {}),
         id: 'dataset.shorts.creator-adaptive-keep-prequential.v1',
         domain: 'shorts',
-        role: 'known-creator causal next-upload evaluation',
-        selectionRule: 'The per-creator 50%-80% chronological window selects one global candidate from a fixed 43,360-candidate registry. The final 20% is replayed causally, with every equal-timestamp batch predicted before any outcome in that batch is revealed. The matched null is the mean of at most 30 strictly earlier same-creator labels.',
+        role: 'known-creator chronological next-upload evaluation',
+        selectionRule: 'The per-creator 50%-80% chronological window selects one global candidate from a fixed 43,360-candidate registry. The final 20% is replayed prequentially, with every equal-timestamp batch predicted before any outcome in that batch is revealed. This proves time-ordering, not a causal effect. The matched null is the mean of at most 30 strictly earlier same-creator labels.',
         runtimeSnapshot: runtime.creatorAdaptiveKeepModel ? {
             population: runtime.creatorAdaptiveKeepModel.population,
             selected: runtime.creatorAdaptiveKeepModel.selected,
@@ -1379,17 +2623,11 @@ function buildCanonicalLineageCatalog(runtime) {
         ...(algorithms['algorithm.shorts.creator-adaptive-causal-mixture.v1'] || {}),
         id: 'algorithm.shorts.creator-adaptive-causal-mixture.v1',
         domain: 'shorts',
-        kind: 'causal known-creator combined forecast',
-        fit: 'Select one staged causal formula on the 50%-80% window, then lock it before the final tail. Creator centering, residual corrections, gates, and interval residuals update only after an entire equal-time batch.',
+        kind: 'chronological known-creator combined forecast',
+        fit: 'Select one staged prequential formula on the 50%-80% window, then lock it before the final tail. Creator centering, residual corrections, gates, and interval residuals update only after an entire equal-time batch.',
         scalarFormula: 'clip(0.5 × centered-together pooled residual analog + 0.5 × visual+together semantic stack, 0, 100)',
         selectedHyperparameters: runtime.creatorAdaptiveKeepModel
             && runtime.creatorAdaptiveKeepModel.selected || null,
-    };
-    datasets['dataset.runtime.shorts.legacy.v1'] = {
-        domain: 'shorts',
-        role: 'legacy diagnostic',
-        selectionRule: 'Historical mixed populations; canonical use is prohibited.',
-        runtimeProvenanceRequired: ['historicalModelRevision'],
     };
     const privateRuntime = {
         rowCount: runtime.privateBlindArtifactPopulation.count,
@@ -1818,7 +3056,7 @@ function buildCanonicalLineageCatalog(runtime) {
             && runtime.creatorAdaptiveKeepModel.artifact.generatedAt || null,
         coordinateId: runtime.creatorAdaptiveKeepModel
             && runtime.creatorAdaptiveKeepModel.coordinateId
-            || CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+            || CREATOR_ADAPTIVE_KEEP_MODEL_COORDINATE_ID,
         runtimeRevisionRequired: true,
         runtimeRevisionRequiredFields: [
             'artifactSha256',
@@ -1844,6 +3082,8 @@ function buildCanonicalLineageCatalog(runtime) {
         domain: 'shorts',
         location: 'buildings/jarvis/saved-channel-validation.js',
         coordinateRegistryVersion: LEDGER_VERSION,
+        coordinateGovernanceVersion: runtime.coordinateGovernanceVersion,
+        coordinateGovernanceSha256: runtime.coordinateGovernanceSha256,
         artifactRevision: runtime.validationArtifact.sourceFingerprint,
         generatedAt: runtime.validationArtifact.generatedAt,
         producerSourceSha256: runtime.validationArtifact.producerSourceSha256,
@@ -1852,10 +3092,12 @@ function buildCanonicalLineageCatalog(runtime) {
         runtimeRevisionRequiredFields: [
             'artifactRevision',
             'producerSourceSha256',
+            'coordinateGovernanceSha256',
         ],
         runtimeRevision: {
             artifactRevision: runtime.validationArtifact.sourceFingerprint,
             producerSourceSha256: runtime.validationArtifact.producerSourceSha256,
+            coordinateGovernanceSha256: runtime.coordinateGovernanceSha256,
         },
     };
     for (const modality of ['visual', 'text', 'together']) {
@@ -1996,11 +3238,6 @@ function buildCanonicalLineageCatalog(runtime) {
             runtime: longVisualManifest.runtime,
         } : { status: 'unknown in historical artifact' };
     }
-    artifacts['artifact.runtime.shorts.legacy.v1'] = {
-        domain: 'shorts',
-        location: 'Historical fields retained in the validation artifact',
-        canonicalUse: false,
-    };
     visualizations['map.runtime.none.v1'] = {
         domain: 'cross-domain',
         mapKey: null,
@@ -2028,6 +3265,61 @@ function buildCanonicalLineageCatalog(runtime) {
         validationProtocols: families,
         coordinateFamilies: clone(lineageContract.coordinateFamilies),
         runtime,
+    };
+}
+
+function buildShortsMapProjectionInventory(lineageCatalog) {
+    const keys = contract.crossDomainInventory.shorts.mapProjections.slice();
+    const maps = Object.entries(lineageCatalog.visualizations || {})
+        .filter(([, definition]) => definition.domain === 'shorts')
+        .map(([id, definition]) => ({
+            id,
+            mapKey: definition.mapKey,
+            target: definition.target,
+        }));
+    const errors = [];
+    const keyCounts = new Map();
+    for (const key of keys) {
+        keyCounts.set(key, (keyCounts.get(key) || 0) + 1);
+    }
+    for (const [key, count] of keyCounts.entries()) {
+        if (count !== 1) errors.push(`duplicate-projection-key:${key}`);
+    }
+    const mapCounts = new Map();
+    for (const map of maps) {
+        mapCounts.set(map.mapKey, (mapCounts.get(map.mapKey) || 0) + 1);
+        if (
+            map.id === 'map.shorts.swipe.v1'
+            || map.mapKey === 'swipe'
+            || map.target === '100 - keep'
+        ) {
+            errors.push(`retired-swipe-map-advertised:${map.id}`);
+        }
+    }
+    if (keyCounts.has('swipe')) {
+        errors.push('retired-swipe-projection-advertised:swipe');
+    }
+    for (const key of keys) {
+        if (mapCounts.get(key) !== 1) {
+            errors.push(
+                `projection-map-cardinality:${key}:${mapCounts.get(key) || 0}`
+            );
+        }
+    }
+    for (const map of maps) {
+        if (!keyCounts.has(map.mapKey)) {
+            errors.push(`unadvertised-canonical-map:${map.id}`);
+        }
+    }
+    if (errors.length) {
+        throw new Error(
+            `Invalid canonical Shorts map inventory: ${errors.join(', ')}`
+        );
+    }
+    return {
+        keys,
+        mapIds: maps.map(map => map.id),
+        note: 'Canonical fitted map planes only. Swipe-away is supplied separately by the governed non-stored 100 - keep display transform.',
     };
 }
 
@@ -2386,6 +3678,46 @@ function lineageForHeldout(definition, protocol) {
     };
 }
 
+function lineageForCreatorExcludedPublic(definition) {
+    const targetKey = definition.target === 'gt10M'
+        ? 'gt10M'
+        : definition.target;
+    return {
+        rawInputIds: groupInputIds(definition.group),
+        representationId: groupRepresentationId(definition.group),
+        fitDatasetId: 'dataset.shorts.creator-excluded-public.v1',
+        fitDataset: [{
+            id: 'dataset.shorts.creator-excluded-public.v1',
+            role: `One shared fit for ${definition.group}.${targetKey}. Every private row, saved row, and validation-creator row is excluded before fitting.`,
+        }],
+        targetField: definition.target === 'views'
+            ? 'log10(public lifetime views + 1)'
+            : (definition.target === 'outlier'
+                ? 'log10(public views/subscribers + 1)'
+                : definition.target),
+        algorithmId: definition.target === 'gt10M'
+            ? 'algorithm.shorts.public-heldout-pls1-binary.v1'
+            : 'algorithm.shorts.public-heldout-pls1-quantile.v1',
+        scalarProjection: definition.target === 'gt10M'
+            ? 'L2-normalized 1536D embedding enters one creator-excluded public PLS axis; the displayed probability is the local observed 10M rate near its fitted rank.'
+            : 'L2-normalized 1536D embedding enters one creator-excluded public PLS axis; its fitted rank is quantile-mapped to the sorted public outcome distribution.',
+        calibrationId: definition.target === 'views' || definition.target === 'outlier'
+            ? 'calibration.inverse-log10-nonnegative.v1'
+            : 'calibration.identity-target-units.v1',
+        validationProtocolId: 'family.shorts.creator-excluded.public-axis.v1',
+        artifactId: 'artifact.runtime.shorts.blind-predictor.v1',
+        sourceCode: [
+            'buildings/jarvis/predictor-lab/run_predictor_lab.py:fit_public_axes',
+        ],
+        visualizationId: 'map.runtime.none.v1',
+        usesEmbedding: true,
+        underlyingAxisId:
+            `axis.shorts.creator-excluded.${definition.group}.${targetKey}`,
+        computationReuse: 'One fitted scalar is reused as an input to both video-held-out and account-held-out downstream forecast protocols without duplicating its ledger address.',
+        reproducibility: { status: 'blind-artifact-pinned' },
+    };
+}
+
 function lineageForForecast(definition, protocol) {
     const viewsLike = definition.key === 'views' || definition.key === 'outlier';
     const swipe = definition.key === 'swipe';
@@ -2404,8 +3736,10 @@ function lineageForForecast(definition, protocol) {
         : (definition.key === 'outlier'
             ? 'log10(current views / subscribers + 1)'
             : (swipe ? 'keep' : definition.key));
-    const axisInputId = `input.runtime.shorts.${protocol}-nine-public-axes.v1`;
-    const axisRepresentationId = `representation.runtime.shorts.${protocol}-nine-axis-vector.v1`;
+    const axisInputId =
+        'input.runtime.shorts.creator-excluded-nine-public-axes.v1';
+    const axisRepresentationId =
+        'representation.runtime.shorts.creator-excluded-nine-axis-vector.v1';
     return {
         rawInputIds: [axisInputId],
         representationId: axisRepresentationId,
@@ -2463,7 +3797,7 @@ function lineageForVisualKeepForecast() {
         usesEmbedding: true,
         reproducibility: {
             status: 'frozen-artifact-pinned',
-            warning: 'The production scalar is in-sample on its final fitting population. The video, forward-time, and account holdouts are separate validation evidence, not alternate raw coordinate values.',
+            warning: 'This coordinate accepts only the exact score-time scalar persisted with a cryptographically bound input manifest and active artifact/manifest release tuple. Final-fit training reconstructions are excluded from this coordinate and retained only as study metadata. Video, forward-time, and account holdouts are separate validation coordinates.',
         },
     };
 }
@@ -2515,7 +3849,7 @@ function lineageForCreatorAdaptiveKeepForecast() {
         }],
         targetField: 'observed stayed-to-watch percentage',
         algorithmId: 'algorithm.shorts.creator-adaptive-causal-mixture.v1',
-        scalarProjection: 'Return a 50/50 mixture of the selection-locked centered-together residual analog and visual+together causal semantic stack, using up to 30 strictly earlier creator labels as the baseline.',
+        scalarProjection: 'Return a 50/50 mixture of the selection-locked centered-together residual analog and visual+together chronological semantic stack, using up to 30 strictly earlier creator labels as the baseline.',
         calibrationId: 'calibration.identity-target-units.v1',
         validationProtocolId: 'family.shorts.creator-adaptive-keep.v1',
         artifactId: 'artifact.shorts.creator-adaptive-keep-model.v1',
@@ -2557,53 +3891,17 @@ function lineageForObserved(definition) {
     };
 }
 
-function lineageForLegacy(definition) {
-    if (definition.key === 'views-public-axis-ensemble') {
-        return {
-            rawInputIds: ['input.shorts.public-view-axis-trio.v1'],
-            representationId: 'representation.runtime.shorts.three-public-view-axes.v1',
-            fitDatasetId: 'dataset.shorts.creator-excluded-public.v1',
-            targetField: 'log10(public lifetime views + 1)',
-            algorithmId: 'algorithm.shorts.legacy-public-axis-ensemble.v1',
-            scalarProjection: 'Average the visual, text, and together creator-excluded log-view axes to one raw log10(views + 1) score; the registered calibration converts it to ordinary views.',
-            calibrationId: 'calibration.inverse-log10-nonnegative.v1',
-            validationProtocolId: 'family.shorts.legacy.v1',
-            artifactId: 'artifact.runtime.shorts.blind-predictor.v1',
-            sourceCode: ['buildings/jarvis/saved-channel-validation.js:buildValidation'],
-            visualizationId: 'map.runtime.none.v1',
-            usesEmbedding: true,
-            underlyingAxisIds: [
-                'axis.shorts.creator-excluded.visual.views',
-                'axis.shorts.creator-excluded.text.views',
-                'axis.shorts.creator-excluded.together.views',
-            ],
-            reproducibility: { status: 'legacy-derived-from-blind-artifact' },
-        };
-    }
-    return {
-        rawInputIds: ['input.shorts.private-outcomes.v1'],
-        representationId: null,
-        fitDatasetId: 'dataset.runtime.shorts.legacy.v1',
-        targetField: definition.target,
-        algorithmId: 'algorithm.legacy-diagnostic.v1',
-        scalarProjection: 'Read the registered historical prediction field without substituting it for a canonical coordinate.',
-        calibrationId: 'calibration.identity-target-units.v1',
-        validationProtocolId: 'family.shorts.legacy.v1',
-        artifactId: 'artifact.runtime.shorts.legacy.v1',
-        sourceCode: ['buildings/jarvis/saved-channel-validation.js:LEGACY_DIAGNOSTIC_COORDINATES'],
-        visualizationId: 'map.runtime.none.v1',
-        usesEmbedding: false,
-        reproducibility: { status: 'legacy-not-replayable' },
-    };
-}
-
 function longLineage(group, metric) {
-    const rawInputId = group === 'visual'
-        ? 'input.long.thumbnail.v1'
-        : 'input.long.thumbnail-title.v1';
-    const representationId = group === 'visual'
-        ? 'representation.long.visual.gemini1536.v1'
-        : 'representation.long.together.gemini1536.v1';
+    const rawInputId = {
+        visual: 'input.long.thumbnail.v1',
+        text: 'input.long.title.v1',
+        together: 'input.long.thumbnail-title.v1',
+    }[group];
+    const representationId = {
+        visual: 'representation.long.visual.gemini1536.v1',
+        text: 'representation.long.text.gemini1536.v1',
+        together: 'representation.long.together.gemini1536.v1',
+    }[group];
     const realviews = metric.key === 'realviews';
     const frozenVisual = metric.key === 'ctrviews' && group === 'visual';
     const queryInput = {
@@ -2630,14 +3928,16 @@ function longLineage(group, metric) {
     const familyId = frozenVisual
         ? 'family.long.visual.ctrviews-frozen.v1'
         : (metric.key === 'ctrviews'
-            ? 'family.long.together.ctrviews-neighbor.v1'
+            ? 'family.long.ctrviews-neighbor.v1'
             : (metric.key === 'ctr' || metric.key === 'ret30'
                 ? 'family.long.ctr-ret30-neighbor.v1'
                 : (metric.key === 'views'
                     ? 'family.long.views-neighbor.v1'
+                    : (metric.key === 'scaled_views'
+                        ? 'family.long.outlier-neighbor.v1'
                     : (metric.key === 'realviews'
                         ? 'family.long.realviews-neighbor.v1'
-                        : 'family.long.gt10m-neighbor.v1'))));
+                        : 'family.long.gt10m-neighbor.v1')))));
     if (frozenVisual) {
         rawInputs.push(privateOutcomes, publicOutcomes);
         fitDataset.push(
@@ -2684,9 +3984,11 @@ function longLineage(group, metric) {
             role: 'Persisted map IDs, map coordinates, derived estimate arrays when available, and public outcomes. It does not contain embedding vectors.',
         });
         artifact.push({
-            id: group === 'visual'
-                ? 'artifact.long.embeddings.visual.v1'
-                : 'artifact.long.embeddings.together.v1',
+            id: {
+                visual: 'artifact.long.embeddings.visual.v1',
+                text: 'artifact.long.embeddings.text.v1',
+                together: 'artifact.long.embeddings.together.v1',
+            }[group],
             role: 'Separately persisted reference vectors and archive IDs used for cosine-neighbor selection before map-ID alignment.',
         });
         artifact.push({
@@ -2742,7 +4044,11 @@ function longLineage(group, metric) {
             id: 'algorithm.long.ctrviews-blend.v1',
             role: 'Builds the reference map x axis from 30% private CTR direction and 70% public log-views direction.',
         });
-    } else if (metric.key === 'views' || metric.key === 'gt10m') {
+    } else if (
+        metric.key === 'views'
+        || metric.key === 'scaled_views'
+        || metric.key === 'gt10m'
+    ) {
         rawInputs.push(publicOutcomes);
     }
     return {
@@ -2767,7 +4073,7 @@ function longLineage(group, metric) {
             : (frozenVisual
                 ? 'L2 visual embedding dot the frozen 30% CTR + 70% views direction, ranked on its immutable ladder.'
                 : (metric.key === 'ctrviews'
-                    ? 'L2-normalize the query; select up to 24 archive neighbors; retain the 1-24 IDs present in the together ctrviews map; weight their display-scaled map x coordinates by max(sim, 0)^8; rank that weighted x value inside the map x array. The current producer writes no ctrviews est array.'
+                    ? 'L2-normalize the query; select up to 24 archive neighbors; retain the 1-24 IDs present in the ctrviews map; weight the persisted ctrviews estimate array by max(sim, 0)^8; rank the result in that same estimate array. If the map has geometry but no estimate array, this scalar is unavailable and only the separately registered map placement may be displayed.'
                     : (metric.key === 'gt10m'
                         ? 'L2-normalize the query; select up to 24 archive neighbors; retain the 1-24 IDs present in the map; weight by max(sim, 0)^8; return the weighted mean of the strict views > 10,000,000 indicator.'
                         : `L2-normalize the query; select up to 24 archive neighbors; retain the 1-24 IDs present in the map; weight by max(sim, 0)^8; resolve the stored ${metric.key} reference values and rank the weighted value inside that same array.`))),
@@ -2785,25 +4091,22 @@ function longLineage(group, metric) {
         sourceCode: frozenVisual
             ? ['build_thumb_assets.py', 'longquant_score.py']
             : ['longquant_score.py', 'add_steered_proj_long.py'],
-        visualizationId: metric.key === 'gt10m'
-            ? 'map.long.hi10m.v1'
-            : `map.long.${metric.key}.v1`,
+        visualizationId: `map.long.${metric.projectionKey}.v1`,
         visualization: [{
-            id: metric.key === 'gt10m'
-                ? 'map.long.hi10m.v1'
-                : `map.long.${metric.key}.v1`,
+            id: `map.long.${metric.projectionKey}.v1`,
             role: frozenVisual
                 ? 'Related target display only; it is not the frozen scalar ladder used by the score.'
-                : (metric.key === 'ctrviews'
-                    ? 'This map x coordinate is the explicit source for the together CTR+views output because the producer persists no separate est array.'
-                    : 'Registered display map for the same named reference metric; map x/y are not silently substituted for scalar estimates.'),
+                : 'Registered display map for the same named reference metric. Its x/y marker and percentile are a separate map-placement diagnostic and are never substituted for the scalar estimate.',
         }],
         usesEmbedding: true,
         reproducibility: {
-            status: frozenVisual ? 'frozen-artifact-required' : 'origin-dependent',
+            status: frozenVisual
+                ? 'frozen-artifact-required-not-held-out'
+                : 'diagnostic-not-held-out',
+            validationStatus: 'not-held-out',
             disclosure: frozenVisual
-                ? 'The direct visual coordinate is available only when the frozen scorer_visual.npz artifact (or its legacy JSON serialization) is present.'
-                : 'Long historical rows must retain stored-production versus derived-neighbor-axis origin; those origins are never silently merged.',
+                ? 'The direct visual coordinate is available only when the frozen scorer_visual.npz artifact (or its legacy JSON serialization) is present. Its current fit population is not an account- or video-held-out accuracy study.'
+                : 'This Long neighbor estimate is an in-corpus diagnostic. It cannot support predictive-accuracy claims until a registered video/account-held-out Long evaluation is added.',
         },
     };
 }
@@ -3243,9 +4546,19 @@ function buildLineageAudit(columns, longColumns, catalog) {
             return foldCollectionComplete(value);
         }
         if (field === 'materializedEligibility') {
+            const targetPopulations = value
+                && value.scalarEligibilityByTarget;
             return value
                 && Number.isInteger(Number(value.scalarEligible))
                 && exactHash(value.scalarEligibleVideoIdSha256)
+                && targetPopulations
+                && Object.values(targetPopulations).length > 0
+                && Object.values(targetPopulations).every(population => (
+                    population
+                    && Number.isInteger(Number(population.n))
+                    && Number(population.n) >= 0
+                    && exactHash(population.videoIdSha256)
+                ))
                 && Array.isArray(value.scalarFolds)
                 && value.scalarFolds.length > 0
                 && foldCollectionComplete(value.scalarFoldPopulations);
@@ -3268,6 +4581,59 @@ function buildLineageAudit(columns, longColumns, catalog) {
         return !unknownText(value);
     };
     const runtimeProvenanceMissing = [];
+    const runtimeProvenanceInvalid = [];
+    const runtimeFieldDiagnostic = (field, value) => {
+        if (field !== 'materializedEligibility') {
+            return {
+                present: value !== null && value !== undefined,
+                type: Array.isArray(value) ? 'array' : typeof value,
+                status: value && value.status || null,
+            };
+        }
+        const targetPopulations = value
+            && value.scalarEligibilityByTarget;
+        const invalidTargetPopulations = Object.entries(
+            targetPopulations || {}
+        ).filter(([, population]) => !(
+            population
+            && Number.isInteger(Number(population.n))
+            && Number(population.n) >= 0
+            && exactHash(population.videoIdSha256)
+        )).map(([key]) => key);
+        const invalidFoldPopulations = (
+            Array.isArray(value && value.scalarFoldPopulations)
+                ? value.scalarFoldPopulations
+                : []
+        ).map((fold, index) => ({ fold, index }))
+            .filter(({ fold }) => !(
+                fold
+                && Number.isInteger(Number(fold.trainingRowCount))
+                && Number(fold.trainingRowCount) >= 0
+                && exactHash(fold.trainingVideoIdSha256)
+                && Number.isInteger(Number(fold.testingRowCount))
+                && Number(fold.testingRowCount) >= 0
+                && exactHash(fold.testingVideoIdSha256)
+            ))
+            .map(({ index }) => index);
+        return {
+            present: value !== null && value !== undefined,
+            scalarEligible: value && value.scalarEligible,
+            scalarEligibleVideoIdSha256Valid:
+                exactHash(value && value.scalarEligibleVideoIdSha256),
+            scalarTargetPopulationCount:
+                Object.keys(targetPopulations || {}).length,
+            invalidTargetPopulations,
+            scalarFoldSelectionCount:
+                Array.isArray(value && value.scalarFolds)
+                    ? value.scalarFolds.length
+                    : 0,
+            scalarFoldPopulationCount:
+                Array.isArray(value && value.scalarFoldPopulations)
+                    ? value.scalarFoldPopulations.length
+                    : 0,
+            invalidFoldPopulations,
+        };
+    };
     for (const id of [...runtimeDatasetIds].sort()) {
         const dataset = (catalog.fitDatasets || {})[id];
         if (!dataset || !Array.isArray(dataset.runtimeProvenanceRequired)) continue;
@@ -3275,6 +4641,14 @@ function buildLineageAudit(columns, longColumns, catalog) {
         for (const field of dataset.runtimeProvenanceRequired) {
             if (!runtimeFieldComplete(field, snapshot && snapshot[field])) {
                 runtimeProvenanceMissing.push(`${id}:runtimeSnapshot.${field}`);
+                runtimeProvenanceInvalid.push({
+                    datasetId: id,
+                    field,
+                    diagnostic: runtimeFieldDiagnostic(
+                        field,
+                        snapshot && snapshot[field]
+                    ),
+                });
             }
         }
     }
@@ -3351,6 +4725,7 @@ function buildLineageAudit(columns, longColumns, catalog) {
         runtimeDatasetsChecked: [...runtimeDatasetIds].sort(),
         runtimeArtifactsChecked: [...runtimeArtifactIds].sort(),
         runtimeProvenanceMissing,
+        runtimeProvenanceInvalid,
         runtimeRevisionMissing,
         unclassifiedColumns: columns.filter(column => !column.valueClass).map(column => column.id),
         incompleteLineages: missing,
@@ -3364,8 +4739,31 @@ function buildLineageAudit(columns, longColumns, catalog) {
     };
 }
 
+const PREDICTOR_RANKING_FAMILIES = Object.freeze(new Set([
+    'creatorExcludedPublic',
+    'videoHeldout',
+    'accountHeldout',
+    'videoForecast',
+    'accountForecast',
+    'creatorAdaptiveKeepPrequential',
+]));
+
+function coordinatePredictorRankingEligible(column) {
+    return !!column
+        && PREDICTOR_RANKING_FAMILIES.has(column.family)
+        && column.status === 'canonical'
+        && column.predictorEligible === true;
+}
+
 function buildCoordinateRegistry(options = {}) {
     const predictorProvenance = options.predictorProvenance || options.provenance || {};
+    const blindFoldPassed = !!(
+        options.blindFoldAudit && options.blindFoldAudit.passed
+    );
+    const publicAxisLeakagePassed = !!(
+        options.publicAxisOverlapAudit
+        && options.publicAxisOverlapAudit.passed
+    );
     const runtime = lineageRuntimeContext(
         options.rows || [],
         predictorProvenance,
@@ -3377,13 +4775,24 @@ function buildCoordinateRegistry(options = {}) {
         options.generatedAt || null
     );
     const lineageCatalog = buildCanonicalLineageCatalog(runtime);
-    const creatorAdaptiveStatus = options.creatorAdaptiveStudy
-        && options.creatorAdaptiveStudy.status || {};
-    const creatorAdaptivePredictorEligible = (
-        creatorAdaptiveStatus.predictorEligible === true
+    const shortsMapProjections = buildShortsMapProjectionInventory(
+        lineageCatalog
     );
-    const observed = OUTCOME_DEFINITIONS.map(definition => ({
-        id: `shorts.observed.${definition.key}`,
+    const creatorAdaptivePromotionAudit = promotionEligibilityAudit(
+        options.creatorAdaptiveStudy || null,
+        'creator_adaptive_keep'
+    );
+    const creatorAdaptivePredictorEligible = !!(
+        creatorAdaptivePromotionAudit
+        && creatorAdaptivePromotionAudit.effectivePredictorEligible
+    );
+    const observed = OUTCOME_DEFINITIONS.filter(
+        definition => definition.key !== 'swipe'
+    ).map(definition => ({
+        id: coordinatePattern(
+            coordinateGovernance.coordinates.observedPattern,
+            { outcomeKey: definition.key }
+        ),
         family: 'observed',
         protocol: 'observed',
         group: 'outcome',
@@ -3400,7 +4809,10 @@ function buildCoordinateRegistry(options = {}) {
         description: 'Measured outcome joined to the scored video. This is truth on the X axis, not an embedding score.',
     }));
     const stored = contract.features.map(definition => ({
-        id: `shorts.stored.${definition.key}`,
+        id: coordinatePattern(
+            coordinateGovernance.coordinates.storedPattern,
+            { featureKey: definition.key }
+        ),
         family: 'stored',
         protocol: 'stored',
         group: definition.group,
@@ -3412,6 +4824,8 @@ function buildCoordinateRegistry(options = {}) {
         sourceKey: definition.sourceKey || definition.key,
         percentileAvailable: definition.target !== 'realviews',
         status: 'canonical',
+        predictorEligible: false,
+        validationStatus: 'diagnostic_not_held_out',
         valueClass: definition.group === 'novelty' || definition.target === 'realviews'
             ? 'embedding_derived_transform'
             : 'direct_embedding_axis',
@@ -3426,14 +4840,16 @@ function buildCoordinateRegistry(options = {}) {
         group: 'visual',
         key: 'visualKeepForecast',
         target: 'keep',
-        label: 'Visual · frozen 1,536D keep forecast',
+        label: 'Visual · frozen 1,536D keep model score',
         unit: 'percent',
         percentileAvailable: false,
         status: 'canonical',
+        predictorEligible: false,
+        validationStatus: 'persisted_score_time_provenance_required',
         valueClass: 'combined_forecast',
         lineageId: 'lineage.shorts.visual-keep-forecast.v1',
         lineage: lineageForVisualKeepForecast(),
-        description: 'One raw keep-rate percentage from the immutable full-vector visual Ridge model. It is a derived forecast from the existing visual embedding, not another embedding space.',
+        description: 'One raw keep-rate percentage persisted at score time from the immutable pooled-global visual Ridge model. The value exists here only when its source, coordinate, artifact, release manifest, input fingerprints, score-record binding, and [0,100] output contract all match. Full-fit training reconstructions never enter this coordinate.',
     }];
     const visualKeepProtocolForecasts = Object.entries(
         VISUAL_KEEP_PROTOCOL_COORDINATES
@@ -3455,30 +4871,70 @@ function buildCoordinateRegistry(options = {}) {
         lineage: lineageForVisualKeepProtocol(protocolKey),
         description: `${definition.description} This value is already out of fold and is never substituted for the frozen production forecast or a stored map estimate.`,
     }));
-    const creatorAdaptiveKeepForecast = [{
-        id: CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
-        family: 'creatorAdaptiveKeepForecast',
+    const creatorAdaptiveKeepPrequential = [{
+        id: CREATOR_ADAPTIVE_KEEP_PREQUENTIAL_COORDINATE_ID,
+        family: 'creatorAdaptiveKeepPrequential',
         protocol: 'prequential',
         group: 'multimodal',
-        key: 'creatorAdaptiveKeepForecast',
+        key: 'creatorAdaptiveKeepPrequential',
         target: 'keep',
-        label: 'Visual + both · causal next-upload keep mixture',
+        label: 'Visual + both · prequential next-upload keep mixture',
         unit: 'percent',
         percentileAvailable: false,
         status: creatorAdaptivePredictorEligible
             ? 'canonical'
             : 'research_diagnostic',
         predictorEligible: creatorAdaptivePredictorEligible,
+        validationStatus: creatorAdaptivePredictorEligible
+            ? 'prospectively_confirmed_creator_diverse'
+            : 'research_only_retrospective',
+        promotionAudit: creatorAdaptivePromotionAudit,
         valueClass: 'combined_forecast',
         lineageId: 'lineage.shorts.creator-adaptive-keep.v1',
         lineage: lineageForCreatorAdaptiveKeepForecast(),
         description: creatorAdaptivePredictorEligible
             ? 'One raw keep-rate percentage from the canonical visual and together embeddings plus an explicit creator profile’s strictly earlier measured uploads. It is unavailable for cold start.'
-            : 'Retrospective research coordinate from the canonical visual and together embeddings plus strictly earlier creator history. It clears the historical account-level 10-point MAE target but stays excluded from blind-predictor rankings until prospective confirmation.',
+            : 'Retrospective research coordinate from the canonical visual and together embeddings plus strictly earlier creator history. Historical target attainment cannot promote it: it stays excluded from blind-predictor rankings until an immutable prospective registration/result chain and the governed creator sample minimum both pass.',
     }];
+    const creatorExcludedPublic = contract.features.filter(definition => (
+        definition.group !== 'novelty'
+        && coordinateGovernance.expansions.creatorExcludedPublicTargets.includes(
+            definition.target
+        )
+    )).map(definition => ({
+        id: coordinatePattern(
+            coordinateGovernance.coordinates.creatorExcludedPublicPattern,
+            { featureKey: definition.key }
+        ),
+        family: 'creatorExcludedPublic',
+        protocol: 'creator_excluded',
+        group: definition.group,
+        key: definition.key,
+        target: definition.target,
+        label: `Creator-excluded ${definition.group === 'together' ? 'Both' : definition.group} · ${definition.label}`,
+        unit: definition.displayUnit || definition.unit,
+        storageUnit: 'blind_model_coordinate',
+        sourceKey: `${definition.key}.raw`,
+        percentileAvailable: false,
+        status: 'canonical',
+        predictorEligible: publicAxisLeakagePassed,
+        validationStatus: 'research_only_creator_excluded_retrospective',
+        valueClass: 'direct_embedding_axis',
+        lineageId: `lineage.shorts.creator-excluded.${definition.key}`,
+        lineage: lineageForCreatorExcludedPublic(definition),
+        description: 'One public-corpus axis fitted after excluding every private, saved, and validation-creator video. This scalar has one ledger address and may feed multiple downstream validation protocols.',
+    }));
     const direct = ['video', 'account'].flatMap(protocol => (
-        contract.features.filter(definition => definition.group !== 'novelty').map(definition => ({
-            id: `shorts.${protocol}-heldout.${definition.key}`,
+        contract.features.filter(definition => (
+            definition.group !== 'novelty'
+            && coordinateGovernance.expansions.privateHeldoutTargets.includes(
+                definition.target
+            )
+        )).map(definition => ({
+            id: coordinatePattern(
+                coordinateGovernance.coordinates.privateHeldoutPattern,
+                { protocol, featureKey: definition.key }
+            ),
             family: `${protocol}Heldout`,
             protocol,
             group: definition.group,
@@ -3489,7 +4945,21 @@ function buildCoordinateRegistry(options = {}) {
             storageUnit: 'blind_model_coordinate',
             sourceKey: `${definition.key}.raw`,
             percentileAvailable: false,
-            status: 'canonical',
+            status: blindFoldPassed
+                && (
+                    ['keep', 'ret5', 'realviews'].includes(definition.target)
+                    || publicAxisLeakagePassed
+                )
+                ? 'canonical'
+                : 'research_diagnostic',
+            predictorEligible: blindFoldPassed
+                && (
+                    ['keep', 'ret5', 'realviews'].includes(definition.target)
+                    || publicAxisLeakagePassed
+                ),
+            validationStatus: blindFoldPassed
+                ? 'research_only_retrospective_holdout'
+                : 'unverified_fold_lineage',
             valueClass: definition.target === 'realviews'
                 ? 'embedding_derived_transform'
                 : 'direct_embedding_axis',
@@ -3501,8 +4971,13 @@ function buildCoordinateRegistry(options = {}) {
         }))
     ));
     const forecasts = ['video', 'account'].flatMap(protocol => (
-        OUTCOME_DEFINITIONS.map(definition => ({
-            id: `shorts.${protocol}-forecast.${definition.key}`,
+        OUTCOME_DEFINITIONS.filter(
+            definition => definition.key !== 'swipe'
+        ).map(definition => ({
+            id: coordinatePattern(
+                coordinateGovernance.coordinates.forecastPattern,
+                { protocol, outcomeKey: definition.key }
+            ),
             family: `${protocol}Forecast`,
             protocol,
             group: 'combined',
@@ -3511,79 +4986,211 @@ function buildCoordinateRegistry(options = {}) {
             label: `${protocol === 'video' ? 'Video-held-out' : 'Account-held-out'} combined forecast · ${definition.label}`,
             unit: definition.key === 'hit10M' ? 'probability' : definition.unit,
             percentileAvailable: false,
-            status: 'canonical',
+            status: blindFoldPassed && publicAxisLeakagePassed
+                ? 'canonical'
+                : 'research_diagnostic',
+            predictorEligible: blindFoldPassed
+                && publicAxisLeakagePassed,
+            validationStatus: blindFoldPassed && publicAxisLeakagePassed
+                ? 'research_only_retrospective_holdout'
+                : 'unverified_input_or_fold_lineage',
             valueClass: 'combined_forecast',
             lineageId: `lineage.shorts.${protocol}-forecast.${definition.key}`,
             lineage: lineageForForecast(definition, protocol),
             description: 'Fold-fitted forecast from the nine creator-excluded public views, outlier, and 10M coordinates. It is not an additional embedding axis.',
         }))
     ));
-    const legacy = LEGACY_DIAGNOSTIC_COORDINATES.map(definition => ({
-        id: `shorts.legacy.${definition.key}`,
-        family: 'legacy',
-        protocol: 'legacy',
-        group: 'legacy',
-        key: definition.key,
-        target: definition.target,
-        label: definition.label,
-        unit: definition.unit,
-        percentileAvailable: false,
-        status: 'legacy_diagnostic',
-        replacement: definition.replacement || null,
-        valueClass: 'legacy_diagnostic',
-        lineageId: `lineage.shorts.legacy.${definition.key}`,
-        lineage: lineageForLegacy(definition),
-        description: 'Registered for audit compatibility. It is not used as the canonical score-card value.',
+    const aliases = buildCoordinateAliases();
+    const displayTransforms = (
+        coordinateGovernance.displayTransforms || []
+    ).map(transform => ({
+        ...transform,
+        valueClass: 'governed_display_transform',
+        description: 'Swipe-away is rendered from canonical keep and is not stored or counted as a second estimator or outcome coordinate.',
     }));
+    const aliasMap = Object.fromEntries(
+        aliases.map(alias => [alias.id, alias.canonicalId])
+    );
+    const retired = (coordinateGovernance.compatibility.retired || []).map(
+        definition => {
+            const coordinateIdentity = {
+                coordinateId: definition.id,
+                family: 'retiredDiagnostic',
+                status: 'retired',
+                registry: 'quant-coordinate-governance',
+                registryVersion:
+                    coordinateGovernance.schemaVersion,
+                registrySha256:
+                    coordinateGovernanceFileSha256(),
+                replacementCoordinateId:
+                    definition.replacement || null,
+            };
+            return {
+                ...definition,
+                coordinateId: definition.id,
+                family: 'retiredDiagnostic',
+                status: 'retired',
+                active: false,
+                predictorEligible: false,
+                predictor_eligible: false,
+                coordinateIdentity,
+                coordinateIdentitySha256:
+                    sha256Json(coordinateIdentity),
+            };
+        }
+    );
     const columns = [
         ...observed,
         ...stored,
         ...visualKeepForecast,
         ...visualKeepProtocolForecasts,
-        ...creatorAdaptiveKeepForecast,
+        ...creatorAdaptiveKeepPrequential,
+        ...creatorExcludedPublic,
         ...direct,
         ...forecasts,
-        ...legacy,
     ];
     const familyMeta = [
         ['observed', 'Observed outcomes', 'Measured truth; never an embedding.'],
         ['stored', 'Stored production scores', 'The exact 21 score-card coordinates.'],
-        ['visualKeepForecast', 'Frozen visual keep forecast', 'One derived full-vector forecast from the existing visual embedding; not a new embedding space.'],
+        ['visualKeepForecast', 'Frozen visual keep model score', 'One persisted score-time full-vector score from the existing visual embedding. Exact release and input provenance is required; full-fit training reconstructions remain outside the ledger.'],
         ['visualKeepProtocolForecast', 'Visual keep protocol predictions', 'Three protocol-specific research outputs. Each is already held out under its named protocol and is distinct from both the frozen production scalar and stored map coordinates.'],
-        ['creatorAdaptiveKeepForecast', 'Creator-adaptive keep forecast', 'One causal next-upload forecast from the existing visual and together embeddings plus explicit prior creator history.'],
-        ['videoHeldout', 'Video-held-out scores', '15 direct axes plus 3 derived realistic-views transforms rebuilt without the evaluated video.'],
-        ['accountHeldout', 'Account-held-out scores', '15 direct axes plus 3 derived realistic-views transforms rebuilt without the evaluated account.'],
-        ['videoForecast', 'Video-held-out combined forecasts', '13 outcomes forecast from nine creator-excluded public axes.'],
-        ['accountForecast', 'Account-held-out combined forecasts', '13 account-transfer outcome forecasts.'],
-        ['legacy', 'Legacy diagnostics', 'Registered for traceability, visibly deprecated, and never substituted for a production score.'],
+        ['creatorAdaptiveKeepPrequential', 'Creator-adaptive historical prequential validation', 'One row-specific chronological replay from the existing visual and together embeddings plus only the creator history available before that historical row. It proves that future labels were excluded, not a causal effect, and is not the live future-upload shadow score.'],
+        ['creatorExcludedPublic', 'Creator-excluded public axes', 'Nine unique retrospective public views, outlier, and over-10M axes shared by downstream validation protocols without duplicate ledger columns. Creator exclusion prevents direct account leakage but does not make the calibration prospective or confirmatory.'],
+        ['videoHeldout', 'Video-held-out private scores', 'Six private keep/ret5 axes plus three realistic-views transforms rebuilt without the evaluated video.'],
+        ['accountHeldout', 'Account-held-out private scores', 'Six private keep/ret5 axes plus three realistic-views transforms rebuilt without the evaluated account.'],
+        ['videoForecast', 'Video-held-out combined forecasts', 'Twelve stored outcomes forecast from nine creator-excluded public axes; swipe is a display transform of keep.'],
+        ['accountForecast', 'Account-held-out combined forecasts', 'Twelve stored account-transfer outcomes; swipe is a display transform of keep.'],
     ].map(([key, label, description]) => ({
         key,
         label,
         description,
         count: columns.filter(column => column.family === key).length,
     }));
-    const longQuantColumns = ['visual', 'together'].flatMap(group => LONG_QUANT_METRICS.map(metric => ({
-        id: `long.output.${group}.${metric.key}`,
+    const longQuantColumns = LONG_QUANT_GROUPS.flatMap(group => LONG_QUANT_METRICS.map(metric => ({
+        id: coordinatePattern(
+            coordinateGovernance.coordinates.longOutputPattern,
+            { group, metricKey: metric.key }
+        ),
         family: 'longStored',
         protocol: 'stored',
         group,
         key: `${group}.${metric.key}`,
         target: metric.target,
-        label: `${group === 'together' ? 'Both' : 'Visual'} · ${metric.label}`,
+        label: `${
+            group === 'together' ? 'Both'
+                : group === 'text' ? 'Text'
+                    : 'Visual'
+        } · ${metric.label}`,
         unit: metric.unit,
         status: 'canonical',
+        predictorEligible: false,
+        validationStatus: 'not-held-out',
         valueClass: group === 'visual' && metric.key === 'ctrviews'
             ? 'direct_embedding_axis'
             : 'embedding_derived_transform',
         lineageId: `lineage.long.output.${group}.${metric.key}`,
         lineage: longLineage(group, metric),
-        description: 'Current Long Quant score output. Historical rows can identify stored-production or derived-neighbor-axis origin separately.',
+        description: 'Canonical nullable Long Quant scalar output. A missing estimate remains missing; a 2D map marker is stored and displayed under its separate map-placement address.',
     })));
+    const longMapPlacements = LONG_QUANT_GROUPS.flatMap(group => (
+        (contract.crossDomainInventory.longQuant.mapProjections || []).map(
+            projectionKey => ({
+                id: coordinatePattern(
+                    coordinateGovernance.coordinates.longMapPlacementPattern,
+                    { group, projectionKey }
+                ),
+                group,
+                projectionKey,
+                mapId: `map.long.${projectionKey}.v1`,
+                valueClass: 'map_placement',
+                predictorEligible: false,
+                validationStatus: 'not-held-out',
+                description: 'Query marker on a registered two-dimensional Long map. It is visualization geometry, not a scalar outcome estimate.',
+            })
+        )
+    ));
     for (const column of [...columns, ...longQuantColumns]) {
         column.lineage = canonicalizeLineage(column.lineage);
         column.coordinateIdentity = buildCoordinateIdentity(column, lineageCatalog);
     }
     const lineageAudit = buildLineageAudit(columns, longQuantColumns, lineageCatalog);
+    const duplicateLongCoordinateIds = [...new Set(
+        longQuantColumns
+            .map(column => column.id)
+            .filter((id, index, ids) => ids.indexOf(id) !== index)
+    )];
+    const duplicateLongMapPlacementIds = [...new Set(
+        longMapPlacements
+            .map(placement => placement.id)
+            .filter((id, index, ids) => ids.indexOf(id) !== index)
+    )];
+    const activeAxisGroups = new Map();
+    for (const column of columns) {
+        const fingerprint = column.coordinateIdentity.axisFingerprint;
+        if (!activeAxisGroups.has(fingerprint)) {
+            activeAxisGroups.set(fingerprint, []);
+        }
+        activeAxisGroups.get(fingerprint).push(column.id);
+    }
+    const duplicateActiveAxes = [...activeAxisGroups.entries()]
+        .filter(([, ids]) => ids.length > 1)
+        .map(([axisFingerprint, ids]) => ({ axisFingerprint, ids }));
+    const activeIds = new Set(columns.map(column => column.id));
+    const aliasErrors = aliases.flatMap(alias => {
+        const errors = [];
+        if (activeIds.has(alias.id)) {
+            errors.push(`${alias.id}:alias-is-active`);
+        }
+        if (!activeIds.has(alias.canonicalId)) {
+            errors.push(`${alias.id}:missing-canonical:${alias.canonicalId}`);
+        }
+        return errors;
+    });
+    const displayTransformIds = new Set();
+    const displayTransformErrors = displayTransforms.flatMap(transform => {
+        const errors = [];
+        if (
+            !transform.id
+            || displayTransformIds.has(transform.id)
+        ) {
+            errors.push(`${transform.id || 'missing-id'}:duplicate-transform`);
+        }
+        displayTransformIds.add(transform.id);
+        if (activeIds.has(transform.id)) {
+            errors.push(`${transform.id}:display-transform-is-stored`);
+        }
+        if (!activeIds.has(transform.sourceCoordinateId)) {
+            errors.push(
+                `${transform.id}:missing-source:${transform.sourceCoordinateId}`
+            );
+        }
+        if (
+            transform.formula !== '100 - source'
+            || transform.stored !== false
+            || transform.predictorEligible !== false
+        ) {
+            errors.push(`${transform.id}:display-transform-contract-differs`);
+        }
+        return errors;
+    });
+    lineageAudit.duplicateActiveAxes = duplicateActiveAxes;
+    lineageAudit.aliasErrors = aliasErrors;
+    lineageAudit.displayTransformErrors = displayTransformErrors;
+    lineageAudit.duplicateLongCoordinateIds = duplicateLongCoordinateIds;
+    lineageAudit.duplicateLongMapPlacementIds = duplicateLongMapPlacementIds;
+    lineageAudit.passed = lineageAudit.passed
+        && duplicateActiveAxes.length === 0
+        && aliasErrors.length === 0
+        && displayTransformErrors.length === 0
+        && duplicateLongCoordinateIds.length === 0
+        && duplicateLongMapPlacementIds.length === 0;
+    lineageAudit.structuralPassed = lineageAudit.structuralPassed
+        && duplicateActiveAxes.length === 0
+        && aliasErrors.length === 0
+        && displayTransformErrors.length === 0
+        && duplicateLongCoordinateIds.length === 0
+        && duplicateLongMapPlacementIds.length === 0;
+    lineageAudit.rule += ' Active columns must also have unique axis fingerprints, every compatibility alias must resolve to exactly one active canonical coordinate, and every non-stored display transform must resolve to an active source without entering the ledger.';
     const valueClassCounts = columns.reduce((counts, column) => {
         counts[column.valueClass] = (counts[column.valueClass] || 0) + 1;
         return counts;
@@ -3592,16 +5199,7 @@ function buildCoordinateRegistry(options = {}) {
     const distinctDirectAxisCount = new Set(
         directAxisColumns.map(column => column.coordinateIdentity.axisFingerprint),
     ).size;
-    const blindColumns = columns.filter(column => (
-        (
-            column.family === 'videoHeldout'
-            || column.family === 'accountHeldout'
-            || column.family === 'videoForecast'
-            || column.family === 'accountForecast'
-            || column.family === 'creatorAdaptiveKeepForecast'
-        )
-        && column.predictorEligible !== false
-    ));
+    const blindColumns = columns.filter(coordinatePredictorRankingEligible);
     const blindUniquePredictionCount = new Set(
         blindColumns.map(column => column.coordinateIdentity.axisFingerprint),
     ).size;
@@ -3609,22 +5207,35 @@ function buildCoordinateRegistry(options = {}) {
         column.family === 'stored'
         || column.family === 'visualKeepForecast'
         || column.family === 'visualKeepProtocolForecast'
-        || column.family === 'legacy'
         || column.predictorEligible === false
     ));
     const outcomeColumns = columns.filter(column => column.family === 'observed');
     return {
         version: LEDGER_VERSION,
         contractVersion: contract.version,
+        governanceVersion: coordinateGovernance.schemaVersion,
+        governanceSha256: coordinateGovernanceFileSha256(),
         rules: [
-            'Every displayed scalar must resolve to one coordinate ID in this registry.',
+            ...coordinateGovernance.rules,
             'A relationship graph pairs one score-coordinate ID with one observed-outcome ID; it never creates a new score.',
             'Stored production, held-out reconstruction, combined forecast, and observed truth are different families and may not substitute for one another.',
             'Percentiles belong to their coordinate cell; they are not new estimates.',
             'Re-scoring parity is defined by identical input fingerprint plus scorer, model, and artifact revisions.',
-            `The ${columns.length} Shorts row columns are not ${columns.length} embedding spaces: ${directAxisColumns.length} are direct-axis columns representing ${distinctDirectAxisCount} distinct fitted axes because shared public axes appear under both protocol views; the frozen visual and creator-adaptive forecasts reuse existing embeddings, and transforms, forecasts, observations, and diagnostics are counted separately.`,
+            `Promotion fails closed unless at least ${MIN_CONFIRMATORY_ACCOUNT_COUNT} independently evaluated creator accounts contribute at least ${MIN_CONFIRMATORY_ROWS_PER_ACCOUNT} rows each and immutable result/preregistration bytes reproduce their hashes while locking model, protocol, outcome, and evaluation-population hashes.`,
+            'Stayed-to-watch and swipe-away are one feed-decision outcome family. Swipe remains visible as an algebraic complement but cannot cast a second model-selection vote.',
+            `The ${columns.length} active Shorts row columns are not ${columns.length} embedding spaces: ${directAxisColumns.length} are unique direct fitted axes; the frozen visual and creator-adaptive forecasts reuse existing embeddings, and transforms, forecasts, observations, and diagnostics are counted separately.`,
         ],
         columns,
+        displayTransforms,
+        aliases,
+        aliasMap,
+        retired,
+        compatibility: {
+            aliases,
+            retired,
+            activeColumnsContainAliases: false,
+            activeColumnsContainRetired: false,
+        },
         families: familyMeta,
         classification: {
             blind: {
@@ -3632,12 +5243,12 @@ function buildCoordinateRegistry(options = {}) {
                 uniquePredictions: blindUniquePredictionCount,
                 aliasColumns: blindColumns.length - blindUniquePredictionCount,
                 families: [...new Set(blindColumns.map(column => column.family))],
-                meaning: 'Coordinates currently eligible for leakage-controlled predictor ranking. Shared creator-excluded public direct axes can appear in both protocol views but identify the same fitted prediction.',
+                meaning: 'Coordinates currently eligible for leakage-controlled predictor ranking. Every active blind column is one unique scalar prediction; compatibility aliases are outside the active ledger.',
             },
             diagnostics: {
                 columns: diagnosticColumns.length,
                 families: [...new Set(diagnosticColumns.map(column => column.family))],
-                meaning: 'Stored production outputs, frozen fitting-population forecasts, research-only candidates, and legacy comparisons. They remain auditable but are excluded from strict predictor rankings.',
+                meaning: 'Stored production outputs, provenance-bound score-time forecasts, and research-only candidates. Full-fit training reconstructions and retired historical diagnostics remain outside active ledger columns.',
             },
             outcomes: {
                 columns: outcomeColumns.length,
@@ -3650,15 +5261,19 @@ function buildCoordinateRegistry(options = {}) {
         totals: {
             shortsRowColumns: columns.length,
             shortsCanonicalColumns: columns.filter(column => column.status === 'canonical').length,
-            shortsLegacyDiagnostics: legacy.length,
+            shortsCompatibilityAliases: aliases.length,
+            shortsRetiredCoordinates: retired.length,
+            shortsLegacyDiagnostics: 0,
             shortsStoredProduction: stored.length,
             shortsVisualKeepForecasts: visualKeepForecast.length,
             shortsVisualKeepProtocolForecasts: visualKeepProtocolForecasts.length,
-            shortsCreatorAdaptiveKeepForecasts: creatorAdaptiveKeepForecast.length,
+            shortsCreatorAdaptiveKeepPrequential:
+                creatorAdaptiveKeepPrequential.length,
+            shortsCreatorExcludedPublic: creatorExcludedPublic.length,
             shortsDirectHeldout: direct.length,
-            shortsCombinedForecasts: (
-                forecasts.length + creatorAdaptiveKeepForecast.length
-            ),
+            shortsCombinedForecasts:
+                valueClassCounts.combined_forecast || 0,
+            shortsHeldoutCombinedForecasts: forecasts.length,
             shortsObservedOutcomes: observed.length,
             longStoredOutputs: longQuantColumns.length,
             shortsDirectEmbeddingAxes: distinctDirectAxisCount,
@@ -3673,7 +5288,7 @@ function buildCoordinateRegistry(options = {}) {
             shortsEmbeddingDerivedTransforms: valueClassCounts.embedding_derived_transform || 0,
             shortsForecastColumns: valueClassCounts.combined_forecast || 0,
             shortsObservedColumns: valueClassCounts.observed_outcome || 0,
-            shortsLegacyColumns: valueClassCounts.legacy_diagnostic || 0,
+            shortsLegacyColumns: 0,
         },
         curves: {
             seconds: CURVE_SECONDS.slice(),
@@ -3689,13 +5304,14 @@ function buildCoordinateRegistry(options = {}) {
         longQuant: {
             columns: longQuantColumns,
             scalarOutputCount: longQuantColumns.length,
+            groups: LONG_QUANT_GROUPS.slice(),
+            metrics: LONG_QUANT_METRICS.map(metric => ({ ...metric })),
+            mapPlacements: longMapPlacements,
             mapProjections: contract.crossDomainInventory.longQuant.mapProjections.slice(),
-            note: 'Map projections are alternate visualizations of registered data. They do not create additional per-video scores.',
+            validationStatus: 'not-held-out',
+            note: 'All 21 nullable scalar addresses are distinct from the 36 map-placement addresses. Long scalar and map diagnostics are not predictive evidence until a registered held-out Long study exists.',
         },
-        shortsMapProjections: {
-            keys: contract.crossDomainInventory.shorts.mapProjections.slice(),
-            note: 'Map projections are alternate visualizations of registered data. They do not create additional per-video scores.',
-        },
+        shortsMapProjections,
     };
 }
 
@@ -3753,6 +5369,99 @@ function centeredCorrelation(points, rankFirst) {
     return pearson(actual, predicted);
 }
 
+function creatorContentFamilyInference(points, binary) {
+    const families = new Map();
+    for (const point of points || []) {
+        if (!finite(point.actual) || !finite(point.predicted)) continue;
+        const accountId = String(point.accountId || 'unknown');
+        const familyId = String(
+            point.contentFamilyEvidence
+                && point.contentFamilyEvidence.familyId
+            || point.contentFamilyId
+            || validationContentFamilyId(point)
+        );
+        const key = `${accountId}\u0000${familyId}`;
+        if (!families.has(key)) {
+            families.set(key, {
+                accountId,
+                familyId,
+                actual: [],
+                predicted: [],
+            });
+        }
+        families.get(key).actual.push(Number(point.actual));
+        families.get(key).predicted.push(Number(point.predicted));
+    }
+    const collapsed = [...families.values()].map(group => ({
+        accountId: group.accountId,
+        familyId: group.familyId,
+        actual: average(group.actual),
+        predicted: average(group.predicted),
+    }));
+    const byAccount = new Map();
+    for (const point of collapsed) {
+        if (!byAccount.has(point.accountId)) byAccount.set(point.accountId, []);
+        byAccount.get(point.accountId).push(point);
+    }
+    const creatorEffects = [];
+    for (const [accountId, accountPoints] of byAccount) {
+        let effect = null;
+        if (binary) {
+            effect = rocAuc(
+                accountPoints.map(point => point.actual >= 0.5 ? 1 : 0),
+                accountPoints.map(point => point.predicted)
+            );
+            if (finite(effect)) effect = Number(effect) - 0.5;
+        } else if (accountPoints.length >= 3) {
+            effect = spearman(
+                accountPoints.map(point => point.actual),
+                accountPoints.map(point => point.predicted)
+            );
+        }
+        if (finite(effect)) {
+            creatorEffects.push({
+                accountId,
+                effect: Number(effect),
+                contentFamilies: accountPoints.length,
+            });
+        }
+    }
+    const creatorCount = creatorEffects.length;
+    const centeredEffect = creatorCount
+        ? average(creatorEffects.map(item => item.effect))
+        : null;
+    const reportedEffect = binary && finite(centeredEffect)
+        ? Number(centeredEffect) + 0.5
+        : centeredEffect;
+    let p = null;
+    if (creatorCount >= 3 && creatorCount <= 18) {
+        const observed = Math.abs(Number(centeredEffect));
+        const permutations = 2 ** creatorCount;
+        let atLeastAsExtreme = 0;
+        for (let mask = 0; mask < permutations; mask++) {
+            const candidate = average(creatorEffects.map((item, index) => (
+                item.effect * ((mask >> index) & 1 ? 1 : -1)
+            )));
+            if (Math.abs(candidate) >= observed - 1e-12) {
+                atLeastAsExtreme++;
+            }
+        }
+        p = atLeastAsExtreme / permutations;
+    }
+    return {
+        effect: finite(reportedEffect) ? Number(reportedEffect) : null,
+        p: finite(p) ? round(p, 8) : null,
+        creatorCount,
+        contentFamilyCount: collapsed.length,
+        creatorEffects,
+        uncertaintyUnit: 'creator_account',
+        familyUnit: 'content_family',
+        method: creatorCount >= 3
+            ? 'exact-creator-sign-flip-after-content-family-collapse'
+            : 'descriptive-only-insufficient-creators',
+    };
+}
+
 function pointMap(points, sourceKey, sourceValue) {
     return new Map((points || [])
         .filter(point => !sourceKey || String(point[sourceKey]) === String(sourceValue))
@@ -3776,6 +5485,11 @@ function blindFeatureValue(row, featureName, protocol) {
     return values && finite(values[index]) ? Number(values[index]) : null;
 }
 
+function creatorExcludedPublicFeatureValue(row, featureName) {
+    const video = blindFeatureValue(row, featureName, 'video');
+    return finite(video) ? Number(video) : null;
+}
+
 function featureDisplayValue(row, definition, protocol) {
     if (!row || !definition) return null;
     if (protocol === 'stored') {
@@ -3785,15 +5499,13 @@ function featureDisplayValue(row, definition, protocol) {
             ? Math.max(0, 10 ** Number(value) - 1)
             : value;
     }
-    const value = blindFeatureValue(row, `${definition.key}.raw`, protocol);
+    const value = protocol === 'creator_excluded'
+        ? creatorExcludedPublicFeatureValue(row, `${definition.key}.raw`)
+        : blindFeatureValue(row, `${definition.key}.raw`, protocol);
     if (!finite(value)) return null;
     return ['views', 'realviews', 'outlier'].includes(definition.target)
         ? Math.max(0, 10 ** Number(value) - 1)
         : Number(value);
-}
-
-function readPath(value, path) {
-    return path.reduce((current, key) => current == null ? null : current[key], value);
 }
 
 function ledgerValue(row, column) {
@@ -3815,8 +5527,17 @@ function ledgerValue(row, column) {
             && row.predictions.visualKeepProtocols[column.protocolKey].predicted
         );
     }
-    if (column.family === 'creatorAdaptiveKeepForecast') {
-        return number(row.predictions && row.predictions.creatorAdaptiveKeepForecast);
+    if (column.family === 'creatorAdaptiveKeepPrequential') {
+        return number(
+            row.predictions
+            && row.predictions.creatorAdaptiveKeepPrequential
+        );
+    }
+    if (column.family === 'creatorExcludedPublic') {
+        const definition = contract.features.find(
+            feature => feature.key === column.key
+        );
+        return featureDisplayValue(row, definition, 'creator_excluded');
     }
     if (column.family === 'videoHeldout' || column.family === 'accountHeldout') {
         const definition = contract.features.find(feature => feature.key === column.key);
@@ -3827,14 +5548,14 @@ function ledgerValue(row, column) {
         return number(row.predictions && row.predictions.score21 && row.predictions.score21[protocol]
             && row.predictions.score21[protocol][column.key]);
     }
-    if (column.family === 'legacy') {
-        const definition = LEGACY_DIAGNOSTIC_COORDINATES.find(item => item.key === column.key);
-        return definition ? number(readPath(row, definition.path)) : null;
-    }
     return null;
 }
 
 function ledgerBaselineValue(row, column) {
+    if (column.family === 'videoForecast' || column.family === 'accountForecast') {
+        const protocol = column.family === 'videoForecast' ? 'video' : 'account';
+        return number(forecastBaseline(row, protocol, column.key));
+    }
     if (column.family === 'visualKeepProtocolForecast') {
         return number(
             row.predictions
@@ -3843,7 +5564,7 @@ function ledgerBaselineValue(row, column) {
             && row.predictions.visualKeepProtocols[column.protocolKey].baseline
         );
     }
-    if (column.family === 'creatorAdaptiveKeepForecast') {
+    if (column.family === 'creatorAdaptiveKeepPrequential') {
         return number(
             row.predictions
             && row.predictions.creatorAdaptiveKeepBaseline
@@ -3898,6 +5619,30 @@ function attachCoordinateLedger(
             }
         }
     }
+    const ignoredSharedPublicCompatibilityMismatches = [];
+    const sharedPublicColumns = registry.columns.filter(
+        column => column.family === 'creatorExcludedPublic'
+    );
+    for (const row of rows) {
+        for (const column of sharedPublicColumns) {
+            const featureName = `${column.key}.raw`;
+            const video = blindFeatureValue(row, featureName, 'video');
+            const account = blindFeatureValue(row, featureName, 'account');
+            if (!finite(video) || !finite(account)) continue;
+            const tolerance = Math.max(
+                1e-10,
+                Math.max(
+                    Math.abs(Number(video)),
+                    Math.abs(Number(account))
+                ) * 1e-10
+            );
+            if (Math.abs(Number(video) - Number(account)) > tolerance) {
+                ignoredSharedPublicCompatibilityMismatches.push(
+                    `${row.id}:${column.key}:value`
+                );
+            }
+        }
+    }
     const visualKeepProtocolParityMismatches = [];
     const rowsById = new Map(rows.map(row => [String(row.id), row]));
     for (const [protocolKey, definition] of Object.entries(
@@ -3942,7 +5687,10 @@ function attachCoordinateLedger(
     }
     const creatorAdaptiveParityMismatches = [];
     const creatorCoordinateIndex = registry.columns.findIndex(
-        column => column.id === CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        column => (
+            column.id
+            === CREATOR_ADAPTIVE_KEEP_PREQUENTIAL_COORDINATE_ID
+        )
     );
     const creatorArtifactSha256 = creatorAdaptiveStudy
         && creatorAdaptiveStudy.modelArtifact
@@ -4068,6 +5816,11 @@ function attachCoordinateLedger(
         duplicateIds,
         rowLengthMismatches,
         storedParityMismatches: storedParityMismatches.slice(0, 50),
+        creatorExcludedPublicCanonicalSource:
+            coordinateGovernance.expansions
+                .creatorExcludedPublicCanonicalSource,
+        ignoredSharedPublicCompatibilityMismatches:
+            ignoredSharedPublicCompatibilityMismatches.slice(0, 50),
         visualKeepProtocolParityMismatches:
             visualKeepProtocolParityMismatches.slice(0, 50),
         creatorAdaptiveParityMismatches: creatorAdaptiveParityMismatches.slice(0, 50),
@@ -4106,17 +5859,24 @@ const LEDGER_OUTCOME_METRIC_KEYS = Object.freeze([
     'spearman',
     'withinAccountSpearman',
     'auc',
-    'oofR2',
-    'oofSpearman',
-    'oofMae',
-    'oofBaselineMae',
-    'oofMaeImprovementVsBaseline',
-    'oofProtocolBaselineR2',
-    'oofMedianFactorError',
-    'oofAuc',
-    'oofBrier',
+    'withinAccountAuc',
+    'inferentialEffect',
+    'inferentialPValue',
+    'inferentialEstimand',
+    'inferentialN',
+    'inferentialCreatorCount',
+    'inferentialMethod',
+    'predictionR2',
+    'predictionSpearman',
+    'predictionMae',
+    'predictionBaselineMae',
+    'predictionMaeImprovementVsBaseline',
+    'predictionProtocolBaselineR2',
+    'predictionMedianFactorError',
+    'predictionAuc',
+    'predictionBrier',
     'n',
-    'oofN',
+    'predictionN',
     'qValue',
     'evidence',
 ]);
@@ -4133,143 +5893,108 @@ function coordinateModelValue(row, column) {
     return Number(value);
 }
 
-function coordinateFoldMode(column) {
-    if (!column || column.valueClass === 'observed_outcome') return 'outcome_not_predictor';
-    if (column.protocol === 'account'
-        || column.family === 'accountHeldout'
-        || column.family === 'accountForecast') {
-        return 'leave_account_out';
+function coordinateModelBaseline(row, column) {
+    const value = ledgerBaselineValue(row, column);
+    if (!finite(value)) return null;
+    if (column.unit === 'views'
+        || column.target === 'views'
+        || column.target === 'realviews'
+        || column.target === 'outlier') {
+        return Math.log10(Math.max(0, Number(value)) + 1);
     }
-    if (column.family === 'visualKeepProtocolForecast') {
-        return 'heldout_protocol_prediction';
-    }
-    if (column.family === 'creatorAdaptiveKeepForecast') return 'prequential_time';
-    return 'video_5fold';
+    return Number(value);
 }
 
-function coordinateValidationTier(column) {
+function nativeOutcomeKey(column) {
+    if (!column || column.valueClass === 'observed_outcome') return null;
+    if ((column.family === 'videoForecast' || column.family === 'accountForecast')
+        && OUTCOME_DEFINITIONS.some(outcome => outcome.key === column.key)) {
+        return column.key;
+    }
+    if (column.target === 'keep') return 'keep';
+    if (column.target === 'ret5') return 'ret5';
+    if (column.target === 'averageRetention') return 'averageRetention';
+    if (column.target === 'views' || column.target === 'realviews') return 'views';
+    if (column.target === 'outlier') return 'outlier';
+    if (column.target === 'gt10M' || column.target === 'hit10M') return 'hit10M';
+    if (/^(survival|drop)(5|10|20)$/.test(String(column.target || ''))) {
+        return column.target;
+    }
+    return null;
+}
+
+function coordinateEvaluationMode(column, outcome) {
+    if (!column || column.valueClass === 'observed_outcome') {
+        return 'outcome_not_predictor';
+    }
+    if (!outcome || nativeOutcomeKey(column) !== outcome.key) {
+        return 'association_only';
+    }
+    if (column.family === 'visualKeepProtocolForecast') {
+        return 'registered_heldout_identity';
+    }
+    if (column.family === 'creatorAdaptiveKeepPrequential') {
+        return 'registered_prequential_identity';
+    }
+    if (column.family === 'creatorExcludedPublic') {
+        return 'creator_excluded_identity';
+    }
+    if (column.family === 'visualKeepForecast') {
+        return 'persisted_score_time_identity';
+    }
+    if (column.family === 'videoHeldout'
+        || column.family === 'videoForecast') {
+        return 'registered_video_heldout_identity';
+    }
+    if (column.family === 'accountHeldout'
+        || column.family === 'accountForecast') {
+        return 'registered_account_heldout_identity';
+    }
+    return 'diagnostic_identity';
+}
+
+function coordinateValidationTier(column, outcome) {
     if (!column || column.valueClass === 'observed_outcome') return 'outcome_not_predictor';
-    if (column.family === 'accountHeldout') return 'account_held_out_coordinate_plus_leave_account_out_calibration';
-    if (column.family === 'accountForecast') return 'account_held_out_forecast_plus_leave_account_out_calibration';
-    if (column.family === 'videoHeldout') return 'video_held_out_coordinate_plus_video_5fold_calibration';
-    if (column.family === 'videoForecast') return 'video_held_out_forecast_plus_video_5fold_calibration';
-    if (column.family === 'stored') return 'stored_coordinate_plus_video_5fold_calibration';
-    if (column.family === 'visualKeepForecast') return 'frozen_final_model_diagnostic_plus_video_5fold_calibration';
+    const mode = coordinateEvaluationMode(column, outcome);
+    if (mode === 'association_only') return 'cross_outcome_association_only';
+    if (column.family === 'creatorExcludedPublic') return 'creator_excluded_public_axis_identity';
+    if (column.family === 'accountHeldout') return 'account_held_out_coordinate_identity';
+    if (column.family === 'accountForecast') return 'account_held_out_forecast_identity';
+    if (column.family === 'videoHeldout') return 'video_held_out_coordinate_identity';
+    if (column.family === 'videoForecast') return 'video_held_out_forecast_identity';
+    if (column.family === 'stored') return 'stored_coordinate_diagnostic_identity';
+    if (column.family === 'visualKeepForecast') return 'persisted_score_time_forecast_identity';
     if (column.family === 'visualKeepProtocolForecast') return `identity_${column.protocol}`;
-    if (column.family === 'creatorAdaptiveKeepForecast') return 'creator_prequential_next_upload';
-    if (column.family === 'legacy') return 'legacy_diagnostic_plus_video_5fold_calibration';
-    return 'video_5fold_calibration';
+    if (column.family === 'creatorAdaptiveKeepPrequential') {
+        return 'creator_prequential_historical_identity';
+    }
+    return 'diagnostic_identity';
 }
 
 function coordinatePlainEnglish(column, outcome) {
     if (column.valueClass === 'observed_outcome') {
         return `${column.label} is measured truth, not a candidate predictor. It is present so every score-ledger column remains auditable, but it is excluded from ranking and calibration against ${outcome.label}.`;
     }
-    const foldMode = coordinateFoldMode(column);
-    const protocol = foldMode === 'leave_account_out'
-        ? 'The one-coordinate calibration is trained on other creator accounts and then tested on the creator account that was left out.'
-        : (foldMode === 'heldout_protocol_prediction'
-            ? 'This value is already the exact held-out prediction from its named protocol. It is evaluated in target units without fitting a second calibration.'
-        : (foldMode === 'prequential_time'
-            ? 'The raw coordinate already is a causal prequential prediction: the final chronological window was scored one upload at a time from strictly earlier same-creator history, with no second calibration.'
-            : 'The one-coordinate calibration is trained on four deterministic video folds and tested on the fifth, so a video outcome never calibrates its own prediction.'));
+    const mode = coordinateEvaluationMode(column, outcome);
+    const protocol = mode === 'association_only'
+        ? `This coordinate is not a registered numerical prediction of ${outcome.label}; this cell reports association only and cannot manufacture a second estimator.`
+        : 'The prediction chart evaluates this exact ledger scalar in its registered target units. No chart-specific fit, rescaling, or second calibration is permitted.';
     const upstream = column.family === 'stored'
-        ? 'This is the exact production value stored with the scored video; the calibration is held out, but the upstream production axis may still be in-sample for its original training account.'
+        ? 'This is the exact production value stored with the scored video. Neither the stored value nor its historical rank-to-outcome calibration is treated as held-out evidence here; the upstream axis or calibration may include the scored account or video.'
         : (column.family === 'visualKeepForecast'
-            ? 'This is the exact raw percentage from the frozen final full-vector visual model. Its fitting-population values are in-sample diagnostics; only the separately displayed protocol predictions are blind evidence.'
+            ? 'This is the exact raw percentage persisted at score time by the active pooled-global frozen visual model. The row is present only when its release manifest, artifact, input fingerprints, score-record binding, null account model, and [0,100] output contract validate. Full-fit training reconstructions are excluded; only the separately displayed protocol predictions are held-out evidence.'
             : (column.family === 'visualKeepProtocolForecast'
                 ? 'This is one exact research prediction from the named visual-only holdout protocol. It is not the frozen production value and it is not a stored visual keep map estimate.'
-            : (column.family === 'creatorAdaptiveKeepForecast'
-                ? 'This is the exact raw percentage produced for the known creator’s next upload from its visual and together embeddings plus at most 30 strictly earlier labels. It is intentionally null outside the registered causal evaluation rows or an explicit live profile.'
-                : (column.family === 'legacy'
-                ? 'This is a legacy diagnostic retained only for comparison and is never promoted to a canonical production score.'
-                : column.description))));
-    return `${upstream} This cell tests whether that exact coordinate predicts ${outcome.label}. ${protocol}`;
+            : (column.family === 'creatorAdaptiveKeepPrequential'
+                ? 'This is the exact row-specific historical prequential percentage produced from visual and together embeddings plus only labels available before that historical row. It is distinct from the live future-upload creator-profile score.'
+                : (column.family === 'creatorExcludedPublic'
+                    ? `${column.description} Creator exclusion makes this a retrospective account-external diagnostic, not prospective confirmation.`
+                    : column.description))));
+    return `${upstream} ${protocol}`;
 }
 
-function fitLinearSingleCalibration(points) {
-    if (!points.length) return null;
-    const xMean = average(points.map(point => point.predicted));
-    const yMean = average(points.map(point => point.actual));
-    const denominator = points.reduce(
-        (sum, point) => sum + (point.predicted - xMean) ** 2,
-        0,
-    );
-    const slope = denominator > 1e-12
-        ? points.reduce(
-            (sum, point) => sum + (point.predicted - xMean) * (point.actual - yMean),
-            0,
-        ) / denominator
-        : 0;
-    const intercept = yMean - slope * xMean;
-    return {
-        baseline: yMean,
-        parameters: {
-            kind: 'linear',
-            slope: round(slope, 10),
-            intercept: round(intercept, 10),
-        },
-        predict(value) {
-            return intercept + slope * Number(value);
-        },
-    };
-}
-
-function fitLogisticSingleCalibration(points) {
-    if (!points.length) return null;
-    const xMean = average(points.map(point => point.predicted));
-    const variance = average(points.map(point => (point.predicted - xMean) ** 2));
-    const xScale = finite(variance) && Number(variance) > 1e-12 ? Math.sqrt(variance) : 1;
-    const positives = points.reduce((sum, point) => sum + (point.actual >= 0.5 ? 1 : 0), 0);
-    const baseline = (positives + 0.5) / (points.length + 1);
-    let intercept = Math.log(baseline / (1 - baseline));
-    let slope = 0;
-    for (let iteration = 0; iteration < 50; iteration++) {
-        let gradientIntercept = 0, gradientSlope = 0;
-        let hessianIntercept = 1e-8, hessianCross = 0, hessianSlope = 1e-6;
-        for (const point of points) {
-            const x = (point.predicted - xMean) / xScale;
-            const y = point.actual >= 0.5 ? 1 : 0;
-            const linear = clamp(intercept + slope * x, -30, 30);
-            const probability = 1 / (1 + Math.exp(-linear));
-            const residual = y - probability;
-            const weight = Math.max(1e-8, probability * (1 - probability));
-            gradientIntercept += residual;
-            gradientSlope += residual * x;
-            hessianIntercept += weight;
-            hessianCross += weight * x;
-            hessianSlope += weight * x * x;
-        }
-        const determinant = hessianIntercept * hessianSlope - hessianCross * hessianCross;
-        if (Math.abs(determinant) < 1e-12) break;
-        const interceptStep = (
-            gradientIntercept * hessianSlope - gradientSlope * hessianCross
-        ) / determinant;
-        const slopeStep = (
-            gradientSlope * hessianIntercept - gradientIntercept * hessianCross
-        ) / determinant;
-        intercept += interceptStep;
-        slope += slopeStep;
-        if (Math.max(Math.abs(interceptStep), Math.abs(slopeStep)) < 1e-8) break;
-    }
-    return {
-        baseline,
-        parameters: {
-            kind: 'logistic',
-            xMean: round(xMean, 10),
-            xScale: round(xScale, 10),
-            intercept: round(intercept, 10),
-            slope: round(slope, 10),
-        },
-        predict(value) {
-            const x = (Number(value) - xMean) / xScale;
-            return 1 / (1 + Math.exp(-clamp(intercept + slope * x, -30, 30)));
-        },
-    };
-}
-
-function singleCoordinateOof(points, outcome, foldMode) {
-    const eligible = (points || []).filter(point => (
+function identityCoordinateEvaluation(points, outcome, mode) {
+    const predictions = (points || []).filter(point => (
         point && point.id && point.accountId
         && finite(point.actual) && finite(point.predicted)
     )).map(point => ({
@@ -4279,113 +6004,30 @@ function singleCoordinateOof(points, outcome, foldMode) {
         predicted: Number(point.predicted),
         baseline: finite(point.baseline) ? Number(point.baseline) : null,
     }));
-    if (foldMode === 'prequential_time'
-        || foldMode === 'heldout_protocol_prediction') {
-        const protocolPrediction = foldMode === 'heldout_protocol_prediction';
-        return {
-            mode: foldMode,
-            eligibleN: eligible.length,
-            predictions: eligible.map(point => ({
-                ...point,
-                calibrated: point.predicted,
-                fold: protocolPrediction
-                    ? 'registered-heldout-protocol'
-                    : 'causal-final-window',
-            })),
-            audit: {
-                mode: foldMode,
-                requestedFolds: 1,
-                completedFolds: eligible.length ? 1 : 0,
-                folds: [],
-                trainingTestOverlapN: 0,
-                heldOutAccountLeakageN: 0,
-                duplicateTestPredictionN: 0,
-                predictedN: eligible.length,
-                rule: protocolPrediction
-                    ? 'Use the already held-out protocol forecast without a second outcome-fitted calibration.'
-                    : 'Use the already prequential raw forecast without a second outcome-fitted calibration.',
-            },
-        };
-    }
-    const mode = foldMode === 'leave_account_out' ? 'leave_account_out' : 'video_5fold';
-    const folds = mode === 'leave_account_out'
-        ? [...new Set(eligible.map(point => point.accountId))].sort()
-        : [0, 1, 2, 3, 4];
-    const predictions = [];
-    const foldAudit = [];
-    for (const fold of folds) {
-        const inTest = point => mode === 'leave_account_out'
-            ? point.accountId === fold
-            : stableHash(`ledger-oof:${point.id}`) % 5 === fold;
-        const training = eligible.filter(point => !inTest(point));
-        const testing = eligible.filter(inTest);
-        if (!testing.length || !training.length) continue;
-        const calibrator = outcome.unit === 'binary'
-            ? fitLogisticSingleCalibration(training)
-            : fitLinearSingleCalibration(training);
-        if (!calibrator) continue;
-        const trainingIds = new Set(training.map(point => point.id));
-        const testingIds = new Set(testing.map(point => point.id));
-        const overlap = [...testingIds].filter(id => trainingIds.has(id));
-        const trainingAccounts = [...new Set(training.map(point => point.accountId))].sort();
-        const testingAccounts = [...new Set(testing.map(point => point.accountId))].sort();
-        foldAudit.push({
-            fold: String(fold),
-            trainingN: training.length,
-            testingN: testing.length,
-            trainingVideoIdSha256: sha256Ids(training.map(point => point.id)),
-            testingVideoIdSha256: sha256Ids(testing.map(point => point.id)),
-            trainingTestOverlapN: overlap.length,
-            trainingAccounts,
-            testingAccounts,
-            calibration: calibrator.parameters,
-            heldOutAccountLeakageN: mode === 'leave_account_out'
-                ? testingAccounts.filter(account => trainingAccounts.includes(account)).length
-                : null,
-        });
-        for (const point of testing) {
-            predictions.push({
-                ...point,
-                baseline: calibrator.baseline,
-                calibrated: calibrator.predict(point.predicted),
-                fold: String(fold),
-            });
-        }
-    }
-    const predictionCounts = predictions.reduce((counts, point) => {
-        counts[point.id] = (counts[point.id] || 0) + 1;
-        return counts;
-    }, {});
     return {
         mode,
-        eligibleN: eligible.length,
+        valueSource: 'scoreLedger.values[coordinateRegistry.index]',
+        transform: outcome.transform || 'identity',
+        identity: true,
+        fittedByRelationshipChart: false,
+        eligibleN: predictions.length,
         predictions,
         audit: {
             mode,
-            requestedFolds: folds.length,
-            completedFolds: foldAudit.length,
-            folds: foldAudit,
-            trainingTestOverlapN: foldAudit.reduce((sum, fold) => sum + fold.trainingTestOverlapN, 0),
-            heldOutAccountLeakageN: mode === 'leave_account_out'
-                ? foldAudit.reduce((sum, fold) => sum + fold.heldOutAccountLeakageN, 0)
-                : null,
-            duplicateTestPredictionN: Object.values(predictionCounts).filter(count => count !== 1).length,
+            fittedParameterCount: 0,
+            trainingRowsReadByChart: 0,
+            trainingOutcomesReadByChart: 0,
             predictedN: predictions.length,
+            rule: 'Evaluate the exact registered ledger value in its native target units. The relationship chart is forbidden from fitting or rescaling it.',
         },
     };
 }
 
-function oofCoordinateDiagnostics(oof, outcome) {
-    if (!oof || !oof.predictions.length) return null;
-    const points = oof.predictions.map(point => ({
-        id: point.id,
-        accountId: point.accountId,
-        actual: point.actual,
-        predicted: point.calibrated,
-        baseline: point.baseline,
-    }));
+function identityCoordinateDiagnostics(evaluation, outcome) {
+    if (!evaluation || !evaluation.predictions.length) return null;
+    const points = evaluation.predictions;
     const regression = regressionMetrics(points, {
-        total: oof.eligibleN,
+        total: evaluation.eligibleN,
         logScale: !!outcome.transform,
     });
     const actualRange = finite(regression.actualMin) && finite(regression.actualMax)
@@ -4447,6 +6089,9 @@ function oofCoordinateDiagnostics(oof, outcome) {
         ),
         protocolBaselineR2: number(regression.protocolBaselineR2),
         perAccount,
+        independentAccountCount: perAccount.length,
+        uncertaintyUnit: 'creator_account',
+        uncertaintyNote: 'Rows quantify video-level error; content families are collapsed within creator and creator accounts are the independent replication unit. Exact creator sign-flip p-values require at least three creators; no creator-clustered confidence interval is claimed.',
     };
 }
 
@@ -4455,6 +6100,9 @@ function rawCoordinateAssociation(points, outcome, scopeKey) {
         .map(point => ({
             id: point.id,
             accountId: point.accountId,
+            contentFamilyId: point.contentFamilyId,
+            contentFamilyEvidence: point.contentFamilyEvidence,
+            title: point.title,
             actual: Number(point.actual),
             predicted: Number(point.predicted),
         }));
@@ -4465,122 +6113,196 @@ function rawCoordinateAssociation(points, outcome, scopeKey) {
     const rawAuc = outcome.unit === 'binary' && observed.length >= 3
         ? rocAuc(actual.map(value => value >= 0.5 ? 1 : 0), predicted)
         : null;
-    const primary = outcome.unit === 'binary'
-        ? rawAuc
-        : (scopeKey === 'pooled' && finite(within) ? within : rawSpearman);
-    const inference = outcome.unit === 'binary'
-        ? aucInference(observed, false)
-        : correlationInference(primary, observed.length);
+    const pooled = scopeKey === 'pooled';
+    const blocked = creatorContentFamilyInference(
+        observed,
+        outcome.unit === 'binary'
+    );
+    const inferentialEffect = number(blocked.effect);
     return {
         n: observed.length,
         spearman: round(rawSpearman),
         withinAccountSpearman: round(within),
         auc: round(rawAuc),
-        pValue: inference.p,
+        withinAccountAuc: pooled && outcome.unit === 'binary'
+            ? round(blocked.effect)
+            : null,
+        inferentialEffect: round(inferentialEffect),
+        inferentialPValue: blocked.p,
+        inferentialEstimand: outcome.unit === 'binary'
+            ? 'creator_macro_content_family_auc'
+            : 'creator_macro_content_family_spearman',
+        inferentialN: blocked.contentFamilyCount,
+        inferentialCreatorCount: blocked.creatorCount,
+        inferentialMethod: blocked.method,
     };
 }
 
-function oofCoordinateMetrics(oof, outcome) {
-    if (!oof || !oof.predictions.length) {
+function predictionCoordinateMetrics(evaluation, outcome) {
+    if (!evaluation || !evaluation.predictions.length) {
         return {
-            oofR2: null,
-            oofSpearman: null,
-            oofMae: null,
-            oofBaselineMae: null,
-            oofMaeImprovementVsBaseline: null,
-            oofProtocolBaselineR2: null,
-            oofMedianFactorError: null,
-            oofAuc: null,
-            oofBrier: null,
-            oofN: 0,
+            predictionR2: null,
+            predictionSpearman: null,
+            predictionMae: null,
+            predictionBaselineMae: null,
+            predictionMaeImprovementVsBaseline: null,
+            predictionProtocolBaselineR2: null,
+            predictionMedianFactorError: null,
+            predictionAuc: null,
+            predictionBrier: null,
+            predictionN: 0,
         };
     }
     if (outcome.unit === 'binary') {
-        const binary = binaryMetrics(oof.predictions.map(point => ({
+        const binary = binaryMetrics(evaluation.predictions.map(point => ({
             actual: point.actual,
-            predicted: point.calibrated,
-        })), oof.eligibleN);
+            predicted: point.predicted,
+        })), evaluation.eligibleN);
         return {
-            oofR2: null,
-            oofSpearman: null,
-            oofMae: null,
-            oofBaselineMae: null,
-            oofMaeImprovementVsBaseline: null,
-            oofProtocolBaselineR2: null,
-            oofMedianFactorError: null,
-            oofAuc: number(binary.auc),
-            oofBrier: number(binary.brier),
-            oofN: binary.n || 0,
+            predictionR2: null,
+            predictionSpearman: null,
+            predictionMae: null,
+            predictionBaselineMae: null,
+            predictionMaeImprovementVsBaseline: null,
+            predictionProtocolBaselineR2: null,
+            predictionMedianFactorError: null,
+            predictionAuc: number(binary.auc),
+            predictionBrier: number(binary.brier),
+            predictionN: binary.n || 0,
         };
     }
     const transformedOutcome = !!outcome.transform;
-    const regression = regressionMetrics(oof.predictions.map(point => ({
+    const regression = regressionMetrics(evaluation.predictions.map(point => ({
         id: point.id,
         accountId: point.accountId,
         actual: point.actual,
-        predicted: point.calibrated,
+        predicted: point.predicted,
         baseline: point.baseline,
     })), {
-        total: oof.eligibleN,
+        total: evaluation.eligibleN,
         logScale: transformedOutcome,
     });
     return {
-        oofR2: number(regression.r2),
-        oofSpearman: number(regression.spearman),
-        oofMae: transformedOutcome ? null : number(regression.mae),
-        oofBaselineMae: transformedOutcome
+        predictionR2: number(regression.r2),
+        predictionSpearman: number(regression.spearman),
+        predictionMae: transformedOutcome ? null : number(regression.mae),
+        predictionBaselineMae: transformedOutcome
             ? null
             : number(regression.baselineMae),
-        oofMaeImprovementVsBaseline: transformedOutcome
+        predictionMaeImprovementVsBaseline: transformedOutcome
             ? null
             : number(regression.maeImprovementVsBaseline),
-        oofProtocolBaselineR2: number(regression.protocolBaselineR2),
-        oofMedianFactorError: transformedOutcome ? number(regression.medianFactorError) : null,
-        oofAuc: null,
-        oofBrier: null,
-        oofN: regression.n || 0,
+        predictionProtocolBaselineR2: number(regression.protocolBaselineR2),
+        predictionMedianFactorError: transformedOutcome
+            ? number(regression.medianFactorError)
+            : null,
+        predictionAuc: null,
+        predictionBrier: null,
+        predictionN: regression.n || 0,
     };
 }
 
-function ledgerEvidence(metrics, column) {
+function ledgerEvidence(metrics, column, inference) {
     if (column.valueClass === 'observed_outcome') return 'outcome_not_predictor';
-    if (!metrics || metrics.n < 20 || metrics.oofN < 20) return 'insufficient_evidence';
+    if (inference && inference.selectionDuplicateOf) {
+        return 'algebraic_duplicate_display_only';
+    }
+    if (!metrics || metrics.n < 20 || metrics.predictionN < 20) {
+        return 'insufficient_evidence';
+    }
     const diagnosticOnly = column.family === 'stored'
         || column.family === 'visualKeepForecast'
         || column.family === 'visualKeepProtocolForecast'
-        || column.family === 'legacy'
         || column.predictorEligible === false;
-    if (finite(metrics.oofAuc)) {
-        if (finite(metrics.qValue) && metrics.qValue <= 0.05 && metrics.oofAuc >= 0.65) {
-            return diagnosticOnly ? 'strong_diagnostic_signal_not_blind' : 'strong_blind_signal';
+    const confirmatory = !!(
+        inference
+        && inference.confirmatoryEligible === true
+        && inference.creatorDiversityPassed === true
+        && inference.prospectiveConfirmed === true
+        && inference.creatorClusteredIntervalAvailable === true
+    );
+    if (finite(metrics.predictionAuc)) {
+        if (finite(metrics.qValue)
+            && metrics.qValue <= 0.05
+            && finite(metrics.inferentialEffect)
+            && metrics.inferentialEffect >= 0.65) {
+            if (diagnosticOnly) return 'strong_diagnostic_signal_not_blind';
+            return confirmatory
+                ? 'strong_blind_signal'
+                : 'exploratory_signal_needs_more_creators';
         }
-        if (metrics.oofAuc >= 0.6) {
-            return diagnosticOnly ? 'directional_diagnostic_signal_not_blind' : 'directional_blind_signal';
+        if (finite(metrics.inferentialEffect)
+            && metrics.inferentialEffect >= 0.6) {
+            if (diagnosticOnly) return 'directional_diagnostic_signal_not_blind';
+            return confirmatory
+                ? 'directional_blind_signal'
+                : 'exploratory_signal_needs_more_creators';
         }
         return 'not_predictive';
     }
-    const rank = Math.abs(number(metrics.oofSpearman) || 0);
-    if (finite(metrics.qValue) && metrics.qValue <= 0.05 && rank >= 0.3 && number(metrics.oofR2) > 0) {
-        return diagnosticOnly ? 'strong_diagnostic_signal_not_blind' : 'strong_blind_signal';
+    const rank = Math.abs(number(metrics.inferentialEffect) || 0);
+    if (finite(metrics.qValue)
+        && metrics.qValue <= 0.05
+        && rank >= 0.3) {
+        if (diagnosticOnly) return 'strong_diagnostic_signal_not_blind';
+        return confirmatory
+            ? 'strong_blind_signal'
+            : 'exploratory_signal_needs_more_creators';
     }
     if (rank >= 0.2) {
-        return diagnosticOnly ? 'directional_diagnostic_signal_not_blind' : 'directional_blind_signal';
+        if (diagnosticOnly) return 'directional_diagnostic_signal_not_blind';
+        return confirmatory
+            ? 'directional_blind_signal'
+            : 'exploratory_signal_needs_more_creators';
     }
     return 'not_predictive';
 }
 
 function adjustLedgerQValues(entries) {
-    const eligible = entries.filter(entry => finite(entry._pValue))
-        .sort((left, right) => left._pValue - right._pValue);
+    const groups = new Map();
+    entries.filter(entry => finite(entry._pValue)).forEach((entry, index) => {
+        const hypothesisId = entry._hypothesisId || `unregistered:${index}`;
+        if (!groups.has(hypothesisId)) {
+            groups.set(hypothesisId, {
+                id: hypothesisId,
+                pValue: Number(entry._pValue),
+                entries: [],
+            });
+        }
+        const group = groups.get(hypothesisId);
+        group.pValue = Math.max(group.pValue, Number(entry._pValue));
+        group.entries.push(entry);
+    });
+    const eligible = [...groups.values()]
+        .sort((left, right) => left.pValue - right.pValue);
     let running = 1;
     for (let index = eligible.length - 1; index >= 0; index--) {
-        running = Math.min(running, eligible[index]._pValue * eligible.length / (index + 1));
-        eligible[index].metrics.qValue = round(running, 8);
+        running = Math.min(
+            running,
+            eligible[index].pValue * eligible.length / (index + 1)
+        );
+        for (const entry of eligible[index].entries) {
+            entry.metrics.qValue = round(running, 8);
+        }
     }
-    entries.forEach(entry => { delete entry._pValue; });
+    entries.forEach(entry => {
+        delete entry._pValue;
+        delete entry._hypothesisId;
+    });
+    return {
+        eligibleRows: [...groups.values()].reduce(
+            (sum, group) => sum + group.entries.length,
+            0
+        ),
+        uniqueHypotheses: eligible.length,
+        duplicateHypothesisRows: [...groups.values()].reduce(
+            (sum, group) => sum + Math.max(0, group.entries.length - 1),
+            0
+        ),
+    };
 }
 
-function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibrationRows = rows) {
+function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey) {
     const matrix = {};
     for (const outcome of OUTCOME_DEFINITIONS) {
         const outcomeRows = rows.filter(row => finite(outcome.accessor(row))).length;
@@ -4588,94 +6310,113 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
             const points = rows.map(row => ({
                 id: row.id,
                 accountId: row.accountId,
+                title: row.title,
+                contentFamilyId: (
+                    row.contentFamilyEvidence
+                    || validationContentFamilyEvidence(row)
+                ).familyId,
+                contentFamilyEvidence: row.contentFamilyEvidence
+                    || validationContentFamilyEvidence(row),
                 actual: transformOutcome(outcome.accessor(row), outcome),
                 predicted: coordinateModelValue(row, column),
-                baseline: ledgerBaselineValue(row, column),
+                baseline: coordinateModelBaseline(row, column),
                 validationSource: row.validationSource || 'saved_channel_join',
             }));
             const raw = rawCoordinateAssociation(points, outcome, scopeKey);
-            const foldMode = coordinateFoldMode(column);
             const isOutcome = column.valueClass === 'observed_outcome';
-            const evaluationIds = new Set(points.map(point => point.id));
-            const calibrationPoints = calibrationRows.map(row => ({
-                id: row.id,
-                accountId: row.accountId,
-                actual: transformOutcome(outcome.accessor(row), outcome),
-                predicted: coordinateModelValue(row, column),
-                baseline: ledgerBaselineValue(row, column),
-                validationSource: row.validationSource || 'saved_channel_join',
-            }));
-            const identityPrediction = foldMode === 'prequential_time'
-                || foldMode === 'heldout_protocol_prediction';
-            const prequentialTargetCompatible = !identityPrediction
-                || outcome.key === 'keep'
-                || outcome.key === 'swipe';
-            const targetCompatibleCalibrationPoints = (
-                identityPrediction && outcome.key === 'swipe'
-            ) ? calibrationPoints.map(point => ({
-                ...point,
-                predicted: finite(point.predicted)
-                    ? 100 - Number(point.predicted)
-                    : null,
-                baseline: finite(point.baseline)
-                    ? 100 - Number(point.baseline)
-                    : null,
-            })) : calibrationPoints;
-            const fullOof = isOutcome
-                ? null
-                : (prequentialTargetCompatible
-                    ? singleCoordinateOof(
-                        targetCompatibleCalibrationPoints,
-                        outcome,
-                        foldMode
-                    )
-                    : null);
-            const oof = fullOof ? {
-                ...fullOof,
-                eligibleN: raw.n,
-                predictions: fullOof.predictions.filter(point => evaluationIds.has(point.id)),
-            } : null;
-            const oofMetrics = oofCoordinateMetrics(oof, outcome);
+            const evaluationMode = coordinateEvaluationMode(column, outcome);
+            const nativePrediction = !isOutcome
+                && evaluationMode !== 'association_only';
+            const evaluation = nativePrediction
+                ? identityCoordinateEvaluation(points, outcome, evaluationMode)
+                : null;
+            const predictionMetrics = predictionCoordinateMetrics(
+                evaluation,
+                outcome
+            );
             const coordinateRows = points.filter(point => finite(point.predicted)).length;
             const pairedRows = raw.n;
             const pairedBlindOnlyRows = points.filter(point => (
                 point.validationSource === 'predictor_blind_inputs_only'
                 && finite(point.actual) && finite(point.predicted)
             )).length;
+            const independentAccountCount = new Set(points.filter(point => (
+                finite(point.actual) && finite(point.predicted)
+            )).map(point => point.accountId)).size;
             const available = !isOutcome && pairedRows >= 3;
+            const predictorRankingEligible =
+                coordinatePredictorRankingEligible(column);
+            const modelSelectionEligible = available
+                && predictorRankingEligible
+                && outcome.selectionRepresentative;
             let availabilityNote = null;
             if (isOutcome) {
-                availabilityNote = 'outcome_not_predictor: measured outcomes are never ranked or calibrated as predictors.';
+                availabilityNote = 'outcome_not_predictor: measured outcomes are never ranked or evaluated as predictors.';
             } else if (!pairedRows) {
                 availabilityNote = 'No row has both this coordinate and this observed outcome.';
             } else if (pairedRows < 3) {
-                availabilityNote = 'Fewer than three paired rows; association and calibration are not estimable.';
-            } else if (!prequentialTargetCompatible) {
-                availabilityNote = `Association only: this ${foldMode === 'heldout_protocol_prediction' ? 'held-out protocol' : 'causal'} scalar predicts keep rate, so it is not reused as a numerical prediction in another outcome unit.`;
-            } else if (!oofMetrics.oofN) {
-                availabilityNote = foldMode === 'leave_account_out'
-                    ? 'Raw association is available, but this scope does not contain another creator account for leave-account-out calibration.'
-                    : 'Raw association is available, but no complete held-out calibration fold could be fit.';
+                availabilityNote = 'Fewer than three paired rows; association is not estimable.';
+            } else if (evaluationMode === 'association_only') {
+                const native = nativeOutcomeKey(column);
+                availabilityNote = `Association only: ${column.id} is registered to predict ${native || column.target}, not ${outcome.key}. The chart does not fit a new cross-outcome estimator.`;
             }
+            if (outcome.selectionDuplicateOf) {
+                availabilityNote = `${
+                    availabilityNote ? `${availabilityNote} ` : ''
+                }Displayed for interpretation only: ${outcome.key} is an algebraic or governed duplicate of ${outcome.selectionDuplicateOf} and is excluded from model selection.`;
+            }
+            const confirmatoryBlockers = [
+                'No prospective confirmation is evaluated by this retrospective relationship cell.',
+                independentAccountCount >= MIN_CONFIRMATORY_ACCOUNT_COUNT
+                    ? null
+                    : `Only ${independentAccountCount} independent creator account${
+                        independentAccountCount === 1 ? '' : 's'
+                    } are represented; ${MIN_CONFIRMATORY_ACCOUNT_COUNT} are required.`,
+                'The reported p-value, when available, is an exact creator-level sign-flip test over creator-macro content-family effects. Fewer than three independent creators produce no transfer p-value.',
+                outcome.selectionDuplicateOf
+                    ? `${outcome.key} duplicates the ${outcome.selectionDuplicateOf} outcome family for selection.`
+                    : null,
+            ].filter(Boolean);
             const metrics = {
                 spearman: isOutcome ? null : raw.spearman,
                 withinAccountSpearman: isOutcome ? null : raw.withinAccountSpearman,
                 auc: isOutcome ? null : raw.auc,
-                oofR2: isOutcome ? null : oofMetrics.oofR2,
-                oofSpearman: isOutcome ? null : oofMetrics.oofSpearman,
-                oofMae: isOutcome ? null : oofMetrics.oofMae,
-                oofBaselineMae: isOutcome ? null : oofMetrics.oofBaselineMae,
-                oofMaeImprovementVsBaseline: isOutcome
+                withinAccountAuc: isOutcome ? null : raw.withinAccountAuc,
+                inferentialEffect: isOutcome ? null : raw.inferentialEffect,
+                inferentialPValue:
+                    isOutcome ? null : raw.inferentialPValue,
+                inferentialEstimand:
+                    isOutcome ? null : raw.inferentialEstimand,
+                inferentialN: isOutcome ? 0 : raw.inferentialN,
+                inferentialCreatorCount:
+                    isOutcome ? 0 : raw.inferentialCreatorCount,
+                inferentialMethod:
+                    isOutcome ? null : raw.inferentialMethod,
+                predictionR2: isOutcome ? null : predictionMetrics.predictionR2,
+                predictionSpearman: isOutcome
                     ? null
-                    : oofMetrics.oofMaeImprovementVsBaseline,
-                oofProtocolBaselineR2: isOutcome
+                    : predictionMetrics.predictionSpearman,
+                predictionMae: isOutcome ? null : predictionMetrics.predictionMae,
+                predictionBaselineMae: isOutcome
                     ? null
-                    : oofMetrics.oofProtocolBaselineR2,
-                oofMedianFactorError: isOutcome ? null : oofMetrics.oofMedianFactorError,
-                oofAuc: isOutcome ? null : oofMetrics.oofAuc,
-                oofBrier: isOutcome ? null : oofMetrics.oofBrier,
+                    : predictionMetrics.predictionBaselineMae,
+                predictionMaeImprovementVsBaseline: isOutcome
+                    ? null
+                    : predictionMetrics.predictionMaeImprovementVsBaseline,
+                predictionProtocolBaselineR2: isOutcome
+                    ? null
+                    : predictionMetrics.predictionProtocolBaselineR2,
+                predictionMedianFactorError: isOutcome
+                    ? null
+                    : predictionMetrics.predictionMedianFactorError,
+                predictionAuc: isOutcome
+                    ? null
+                    : predictionMetrics.predictionAuc,
+                predictionBrier: isOutcome
+                    ? null
+                    : predictionMetrics.predictionBrier,
                 n: pairedRows,
-                oofN: isOutcome ? 0 : oofMetrics.oofN,
+                predictionN: isOutcome ? 0 : predictionMetrics.predictionN,
                 qValue: null,
                 evidence: null,
             };
@@ -4689,9 +6430,13 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 group: column.group,
                 unit: column.unit,
                 available,
-                predictorEligible: column.predictorEligible !== false,
+                predictorEligible: predictorRankingEligible,
+                modelSelectionEligible,
+                selectionDuplicateOf: outcome.selectionDuplicateOf,
                 availabilityNote,
-                validationTier: coordinateValidationTier(column),
+                nativeOutcomeKey: nativeOutcomeKey(column),
+                evaluationMode,
+                validationTier: coordinateValidationTier(column, outcome),
                 plainEnglish: coordinatePlainEnglish(column, outcome),
                 coverage: {
                     cohortRows: rows.length,
@@ -4700,31 +6445,58 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                     pairedRows,
                     pairedFraction: rows.length ? round(pairedRows / rows.length) : 0,
                     pairedBlindOnlyRows,
-                    accountCount: new Set(points.filter(point => (
-                        finite(point.actual) && finite(point.predicted)
-                    )).map(point => point.accountId)).size,
-                    calibrationMode: foldMode,
-                    requestedFolds: oof ? oof.audit.requestedFolds : 0,
-                    completedFolds: oof ? oof.audit.completedFolds : 0,
-                    trainingTestOverlapN: oof ? oof.audit.trainingTestOverlapN : 0,
-                    heldOutAccountLeakageN: oof ? oof.audit.heldOutAccountLeakageN : null,
-                    duplicateTestPredictionN: oof ? oof.audit.duplicateTestPredictionN : 0,
+                    accountCount: independentAccountCount,
+                    evaluationMode,
+                    predictionRows: predictionMetrics.predictionN,
+                    chartFittedParameterCount: 0,
+                    chartTrainingRowsRead: 0,
+                    chartTrainingOutcomesRead: 0,
                 },
-                calibration: oof ? {
-                    mode: oof.mode,
-                    outputScale: outcome.transform || 'identity',
-                    folds: oof.audit.folds.map(fold => ({
-                        fold: fold.fold,
-                        trainingN: fold.trainingN,
-                        testingN: fold.testingN,
-                        trainingAccounts: fold.trainingAccounts,
-                        testingAccounts: fold.testingAccounts,
-                        parameters: fold.calibration,
-                    })),
-                    diagnostics: oofCoordinateDiagnostics(oof, outcome),
+                inference: {
+                    status:
+                        'exploratory-creator-blocked-exact-sign-flip',
+                    hypothesisFamily: outcome.hypothesisFamily,
+                    selectionRepresentative:
+                        outcome.selectionRepresentative,
+                    selectionDuplicateOf: outcome.selectionDuplicateOf,
+                    modelSelectionEligible,
+                    independentAccountCount,
+                    minimumIndependentAccountsForConfirmatoryClaim:
+                        coordinateGovernance.inference
+                            .minimumIndependentAccountsForConfirmatoryClaim,
+                    creatorDiversityPassed:
+                        independentAccountCount >= MIN_CONFIRMATORY_ACCOUNT_COUNT,
+                    prospectiveConfirmed: false,
+                    confirmatoryEligible: false,
+                    confirmatoryBlockers,
+                    uncertaintyUnit: 'creator_account',
+                    creatorClusteredIntervalAvailable: false,
+                    warning: 'Content families are collapsed within creator. An exact creator-level sign-flip p-value is available only with at least three contributing creators, and remains exploratory until prospective confirmation.',
+                    interpretation: independentAccountCount >= coordinateGovernance
+                        .inference.minimumIndependentAccountsForConfirmatoryClaim
+                        ? 'The creator count clears the diversity floor, but this retrospective creator-blocked sign-flip analysis has no prospective confirmation, so it remains exploratory.'
+                        : `Only ${independentAccountCount} independent creator account${independentAccountCount === 1 ? '' : 's'} support this cell; video rows do not create additional independent creator replications.`,
+                },
+                evaluation: evaluation ? {
+                    mode: evaluation.mode,
+                    valueSource: evaluation.valueSource,
+                    outputScale: evaluation.transform,
+                    identity: evaluation.identity,
+                    fittedByRelationshipChart:
+                        evaluation.fittedByRelationshipChart,
+                    audit: evaluation.audit,
+                    diagnostics: identityCoordinateDiagnostics(
+                        evaluation,
+                        outcome
+                    ),
                 } : null,
                 metrics,
-                _pValue: isOutcome ? null : raw.pValue,
+                _pValue: isOutcome || !predictorRankingEligible
+                    ? null
+                    : raw.inferentialPValue,
+                _hypothesisId: isOutcome || !predictorRankingEligible
+                    ? null
+                    : `${column.coordinateIdentity.axisFingerprint}:${outcome.hypothesisFamily}`,
             };
             return entry;
         });
@@ -4733,23 +6505,29 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 ...Object.fromEntries(Object.entries(outcome).filter(([key]) => key !== 'accessor')),
                 observedRows: outcomeRows,
                 cohortRows: rows.length,
-                plainEnglish: `Measured ${outcome.label}. Every canonical score-ledger coordinate is tested against this same outcome definition.`,
+                plainEnglish: outcome.selectionDuplicateOf
+                    ? `Measured ${outcome.label}. This is the governed algebraic complement of ${outcome.selectionDuplicateOf}; it remains visible but cannot count as a second model-selection outcome.`
+                    : `Measured ${outcome.label}. Every canonical score-ledger coordinate is tested against this same outcome definition.`,
             },
             coordinates,
         };
     }
     const columnsById = new Map(coordinateRegistry.columns.map(column => [column.id, column]));
     const globalFamily = Object.values(matrix).flatMap(result => result.coordinates);
-    adjustLedgerQValues(globalFamily);
-    const globallyEligibleTests = globalFamily.filter(entry => finite(entry.metrics.qValue)).length;
+    const qValueAudit = adjustLedgerQValues(globalFamily);
     Object.values(matrix).forEach(result => {
-        result.outcome.qValueFamily = `global_all_eligible_${coordinateRegistry.columns.length}x${OUTCOME_DEFINITIONS.length}`;
-        result.outcome.qValueEligibleTests = globallyEligibleTests;
+        result.outcome.qValueFamily =
+            'global_unique_coordinate_axis_by_outcome_hypothesis';
+        result.outcome.qValueEligibleTests = qValueAudit.uniqueHypotheses;
+        result.outcome.qValueEligibleRows = qValueAudit.eligibleRows;
+        result.outcome.qValueDuplicateRowsRemoved =
+            qValueAudit.duplicateHypothesisRows;
     });
     globalFamily.forEach(entry => {
         entry.metrics.evidence = ledgerEvidence(
             entry.metrics,
             columnsById.get(entry.coordinateId),
+            entry.inference,
         );
         assertLedgerMetricSchema(entry.metrics);
     });
@@ -4841,7 +6619,7 @@ function buildBlindIndicatorMetrics(rows, protocol) {
             predicted: blindFeatureValue(row, definition.key, protocol),
         }));
         let metrics;
-        if (definition.variant === 'percentile' && definition.target !== 'gt10M') {
+        if (definition.variant === 'percentile') {
             metrics = rankMetrics(points, rows.length);
         } else if (definition.target === 'gt10M') {
             metrics = binaryMetrics(points, rows.length);
@@ -4918,14 +6696,18 @@ function solveLinearSystem(matrix, rightHandSide) {
     return augmented.map(row => row.slice(size));
 }
 
-function fitRidgeMulti(rows, protocol, targets, lambda) {
+function fitRidgeMulti(rows, targets, lambda) {
     if (rows.length < 8 || !targets.length) return null;
     const featureMeans = STRICT_FORECAST_RAW_FEATURES.map(name => {
-        const values = rows.map(row => blindFeatureValue(row, name, protocol)).filter(finite);
+        const values = rows.map(
+            row => creatorExcludedPublicFeatureValue(row, name)
+        ).filter(finite);
         return values.length ? average(values) : 0;
     });
     const featureScales = STRICT_FORECAST_RAW_FEATURES.map((name, index) => {
-        const values = rows.map(row => blindFeatureValue(row, name, protocol)).filter(finite);
+        const values = rows.map(
+            row => creatorExcludedPublicFeatureValue(row, name)
+        ).filter(finite);
         const variance = values.length
             ? average(values.map(value => (Number(value) - featureMeans[index]) ** 2))
             : 0;
@@ -4936,14 +6718,17 @@ function fitRidgeMulti(rows, protocol, targets, lambda) {
         const variance = average(rows.map(row => (Number(target.accessor(row)) - targetMeans[index]) ** 2));
         return variance > 1e-12 ? Math.sqrt(variance) : 1;
     });
-    const parameterCount = STRICT_FORECAST_RAW_FEATURES.length + 1;
+    const parameterCount = STRICT_FORECAST_RAW_FEATURES.length * 2 + 1;
     const left = Array.from({ length: parameterCount }, () => Array(parameterCount).fill(0));
     const right = Array.from({ length: parameterCount }, () => Array(targets.length).fill(0));
     for (const row of rows) {
+        const missing = STRICT_FORECAST_RAW_FEATURES.map(name => (
+            finite(creatorExcludedPublicFeatureValue(row, name)) ? 0 : 1
+        ));
         const x = [1, ...STRICT_FORECAST_RAW_FEATURES.map((name, index) => {
-            const value = blindFeatureValue(row, name, protocol);
+            const value = creatorExcludedPublicFeatureValue(row, name);
             return finite(value) ? (Number(value) - featureMeans[index]) / featureScales[index] : 0;
-        })];
+        }), ...missing];
         const y = targets.map((target, index) => (
             (Number(target.accessor(row)) - targetMeans[index]) / targetScales[index]
         ));
@@ -4960,11 +6745,15 @@ function fitRidgeMulti(rows, protocol, targets, lambda) {
         lambda: Number(lambda),
         targetMeans,
         targetScales,
+        missingnessIndicators: true,
         predict(row) {
+            const missing = STRICT_FORECAST_RAW_FEATURES.map(name => (
+                finite(creatorExcludedPublicFeatureValue(row, name)) ? 0 : 1
+            ));
             const x = [1, ...STRICT_FORECAST_RAW_FEATURES.map((name, index) => {
-                const value = blindFeatureValue(row, name, protocol);
+                const value = creatorExcludedPublicFeatureValue(row, name);
                 return finite(value) ? (Number(value) - featureMeans[index]) / featureScales[index] : 0;
-            })];
+            }), ...missing];
             return targets.map((target, targetIndex) => {
                 const standardized = x.reduce(
                     (sum, value, featureIndex) => sum + value * coefficients[featureIndex][targetIndex],
@@ -4976,45 +6765,140 @@ function fitRidgeMulti(rows, protocol, targets, lambda) {
     };
 }
 
-function selectRidgeLambda(rows, protocol, targets, salt) {
+function targetSelectionFamily(target) {
+    return String(target && (target.selectionFamily || target.key) || 'unknown');
+}
+
+function targetSelectionFamilySummary(targets) {
+    const families = new Map();
+    for (const target of targets) {
+        const family = targetSelectionFamily(target);
+        if (!families.has(family)) families.set(family, []);
+        families.get(family).push(target.key);
+    }
+    return [...families.entries()].map(([family, targetKeys]) => ({
+        family,
+        targetKeys,
+        weight: round(1 / families.size),
+        withinFamilyTargetWeight: round(1 / targetKeys.length),
+    }));
+}
+
+function selectRidgeLambda(rows, targets, salt) {
+    const accountIds = [...new Set(rows.map(row => row.accountId))].sort();
+    const useAccountFolds = accountIds.length >= 2;
     const foldCount = rows.length >= 80 ? 4 : 3;
-    let best = { lambda: RIDGE_LAMBDAS[0], error: Infinity };
+    const groupedAssignment = useAccountFolds
+        ? null
+        : contentFamilyFoldAssignments(rows, foldCount, salt);
+    const rowIndices = new Map(
+        rows.map((row, index) => [row, index])
+    );
+    const folds = useAccountFolds
+        ? accountIds
+        : Array.from(
+            { length: groupedAssignment.folds },
+            (_, index) => index
+        );
+    let best = {
+        lambda: RIDGE_LAMBDAS[0],
+        error: Infinity,
+        creatorMacroStandardizedMse: Infinity,
+        worstCreatorStandardizedMse: Infinity,
+    };
     for (const lambda of RIDGE_LAMBDAS) {
-        let error = 0, count = 0;
-        for (let fold = 0; fold < foldCount; fold++) {
-            const training = rows.filter(row => stableHash(`${salt}:${row.id}`) % foldCount !== fold);
-            const testing = rows.filter(row => stableHash(`${salt}:${row.id}`) % foldCount === fold);
-            const model = fitRidgeMulti(training, protocol, targets, lambda);
+        const squaredErrorsByAccountFamily = new Map();
+        for (const fold of folds) {
+            const inFold = row => useAccountFolds
+                ? row.accountId === fold
+                : groupedAssignment.assignments[rowIndices.get(row)] === fold;
+            const training = rows.filter(row => !inFold(row));
+            const testing = rows.filter(inFold);
+            const model = fitRidgeMulti(training, targets, lambda);
             if (!model || !testing.length) continue;
             for (const row of testing) {
                 const predicted = model.predict(row);
                 targets.forEach((target, index) => {
                     const scale = model.targetScales[index] || 1;
                     const residual = (predicted[index] - Number(target.accessor(row))) / scale;
-                    error += residual * residual;
-                    count++;
+                    const family = targetSelectionFamily(target);
+                    if (!squaredErrorsByAccountFamily.has(row.accountId)) {
+                        squaredErrorsByAccountFamily.set(
+                            row.accountId,
+                            new Map()
+                        );
+                    }
+                    const accountFamilies =
+                        squaredErrorsByAccountFamily.get(row.accountId);
+                    if (!accountFamilies.has(family)) {
+                        accountFamilies.set(family, []);
+                    }
+                    accountFamilies.get(family).push(residual * residual);
                 });
             }
         }
-        const meanError = count ? error / count : Infinity;
-        if (meanError < best.error - 1e-12 || (Math.abs(meanError - best.error) <= 1e-12 && lambda > best.lambda)) {
-            best = { lambda, error: meanError };
+        const creatorErrors = [...squaredErrorsByAccountFamily.values()]
+            .map(families => [...families.values()]
+                .filter(errors => errors.length)
+                .map(errors => average(errors)))
+            .filter(familyErrors => familyErrors.length)
+            .map(familyErrors => average(familyErrors));
+        const creatorMacroError = creatorErrors.length
+            ? average(creatorErrors)
+            : Infinity;
+        const worstCreatorError = creatorErrors.length
+            ? Math.max(...creatorErrors)
+            : Infinity;
+        const objective = finite(creatorMacroError)
+            && finite(worstCreatorError)
+            ? 0.75 * creatorMacroError + 0.25 * worstCreatorError
+            : Infinity;
+        if (objective < best.error - 1e-12
+            || (Math.abs(objective - best.error) <= 1e-12
+                && lambda > best.lambda)) {
+            best = {
+                lambda,
+                error: objective,
+                creatorMacroStandardizedMse: creatorMacroError,
+                worstCreatorStandardizedMse: worstCreatorError,
+                selectionFamilyCount: new Set(
+                    targets.map(targetSelectionFamily)
+                ).size,
+                creatorCount: creatorErrors.length,
+                innerFoldUnit: useAccountFolds
+                    ? 'creator_account'
+                    : 'content_family',
+            };
         }
     }
     return best;
 }
 
-function crossValidatedMulti(rows, protocol, targets, foldMode) {
-    const eligible = rows.filter(row => targets.every(target => finite(target.accessor(row))));
+function crossValidatedTarget(rows, target, foldMode) {
+    const eligible = rows.filter(row => finite(target.accessor(row)));
     const predictions = new Map(), baselines = new Map(), selected = [];
     const outerFoldPopulations = [];
+    const groupedAssignment = foldMode === 'account'
+        ? null
+        : contentFamilyFoldAssignments(rows, 5, 'outer');
+    const foldByFamily = groupedAssignment
+        ? new Map(rows.map((row, index) => [
+            validationContentFamilyId(row),
+            groupedAssignment.assignments[index],
+        ]))
+        : null;
     const folds = foldMode === 'account'
         ? [...new Set(eligible.map(row => row.accountId))]
-        : [0, 1, 2, 3, 4];
+        : [...new Set(eligible.map(row => (
+            foldByFamily.get(validationContentFamilyId(row))
+        )))].filter(finite).sort((left, right) => left - right);
     for (const fold of folds) {
-        const inFold = row => foldMode === 'account'
-            ? row.accountId === fold
-            : stableHash(`outer:${row.id}`) % 5 === fold;
+        const inFold = row => {
+            if (foldMode === 'account') return row.accountId === fold;
+            return foldByFamily.get(
+                validationContentFamilyId(row)
+            ) === fold;
+        };
         const training = eligible.filter(row => !inFold(row));
         const testing = eligible.filter(inFold);
         if (!testing.length || training.length < 8) continue;
@@ -5025,24 +6909,117 @@ function crossValidatedMulti(rows, protocol, targets, foldMode) {
             testingRowCount: testing.length,
             testingVideoIdSha256: sha256Ids(testing.map(row => row.id)),
         });
-        const choice = selectRidgeLambda(training, protocol, targets, `inner:${foldMode}:${fold}`);
-        const model = fitRidgeMulti(training, protocol, targets, choice.lambda);
+        const choice = selectRidgeLambda(
+            training,
+            [target],
+            `inner:${foldMode}:${target.key}:${fold}`
+        );
+        const model = fitRidgeMulti(training, [target], choice.lambda);
         if (!model) continue;
-        selected.push({ fold: String(fold), lambda: choice.lambda, innerStandardizedMse: round(choice.error) });
+        selected.push({
+            fold: String(fold),
+            targetKey: target.key,
+            lambda: choice.lambda,
+            innerStandardizedMse: round(choice.error),
+            innerFamilyBalancedStandardizedMse: round(choice.error),
+            innerCreatorMacroStandardizedMse:
+                round(choice.creatorMacroStandardizedMse),
+            innerWorstCreatorStandardizedMse:
+                round(choice.worstCreatorStandardizedMse),
+            innerCreatorCount: choice.creatorCount || 0,
+            innerFoldUnit: choice.innerFoldUnit || 'unavailable',
+            selectionFamilyCount: choice.selectionFamilyCount || 0,
+            selectionFamilies: targetSelectionFamilySummary([target]),
+        });
         for (const row of testing) {
-            predictions.set(row.id, model.predict(row));
-            baselines.set(row.id, model.targetMeans.slice());
+            predictions.set(row.id, model.predict(row)[0]);
+            baselines.set(row.id, model.targetMeans[0]);
         }
     }
     return {
         eligible: eligible.length,
-        eligibleVideoIdSha256: eligible.length ? sha256Ids(eligible.map(row => row.id)) : null,
+        eligibleVideoIdSha256: sha256Ids(eligible.map(row => row.id)),
         outerFoldPopulations,
+        outerFoldLineage: foldMode === 'account'
+            ? {
+                algorithm: 'leave-one-creator-account-out',
+                unit: 'creator_account',
+            }
+            : {
+                algorithm: 'content-family-grouped-balanced-v1',
+                unit: 'content_family',
+                assignmentSha256: sha256Json(
+                    [...foldByFamily.entries()]
+                        .map(([contentFamilyId, fold]) => ({
+                            contentFamilyId,
+                            fold,
+                        }))
+                        .sort((left, right) => (
+                            left.contentFamilyId.localeCompare(
+                                right.contentFamilyId
+                            )
+                        ))
+                ),
+                contentFamilies: groupedAssignment.contentFamilies,
+            },
         predictions,
         baselines,
         selected,
+        targetKey: target.key,
+    };
+}
+
+function crossValidatedMulti(rows, targets, foldMode) {
+    const runs = targets.map(target => (
+        crossValidatedTarget(rows, target, foldMode)
+    ));
+    const predictions = new Map(), baselines = new Map();
+    const setValue = (map, id, index, value) => {
+        if (!map.has(id)) map.set(id, Array(targets.length).fill(null));
+        map.get(id)[index] = finite(value) ? Number(value) : null;
+    };
+    runs.forEach((run, targetIndex) => {
+        run.predictions.forEach((value, id) => (
+            setValue(predictions, id, targetIndex, value)
+        ));
+        run.baselines.forEach((value, id) => (
+            setValue(baselines, id, targetIndex, value)
+        ));
+    });
+    const eligibleIds = [...new Set(runs.flatMap(
+        run => rows.filter(row => finite(
+            targets.find(target => target.key === run.targetKey).accessor(row)
+        )).map(row => row.id)
+    ))];
+    return {
+        eligible: eligibleIds.length,
+        eligibleVideoIdSha256: sha256Ids(eligibleIds),
+        targetEligibility: Object.fromEntries(runs.map(run => [
+            run.targetKey,
+            {
+                n: run.eligible,
+                videoIdSha256: run.eligibleVideoIdSha256,
+            },
+        ])),
+        outerFoldPopulations: runs.flatMap(run => (
+            run.outerFoldPopulations.map(population => ({
+                targetKey: run.targetKey,
+                ...population,
+            }))
+        )),
+        outerFoldLineage: runs[0]
+            ? runs[0].outerFoldLineage
+            : null,
+        outerFoldLineageConsistent: runs.every(run => (
+            sha256Json(run.outerFoldLineage)
+                === sha256Json(runs[0] && runs[0].outerFoldLineage)
+        )),
+        predictions,
+        baselines,
+        selected: runs.flatMap(run => run.selected),
         featureNames: STRICT_FORECAST_RAW_FEATURES.slice(),
         targetKeys: targets.map(target => target.key),
+        targetSelectionFamilies: targetSelectionFamilySummary(targets),
     };
 }
 
@@ -5058,35 +7035,36 @@ function forecastBaseline(row, protocol, key) {
 
 function attachScore21Forecasts(rows) {
     const scalarTargets = [
-        { key: 'keep', accessor: row => row.actual.keep },
-        { key: 'ret5', accessor: row => row.actual.ret5 },
-        { key: 'averageRetention', accessor: row => row.actual.averageRetention },
-        { key: 'logViews', accessor: row => finite(row.actual.viewsCurrent) ? Math.log10(Math.max(0, Number(row.actual.viewsCurrent)) + 1) : null },
-        { key: 'logOutlier', accessor: row => finite(row.actual.outlierCurrent) ? Math.log10(Math.max(0, Number(row.actual.outlierCurrent)) + 1) : null },
-        { key: 'hit10M', accessor: row => row.actual.hit10MCurrent },
+        { key: 'keep', selectionFamily: 'feed-decision', accessor: row => row.actual.keep },
+        { key: 'ret5', selectionFamily: 'early-retention', accessor: row => row.actual.ret5 },
+        { key: 'averageRetention', selectionFamily: 'overall-retention', accessor: row => row.actual.averageRetention },
+        { key: 'logViews', selectionFamily: 'reach', accessor: row => finite(row.actual.viewsCurrent) ? Math.log10(Math.max(0, Number(row.actual.viewsCurrent)) + 1) : null },
+        { key: 'logOutlier', selectionFamily: 'reach', accessor: row => finite(row.actual.outlierCurrent) ? Math.log10(Math.max(0, Number(row.actual.outlierCurrent)) + 1) : null },
+        { key: 'hit10M', selectionFamily: 'reach', accessor: row => row.actual.hit10MCurrent },
     ];
     const checkpointTargets = [
-        { key: 'survival5', accessor: row => curveValue(row, 'normalized', 5) },
-        { key: 'survival10', accessor: row => curveValue(row, 'normalized', 10) },
-        { key: 'survival20', accessor: row => curveValue(row, 'normalized', 20) },
-        { key: 'drop5', accessor: row => curveValue(row, 'drop', 5) },
-        { key: 'drop10', accessor: row => curveValue(row, 'drop', 10) },
-        { key: 'drop20', accessor: row => curveValue(row, 'drop', 20) },
+        { key: 'survival5', selectionFamily: 'retention-checkpoint-5s', accessor: row => curveValue(row, 'normalized', 5) },
+        { key: 'survival10', selectionFamily: 'retention-checkpoint-10s', accessor: row => curveValue(row, 'normalized', 10) },
+        { key: 'survival20', selectionFamily: 'retention-checkpoint-20s', accessor: row => curveValue(row, 'normalized', 20) },
+        { key: 'drop5', selectionFamily: 'retention-checkpoint-5s', accessor: row => curveValue(row, 'drop', 5) },
+        { key: 'drop10', selectionFamily: 'retention-checkpoint-10s', accessor: row => curveValue(row, 'drop', 10) },
+        { key: 'drop20', selectionFamily: 'retention-checkpoint-20s', accessor: row => curveValue(row, 'drop', 20) },
     ];
     const curveTargets = CURVE_SECONDS.slice(1).map(second => ({
         key: `second${second}`,
+        selectionFamily: 'retention-trajectory',
         accessor: row => curveValue(row, 'normalized', second),
     }));
     const runs = {
         video: {
-            scalar: crossValidatedMulti(rows, 'video', scalarTargets, 'video'),
-            checkpoints: crossValidatedMulti(rows, 'video', checkpointTargets, 'video'),
-            curve: crossValidatedMulti(rows, 'video', curveTargets, 'video'),
+            scalar: crossValidatedMulti(rows, scalarTargets, 'video'),
+            checkpoints: crossValidatedMulti(rows, checkpointTargets, 'video'),
+            curve: crossValidatedMulti(rows, curveTargets, 'video'),
         },
         account: {
-            scalar: crossValidatedMulti(rows, 'account', scalarTargets, 'account'),
-            checkpoints: crossValidatedMulti(rows, 'account', checkpointTargets, 'account'),
-            curve: crossValidatedMulti(rows, 'account', curveTargets, 'account'),
+            scalar: crossValidatedMulti(rows, scalarTargets, 'account'),
+            checkpoints: crossValidatedMulti(rows, checkpointTargets, 'account'),
+            curve: crossValidatedMulti(rows, curveTargets, 'account'),
         },
     };
     for (const row of rows) {
@@ -5100,8 +7078,13 @@ function attachScore21Forecasts(rows) {
             const curve = runs[protocol].curve.predictions.get(row.id);
             const curveBaseline = runs[protocol].curve.baselines.get(row.id);
             const assign = (values, checkpointValues, curveValues) => {
-                if (!values) return null;
-                const byKey = Object.fromEntries(scalarTargets.map((target, index) => [target.key, values[index]]));
+                if (!values || !values.some(finite)) return null;
+                const byKey = Object.fromEntries(scalarTargets.map(
+                    (target, index) => [
+                        target.key,
+                        finite(values[index]) ? Number(values[index]) : NaN,
+                    ]
+                ));
                 const checkpointsByKey = checkpointValues
                     ? Object.fromEntries(checkpointTargets.map((target, index) => [target.key, checkpointValues[index]]))
                     : {};
@@ -5110,16 +7093,25 @@ function attachScore21Forecasts(rows) {
                     swipe: round(100 - byKey.keep),
                     ret5: round(byKey.ret5),
                     averageRetention: round(byKey.averageRetention),
-                    views: round(Math.max(0, 10 ** byKey.logViews - 1), 2),
-                    outlier: round(Math.max(0, 10 ** byKey.logOutlier - 1)),
-                    hit10M: round(clamp(byKey.hit10M, 0, 1)),
+                    views: finite(byKey.logViews)
+                        ? round(Math.max(0, 10 ** byKey.logViews - 1), 2)
+                        : null,
+                    outlier: finite(byKey.logOutlier)
+                        ? round(Math.max(0, 10 ** byKey.logOutlier - 1))
+                        : null,
+                    hit10M: finite(byKey.hit10M)
+                        ? round(clamp(byKey.hit10M, 0, 1))
+                        : null,
                     survival5: round(checkpointsByKey.survival5),
                     survival10: round(checkpointsByKey.survival10),
                     survival20: round(checkpointsByKey.survival20),
                     drop5: round(checkpointsByKey.drop5),
                     drop10: round(checkpointsByKey.drop10),
                     drop20: round(checkpointsByKey.drop20),
-                    retentionCurve: curveValues ? [100, ...curveValues.map(value => round(value))] : null,
+                    retentionCurve: curveValues
+                        && curveValues.some(finite)
+                        ? [100, ...curveValues.map(value => round(value))]
+                        : null,
                 };
             };
             row.predictions.score21[protocol] = assign(scalar, checkpoints, curve);
@@ -5138,16 +7130,35 @@ function attachScore21Forecasts(rows) {
         protocols: Object.fromEntries(Object.entries(runs).map(([protocol, run]) => [protocol, {
             scalarEligible: run.scalar.eligible,
             scalarEligibleVideoIdSha256: run.scalar.eligibleVideoIdSha256,
+            scalarEligibilityByTarget: run.scalar.targetEligibility,
+            scalarOuterFoldLineage: run.scalar.outerFoldLineage,
+            scalarOuterFoldLineageConsistent:
+                run.scalar.outerFoldLineageConsistent,
             checkpointEligible: run.checkpoints.eligible,
             checkpointEligibleVideoIdSha256: run.checkpoints.eligibleVideoIdSha256,
+            checkpointEligibilityByTarget:
+                run.checkpoints.targetEligibility,
+            checkpointOuterFoldLineage:
+                run.checkpoints.outerFoldLineage,
+            checkpointOuterFoldLineageConsistent:
+                run.checkpoints.outerFoldLineageConsistent,
             curveEligibleThrough20s: run.curve.eligible,
             curveEligibleVideoIdSha256: run.curve.eligibleVideoIdSha256,
+            curveEligibilityByTarget: run.curve.targetEligibility,
+            curveOuterFoldLineage: run.curve.outerFoldLineage,
+            curveOuterFoldLineageConsistent:
+                run.curve.outerFoldLineageConsistent,
             scalarFolds: run.scalar.selected,
             scalarFoldPopulations: run.scalar.outerFoldPopulations,
+            scalarSelectionFamilies: run.scalar.targetSelectionFamilies,
             checkpointFolds: run.checkpoints.selected,
             checkpointFoldPopulations: run.checkpoints.outerFoldPopulations,
+            checkpointSelectionFamilies:
+                run.checkpoints.targetSelectionFamilies,
             curveFolds: run.curve.selected,
             curveFoldPopulations: run.curve.outerFoldPopulations,
+            curveSelectionFamilies: run.curve.targetSelectionFamilies,
+            selectionWeightingRule: 'Each target has its own eligible population and Ridge fit. Inner selection averages standardized loss equally across creators and adds a 25% worst-creator penalty, so large creators cannot dominate hyperparameter choice.',
         }])),
     };
 }
@@ -5270,8 +7281,7 @@ function buildScope(rows, validationRows, key, coordinateRegistry) {
     const ledgerOutcomeMatrix = buildLedgerOutcomeMatrix(
         validationScoped,
         coordinateRegistry,
-        key,
-        validationRows,
+        key
     );
     return {
         key,
@@ -5377,17 +7387,23 @@ function buildScope(rows, validationRows, key, coordinateRegistry) {
 }
 
 function buildValidationCohort(joinedRows, blindInputs, blindFeatureNames) {
-    const joinedIds = new Set(joinedRows.map(row => String(row.id)));
+    const joinedKeys = new Set(joinedRows.map(row => (
+        `${String(row.accountId)}\u0000${String(row.id)}`
+    )));
     const blindOnlyRows = [];
     for (const source of (blindInputs && blindInputs.rows) || []) {
         const id = String(source && source.id || '');
-        if (!id || joinedIds.has(id)) continue;
+        const accountId = String(
+            source && (source.account || source.accountId) || ''
+        );
+        if (!id || !accountId
+            || joinedKeys.has(`${accountId}\u0000${id}`)) continue;
         const keep = number(source.actualKeep);
         const views = number(source.actualViews);
         blindOnlyRows.push({
             id,
             channelId: null,
-            accountId: String(source.account || source.accountId || 'unknown'),
+            accountId,
             accountName: String(source.accountName || source.account || 'Unknown account'),
             title: String(source.title || id),
             publishedAt: number(source.publishedAt),
@@ -5395,6 +7411,18 @@ function buildValidationCohort(joinedRows, blindInputs, blindFeatureNames) {
             subscribers: null,
             transcript: '',
             inputManifest: null,
+            contentFamilyId: source.contentFamilyId
+                || source.content_family_id
+                || null,
+            sourceContentId: source.sourceContentId
+                || source.source_content_id
+                || null,
+            perceptualHash: source.perceptualHash
+                || source.perceptual_hash
+                || null,
+            montageSha256: source.montageSha256
+                || source.montage_sha256
+                || null,
             noveltyProvenance: null,
             storedRaw: contract.features.map(() => null),
             storedPercentile: contract.features.map(() => null),
@@ -5404,7 +7432,6 @@ function buildValidationCohort(joinedRows, blindInputs, blindFeatureNames) {
             validationSource: 'predictor_blind_inputs_only',
             actual: {
                 keep,
-                swipe: finite(keep) ? round(100 - Number(keep)) : null,
                 ret5: number(source.actualRet5),
                 averageRetention: null,
                 retentionCurve: null,
@@ -5536,6 +7563,16 @@ function buildValidation({
         keepTarget.creatorAdaptiveStudy || null,
         creatorAdaptiveKeepModel
     );
+    const promotionAudits = {
+        visualKeep: promotionEligibilityAudit(
+            visualKeepStudy,
+            'visual_keep'
+        ),
+        creatorAdaptiveKeep: promotionEligibilityAudit(
+            creatorAdaptiveStudy,
+            'creator_adaptive_keep'
+        ),
+    };
     const predictorProvenance = predictor.provenance || {};
     const visualKeepModelArtifact = visualKeepStudy
         && visualKeepStudy.modelArtifact
@@ -5545,6 +7582,21 @@ function buildValidation({
         visualKeepModelArtifact
         && /^[a-f0-9]{64}$/i.test(String(visualKeepModelArtifact.artifactSha256 || ''))
     ) ? String(visualKeepModelArtifact.artifactSha256).toLowerCase() : null;
+    const visualKeepRelease = predictorProvenance.runtimeManifests
+        && predictorProvenance.runtimeManifests.visualKeepModelRelease
+        || {};
+    const visualKeepManifestSha256 = exactSha256(
+        visualKeepRelease.manifestSha256
+    ) ? String(visualKeepRelease.manifestSha256).toLowerCase() : null;
+    const visualKeepReleaseArtifactSha256 = exactSha256(
+        visualKeepRelease.artifactSha256
+    ) ? String(visualKeepRelease.artifactSha256).toLowerCase() : null;
+    const visualKeepReleaseParityPassed = !!(
+        visualKeepArtifactSha256
+        && visualKeepManifestSha256
+        && visualKeepReleaseArtifactSha256
+            === visualKeepArtifactSha256
+    );
     const visualKeepProduction = pointMap(
         visualKeepStudy
         && visualKeepStudy.production
@@ -5584,7 +7636,28 @@ function buildValidation({
     const viewsForward = pointMap(predictorStress(viewsTarget, 'Forward-time public-views transfer').points);
     const blindInputs = keepTarget.blindInputs || {};
     const blindFeatureNames = Array.isArray(blindInputs.featureNames) ? blindInputs.featureNames : [];
-    const blindById = new Map((blindInputs.rows || []).map(row => [String(row.id), row]));
+    const blindById = new Map();
+    for (const blindRow of blindInputs.rows || []) {
+        const id = String(blindRow && blindRow.id || '');
+        const accountId = String(
+            blindRow && (blindRow.account || blindRow.accountId) || ''
+        );
+        if (!id || !accountId) {
+            const error = new Error(
+                'Every blind-validation row must declare both video ID and canonical account ID.'
+            );
+            error.code = 'BLIND_ROW_IDENTITY_MISSING';
+            throw error;
+        }
+        if (blindById.has(id)) {
+            const error = new Error(
+                `Blind-validation artifact contains duplicate video ID ${id}.`
+            );
+            error.code = 'BLIND_ROW_DUPLICATE_VIDEO_ID';
+            throw error;
+        }
+        blindById.set(id, blindRow);
+    }
     const rows = [];
     const joinSummary = [];
 
@@ -5593,12 +7666,44 @@ function buildValidation({
         const savedVideos = (source.manifest && source.manifest.videos) || [];
         const savedById = new Map(savedVideos.map(video => [String(video.id), video]));
         let matched = 0;
+        let legacyLedgerMissing = 0;
+        let invalidLedgerExcluded = 0;
+        let legacyManifestBindingMissing = 0;
+        let invalidManifestBindingExcluded = 0;
         for (const privateVideo of privateVideos) {
             const id = String(privateVideo.id || privateVideo.videoId || '');
             const saved = savedById.get(id);
             if (!id || !saved || saved.status !== 'done') continue;
+            const ledgerState = scoreLedgerValidationSummary(saved);
+            if (ledgerState.valid !== true) {
+                if (ledgerState.state === 'legacy-missing') {
+                    legacyLedgerMissing++;
+                } else {
+                    invalidLedgerExcluded++;
+                }
+                continue;
+            }
+            const manifestBinding =
+                validateManifestRowBinding(saved);
+            if (manifestBinding.valid !== true) {
+                if (manifestBinding.state === 'legacy-missing') {
+                    legacyManifestBindingMissing++;
+                } else {
+                    invalidManifestBindingExcluded++;
+                }
+                continue;
+            }
             matched++;
             const blind = blindById.get(id) || {};
+            if (blindById.has(id)
+                && String(blind.account || blind.accountId || '')
+                    !== String(source.accountId || '')) {
+                const error = new Error(
+                    `Blind-validation account mismatch for ${id}.`
+                );
+                error.code = 'BLIND_ROW_ACCOUNT_MISMATCH';
+                throw error;
+            }
             const knownKeep = keepKnown.get(id) || {};
             const unseenKeep = keepUnseen.get(id) || {};
             const forwardKeep = keepForward.get(id) || {};
@@ -5611,20 +7716,21 @@ function buildValidation({
                 && typeof saved.visual_keep_forecast === 'object'
                 ? saved.visual_keep_forecast
                 : null;
-            const currentPersistedVisualKeep = persistedVisualKeep
-                && visualKeepArtifactSha256
-                && persistedVisualKeep.coordinate_id === VISUAL_KEEP_COORDINATE_ID
-                && persistedVisualKeep.calibration_scope === 'pooled_global'
-                && persistedVisualKeep.account_model == null
-                && String(persistedVisualKeep.model_artifact_sha256 || '').toLowerCase()
-                    === visualKeepArtifactSha256
-                && finite(
-                    persistedVisualKeep.raw != null
-                        ? persistedVisualKeep.raw
-                        : persistedVisualKeep.est
-                )
-                ? persistedVisualKeep
-                : null;
+            const persistedVisualKeepAudit =
+                persistedVisualKeepForecastAudit(
+                    saved,
+                    visualKeepReleaseParityPassed
+                        ? visualKeepArtifactSha256
+                        : null,
+                    visualKeepManifestSha256,
+                    visualKeepStudy,
+                    contract.version,
+                    FEATURE_CONTRACT_SHA256
+                );
+            const currentPersistedVisualKeep =
+                persistedVisualKeepAudit.valid
+                    ? persistedVisualKeep
+                    : null;
             const storedCells = contract.features.map(definition => featureCell(saved, definition.key));
             const blindVideoHeldOut = Array.isArray(blind.videoHeldOut) ? blind.videoHeldOut : [];
             const blindAccountHeldOut = Array.isArray(blind.accountHeldOut) ? blind.accountHeldOut : [];
@@ -5635,6 +7741,11 @@ function buildValidation({
                 channelId: source.channelId,
                 accountId: source.accountId,
                 accountName: source.accountName,
+                sourceScoreLedgerSha256:
+                    saved.score_ledger
+                    && saved.score_ledger.ledger_sha256 || null,
+                sourceScoreRecordSha256:
+                    saved.score_record_sha256 || null,
                 title: String(saved.title || privateVideo.title || id),
                 publishedAt: parseDate(privateVideo.published || saved.published),
                 duration,
@@ -5643,9 +7754,44 @@ function buildValidation({
                 inputManifest: saved.input_manifest && typeof saved.input_manifest === 'object'
                     ? saved.input_manifest
                     : null,
+                contentFamilyId: saved.contentFamilyId
+                    || saved.content_family_id
+                    || blind.contentFamilyId
+                    || blind.content_family_id
+                    || null,
+                sourceContentId: saved.sourceContentId
+                    || saved.source_content_id
+                    || blind.sourceContentId
+                    || blind.source_content_id
+                    || null,
+                perceptualHash: saved.perceptualHash
+                    || saved.perceptual_hash
+                    || blind.perceptualHash
+                    || blind.perceptual_hash
+                    || null,
+                montageSha256: saved.montageSha256
+                    || saved.montage_sha256
+                    || blind.montageSha256
+                    || blind.montage_sha256
+                    || null,
                 noveltyProvenance: saved.novelty_provenance && typeof saved.novelty_provenance === 'object'
                     ? saved.novelty_provenance
                     : null,
+                contentFamilyEvidence:
+                    validationContentFamilyEvidence({
+                        ...blind,
+                        ...saved,
+                        inputManifest: saved.input_manifest,
+                        title: String(
+                            saved.title || privateVideo.title || id
+                        ),
+                    }),
+                studyMetadata: {
+                    visualKeep: {
+                        persistedScoreTimeForecastAudit:
+                            persistedVisualKeepAudit,
+                    },
+                },
                 storedRaw: storedCells.map(cell => cell.raw),
                 storedPercentile: storedCells.map(cell => cell.percentile),
                 blindFeatureNames,
@@ -5653,9 +7799,6 @@ function buildValidation({
                 blindAccountHeldOut,
                 actual: {
                     keep,
-                    swipe: finite(privateVideo.swiped)
-                        ? number(privateVideo.swiped)
-                        : (finite(keep) ? round(100 - Number(keep)) : null),
                     ret5: number(privateVideo.ret5),
                     averageRetention: number(privateVideo.avg_retention),
                     retentionCurve: retentionCurveSnapshot(privateVideo.curve, duration),
@@ -5680,35 +7823,50 @@ function buildValidation({
                         && (currentPersistedVisualKeep.raw != null
                             ? currentPersistedVisualKeep.raw
                             : currentPersistedVisualKeep.est)
-                    ) != null
-                        ? number(
-                            currentPersistedVisualKeep.raw != null
-                                ? currentPersistedVisualKeep.raw
-                                : currentPersistedVisualKeep.est
-                        )
-                        : number(frozenVisualKeep.predicted),
+                    ),
                     visualKeepForecastSource: currentPersistedVisualKeep
-                        ? 'persisted_score_artifact'
-                        : (finite(frozenVisualKeep.predicted)
-                            ? 'current_frozen_model_training_population_backfill'
-                            : null),
+                        ? 'live_frozen_model_score'
+                        : null,
+                    visualKeepForecastEvaluationStatus:
+                        currentPersistedVisualKeep
+                            ? promotionAudits.visualKeep
+                                && promotionAudits.visualKeep
+                                    .prospectiveConfirmed
+                                ? 'immutable_preregistered_result_audit_passed'
+                                : 'retrospective_score_time_prediction_not_confirmed_by_preregistered_result'
+                            : null,
                     visualKeepForecastArtifactSha256: (
                         currentPersistedVisualKeep
                         && currentPersistedVisualKeep.model_artifact_sha256
-                        || (finite(frozenVisualKeep.predicted)
-                            ? visualKeepArtifactSha256
-                            : null)
+                    ),
+                    visualKeepForecastManifestSha256: (
+                        currentPersistedVisualKeep
+                        && currentPersistedVisualKeep.model_manifest_sha256
+                    ),
+                    visualKeepForecastInputFingerprint: (
+                        currentPersistedVisualKeep
+                        && persistedVisualKeepAudit.inputFingerprint
+                    ),
+                    visualKeepForecastInputRevisionFingerprint: (
+                        currentPersistedVisualKeep
+                        && persistedVisualKeepAudit
+                            .inputRevisionFingerprint
                     ),
                     visualKeepForecastRejectedRevision: (
                         persistedVisualKeep && !currentPersistedVisualKeep
                             ? persistedVisualKeep.model_artifact_sha256 || 'unversioned'
                             : null
                     ),
+                    visualKeepForecastRejectionReasons: (
+                        persistedVisualKeep && !currentPersistedVisualKeep
+                            ? persistedVisualKeepAudit.blockers
+                            : []
+                    ),
                     visualKeepProtocols: visualKeepProtocolValues(id),
-                    creatorAdaptiveKeepForecast: number(
+                    creatorAdaptiveKeepPrequential: number(
                         creatorAdaptiveKeep.predicted
                     ),
-                    creatorAdaptiveKeepForecastSource: finite(
+                    creatorAdaptiveKeepPrequentialSource: finite(
                         creatorAdaptiveKeep.predicted
                     ) ? 'causal_final20_prequential' : null,
                     creatorAdaptiveKeepBaseline: number(
@@ -5761,33 +7919,91 @@ function buildValidation({
             accountName: source.accountName,
             privateRows: privateVideos.length,
             savedRows: savedVideos.filter(video => video.status === 'done').length,
+            canonicalLedgerRows: savedVideos.filter(video => (
+                video.status === 'done'
+                && scoreLedgerValidationSummary(video).valid === true
+            )).length,
+            canonicalManifestRows: savedVideos.filter(video => (
+                video.status === 'done'
+                && validateManifestRowBinding(video).valid === true
+            )).length,
+            legacyLedgerMissing,
+            invalidLedgerExcluded,
+            legacyManifestBindingMissing,
+            invalidManifestBindingExcluded,
             matchedRows: matched,
             unmatchedPrivateRows: privateVideos.length - matched,
         });
     }
 
     rows.sort((left, right) => (right.publishedAt || 0) - (left.publishedAt || 0) || left.id.localeCompare(right.id));
-    const score21Model = attachScore21Forecasts(rows);
+    const blindFoldAudit = auditBlindFoldLineage(blindInputs);
+    const creatorChannelIdentityAudit =
+        validationCreatorChannelIdentityAudit(
+            channels,
+            predictorProvenance
+        );
+    const publicAxisOverlapAudit = auditPublicAxisOverlap(
+        predictorProvenance,
+        (blindInputs.rows || []).map(row => row.id),
+        rows.map(row => row.id),
+        creatorChannelIdentityAudit
+    );
     const validationCohort = buildValidationCohort(rows, blindInputs, blindFeatureNames);
+    const score21Model = attachScore21Forecasts(
+        validationCohort.rows
+    );
     for (const row of validationCohort.rows) {
         const frozenVisualKeep = visualKeepProduction.get(String(row.id)) || {};
         const creatorAdaptiveKeep = creatorAdaptiveEvaluation.get(String(row.id)) || {};
         row.predictions = row.predictions || {};
-        row.predictions.visualKeepProtocols = visualKeepProtocolValues(row.id);
-        if (!finite(row.predictions.visualKeepForecast)) {
-            row.predictions.visualKeepForecast = number(frozenVisualKeep.predicted);
-            row.predictions.visualKeepForecastSource = finite(frozenVisualKeep.predicted)
-                ? 'current_frozen_model_training_population_backfill'
-                : null;
-            row.predictions.visualKeepForecastArtifactSha256 = finite(frozenVisualKeep.predicted)
-                ? visualKeepArtifactSha256
-                : null;
+        row.contentFamilyEvidence = row.contentFamilyEvidence
+            || validationContentFamilyEvidence(row);
+        row.studyMetadata = row.studyMetadata || {};
+        row.studyMetadata.visualKeep =
+            row.studyMetadata.visualKeep || {};
+        if (finite(frozenVisualKeep.predicted)) {
+            row.studyMetadata.visualKeep
+                .fullFitTrainingDiagnostic = {
+                    relatedCoordinateId:
+                        VISUAL_KEEP_COORDINATE_ID,
+                    diagnosticId:
+                        'shorts.visual-keep.full-fit-training-diagnostic.v1',
+                    value: number(frozenVisualKeep.predicted),
+                    source:
+                        'current_model_full_fit_training_diagnostic',
+                    modelArtifactSha256:
+                        visualKeepArtifactSha256,
+                    modelManifestSha256:
+                        visualKeepManifestSha256,
+                    excludedFromCanonicalLedger: true,
+                    excludedFromValidationMatrix: true,
+                    claimBoundary:
+                        'This row was reconstructed from the final fitting model. It is retained only as study metadata and is never substituted into the canonical score-time forecast coordinate.',
+                };
         }
-        if (!finite(row.predictions.creatorAdaptiveKeepForecast)) {
-            row.predictions.creatorAdaptiveKeepForecast = number(
+        row.predictions.visualKeepProtocols = visualKeepProtocolValues(row.id);
+        if (!Object.prototype.hasOwnProperty.call(
+            row.predictions,
+            'visualKeepForecast'
+        )) {
+            row.predictions.visualKeepForecast = null;
+            row.predictions.visualKeepForecastSource = null;
+            row.predictions.visualKeepForecastEvaluationStatus = null;
+            row.predictions.visualKeepForecastArtifactSha256 = null;
+            row.predictions.visualKeepForecastManifestSha256 = null;
+            row.predictions.visualKeepForecastInputFingerprint = null;
+            row.predictions.visualKeepForecastInputRevisionFingerprint =
+                null;
+            row.predictions.visualKeepForecastRejectionReasons = [];
+        }
+        if (!finite(
+            row.predictions.creatorAdaptiveKeepPrequential
+        )) {
+            row.predictions.creatorAdaptiveKeepPrequential = number(
                 creatorAdaptiveKeep.predicted
             );
-            row.predictions.creatorAdaptiveKeepForecastSource = finite(
+            row.predictions.creatorAdaptiveKeepPrequentialSource = finite(
                 creatorAdaptiveKeep.predicted
             ) ? 'causal_final20_prequential' : null;
             row.predictions.creatorAdaptiveKeepBaseline = number(
@@ -5837,6 +8053,55 @@ function buildValidation({
             ) ? creatorAdaptiveKeep.historyVideoIds.map(String) : [];
         }
     }
+    const validationContentFamilyAudit =
+        contentFamilyEvidenceAudit(validationCohort.rows);
+    const visualKeepForecastProvenanceAudit = {
+        failClosed: true,
+        coordinateId: VISUAL_KEEP_COORDINATE_ID,
+        requiredSource: 'live_frozen_model_score',
+        requiredCalibrationScope: 'pooled_global',
+        requiredAccountModel: null,
+        requiredOutputBounds: [0, 100],
+        expectedModelArtifactSha256: visualKeepArtifactSha256,
+        expectedModelManifestSha256: visualKeepManifestSha256,
+        releaseArtifactParityPassed:
+            visualKeepReleaseParityPassed,
+        modelOutputContract:
+            visualKeepModelOutputAudit(visualKeepStudy),
+        persistedForecastRows: validationCohort.rows.filter(row => (
+            row.studyMetadata
+            && row.studyMetadata.visualKeep
+            && row.studyMetadata.visualKeep
+                .persistedScoreTimeForecastAudit
+            && row.studyMetadata.visualKeep
+                .persistedScoreTimeForecastAudit.state
+                !== 'missing_persisted_forecast'
+        )).length,
+        canonicalAcceptedRows: validationCohort.rows.filter(row => (
+            finite(
+                row.predictions
+                && row.predictions.visualKeepForecast
+            )
+        )).length,
+        rejectedPersistedRows: validationCohort.rows.filter(row => (
+            row.studyMetadata
+            && row.studyMetadata.visualKeep
+            && row.studyMetadata.visualKeep
+                .persistedScoreTimeForecastAudit
+            && row.studyMetadata.visualKeep
+                .persistedScoreTimeForecastAudit.state
+                === 'rejected_persisted_forecast'
+        )).length,
+        fullFitTrainingDiagnosticsRetainedAsStudyMetadata:
+            validationCohort.rows.filter(row => (
+                row.studyMetadata
+                && row.studyMetadata.visualKeep
+                && row.studyMetadata.visualKeep
+                    .fullFitTrainingDiagnostic
+            )).length,
+        fullFitTrainingDiagnosticsInsertedIntoCanonicalLedger: 0,
+        rule: 'The canonical visual keep coordinate is populated only by an exact persisted score-time forecast bound to its score record, input fingerprints, input revision, canonical montage, and active artifact/manifest release. Final-fit training reconstructions never fill missing or rejected values.',
+    };
     const coordinateRegistry = buildCoordinateRegistry({
         rows,
         predictorProvenance,
@@ -5846,6 +8111,8 @@ function buildValidation({
         creatorAdaptiveStudy,
         sourceFingerprint,
         generatedAt,
+        blindFoldAudit,
+        publicAxisOverlapAudit,
     });
     if (!coordinateRegistry.lineageAudit || !coordinateRegistry.lineageAudit.passed) {
         const audit = coordinateRegistry.lineageAudit || {};
@@ -5862,20 +8129,39 @@ function buildValidation({
         visualKeepStudy,
         creatorAdaptiveStudy
     );
+    if (!ledgerAudit.passed) {
+        const error = new Error(
+            'Canonical score-ledger parity failed; refusing to expose values that do not resolve to one source of truth.'
+        );
+        error.code = 'SCORE_LEDGER_PARITY_MISMATCH';
+        error.ledgerAudit = ledgerAudit;
+        throw error;
+    }
     const scopes = {
         pooled: buildScope(rows, validationCohort.rows, 'pooled', coordinateRegistry),
         tyler: buildScope(rows, validationCohort.rows, 'tyler', coordinateRegistry),
         hafu: buildScope(rows, validationCohort.rows, 'hafu', coordinateRegistry),
     };
-    const privateAxisTrainingIdOverlap = number(predictorProvenance.privateAxisTrainingIdOverlap);
-    const savedAxisTrainingIdOverlap = number(predictorProvenance.savedAxisTrainingIdOverlap);
-    const validationCreatorAxisTrainingIdOverlap = number(predictorProvenance.validationCreatorAxisTrainingIdOverlap);
-    const blindFeatureRowsComplete = validationCohort.rows.length > 0
-        && validationCohort.rows.every(row => row.blindVideoHeldOut.length === blindFeatureNames.length)
-        && validationCohort.rows.every(row => row.blindAccountHeldOut.length === blindFeatureNames.length);
-    const publicAxisLeakageChecksPassed = privateAxisTrainingIdOverlap === 0
-        && savedAxisTrainingIdOverlap === 0
-        && validationCreatorAxisTrainingIdOverlap === 0;
+    const blindFeatureVectorsAligned = validationCohort.rows.length > 0
+        && new Set(blindFeatureNames).size === blindFeatureNames.length
+        && validationCohort.rows.every(
+            row => row.blindVideoHeldOut.length === blindFeatureNames.length
+        )
+        && validationCohort.rows.every(
+            row => row.blindAccountHeldOut.length === blindFeatureNames.length
+        );
+    const requiredInputIndices = STRICT_FORECAST_RAW_FEATURES.map(
+        name => blindFeatureNames.indexOf(name)
+    );
+    const finiteInputRows = validationCohort.rows.filter(row => (
+        requiredInputIndices.every(index => (
+            index >= 0
+            && finite(row.blindVideoHeldOut[index])
+            && finite(row.blindAccountHeldOut[index])
+        ))
+    )).length;
+    const allRequiredInputsFinite = validationCohort.rows.length > 0
+        && finiteInputRows === validationCohort.rows.length;
     const validationAccountCount = new Set(
         validationCohort.rows.filter(row => finite(row.actual.keep)).map(row => row.accountId)
     ).size;
@@ -5889,8 +8175,13 @@ function buildValidation({
         publishedAt: row.publishedAt,
         duration: row.duration,
         validationSource: row.validationSource || 'saved_channel_join',
+        sourceScoreLedgerSha256: row.sourceScoreLedgerSha256,
+        sourceScoreRecordSha256: row.sourceScoreRecordSha256,
         actual: row.actual,
+        predictions: row.predictions,
         scoreLedger: row.scoreLedger,
+        contentFamilyEvidence: row.contentFamilyEvidence,
+        studyMetadata: row.studyMetadata,
     }));
     return {
         version: VERSION,
@@ -5908,58 +8199,82 @@ function buildValidation({
         score21Model,
         visualKeepStudy,
         creatorAdaptiveStudy,
+        promotionAudits,
         coordinateRegistry,
         ledgerAudit,
         outcomeDefinitions: OUTCOME_DEFINITIONS.map(definition => (
             Object.fromEntries(Object.entries(definition).filter(([key]) => key !== 'accessor'))
         )),
         validationContract: {
-            stored: 'Exact 21 values persisted by the channel scorer. They are shown for diagnosis, never promoted to blind evidence.',
-            videoHeldOut: `${blindInputs.videoHeldOutProtocol || 'The evaluated video is excluded from every target-aligned fit.'} In the canonical validation matrix, a separate deterministic five-fold calibration trains on four video folds and predicts the fifth. The test video's outcome is never used to fit its own calibration.`,
-            accountHeldOut: `${blindInputs.accountHeldOutProtocol || 'The evaluated account is excluded from every target-aligned fit.'} In the canonical validation matrix, leave-account-out calibration trains on every other creator and predicts the omitted creator. No outcome from the test creator enters that fold's calibration.`,
-            publicViewsAxis: 'The production one-component PLS direction and rank-to-outcome calibration are refit on public corpus videos after excluding private rows, saved rows, and every video from each validation creator.',
+            stored: 'Exact 21 values persisted by the channel scorer. Their upstream fit and historical rank calibration may include the scored account or video, so they are in-sample/unknown-generation diagnostics and never confirmatory evidence.',
+            videoHeldOut: `${blindInputs.videoHeldOutProtocol || 'The evaluated video is excluded from every target-aligned fit.'} The canonical matrix evaluates that exact registered value; it does not fit a second chart-only calibration. This remains retrospective evidence rather than prospective confirmation.`,
+            accountHeldOut: `${blindInputs.accountHeldOutProtocol || 'The evaluated account is excluded from every target-aligned fit.'} The canonical matrix evaluates that exact registered value; it does not fit a second chart-only calibration. Whole-account exclusion measures historical transfer, not future prospective confirmation.`,
+            publicViewsAxis: 'The one-component PLS direction and rank-to-outcome calibration are refit on public corpus videos after excluding private rows, saved rows, and every video from each validation creator. This is a retrospective creator-excluded research axis, not a confirmatory or prospective calibration.',
             forwardTime: 'Training labels precede test labels, but the present-day representation remains fixed; this is a partial backtest.',
-            visualKeepStudy: 'A separate visual-only study fits directly from the canonical 1,536-dimensional opening montage embedding. It reports nested video holdout, forward-time, and whole-creator holdout as separate claims; the stricter protocols determine whether the model may be promoted.',
-            creatorAdaptiveKeepStudy: 'The creator-adaptive coordinate is a separate known-creator next-upload claim. Its final chronological predictions use the visual and together embeddings plus only that creator’s strictly earlier measured uploads. Equal timestamps are simultaneous batches. Cold start and anonymous upload scoring are explicitly unsupported.',
+            visualKeepStudy: `A separate visual-only study fits directly from the canonical 1,536-dimensional opening montage embedding. Nested video holdout, historical forward-time, and whole-creator holdout remain research evidence. Promotion additionally requires at least ${MIN_CONFIRMATORY_ACCOUNT_COUNT} independently evaluated creators with at least ${MIN_CONFIRMATORY_ROWS_PER_ACCOUNT} rows each and an immutable prospective registration/result chain; missing evidence fails closed.`,
+            creatorAdaptiveKeepStudy: `The creator-adaptive coordinate is a separate known-creator next-upload claim. Its final chronological predictions use the visual and together embeddings plus only that creator’s strictly earlier measured uploads. Equal timestamps are simultaneous batches. Cold start and anonymous upload scoring are explicitly unsupported. Retrospective replay cannot promote without the governed creator sample floor and an immutable prospective registration/result chain.`,
             ledgerOutcomeMatrix: `The single canonical ${coordinateRegistry.columns.length}-coordinate by 13-outcome validation matrix. Coordinates remain in score-ledger order and are never renamed or re-created for a chart.`,
             retentionCurve: 'Observed YouTube retention is interpolated from its native percent-of-duration curve to exact seconds 0 through 20, then divided by that video\'s observed opening value. Forecasts use only nine public axes rebuilt after both validation creators were excluded.',
             coordinateLedger: 'Every displayed scalar is resolved by canonical coordinate ID. A relationship graph is only a score-coordinate/outcome pairing and cannot mint a new score.',
             glossary: {
-                rawAssociation: 'Spearman measures whether higher coordinate values generally accompany higher outcomes without fitting a calibration. withinAccountSpearman removes each creator\'s level before measuring that rank relationship. AUC is the analogous ranking measure for the binary over-10M outcome.',
-                video5Fold: 'Videos are deterministically assigned to five folds by video ID. For each fold, the one-coordinate calibration is fit on the other four folds and then frozen before it predicts the held-out fold.',
-                leaveAccountOut: 'One creator account is the complete test fold. The calibration sees outcomes from other creators only, then predicts every eligible video from the omitted creator.',
+                rawAssociation: 'Pooled Spearman and pooled AUC are descriptive. For pooled inference, effect, p, and q all use the same within-account centered Spearman or within-account pair-weighted AUC on the same paired population; between-creator level shifts cannot supply inferential evidence.',
+                nativePrediction: 'A coordinate receives prediction-error metrics only for the outcome it was registered to predict. The plotted prediction is the exact ledger value after only its registered unit transform.',
+                crossOutcome: 'A coordinate paired with any other outcome receives association metrics only. The relationship atlas is forbidden from fitting a new estimator.',
                 prequentialTime: 'Uploads are evaluated in chronological order. A prediction may use outcomes from earlier uploads, but the current upload’s outcome becomes available only after its prediction and can enter only later predictions.',
-                oof: 'Out-of-fold. Every reported OOF prediction was made by a calibration that did not train on that test video outcome; account-held-out OOF also excludes every outcome from the test creator.',
-                oofR2: 'Improvement over the training-fold mean on the held-out rows. Zero matches that baseline; negative is worse; positive is better.',
-                oofMae: 'Average absolute held-out error in the outcome unit, such as percentage points.',
-                oofMedianFactorError: 'For log-scaled views or outlier outcomes, the median multiplicative miss. 1.0 is perfect; 2.0 means a typical two-fold error.',
-                oofSpearman: 'Rank agreement between calibrated held-out predictions and outcomes. 1 is perfect ordering, 0 is no monotonic ordering, and -1 is reversed.',
-                oofAuc: 'For over-10M classification, the chance that a randomly selected hit receives a higher held-out prediction than a miss. 0.5 is chance.',
-                oofBrier: 'Mean squared probability error for held-out over-10M predictions. Lower is better; zero is perfect.',
-                predictionRange: 'The maximum held-out prediction minus the minimum held-out prediction. Range ratio divides that span by the observed span. A narrow ratio exposes regression-to-the-mean even when R-squared looks favorable.',
-                plotModes: 'Held-out prediction plots apply the exact fold-specific calibration used by the reported OOF metrics. Raw-coordinate plots show the uncalibrated embedding-axis coordinate and are association diagnostics only.',
-                qValue: `Global Benjamini-Hochberg false-discovery-rate adjustment across the full eligible ${coordinateRegistry.columns.length}-coordinate by 13-outcome exploratory family. Evidence and ranking use this global q-value because the UI can surface the best result across outcomes.`,
-                outcomeNotPredictor: 'The 13 measured-outcome columns stay in the ledger for traceability but are excluded from predictive rankings, calibration, and evidence claims.',
+                predictionR2: 'Conventional held-out R-squared: prediction error compared with the variance of the displayed test outcomes. It is distinct from protocol-baseline skill.',
+                predictionProtocolBaselineR2: 'MSE skill relative to an explicitly registered upstream protocol baseline. It is null when no such baseline exists.',
+                predictionMae: 'Average absolute error of the exact registered prediction in the outcome unit, such as percentage points.',
+                predictionMedianFactorError: 'For log-scaled views or outlier outcomes, the median multiplicative miss. 1.0 is perfect; 2.0 means a typical two-fold error.',
+                predictionSpearman: 'Rank agreement between exact registered predictions and outcomes. 1 is perfect ordering, 0 is no monotonic ordering, and -1 is reversed.',
+                predictionAuc: 'For over-10M classification, the chance that a randomly selected hit receives a higher registered probability than a miss. 0.5 is chance.',
+                predictionBrier: 'Mean squared probability error for registered over-10M predictions. Lower is better; zero is perfect.',
+                predictionRange: 'The maximum exact ledger prediction minus the minimum. Range ratio divides that span by the observed span. A narrow ratio exposes regression to the mean even when R-squared looks favorable.',
+                plotModes: 'Native prediction plots and row tables read the exact score-ledger cell. Cross-outcome plots show raw association only. The browser performs no fold assignment, fit, or recalibration.',
+                qValue: `The full eligible ${coordinateRegistry.columns.length}-coordinate by 13-outcome display grid is not treated as independent tests. Global Benjamini-Hochberg adjustment operates on unique predictor-coordinate-axis by governed outcome-family hypotheses. Each q-value adjusts the p-value for the displayed inferentialEffect and inferentialEstimand; pooled descriptive effects never replace it. Diagnostic/in-sample coordinates do not enter the selection family, and stayed-to-watch plus its exact swipe-away complement count once.`,
+                outcomeSelection: 'Swipe-away is displayed but aliases stayed-to-watch for selection. Every modeled outcome now has its own eligible population and Ridge fit; lambda selection balances creator-macro loss with a worst-creator penalty instead of allowing creator row counts or sibling outcomes to dominate.',
+                promotion: `Promotion fails closed. An artifact must explicitly mark itself promoted, at least ${MIN_CONFIRMATORY_ACCOUNT_COUNT} independent creators must contribute at least ${MIN_CONFIRMATORY_ROWS_PER_ACCOUNT} evaluation rows each, and immutable result plus preregistration bytes must reproduce their declared hashes while locking model, protocol, outcome, and population hashes. Matching 64-character strings alone are not evidence. Predictor ranking also requires an explicit predictor-eligible claim.`,
+                creatorAwareUncertainty: 'Video rows measure within-account error but do not create independent creator replications. Content families are collapsed within creator, creators are the inferential units, and an exact creator-level sign-flip p-value is reported only with at least three independent creators.',
+                outcomeNotPredictor: 'Twelve independently stored measured-outcome columns stay in the ledger for traceability and are excluded from predictor ranking. Swipe-away remains available only as the governed 100 - keep display transform.',
                 coverage: 'Counts are explicit because not every artifact contains every truth field. Blind-only rows add real keep, ret5, and views labels, but never receive fabricated stored scores, average retention, outlier, or retention curves.',
             },
         },
         leakageAudit: {
-            passedForBlindInputs: blindFeatureRowsComplete && publicAxisLeakageChecksPassed,
+            passedForBlindInputs: blindFeatureVectorsAligned
+                && blindFoldAudit.passed
+                && blindFoldAudit
+                    .strongDuplicateProtectionPassed
+                && publicAxisOverlapAudit.passed,
             coordinateLedgerPassed: ledgerAudit.passed,
             coordinateLedgerVersion: coordinateRegistry.version,
-            privateRowsExcludedFromPublicAxis: privateAxisTrainingIdOverlap === 0,
-            savedRowsExcludedFromPublicAxis: savedAxisTrainingIdOverlap === 0,
-            validationCreatorsExcludedFromPublicAxis: validationCreatorAxisTrainingIdOverlap === 0,
+            privateRowsExcludedFromPublicAxis:
+                publicAxisOverlapAudit.privateOverlap.length === 0
+                && publicAxisOverlapAudit.manifestsComplete,
+            savedRowsExcludedFromPublicAxis:
+                publicAxisOverlapAudit.savedOverlap.length === 0
+                && publicAxisOverlapAudit.manifestsComplete,
+            validationCreatorsExcludedFromPublicAxis:
+                publicAxisOverlapAudit.validationCreatorOverlap.length === 0
+                && publicAxisOverlapAudit.manifestsComplete
+                && creatorChannelIdentityAudit.passed,
             validationAccountCount,
             savedDrilldownAccountCount,
-            privateAxisTrainingIdOverlapReported: privateAxisTrainingIdOverlap,
-            savedAxisTrainingIdOverlapReported: savedAxisTrainingIdOverlap,
-            validationCreatorAxisTrainingIdOverlapReported: validationCreatorAxisTrainingIdOverlap,
+            blindFoldAudit,
+            validationContentFamilyAudit,
+            validationCreatorChannelIdentityAudit:
+                creatorChannelIdentityAudit,
+            visualKeepForecastProvenanceAudit,
+            publicAxisOverlapAudit,
+            blindFeatureVectorsAligned,
+            requiredFiniteInputRows: finiteInputRows,
+            requiredFiniteInputTotal: validationCohort.rows.length,
+            allRequiredInputsFinite,
+            missingInputPolicy: 'Training-fold mean imputation plus one explicit missingness indicator per coordinate. Complete-case coverage is reported separately.',
+            promotionAudits,
             savedAxisCandidateOverlapRemoved: number(predictorProvenance.savedAxisCandidateOverlapRemoved),
             validationCreatorVideoCountExcluded: number(predictorProvenance.validationCreatorVideoCountExcluded),
-            validationCreatorChannelIds: Array.isArray(predictorProvenance.validationCreatorChannelIds)
-                ? predictorProvenance.validationCreatorChannelIds
-                : [],
+            validationCreatorChannelIds:
+                creatorChannelIdentityAudit
+                    .canonicalChannelIds,
             scorerVersionPersistedPerVideo: !!predictorProvenance.featureScorerVersionPersistedPerVideo,
             predictorGeneratedAt: number(predictor.generatedAt),
             featureContractVersion: contract.version,
@@ -5968,22 +8283,49 @@ function buildValidation({
                 'Stored saved-channel rows do not persist an immutable scorer generation, so their 21 values remain diagnostics even when the video ID was excluded later.',
                 'Current public views are lifetime snapshots, not fixed-horizon outcomes; publication age can still confound view error.',
                 `${validationAccountCount} creator account${validationAccountCount === 1 ? '' : 's'} contribute persisted blind-input truth to the expanded matrix; ${savedDrilldownAccountCount} have joined saved score cards and richer private outcomes. Creator-level confidence is bounded by the former count, while original-card drilldown is bounded by the latter.`,
-                'Swipe-away is the exact inverse of stayed-to-watch and is not a second independent label.',
+                'Swipe-away is the exact inverse of stayed-to-watch. It remains visible, shares the feed-decision hypothesis family, and is excluded as a second model-selection vote.',
+                `No model is promotion-eligible unless prospectively completed result and preregistration evidence bytes reproduce their declared hashes and at least ${MIN_CONFIRMATORY_ACCOUNT_COUNT} independent creator accounts contribute ${MIN_CONFIRMATORY_ROWS_PER_ACCOUNT} or more evaluation rows each. Historical row count, video-fold performance, caller booleans, synthetic hash strings, or in-sample public calibration cannot substitute for either gate.`,
+                'Transfer inference is creator-blocked: content families are collapsed within creator and creators are the inferential units. Exact creator sign-flip p-values require at least three independent creators and remain exploratory until prospective confirmation.',
+                validationContentFamilyAudit.warning,
                 'The combined forecasts use only nine creator-excluded public views/outlier/10M axes. Private-label-aligned keep, ret5, and realistic-views coordinates remain visible in the single-score matrix but are not stacked into the forecast.',
                 'The 20-second curve forecast is evaluated only where the observed video and retention curve reach that second.',
-            ],
+            ].filter(Boolean),
         },
     };
 }
 
 module.exports = {
     VERSION,
+    LEDGER_VERSION,
+    CREATOR_ADAPTIVE_KEEP_MODEL_COORDINATE_ID,
+    CREATOR_ADAPTIVE_KEEP_PREQUENTIAL_COORDINATE_ID,
+    GOVERNANCE_SHA256: coordinateGovernanceFileSha256(),
     SUPPORTED_CHANNELS,
     contract,
+    coordinateGovernance,
     buildValidation,
     regressionMetrics,
     binaryMetrics,
     featureCell,
     buildCoordinateRegistry,
-    _singleCoordinateOof: singleCoordinateOof,
+    resolveCoordinateId,
+    _nativeOutcomeKey: nativeOutcomeKey,
+    _identityCoordinateEvaluation: identityCoordinateEvaluation,
+    _rawCoordinateAssociation: rawCoordinateAssociation,
+    _crossValidatedMulti: crossValidatedMulti,
+    _selectRidgeLambda: selectRidgeLambda,
+    _contentFamilyFoldAssignments: contentFamilyFoldAssignments,
+    _validationContentFamilyId: validationContentFamilyId,
+    _validationContentFamilyEvidence:
+        validationContentFamilyEvidence,
+    _contentFamilyEvidenceAudit: contentFamilyEvidenceAudit,
+    _persistedVisualKeepForecastAudit:
+        persistedVisualKeepForecastAudit,
+    _blindFoldManifestRows: blindFoldManifestRows,
+    _canonicalFitManifestRows: canonicalFitManifestRows,
+    _retentionCurveSnapshot: retentionCurveSnapshot,
+    _sha256Json: sha256Json,
+    _promotionEligibilityAudit: promotionEligibilityAudit,
+    _minimumConfirmatoryRowsPerAccount:
+        MIN_CONFIRMATORY_ROWS_PER_ACCOUNT,
 };

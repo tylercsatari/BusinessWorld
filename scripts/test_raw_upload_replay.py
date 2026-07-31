@@ -10,14 +10,16 @@ import base64
 import importlib.util
 import inspect
 import io
+import hashlib
 import json
 import os
 import sys
 
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+from shorts_score_ledger import score_record_binding_sha256
+
 SPEC = importlib.util.spec_from_file_location('raw_upload_replay_test_subject', os.path.join(ROOT, 'raw_upload.py'))
 RAW = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RAW)
@@ -35,18 +37,63 @@ class FakeS3:
         self.fail_reads = False
         self.fail_writes = False
 
-    def get_object(self, Bucket, Key):
+    def _etag(self, payload):
+        return hashlib.sha256(payload).hexdigest()
+
+    def get_object(
+        self,
+        Bucket,
+        Key,
+        IfMatch=None,
+        Range=None,
+    ):
         if self.fail_reads:
             raise FakeS3Error('ServiceUnavailable', 'simulated R2 read outage')
         if Key not in self.objects:
             raise FakeS3Error('NoSuchKey', Key)
-        return {'Body': io.BytesIO(self.objects[Key])}
+        payload = self.objects[Key]
+        etag = self._etag(payload)
+        if IfMatch and str(IfMatch).strip('"') != etag:
+            raise FakeS3Error(
+                'PreconditionFailed',
+                'simulated conditional read mismatch',
+            )
+        if Range:
+            match = RAW.re.fullmatch(r'bytes=(\d+)-(\d*)', Range)
+            assert match
+            start = int(match.group(1))
+            end = (
+                int(match.group(2))
+                if match.group(2)
+                else len(payload) - 1
+            )
+            payload = payload[start:end + 1]
+        return {
+            'Body': io.BytesIO(payload),
+            'ETag': f'"{etag}"',
+        }
+
+    def head_object(self, Bucket, Key):
+        if self.fail_reads:
+            raise FakeS3Error(
+                'ServiceUnavailable',
+                'simulated R2 read outage',
+            )
+        if Key not in self.objects:
+            raise FakeS3Error('NoSuchKey', Key)
+        payload = self.objects[Key]
+        return {
+            'ETag': f'"{self._etag(payload)}"',
+            'ContentLength': len(payload),
+        }
 
     def put_object(self, Bucket, Key, Body, **kwargs):
         if self.fail_writes:
             raise FakeS3Error('ServiceUnavailable', 'simulated R2 write outage')
         self.objects[Key] = bytes(Body)
-        return {'ETag': '"fake-cache-etag"'}
+        return {
+            'ETag': f'"{self._etag(self.objects[Key])}"',
+        }
 
 
 def revisions(suffix='a'):
@@ -187,6 +234,39 @@ def test_cache_hit_skips_all_embedding_calls():
     with open(os.path.join(ROOT, 'buildings', 'jarvis', 'saved-channel-feature-contract.json'), encoding='utf-8') as handle:
         contract = json.load(handle)
     assert manifest['display_contract_version'] == contract['version']
+    assert (
+        manifest['feature_contract_identity_schema_version']
+        == RAW.FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION
+    )
+    assert manifest['feature_contract_sha256'] == RAW.FEATURE_CONTRACT_SHA256
+    assert (
+        manifest['feature_contract_document_sha256']
+        == RAW.FEATURE_CONTRACT_DOCUMENT_SHA256
+    )
+    assert (
+        output['score_ledger']['feature_contract_sha256']
+        == manifest['feature_contract_sha256']
+    )
+    assert (
+        output['score_ledger']['feature_contract_document_sha256']
+        == manifest['feature_contract_document_sha256']
+    )
+    with open(
+        os.path.join(ROOT, 'shorts_score_ledger.py'),
+        'rb',
+    ) as handle:
+        expected_ledger_source_sha256 = hashlib.sha256(
+            handle.read()
+        ).hexdigest()
+    assert (
+        RAW._score_ledger_code_sha256()
+        == expected_ledger_source_sha256
+    )
+    assert (
+        "'score_ledger_module_sha256'" in inspect.getsource(
+            RAW._score_revisions
+        )
+    ), 'replay identity must change when ledger materialization code changes'
 
 
 def test_input_and_revision_changes_invalidate_replay():
@@ -237,6 +317,114 @@ def test_source_image_encodings_converge_to_one_canonical_montage():
         base64.b64encode(canonical_bmp).decode(), 'same words', True)
     assert png_state == bmp_state
     assert png_state['montage_sha256'] == RAW.hashlib.sha256(canonical_png).hexdigest()
+
+
+def test_equivalent_ingress_modes_share_canonical_score_identity():
+    fake_s3 = FakeS3()
+    RAW.s3 = fake_s3
+    image = RAW.Image.new('RGB', (400, 142), (25, 50, 75))
+    source = io.BytesIO()
+    image.save(source, format='PNG')
+    montage = base64.b64encode(
+        RAW.canonicalize_montage_bytes(source.getvalue())
+    ).decode()
+    transcript = RAW.normalize_transcript(
+        '  This   machine does something impossible. \n'
+    )
+    replay = RAW._score_replay_prepare(
+        montage,
+        transcript,
+        True,
+        12.5,
+        'tyler',
+        revisions=revisions('cross-ingress'),
+    )
+    score = canonical_score(7, 'tyler')
+    replay_meta = RAW._score_replay_store(
+        replay,
+        score,
+        'tyler',
+        True,
+    )
+    source_modes = (
+        'device-upload',
+        'youtube',
+        'youtube-relay-acquisition',
+        'five-frame-montage',
+    )
+    outputs = [
+        RAW._score_output(
+            {},
+            'Equivalent ingress fixture',
+            montage,
+            transcript,
+            True,
+            12.5,
+            json.loads(json.dumps(score)),
+            dict(replay_meta),
+            'tyler',
+            source_mode,
+        )
+        for source_mode in source_modes
+    ]
+    first = outputs[0]
+    first_manifest = first['input_manifest']
+    first_binding = score_record_binding_sha256({
+        'id': 'equivalent-ingress',
+        'kind': 'scored',
+        'title': first['title'],
+        'score_ledger': first['score_ledger'],
+        'steer': first['steer'],
+        'features': first['features'],
+        'visual_keep_forecast': first['visual_keep_forecast'],
+        'creator_adaptive_keep_forecast':
+            first['creator_adaptive_keep_forecast'],
+        'input_manifest': first_manifest,
+    })
+    for output, source_mode in zip(outputs, source_modes):
+        manifest = output['input_manifest']
+        assert manifest['source_mode'] == source_mode
+        assert (
+            manifest['embedding_input_fingerprint']
+            == first_manifest['embedding_input_fingerprint']
+        )
+        assert (
+            manifest['score_input_fingerprint']
+            == first_manifest['score_input_fingerprint']
+        )
+        assert (
+            manifest['revision_fingerprint']
+            == first_manifest['revision_fingerprint']
+        )
+        assert (
+            manifest['output_fingerprint']
+            == first_manifest['output_fingerprint']
+        )
+        assert output['score_ledger'] == first['score_ledger']
+        assert (
+            output['score_ledger']['ledger_sha256']
+            == first['score_ledger']['ledger_sha256']
+        )
+        assert output['features'] == first['features']
+        assert output['steer'] == first['steer']
+        binding = score_record_binding_sha256({
+            'id': 'equivalent-ingress',
+            'kind': 'scored',
+            'title': output['title'],
+            'score_ledger': output['score_ledger'],
+            'steer': output['steer'],
+            'features': output['features'],
+            'visual_keep_forecast':
+                output['visual_keep_forecast'],
+            'creator_adaptive_keep_forecast':
+                output['creator_adaptive_keep_forecast'],
+            'input_manifest': manifest,
+        })
+        assert binding == first_binding
+    assert len({
+        output['input_manifest']['source_mode']
+        for output in outputs
+    }) == len(source_modes)
 
 
 def test_cache_failures_fall_through_without_hiding_scores():
@@ -323,7 +511,16 @@ def test_visual_keep_formula_replays_the_frozen_raw_coordinate():
         'status': 'research_only_not_validated_for_pre_upload_decisions',
         'input': 'fixture visual embedding',
         'formula': {
+            'estimatorId': RAW.VISUAL_KEEP_ESTIMATOR_ID,
             'scope': 'pooled_global',
+            'accountInputs': [],
+            'selected': {
+                'estimatorId': RAW.VISUAL_KEEP_ESTIMATOR_ID,
+                'pooledAlpha': 1.0,
+                'accountWeight': 0.0,
+            },
+            'outputTransform': 'clip(linear_prediction, 0, 100)',
+            'outputBounds': [0, 100],
             'pooled': {
                 'intercept': 5,
                 'coefficients': pooled_coefficients,
@@ -357,6 +554,63 @@ def test_visual_keep_formula_replays_the_frozen_raw_coordinate():
     assert replayed['model_artifact_sha256'] == artifact_sha256
     assert replayed['model_artifact_key'] == artifact_key
     assert replayed['model_manifest_sha256'] == 'b' * 64
+    for invalid_formula in (
+        {
+            **payload['formula'],
+            'estimatorId': 'unregistered-estimator',
+        },
+        {
+            **payload['formula'],
+            'accountInputs': ['creator_id'],
+        },
+        {
+            **payload['formula'],
+            'selected': {
+                **payload['formula']['selected'],
+                'pooledAlpha': 100.0,
+            },
+        },
+    ):
+        invalid_payload = {
+            **payload,
+            'formula': invalid_formula,
+        }
+        try:
+            RAW._visual_keep_forecast_from_payload(
+                embedding,
+                invalid_payload,
+                artifact_sha256,
+                artifact_key,
+                'b' * 64,
+            )
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError(
+                'unregistered visual keep formula was accepted'
+            )
+
+
+def test_revision_pinned_reads_fail_closed_on_mutation():
+    fake_s3 = FakeS3()
+    key = RAW.VISUAL_KEEP_MODEL_MANIFEST_KEY
+    original = b'{"release":"one"}'
+    fake_s3.objects[key] = original
+    RAW.s3 = fake_s3
+    revision = RAW._object_revision(key)
+    assert revision['state'] == 'present'
+    assert revision['sha256'] == hashlib.sha256(original).hexdigest()
+    RAW._PINNED_ARTIFACT_REVISIONS = {key: revision}
+    assert RAW.r2_get(key) == original
+    fake_s3.objects[key] = b'{"release":"two"}'
+    try:
+        RAW.r2_get(key)
+    except RAW.ScoreArtifactIntegrityError:
+        pass
+    else:
+        raise AssertionError(
+            'a mutated manifest was read under an older revision identity'
+        )
 
 
 if __name__ == '__main__':
@@ -366,11 +620,14 @@ if __name__ == '__main__':
         test_input_and_revision_changes_invalidate_replay()
         test_embedding_identity_is_independent_from_duration_and_creator_profile()
         test_source_image_encodings_converge_to_one_canonical_montage()
+        test_equivalent_ingress_modes_share_canonical_score_identity()
         test_cache_failures_fall_through_without_hiding_scores()
         test_corrupt_cache_is_an_integrity_miss()
         test_incomplete_scores_are_never_cached()
         test_production_lookup_precedes_embedding()
         test_visual_keep_formula_replays_the_frozen_raw_coordinate()
+        test_revision_pinned_reads_fail_closed_on_mutation()
     finally:
+        RAW._PINNED_ARTIFACT_REVISIONS = {}
         RAW.s3 = original_s3
     print('raw_upload deterministic replay: PASS')

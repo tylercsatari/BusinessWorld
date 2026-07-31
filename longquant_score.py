@@ -39,9 +39,57 @@ except Exception:
     requests = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+COORDINATE_GOVERNANCE_PATH = os.path.join(
+    HERE,
+    "buildings",
+    "jarvis",
+    "quant-coordinate-governance.json",
+)
+with open(COORDINATE_GOVERNANCE_PATH, "rb") as governance_handle:
+    COORDINATE_GOVERNANCE_BYTES = governance_handle.read()
+COORDINATE_GOVERNANCE = json.loads(
+    COORDINATE_GOVERNANCE_BYTES.decode("utf8")
+)
+COORDINATE_GOVERNANCE_SHA256 = hashlib.sha256(
+    COORDINATE_GOVERNANCE_BYTES
+).hexdigest()
 DIM = 1536
 EMB_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent"
 CHANS = ("visual", "text", "together")
+LONG_GROUPS = tuple(COORDINATE_GOVERNANCE["expansions"]["longGroups"])
+LONG_METRICS = tuple(
+    metric["key"]
+    for metric in COORDINATE_GOVERNANCE["expansions"]["longMetrics"]
+)
+LONG_OUTPUT_COORDINATES = tuple(
+    COORDINATE_GOVERNANCE["coordinates"]["longOutputPattern"]
+    .replace("{group}", group)
+    .replace("{metricKey}", metric)
+    for group in LONG_GROUPS
+    for metric in LONG_METRICS
+)
+
+
+def long_output_coordinate(group, metric):
+    if group not in LONG_GROUPS or metric not in LONG_METRICS:
+        raise ValueError(
+            f"unknown canonical Long output coordinate: {group}.{metric}"
+        )
+    return (
+        COORDINATE_GOVERNANCE["coordinates"]["longOutputPattern"]
+        .replace("{group}", group)
+        .replace("{metricKey}", metric)
+    )
+
+
+LONG_SCORE_ALIAS_SCHEMA = "long-score-alias-contract-v1"
+LONG_MAP_PLACEMENT_PATTERN = COORDINATE_GOVERNANCE["coordinates"][
+    "longMapPlacementPattern"
+]
+if LONG_GROUPS != CHANS or len(LONG_OUTPUT_COORDINATES) != 21:
+    raise RuntimeError(
+        "Long coordinate governance must define visual/text/together x 7 metrics"
+    )
 REL_FLOOR = 0.35
 # Exact p10 real-real nearest-neighbor cosine produced by harness_long.py's
 # deterministic density calibration over the frozen raw-long visual corpus.
@@ -50,6 +98,12 @@ PROVENANCE_SCHEMA_VERSION = 2
 QUERY_FINGERPRINT_GENERATION = "longquant-query-input-v2"
 NEIGHBOR_ALGORITHM_GENERATION = "longquant-neighbor-map-v2"
 DIRECT_ALGORITHM_GENERATION = "longquant-frozen-visual-ctrviews-v1"
+VISUAL_CTRVIEWS_ARTIFACT_KEY = "longform/thumb-rl/scorer_visual.npz"
+VISUAL_CTRVIEWS_MANIFEST_KEY = (
+    "longform/thumb-rl/scorer_visual.manifest.json"
+)
+VISUAL_CTRVIEWS_ARCHIVE_PREFIX = "longform/thumb-rl/by-sha256"
+VISUAL_CTRVIEWS_LINEAGE_SCHEMA_VERSION = 1
 try:
     SCORER_SOURCE_SHA256 = hashlib.sha256(open(__file__, "rb").read()).hexdigest()
 except Exception:
@@ -97,6 +151,29 @@ def canonical_json_bytes(value):
     ).encode("utf8")
 
 
+def _ledger_json_value(value):
+    if isinstance(value, float):
+        if value == 0:
+            return 0
+        if value.is_integer():
+            return int(value)
+        return value
+    if isinstance(value, list):
+        return [_ledger_json_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_ledger_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _ledger_json_value(item)
+            for key, item in value.items()
+        }
+    return value
+
+
+def ledger_json_bytes(value):
+    return canonical_json_bytes(_ledger_json_value(value))
+
+
 def sha256_bytes(value):
     return hashlib.sha256(value).hexdigest()
 
@@ -108,18 +185,53 @@ def normalize_etag(value):
 def object_revision(key):
     try:
         head = s3.head_object(Bucket=BUCKET, Key=key)
-    except Exception:
-        return {
-            "key": key,
-            "etag": None,
-            "version_id": None,
-            "content_length": None,
-        }
-    return {
+    except Exception as error:
+        raise RuntimeError(
+            f"could not pin required R2 artifact revision for {key}: "
+            f"{type(error).__name__}: {str(error)[:200]}"
+        ) from error
+    revision = {
         "key": key,
         "etag": normalize_etag(head.get("ETag")),
         "version_id": str(head.get("VersionId") or "") or None,
         "content_length": int(head["ContentLength"]) if head.get("ContentLength") is not None else None,
+    }
+    if (
+        not revision["etag"]
+        or revision["content_length"] is None
+        or revision["content_length"] <= 0
+    ):
+        raise RuntimeError(
+            f"required R2 artifact revision is incomplete for {key}"
+        )
+    return revision
+
+
+def pinned_object_bytes(key):
+    revision = object_revision(key)
+    try:
+        response = s3.get_object(
+            Bucket=BUCKET,
+            Key=key,
+            IfMatch=revision["etag"],
+        )
+        body = response["Body"].read()
+    except Exception as error:
+        raise RuntimeError(
+            f"could not read pinned R2 artifact {key}: "
+            f"{type(error).__name__}: {str(error)[:200]}"
+        ) from error
+    response_etag = normalize_etag(response.get("ETag"))
+    if (
+        response_etag
+        and response_etag != revision["etag"]
+    ) or len(body) != revision["content_length"]:
+        raise RuntimeError(
+            f"pinned R2 artifact changed while reading {key}"
+        )
+    return body, {
+        **revision,
+        "sha256": sha256_bytes(body),
     }
 
 
@@ -329,10 +441,9 @@ def cache_arrays_with_revision(chan, names=("vecs",)):
     revision_matches = bool(
         revision
         and revision.get("sha256")
-        and (
-            not head.get("etag")
-            or revision.get("etag") == head.get("etag")
-        )
+        and revision.get("etag") == head.get("etag")
+        and revision.get("content_length")
+            == head.get("content_length")
     )
     if missing or not revision_matches:
         npz = os.path.join(cdir, f"rawlong_{chan}_{tag}.npz")
@@ -343,13 +454,6 @@ def cache_arrays_with_revision(chan, names=("vecs",)):
             except Exception:
                 pass
             return cache_arrays_with_revision(chan, names)
-        if not head.get("etag"):
-            missing = list(requested)
-            for path in paths.values():
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
         with zipfile.ZipFile(npz) as zf:
             members = zf.namelist()
             for name in missing:
@@ -438,13 +542,15 @@ def load_map_with_revision(chan):
     try:
         with open(path, "r", encoding="utf8") as handle:
             mapping = json.load(handle)
-    except Exception:
-        body = r2_get(key)
-        mapping = json.loads(body.decode("utf8")) if body else {}
-        revision = {
-            **object_revision(key),
-            "sha256": sha256_bytes(body) if body else None,
-        }
+    except Exception as error:
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"pinned Long Quant map cache is invalid for {key}: "
+            f"{type(error).__name__}: {str(error)[:160]}"
+        ) from error
     revision["immutable_key"] = (
         f"raw-long/{chan}/maps/by-sha256/{revision['sha256']}.json"
         if revision.get("sha256") else None
@@ -462,17 +568,21 @@ def load_map_with_revision(chan):
     revision["published_runtime_revision"] = generation.get("runtime_revision")
     manifest_key = revision.get("manifest_key")
     if manifest_key:
-        manifest_bytes = r2_get(manifest_key)
+        manifest_bytes, manifest_revision = (
+            pinned_object_bytes(manifest_key)
+        )
         try:
             manifest = json.loads(manifest_bytes.decode("utf8")) if manifest_bytes else None
-        except Exception:
-            manifest = None
+        except Exception as error:
+            raise RuntimeError(
+                f"Long Quant generation manifest is invalid: {manifest_key}"
+            ) from error
         manifest_map_sha256 = (
             (manifest or {}).get("map_artifact", {}).get("sha256")
         )
         revision["generation_manifest"] = {
-            **object_revision(manifest_key),
-            "pointer_sha256": sha256_bytes(manifest_bytes) if manifest_bytes else None,
+            **manifest_revision,
+            "pointer_sha256": manifest_revision["sha256"],
             "manifest_sha256": (manifest or {}).get("manifest_sha256"),
             "immutable_manifest_key": (manifest or {}).get("immutable_manifest_key"),
             "generation_id": (manifest or {}).get("generation_id"),
@@ -488,8 +598,19 @@ def load_map_with_revision(chan):
                 else None
             ),
         }
+        if (
+            not manifest_map_sha256
+            or manifest_map_sha256 != revision.get("sha256")
+            or (manifest or {}).get("generation_id")
+                != revision.get("generation_id")
+        ):
+            raise RuntimeError(
+                f"Long Quant map does not match its generation manifest: {key}"
+            )
     else:
-        revision["generation_manifest"] = None
+        raise RuntimeError(
+            f"Long Quant map has no generation manifest: {key}"
+        )
     return mapping, revision
 
 
@@ -594,6 +715,7 @@ def neighbor_metric_provenance(
     map_revision,
     alignment_population,
     query_input,
+    coordinate=None,
 ):
     map_generation = map_revision.get("algorithm_generation")
     if not map_generation:
@@ -632,7 +754,8 @@ def neighbor_metric_provenance(
             ).get(metric_base)
     return {
         "schema_version": PROVENANCE_SCHEMA_VERSION,
-        "coordinate": f"long.output.{chan}.{metric_name}",
+        "coordinate": coordinate
+        or long_output_coordinate(chan, metric_name),
         "query_input": query_input,
         "embedding_archive_revision": archive_revision,
         "map_revision": map_revision,
@@ -699,6 +822,21 @@ def channel_score(chan, emb, query_input=None):
     }
     published_archive = map_revision.get("published_embedding_archive") or {}
     if (
+        not archive_revision.get("sha256")
+        or archive_revision.get("sha256")
+            != published_archive.get("sha256")
+        or (
+            archive_revision.get("etag")
+            and published_archive.get("mutable_etag")
+            and archive_revision.get("etag")
+                != published_archive.get("mutable_etag")
+        )
+    ):
+        raise RuntimeError(
+            f"raw-long/{chan} embedding archive does not match "
+            "the loaded map generation"
+        )
+    if (
         archive_revision.get("sha256")
         and archive_revision.get("sha256") == published_archive.get("sha256")
     ):
@@ -731,13 +869,17 @@ def channel_score(chan, emb, query_input=None):
         ),
     }
     metrics = {}
+    map_placements = {}
 
     def from_proj(name, aliases=()):
         for key in (name,) + tuple(aliases):
             p = proj.get(key)
             if isinstance(p, dict) and isinstance(p.get("est"), list):
                 est = wavg(p["est"], idx, weights)
-                return metric_obj(est, rank_pct(p["est"], est), key)
+                metric = metric_obj(est, rank_pct(p["est"], est), key)
+                if metric:
+                    metric["projection"] = key
+                return metric
         return None
 
     def from_axis(name, aliases=()):
@@ -758,15 +900,21 @@ def channel_score(chan, emb, query_input=None):
             }
         return None
 
-    metrics["ctr"] = from_proj("ctr") or from_axis("ctr")
-    metrics["ret30"] = from_proj("ret30", ("retention",)) or from_axis("ret30", ("retention",))
-    metrics["realviews"] = from_proj("realviews") or from_axis("realviews")
-    metrics["ctrviews"] = from_proj("ctrviews") or from_axis("ctrviews")
+    metrics["ctr"] = from_proj("ctr")
+    metrics["ret30"] = from_proj("ret30", ("retention",))
+    metrics["realviews"] = from_proj("realviews")
+    # The visual CTR+views coordinate is always the frozen direct ladder attached
+    # by main(). A neighbor map can never reuse that canonical scalar address.
+    metrics["ctrviews"] = None if chan == "visual" else from_proj("ctrviews")
 
     vest = wavg(views, idx, weights)
     metrics["views"] = metric_obj(vest, rank_pct(views, vest), "neighbor_views")
+    if metrics["views"]:
+        metrics["views"]["projection"] = "views"
     oest = wavg(outlier, idx, weights)
     metrics["scaled_views"] = metric_obj(oest, rank_pct(outlier, oest), "neighbor_outlier")
+    if metrics["scaled_views"]:
+        metrics["scaled_views"]["projection"] = "outlier"
 
     gt = []
     for v in views:
@@ -775,7 +923,29 @@ def channel_score(chan, emb, query_input=None):
         except Exception:
             gt.append(None)
     p10 = wavg(gt, idx, weights)
-    metrics["gt10m"] = metric_obj(p10, round(100.0 * p10, 1) if p10 is not None else None, "neighbor_rate")
+    # The scalar is a local conditional hit probability in [0, 1]. It is not
+    # a corpus percentile, so the percentile field remains explicitly null.
+    metrics["gt10m"] = metric_obj(
+        p10,
+        None,
+        "neighbor_probability",
+    )
+    if metrics["gt10m"]:
+        metrics["gt10m"]["projection"] = "hi10m"
+
+    for metric_name, projection_name, aliases in (
+        ("ctrviews", "ctrviews", ()),
+        ("ctr", "ctr", ()),
+        ("ret30", "ret30", ("retention",)),
+        ("views", "views", ()),
+        ("scaled_views", "outlier", ()),
+        ("realviews", "realviews", ()),
+        ("gt10m", "hi10m", ()),
+    ):
+        placement = from_axis(projection_name, aliases)
+        if placement:
+            map_placements[metric_name] = placement
+
     query_input = query_input or query_input_manifest(None, "", "not-supplied")
     for metric_name, metric in metrics.items():
         if metric:
@@ -788,6 +958,26 @@ def channel_score(chan, emb, query_input=None):
                 alignment_population,
                 query_input,
             )
+    for metric_name, placement in map_placements.items():
+        canonical_projection = {
+            "scaled_views": "outlier",
+            "gt10m": "hi10m",
+        }.get(metric_name, metric_name)
+        coordinate = (
+            LONG_MAP_PLACEMENT_PATTERN
+            .replace("{group}", chan)
+            .replace("{projectionKey}", canonical_projection)
+        )
+        placement["provenance"] = neighbor_metric_provenance(
+            chan,
+            metric_name,
+            placement,
+            archive_revision,
+            map_revision,
+            alignment_population,
+            query_input,
+            coordinate=coordinate,
+        )
 
     neighbors = []
     for i, sim in zip(idx[:12], sims[:12]):
@@ -800,6 +990,7 @@ def channel_score(chan, emb, query_input=None):
         })
     return {
         "metrics": metrics,
+        "map_placements": map_placements,
         "neighbors": neighbors,
         "nn_cos": round(float(sims[0]), 6) if len(sims) else None,
         "alignment": {
@@ -817,65 +1008,159 @@ def channel_score(chan, emb, query_input=None):
 
 
 def visual_ctrviews_exact(ev):
-    blend = ladder = None
-    p90 = None
-    artifact_path = None
-    artifact_sha256 = None
-    artifact_archive_key = None
-    lineage_manifest_sha256 = None
-    lineage_schema_version = None
-    lineage_manifest = None
-    built = r2_get("longform/thumb-rl/scorer_visual.npz")
-    if built:
-        try:
-            sc = np.load(io.BytesIO(built), allow_pickle=False)
+    built = r2_get(VISUAL_CTRVIEWS_ARTIFACT_KEY)
+    manifest_bytes = r2_get(VISUAL_CTRVIEWS_MANIFEST_KEY)
+    if not built and not manifest_bytes:
+        return None
+    if not built:
+        raise RuntimeError(
+            "long visual scorer artifact is missing for its release manifest"
+        )
+    if not manifest_bytes:
+        raise RuntimeError(
+            "long visual scorer release manifest is missing"
+        )
+    try:
+        release_manifest = json.loads(manifest_bytes.decode("utf8"))
+    except Exception as error:
+        raise RuntimeError(
+            "long visual scorer release manifest is not valid JSON"
+        ) from error
+    if not isinstance(release_manifest, dict):
+        raise RuntimeError("long visual scorer release manifest is not an object")
+
+    artifact_sha256 = sha256_bytes(built)
+    artifact_archive_key = (
+        f"{VISUAL_CTRVIEWS_ARCHIVE_PREFIX}/{artifact_sha256}.npz"
+    )
+    immutable_manifest_key = (
+        f"{VISUAL_CTRVIEWS_ARCHIVE_PREFIX}/{artifact_sha256}.manifest.json"
+    )
+    exact_sha = re.compile(r"^[a-f0-9]{64}$")
+    required_manifest = {
+        "schemaVersion": VISUAL_CTRVIEWS_LINEAGE_SCHEMA_VERSION,
+        "producer": "build_thumb_assets.py",
+        "embeddingModel": "gemini-embedding-2",
+        "embeddingDimensions": DIM,
+        "artifactSha256": artifact_sha256,
+        "canonicalKey": VISUAL_CTRVIEWS_ARTIFACT_KEY,
+        "archiveKey": artifact_archive_key,
+    }
+    for field, expected in required_manifest.items():
+        if release_manifest.get(field) != expected:
+            raise RuntimeError(
+                f"long visual scorer release manifest {field} mismatch"
+            )
+    for field in (
+        "producerSourceSha256",
+        "lineageSha256",
+        "artifactSha256",
+    ):
+        if not exact_sha.fullmatch(str(release_manifest.get(field) or "")):
+            raise RuntimeError(
+                f"long visual scorer release manifest {field} is invalid"
+            )
+
+    archived = r2_get(artifact_archive_key)
+    immutable_manifest_bytes = r2_get(immutable_manifest_key)
+    if not archived or sha256_bytes(archived) != artifact_sha256:
+        raise RuntimeError(
+            "long visual scorer immutable artifact is missing or mismatched"
+        )
+    if archived != built:
+        raise RuntimeError(
+            "long visual scorer mutable artifact differs from immutable release"
+        )
+    if not immutable_manifest_bytes or immutable_manifest_bytes != manifest_bytes:
+        raise RuntimeError(
+            "long visual scorer immutable release manifest is missing or mismatched"
+        )
+
+    try:
+        with np.load(io.BytesIO(built), allow_pickle=False) as sc:
+            required_arrays = {"blend", "ladder", "LINEAGE_JSON", "LINEAGE_SHA256"}
+            if not required_arrays.issubset(sc.files):
+                raise RuntimeError(
+                    "long visual scorer artifact lacks required lineage arrays"
+                )
             blend = np.asarray(sc["blend"], np.float32)
             ladder = np.asarray(sc["ladder"], np.float32)
-            p90 = float(np.asarray(sc["p90"]).reshape(-1)[0]) if "p90" in sc.files else None
-            artifact_path = "longform/thumb-rl/scorer_visual.npz"
-            artifact_sha256 = hashlib.sha256(built).hexdigest()
-            if "LINEAGE_JSON" in sc.files:
-                artifact_archive_key = f"longform/thumb-rl/by-sha256/{artifact_sha256}.npz"
-                lineage_text = str(np.asarray(sc["LINEAGE_JSON"]).reshape(-1)[0])
-                lineage_manifest_sha256 = hashlib.sha256(lineage_text.encode()).hexdigest()
-                recorded_lineage_sha = (
-                    str(np.asarray(sc["LINEAGE_SHA256"]).reshape(-1)[0])
-                    if "LINEAGE_SHA256" in sc.files else None
-                )
-                if recorded_lineage_sha and recorded_lineage_sha != lineage_manifest_sha256:
-                    raise RuntimeError("long visual scorer lineage manifest hash mismatch")
-                lineage_manifest = json.loads(lineage_text)
-                lineage_schema_version = lineage_manifest.get("schemaVersion")
-        except RuntimeError:
-            raise
-        except Exception:
-            blend = ladder = None
-    if blend is None or ladder is None:
-        legacy = r2_get("longform/thumb-rl/scorer_visual.json")
-        if not legacy:
-            return None
-        sc = json.loads(legacy.decode("utf8"))
-        blend = np.asarray(sc["blend"], np.float32)
-        ladder = np.asarray(sc["ladder"], np.float32)
-        p90 = sc.get("p90")
-        artifact_path = "longform/thumb-rl/scorer_visual.json"
-        artifact_sha256 = hashlib.sha256(legacy).hexdigest()
+            p90 = (
+                float(np.asarray(sc["p90"]).reshape(-1)[0])
+                if "p90" in sc.files
+                else None
+            )
+            lineage_text = str(np.asarray(sc["LINEAGE_JSON"]).reshape(-1)[0])
+            recorded_lineage_sha = str(
+                np.asarray(sc["LINEAGE_SHA256"]).reshape(-1)[0]
+            )
+    except RuntimeError:
+        raise
+    except Exception as error:
+        raise RuntimeError(
+            "long visual scorer artifact cannot be decoded"
+        ) from error
+
+    lineage_manifest_sha256 = sha256_bytes(lineage_text.encode("utf8"))
+    if (
+        recorded_lineage_sha != lineage_manifest_sha256
+        or release_manifest["lineageSha256"] != lineage_manifest_sha256
+    ):
+        raise RuntimeError("long visual scorer lineage manifest hash mismatch")
+    try:
+        lineage_manifest = json.loads(lineage_text)
+    except Exception as error:
+        raise RuntimeError(
+            "long visual scorer embedded lineage is not valid JSON"
+        ) from error
+    if not isinstance(lineage_manifest, dict):
+        raise RuntimeError("long visual scorer embedded lineage is not an object")
+    for field, value in lineage_manifest.items():
+        if release_manifest.get(field) != value:
+            raise RuntimeError(
+                f"long visual scorer embedded lineage {field} mismatch"
+            )
+    lineage_schema_version = lineage_manifest.get("schemaVersion")
+    if lineage_schema_version != VISUAL_CTRVIEWS_LINEAGE_SCHEMA_VERSION:
+        raise RuntimeError("long visual scorer lineage schema is unsupported")
+    if blend.shape != (DIM,) or not np.all(np.isfinite(blend)):
+        raise RuntimeError("long visual scorer blend is invalid")
+    if (
+        ladder.ndim != 1
+        or ladder.size == 0
+        or not np.all(np.isfinite(ladder))
+        or np.any(ladder[1:] < ladder[:-1])
+    ):
+        raise RuntimeError("long visual scorer calibration ladder is invalid")
+    if p90 is not None and not np.isfinite(p90):
+        raise RuntimeError("long visual scorer p90 is invalid")
+
+    release_manifest_sha256 = sha256_bytes(manifest_bytes)
     artifact_revision = {
-        **object_revision(artifact_path),
+        **object_revision(VISUAL_CTRVIEWS_ARTIFACT_KEY),
         "sha256": artifact_sha256,
         "immutable_key": artifact_archive_key,
+        "immutable_revision": object_revision(artifact_archive_key),
+        "manifest_key": VISUAL_CTRVIEWS_MANIFEST_KEY,
+        "manifest_sha256": release_manifest_sha256,
+        "manifest_revision": object_revision(VISUAL_CTRVIEWS_MANIFEST_KEY),
+        "immutable_manifest_key": immutable_manifest_key,
+        "immutable_manifest_revision": object_revision(
+            immutable_manifest_key
+        ),
         "lineage_manifest_sha256": lineage_manifest_sha256,
         "lineage_schema_version": lineage_schema_version,
     }
-    populations = (lineage_manifest or {}).get("populations") or {}
+    populations = lineage_manifest.get("populations") or {}
     dataset_lineage = {
         "embedding_store_population": populations.get("embeddingStore"),
         "frozen_ctr_fit_population": populations.get("privateCtrFit"),
         "curated_views_fit_population": populations.get("curatedViewsFit"),
         "calibration_ladder_population": populations.get("calibrationLadder"),
-        "source_revisions": (lineage_manifest or {}).get("sourceRevisions"),
+        "source_revisions": lineage_manifest.get("sourceRevisions"),
         "lineage_manifest": lineage_manifest,
         "lineage_manifest_sha256": lineage_manifest_sha256,
+        "release_manifest_sha256": release_manifest_sha256,
     }
     en = norm(ev)
     proj = float(en @ blend)
@@ -886,9 +1171,12 @@ def visual_ctrviews_exact(ev):
         "kind": "visual_ctrviews_ladder",
         "proj": round(proj, 4),
         "p90": p90,
-        "artifact": artifact_path,
+        "artifact": VISUAL_CTRVIEWS_ARTIFACT_KEY,
         "artifact_sha256": artifact_sha256,
         "artifact_archive_key": artifact_archive_key,
+        "release_manifest_key": VISUAL_CTRVIEWS_MANIFEST_KEY,
+        "release_manifest_sha256": release_manifest_sha256,
+        "immutable_manifest_key": immutable_manifest_key,
         "lineage_manifest_sha256": lineage_manifest_sha256,
         "lineage_schema_version": lineage_schema_version,
         "dataset_lineage": dataset_lineage,
@@ -910,7 +1198,7 @@ def require_visual_ctrviews_exact(ev):
 def attach_direct_query_provenance(metric, query_input):
     metric["provenance"] = {
         "schema_version": PROVENANCE_SCHEMA_VERSION,
-        "coordinate": "long.output.visual.ctrviews",
+        "coordinate": long_output_coordinate("visual", "ctrviews"),
         "query_input": query_input,
         "artifact_revision": metric.get("artifact_revision"),
         "dataset_lineage": metric.get("dataset_lineage"),
@@ -981,6 +1269,133 @@ def dataset_runtime_manifest(channels, query_input, direct_metric=None):
     }
 
 
+def build_long_score_ledger(channels):
+    entries = []
+    producer_errors = []
+    expected_by_group = set(LONG_METRICS)
+    for group, channel in (channels or {}).items():
+        unknown = set(((channel or {}).get("metrics") or {}).keys()) - expected_by_group
+        for metric_name in sorted(unknown):
+            producer_errors.append(
+                f"unregistered scalar metric emitted: {group}.{metric_name}"
+            )
+    for coordinate in LONG_OUTPUT_COORDINATES:
+        _, _, group, metric_name = coordinate.split(".", 3)
+        channel = (channels or {}).get(group)
+        metric = ((channel or {}).get("metrics") or {}).get(metric_name)
+        provenance = (metric or {}).get("provenance") or {}
+        value = (metric or {}).get("est")
+        percentile = (metric or {}).get("pctile")
+        available = bool(
+            value is not None
+            and isinstance(value, (int, float))
+            and np.isfinite(float(value))
+        )
+        if metric and provenance.get("coordinate") != coordinate:
+            producer_errors.append(
+                f"{coordinate}: provenance coordinate "
+                f"{provenance.get('coordinate')!r} does not match"
+            )
+        if channel is None:
+            unavailable_reason = "input_channel_not_scored"
+        elif metric is None:
+            unavailable_reason = "scalar_estimate_not_materialized"
+        elif not available:
+            unavailable_reason = "scalar_estimate_not_finite"
+        else:
+            unavailable_reason = None
+        entries.append({
+            "coordinate_id": coordinate,
+            "group": group,
+            "metric": metric_name,
+            "available": available,
+            "value": float(value) if available else None,
+            "percentile": (
+                float(percentile)
+                if available
+                and percentile is not None
+                and isinstance(percentile, (int, float))
+                and np.isfinite(float(percentile))
+                else None
+            ),
+            "kind": (metric or {}).get("kind"),
+            "projection": (metric or {}).get("projection"),
+            "unavailable_reason": unavailable_reason,
+            "provenance": provenance or None,
+        })
+    ledger = {
+        "schema": "long-stored-score-ledger-v1",
+        "schema_version": 1,
+        "percentile_unit": COORDINATE_GOVERNANCE["percentileStorageUnit"],
+        "ledger_version": COORDINATE_GOVERNANCE["ledgerVersion"],
+        "governance_schema_version": COORDINATE_GOVERNANCE["schemaVersion"],
+        "governance_sha256": COORDINATE_GOVERNANCE_SHA256,
+        "coordinate_ids": list(LONG_OUTPUT_COORDINATES),
+        "entries": entries,
+        "values_by_id": {
+            entry["coordinate_id"]: entry["value"] for entry in entries
+        },
+        "percentiles_by_id": {
+            entry["coordinate_id"]: entry["percentile"] for entry in entries
+        },
+        "available_count": sum(1 for entry in entries if entry["available"]),
+        "expected_count": len(entries),
+        "schema_complete": len(entries) == 21,
+        "all_values_available": all(entry["available"] for entry in entries),
+        "producer_errors": producer_errors,
+        "contract_valid": len(entries) == 21 and not producer_errors,
+    }
+    ledger["ledger_sha256"] = sha256_bytes(ledger_json_bytes(ledger))
+    return ledger
+
+
+def score_alias_contract(
+    ledger,
+    coordinate_id,
+    aliases,
+    decision_use,
+    decision_eligible,
+):
+    entry = next(
+        (
+            item
+            for item in (ledger or {}).get("entries", [])
+            if item.get("coordinate_id") == coordinate_id
+        ),
+        None,
+    )
+    percentile = (entry or {}).get("percentile")
+    if (
+        not (ledger or {}).get("contract_valid")
+        or not (entry or {}).get("available")
+        or percentile is None
+        or not isinstance(percentile, (int, float))
+        or not np.isfinite(float(percentile))
+    ):
+        canonical_value = None
+    else:
+        raw_value = float(percentile)
+        canonical_value = round(
+            raw_value / 100.0,
+            4,
+        )
+    return canonical_value, {
+        "schema": LONG_SCORE_ALIAS_SCHEMA,
+        "canonical_coordinate_id": coordinate_id,
+        "canonical_field": "percentile",
+        "canonical_value": canonical_value,
+        "decision_use": decision_use,
+        "decision_eligible": bool(decision_eligible),
+        "compatibility_aliases": {
+            alias: {
+                "coordinate_id": coordinate_id,
+                "field": "percentile",
+            }
+            for alias in aliases
+        },
+    }
+
+
 def text_only_score(
     title,
     emb_json,
@@ -1011,18 +1426,25 @@ def text_only_score(
     )
     ch = channel_score("text", et, query_input=query_input)
     channels = {"text": ch}
+    long_score_ledger = build_long_score_ledger(channels)
 
     def pick(metric):
         m = ((ch or {}).get("metrics") or {}).get(metric)
         return m if m and m.get("pctile") is not None else None
 
-    headline = pick("ctrviews") or pick("views")
-    hp = (headline or {}).get("pctile")
-    pctile = round(float(hp) / 100.0, 4) if hp is not None and float(hp) > 1 else (hp or 0)
+    headline_metric = "ctrviews" if pick("ctrviews") else "views"
+    pctile, alias_contract = score_alias_contract(
+        long_score_ledger,
+        long_output_coordinate("text", headline_metric),
+        ("pctile", "text_pctile"),
+        "text_diagnostic_only",
+        False,
+    )
     out = {
         "title": title,
         "pctile": pctile,
         "text_pctile": pctile,
+        "score_alias_contract": alias_contract,
         "primary_channel": "text",
         "nn_cos": (ch or {}).get("nn_cos"),
         "channel_roles": {
@@ -1038,6 +1460,7 @@ def text_only_score(
             "ctrviews": pick("ctrviews"),
         },
         "channels": channels,
+        "long_score_ledger": long_score_ledger,
         "emb_preview": {"visual": None, "text": preview(et), "together": None},
         "input_manifest": {
             "domain": "longquant",
@@ -1046,6 +1469,8 @@ def text_only_score(
             "embedding_model": "gemini-embedding-2",
             "embedding_dimensions": DIM,
             "display_contract_version": 2,
+            "coordinate_governance_schema_version": COORDINATE_GOVERNANCE["schemaVersion"],
+            "coordinate_governance_sha256": COORDINATE_GOVERNANCE_SHA256,
             "score_text": title,
             "score_text_sha256": query_input["text"]["sha256"],
             "score_text_present": query_input["text"]["present"],
@@ -1058,7 +1483,7 @@ def text_only_score(
                 query_input,
             ),
             "display_preference": ["text"],
-            "primary_score": "text-channel ctrviews neighbor percentile in the raw-long text latent space",
+            "primary_score": "text-channel scalar CTR+views estimate when materialized; otherwise raw-views neighbor estimate",
             "threshold_uses": "text only",
             "note": "Title text embedded on its own — the same corpus and metric projections as the visual maps, but nothing visual was scored. This never feeds the thumbnail threshold.",
             "channels": {
@@ -1150,11 +1575,20 @@ def main():
                 return m
         return None
 
-    # This is the exact generator-training performance axis. A title can be
-    # evaluated beside it, but can never suppress or inflate thumbnail potential.
-    headline = pick("ctrviews", ("visual",)) or pick("views", ("visual",))
-    hp = (headline or {}).get("pctile")
-    pctile = round(float(hp) / 100.0, 4) if hp is not None and float(hp) > 1 else (hp or 0)
+    long_score_ledger = build_long_score_ledger(channels)
+    # All compatibility names and decisions resolve to this one registered
+    # scalar. Text/together channels remain diagnostics.
+    pctile, alias_contract = score_alias_contract(
+        long_score_ledger,
+        long_output_coordinate("visual", "ctrviews"),
+        ("pctile", "visual_pctile", "thumbnail_potential"),
+        "thumbnail_threshold_and_rewards",
+        True,
+    )
+    if pctile is None:
+        raise RuntimeError(
+            "canonical long.output.visual.ctrviews percentile is unavailable"
+        )
     visual_nn = (channels.get("visual") or {}).get("nn_cos")
     relevance_penalty = None if relevance is None else max(0.0, REL_FLOOR - relevance) * 2.0
     density_penalty = None if visual_nn is None else max(0.0, DENSITY_FLOOR - float(visual_nn)) * 1.5
@@ -1173,6 +1607,8 @@ def main():
         "embedding_model": "gemini-embedding-2",
         "embedding_dimensions": DIM,
         "display_contract_version": 2,
+        "coordinate_governance_schema_version": COORDINATE_GOVERNANCE["schemaVersion"],
+        "coordinate_governance_sha256": COORDINATE_GOVERNANCE_SHA256,
         "score_text": title,
         "score_text_sha256": query_input["text"]["sha256"],
         "score_text_present": query_input["text"]["present"],
@@ -1191,6 +1627,15 @@ def main():
         "visual_ctrviews_artifact": exact.get("artifact"),
         "visual_ctrviews_artifact_sha256": exact.get("artifact_sha256"),
         "visual_ctrviews_artifact_archive_key": exact.get("artifact_archive_key"),
+        "visual_ctrviews_release_manifest_key": exact.get(
+            "release_manifest_key"
+        ),
+        "visual_ctrviews_release_manifest_sha256": exact.get(
+            "release_manifest_sha256"
+        ),
+        "visual_ctrviews_immutable_manifest_key": exact.get(
+            "immutable_manifest_key"
+        ),
         "visual_ctrviews_lineage_manifest_sha256": exact.get("lineage_manifest_sha256"),
         "visual_ctrviews_lineage_schema_version": exact.get("lineage_schema_version"),
         "note": "Transcript or channel context can guide generation upstream. The threshold score embeds only the thumbnail image. Title text is embedded separately for relevance and diagnostic text/together maps; the together embedding never changes thumbnail potential.",
@@ -1220,6 +1665,7 @@ def main():
         "pctile": pctile,
         "visual_pctile": pctile,
         "thumbnail_potential": pctile,
+        "score_alias_contract": alias_contract,
         "reward": round(float(reward), 4),
         "training_reward": round(float(thumbnail_model_reward), 4) if thumbnail_model_reward is not None else None,
         "thumbnail_model_reward": round(float(thumbnail_model_reward), 4) if thumbnail_model_reward is not None else None,
@@ -1229,6 +1675,7 @@ def main():
         "relevance": round(relevance, 4) if relevance is not None else None,
         "nn_cos": round(float(visual_nn), 6) if visual_nn is not None else None,
         "reward_trace": {
+            "schema": "long-score-reward-trace-v1",
             "visual_pctile": round(float(pctile), 4),
             "relevance": round(relevance, 4) if relevance is not None else None,
             "relevance_floor": REL_FLOOR,
@@ -1257,6 +1704,7 @@ def main():
             "ctrviews": pick("ctrviews", ("visual",)),
         },
         "channels": channels,
+        "long_score_ledger": long_score_ledger,
         "emb_preview": {"visual": preview(ev), "text": preview(et), "together": preview(eg)},
         "input_manifest": input_manifest,
     }
