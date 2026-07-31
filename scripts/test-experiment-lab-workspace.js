@@ -314,6 +314,20 @@ creatorWorkspace = rebind(creatorWorkspace);
 assert(validateWorkspace(ownerWorkspace).valid);
 assert(validateWorkspace(creatorWorkspace).valid);
 
+// Canonical JSON object identity is independent of insertion order. R2 may
+// parse the same bound account fields in an order different from the producer.
+const reorderedPersistedAccount = clone(ownerWorkspace);
+reorderedPersistedAccount.account = {
+    email: ownerWorkspace.account.email,
+    id: ownerWorkspace.account.id,
+    name: ownerWorkspace.account.name,
+    role: ownerWorkspace.account.role,
+};
+assert.deepStrictEqual(
+    validateWorkspace(reorderedPersistedAccount),
+    { valid: true, errors: [] }
+);
+
 const expectedSha = sha256Bytes(
     canonicalJsonBytes(bindingPayload(ownerWorkspace))
 );

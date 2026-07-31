@@ -384,8 +384,9 @@ function validateWorkspace(workspace) {
     try {
         const identity = accountIdentity(workspace.account);
         if (
-            JSON.stringify(identity)
-            !== JSON.stringify(workspace.account)
+            !canonicalJsonBytes(identity).equals(
+                canonicalJsonBytes(workspace.account)
+            )
         ) errors.push('workspace account identity is invalid');
     } catch (error) {
         errors.push(error.message);
