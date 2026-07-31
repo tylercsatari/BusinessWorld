@@ -318,6 +318,11 @@ function runtimeFor(cloud) {
                 'canonical scorer validation was unexpectedly reached'
             );
         },
+        url: {
+            searchParams: new URLSearchParams(),
+        },
+        experimentLabAccountScope: async () => null,
+        requireExperimentLabItem: async () => null,
         readBody,
         sendJsonGz,
     });
@@ -1159,7 +1164,7 @@ async function main() {
         async () => {
             const openSavedSource = sourceSlice(
                 retentionUiSource,
-                'async function openSaved(id)',
+            'async function openSaved(id, options)',
                 'function savedDetail()'
             );
             assert.match(

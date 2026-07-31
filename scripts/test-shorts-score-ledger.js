@@ -141,8 +141,13 @@ function shortsBrowserLedgerApi() {
         ROOT,
         'buildings/jarvis/jarvis-retention.js'
     );
-    const marker =
-        '    return { mount, mountExperiment, __st: () => st };';
+    const marker = `    return {
+        mount,
+        mountExperiment,
+        unmountExperiment,
+        getExperimentContext: () => LAB_CONTEXT,
+        __st: () => st,
+    };`;
     const source = fs.readFileSync(uiPath, 'utf8');
     assert(
         source.includes(marker),
@@ -153,6 +158,8 @@ function shortsBrowserLedgerApi() {
         `    return {
             mount,
             mountExperiment,
+            unmountExperiment,
+            getExperimentContext: () => LAB_CONTEXT,
             __st: () => st,
             __test: {
                 shortsLedgerState,

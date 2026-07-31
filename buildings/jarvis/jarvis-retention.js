@@ -7,9 +7,33 @@
  */
 const JarvisRetention = (function () {
     'use strict';
-    const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
+    const BASE_COLORS = Object.freeze({ bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
-        orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
+        orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' });
+    const EXPERIMENT_LAB_COLORS = Object.freeze({
+        bg: '#eee7d8',
+        card: '#f7f0e2',
+        card2: '#e4dccb',
+        border: '#b9b1a1',
+        border2: '#8e968f',
+        text: '#14231c',
+        dim: '#526158',
+        mute: '#617067',
+        faint: '#899087',
+        cyan: '#1f8a78',
+        green: '#257b62',
+        orange: '#d7673f',
+        red: '#b54e35',
+        purple: '#6671b9',
+        yellow: '#d5a33f',
+        amber: '#b98424',
+        accent: '#d7673f',
+    });
+    const C = { ...BASE_COLORS };
+    let mountSurface = 'jarvis';
+    let mountGeneration = 0;
+    let LAB_CONTEXT = null;
+    let LAB_TEAM_DATA = {};
     let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, EXPPLOTS = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVALIDATION = null, SAVEDCHANNELVIDEOCACHE = {}, SCORECONTRACT = null, SCORECONTRACT_PROMISE = null, SCORECONTRACT_AT = 0, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const RAW_REQUESTS = {};
     const EXPPLOT_RELEASES = {};
@@ -23,7 +47,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
     st.savedValidationFeature = null;
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
@@ -3023,7 +3047,7 @@ const JarvisRetention = (function () {
     function rawViewTabs() {
         const active = st.rawView || 'map';
         const tab = (id, label) => `<span data-rawview="${id}" style="cursor:pointer;border:1px solid ${active === id ? C.cyan : C.border};background:${active === id ? C.cyan + '18' : 'transparent'};color:${active === id ? C.cyan : C.dim};padding:5px 12px;font-size:11px;font-weight:900">${label}</span>`;
-        return `<div style="display:flex;gap:0;margin-bottom:14px">${tab('map', 'Embedding map')}${tab('predictor', 'Predictor lab')}</div>`;
+        return `<div style="display:flex;gap:0;margin-bottom:14px">${tab('map', 'Embedding map')}${isExperimentLabSurface() ? '' : tab('predictor', 'Predictor lab')}</div>`;
     }
     function predictorMetric(label, value, detail, color) {
         return `<div style="background:${C.card2};border:1px solid ${C.border};padding:9px 11px;min-width:125px"><div style="font-size:8px;color:${C.mute};text-transform:uppercase;font-weight:800">${label}</div><div style="font-size:19px;color:${color || C.text};font-weight:900;margin-top:2px">${value}</div><div style="font-size:8px;color:${C.faint};margin-top:2px;line-height:1.3">${detail || ''}</div></div>`;
@@ -3181,7 +3205,11 @@ const JarvisRetention = (function () {
         const allInputs = keep ? `${fmtv(point.allInputsPredicted, 2)}% keep` : `${fv(point.allInputsPredictedViews)} views`;
         const adjustment = keep ? `${sgn(point.groupAdjustment, 2)} points` : `${fmtv(Math.pow(10, point.groupAdjustment || 0), 2)}×`;
         const group = keep ? point.accountName : point.channelName;
-        const image = keep ? `/api/raw/montage/${esc(point.id)}` : `/api/raw/saved-channel/${esc(point.channel)}/montage/${esc(point.id)}`;
+        const image = authenticatedMediaUrl(
+            keep
+                ? `/api/raw/montage/${esc(point.id)}`
+                : `/api/raw/saved-channel/${esc(point.channel)}/montage/${esc(point.id)}`
+        );
         return cardc(`<div style="display:grid;grid-template-columns:minmax(150px,240px) 1fr 18px;gap:12px;align-items:start"><img src="${image}" alt="" style="width:100%;aspect-ratio:5/1;object-fit:cover;background:${C.card2};border:1px solid ${C.border}"/><div><div style="font-size:9px;color:${C.cyan};text-transform:uppercase;font-weight:900">exact held-out video</div><div style="font-size:13px;color:${C.text};font-weight:900;margin-top:3px">${esc(point.title)}</div><div style="font-size:9px;color:${C.mute};margin-top:3px">${esc(group || '')} · sparse content <b style="color:${C.text}">${content}</b> · all-input benchmark <b style="color:${C.yellow}">${allInputs}</b> · known-group adjustment <b style="color:${C.purple}">${adjustment}</b> · final sparse <b style="color:${C.cyan}">${predicted}</b> · actual <b style="color:${C.green}">${actual}</b>${keep ? ` · error ${sgn(point.error, 2)} points` : ` · factor error ${fmtv(point.factorError, 2)}× · fold-only uncertainty σ ${fmtv(point.residualSigma, 3)} log`}</div><a href="https://www.youtube.com/watch?v=${esc(point.id)}" target="_blank" style="display:inline-block;color:${C.cyan};font-size:9px;margin-top:6px">open source video →</a></div><span data-predictorpointclose style="cursor:pointer;color:${C.dim};font-size:16px">×</span></div>`, 11);
     }
     function renderRawPredictor() {
@@ -3811,7 +3839,7 @@ const JarvisRetention = (function () {
         const cards = g.attempts.map(a => {
             const reasoning = a.reasoning ? `<details style="margin-top:6px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">reasoning</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px;white-space:pre-wrap;max-height:220px;overflow:auto">${esc(a.reasoning)}</div></details>` : '';
             return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:8px;background:${C.card2}">
-              <img src="/api/hooks/grpo/montage/${run}/${id}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">
+              <img src="${esc(authenticatedMediaUrl(`/api/hooks/grpo/montage/${run}/${id}_${a.k}`))}" style="width:100%;border-radius:6px;display:block" loading="lazy">
               <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">
                 <span style="color:${C.amber}">legacy score aliases hidden · non-rankable</span>
                 <span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span>
@@ -3888,8 +3916,8 @@ const JarvisRetention = (function () {
     function expDemoPoll(rid, tries) {
         tries = tries || 0;
         st.expGenT0 = st.expGenT0 || Date.now();
-        fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStat = s || null; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
-        fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
+        rtFetchJson('/api/hooks/demo/status/' + rid, {}, 2).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStat = s || null; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
+        rtFetchJson('/api/hooks/grpo/group/demo/' + rid, {}, 2).then(j => {
             if (j && Array.isArray(j.attempts) && j.attempts.length) {
                 EXPDEMO[rid] = j; rtgUpdateExp();               // render live — hooks + frames stream in
                 if (j.done) {                                   // fully complete → stop, auto-score the first
@@ -3917,8 +3945,8 @@ const JarvisRetention = (function () {
         const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
         st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null; st.warmHold = 1;
         window.clearInterval(st._genTick); st._genTick = window.setInterval(() => { if (st.expGenBusy) rtgUpdateExp(); else window.clearInterval(st._genTick); }, 1000);   // live elapsed timer
-        fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem }) })
-            .then(r => r.json()).then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
+        rtFetchJson('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem }) }, 1)
+            .then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
             .catch(() => { st.expGenBusy = false; rtgUpdateExp(); });
         rtgUpdateExp();
     }
@@ -3951,14 +3979,14 @@ const JarvisRetention = (function () {
                     // hosted result: 5 separate frame images; legacy box result: one montage + keep%
                     const errFor = i => ((a.errs || []).find(x => x.indexOf('frame ' + (i + 1) + ':') === 0) || '').slice(9);
                     const frameTile = (fid, i) => {
-                        if (fid) return `<div style="flex:1;position:relative"><img src="/api/hooks/grpo/montage/demo/${esc(fid)}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>`;
+                        if (fid) return `<div style="flex:1;position:relative"><img src="${esc(authenticatedMediaUrl(`/api/hooks/grpo/montage/demo/${fid}`))}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>`;
                         const fe = errFor(i);   // failed → red ✕ with the REAL error on hover; pending → empty slot
                         return fe ? `<div title="${esc('frame ' + (i + 1) + ' failed: ' + fe)}" style="flex:1;aspect-ratio:9/16;background:${C.bg};border:1px solid #ef444455;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#ef4444;font-size:13px;font-weight:800;cursor:help">✕</div>`
                                   : `<div style="flex:1;aspect-ratio:9/16;background:${C.bg};border-radius:4px"></div>`;
                     };
                     const frameStrip = (a.frame_imgs && a.frame_imgs.length)
                         ? `<div style="display:flex;gap:3px">${a.frame_imgs.map(frameTile).join('')}</div>`
-                        : `<img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
+                        : `<img src="${esc(authenticatedMediaUrl(`/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}`))}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
                     const _hardErrs = (a.errs || []).filter(x => x.indexOf('FAILED') >= 0).length;
                     const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:${_hardErrs ? '#ef4444' : C.amber};margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame note${a.errs.length > 1 ? 's' : ''} (${_hardErrs ? _hardErrs + ' missing, ' : ''}rest = fallback renders) — hover for details</div>` : '';
                     const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
@@ -4093,7 +4121,7 @@ const JarvisRetention = (function () {
     function grindPoll(rid, tries) {
         tries = tries || 0;
         const again = ms => { if (tries < 7200 && st.grindRid === rid) setTimeout(() => grindPoll(rid, tries + 1), ms); };
-        fetch('/api/hooks/grind/run/' + rid).then(async response => {
+        rtFetch('/api/hooks/grind/run/' + rid).then(async response => {
             if (response.status === 404) return null;
             const body = await response.json();
             if (response.ok || response.status === 409) return body;
@@ -4120,7 +4148,7 @@ const JarvisRetention = (function () {
     function grindEnsure() {
         if (GRINDLIST !== null) return;
         GRINDLIST = { loading: 1 };
-        fetch('/api/hooks/grind/runs').then(r => r.json()).then(j => {
+        rtFetchJson('/api/hooks/grind/runs', {}, 3).then(j => {
             GRINDLIST = j || { runs: [] };
             // Only auto-attach a RUNNING run (so a page reload resumes YOUR grind) — and it gets a
             // clear "already running when you opened this" banner unless this page started it.
@@ -4137,8 +4165,8 @@ const JarvisRetention = (function () {
         const metric = st.grindMetric || 'keep';
         const coordinateId = `shorts.stored.together.${metric}`;
         st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile() }) })
-            .then(r => r.json()).then(j => {
+        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile() }) }, 1)
+            .then(j => {
                 st.grindStarting = 0;
                 if (j.rid) {
                     st.grindMine = st.grindMine || {};
@@ -4176,7 +4204,7 @@ const JarvisRetention = (function () {
         st.grindErr = null;
         st.grindOpening = k; rtgUpdateExp();
         try {
-            const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => { if (!r.ok) throw new Error('not scored'); return r.json(); });
+            const score = await rtFetchJson('/api/hooks/grind/score/' + rid + '_' + k, {}, 3);
             if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
             const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
             score.montage = monUrl.split('base64,').pop();
@@ -4195,7 +4223,7 @@ const JarvisRetention = (function () {
             const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
             const verifiedScore = shortsGrindVerifiedScore(a);
             if (!verifiedScore) throw new Error(shortsGrindUnverifiedMessage(a));
-            const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => r.ok ? r.json() : null);
+            const score = await rtFetchJson('/api/hooks/grind/score/' + rid + '_' + k, {}, 3);
             if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
             const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
             await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score.indicators, score_ledger: score.score_ledger, novelty_provenance: score.novelty_provenance, channels: score.channels, emb_preview: score.emb_preview, input_manifest: score.input_manifest, score_verified: verifiedScore.score_verified, score_coordinate_id: verifiedScore.score_coordinate_id, score_ledger_sha256: verifiedScore.score_ledger_sha256, score_value: verifiedScore.score_value, score_percentile_0_100: verifiedScore.score_percentile_0_100, montage: monUrl });
@@ -4261,7 +4289,17 @@ const JarvisRetention = (function () {
                     ? `<b style="color:${heatCol(verifiedScore.score_percentile_0_100 / 100)};font-size:14px">${fmtv(verifiedScore.score_percentile_0_100, 1)}</b><span style="font-size:9px;color:${C.mute}">%ile · verified</span>`
                     : (scoreClaimed ? `<span style="font-size:9px;color:${C.amber}">historical · unverified</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring' : `⏳ ${a.frames_done || 0}/5`}</span>`);
                 const win = !!(verifiedWinner && verifiedWinner.attempt.k === a.k);
-                const img = verifiedScore ? `/api/hooks/grind/montage/${esc(g.rid)}_${a.k}` : (a.frame_imgs && a.frame_imgs.find(Boolean) ? `/api/hooks/grind/montage/${esc(a.frame_imgs.find(Boolean))}` : '');
+                const img = verifiedScore
+                    ? authenticatedMediaUrl(
+                        `/api/hooks/grind/montage/${g.rid}_${a.k}`
+                    )
+                    : (
+                        a.frame_imgs && a.frame_imgs.find(Boolean)
+                            ? authenticatedMediaUrl(
+                                `/api/hooks/grind/montage/${a.frame_imgs.find(Boolean)}`
+                            )
+                            : ''
+                    );
                 return `<div style="border:2px solid ${win ? C.green : C.border};border-radius:9px;padding:7px;background:${C.card2};width:250px;flex-shrink:0">
                   <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:10px;font-weight:800;color:${win ? C.green : C.dim}">#${a.k + 1}${win ? ' 🎯 WINNER' : ''}</span>${pctBadge}</div>
                   ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
@@ -4327,7 +4365,7 @@ const JarvisRetention = (function () {
     }
     function renderExperiment() {
         scoreContractEnsure();
-        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
+        const head = labWorkspaceBanner() + h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; rtFetchJson('/api/indicators/registry', { cache: 'no-store' }, 4).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(e => { EXPREG = { error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if ((st.savedBank || 'hooks') === 'channels' && SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
@@ -4363,11 +4401,15 @@ const JarvisRetention = (function () {
         const upMontageSrc = up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : '');
         const historicalReadOnly =
             up._historicalDisplayOnly === true;
+        const inspectionReadOnly =
+            up._inspectionReadOnly === true;
+        const displayReadOnly =
+            historicalReadOnly || inspectionReadOnly;
         // ── 1. trace: raw input → embedding ──
         const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: ${esc(rawInputLabel(up, ch))}</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span title="${esc(rawInputLabel(up, ch))}" style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg><span style="font-size:8px;color:${C.faint};white-space:nowrap">${esc(rawInputLabel(up, ch))}</span></div>`; };
         const upIdx = (st.rawUploads || []).lastIndexOf(up);
         const titleRow = (() => {
-            if (historicalReadOnly) {
+            if (displayReadOnly) {
                 return `<span style="font-size:13px;font-weight:900;color:${C.text}">${esc(up.title || 'Historical scored hook')}</span>`;
             }
             const ed = st.rawTitleEdit && st.rawTitleEdit.idx === upIdx ? st.rawTitleEdit : null;
@@ -4379,19 +4421,19 @@ const JarvisRetention = (function () {
             const shown = up.silent
                 ? `<div style="font-size:11px;color:${C.dim};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">no voiceover detected${up.transcript ? ` — low-confidence guess: <i>"${esc(String(up.transcript).slice(0, 120))}"</i>` : ''} — the Text channel is not scored; Together remains visible whenever its persisted ledger coordinate used the montage-only fallback</div>`
                 : `<div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">"${esc(up.transcript || '')}"${up.transcriptSource ? ` <span style="font-style:normal;font-size:9px;color:${C.faint}">· ${esc(up.transcriptSource)}</span>` : ''}</div>`;
-            if (historicalReadOnly) return shown;
+            if (displayReadOnly) return shown;
             if (!ed) return shown + (up.montage ? `<div style="margin-bottom:8px"><span data-rawtransedit="${upIdx}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:800">✏️ fix transcript + re-embed</span></div>` : '');
             return `<div style="border:1px solid ${C.amber}66;border-radius:8px;padding:8px;margin-bottom:8px;background:#0f172a"><textarea data-rawtranstext rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(ed.text || '')}</textarea><div style="display:flex;gap:7px;margin-top:6px;flex-wrap:wrap"><span data-rawreembed="${upIdx}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 11px;font-size:10px;font-weight:900">${st.rawReembedBusy ? '⏳ re-embedding all channels…' : '🔁 re-embed with this transcript'}</span><span data-rawreembedvis="${upIdx}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">visuals only</span><span data-rawtranscancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span></div></div>`;
         })();
         const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
               ${titleRow}
-              ${historicalReadOnly
-                ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">Historical display · read-only</span>`
+              ${displayReadOnly
+                ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">${inspectionReadOnly ? 'Team workspace · read-only' : 'Historical display · read-only'}</span>`
                 : `<span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span>`}</div>
             ${up._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(up._uploadWarning)}</div>` : ''}
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div>${upMontageSrc ? `<img src="${esc(upMontageSrc)}" style="width:260px;border-radius:6px;background:#000"/>` : `<div style="width:260px;padding:20px;box-sizing:border-box;border-radius:6px;background:#000;color:${C.mute};font-size:10px;text-align:center">stored montage unavailable</div>`}</div>
-              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript${historicalReadOnly ? ' (persisted read-only evidence)' : ' (editable)'}</div>${transcriptBlock}
+              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript${displayReadOnly ? ' (persisted read-only evidence)' : ' (editable)'}</div>${transcriptBlock}
                 <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">3 · Gemini embedding (1536-d, pooled to 48 for display)</div>${embHeat('visual')}${embHeat('text')}${embHeat('together')}${rawInputManifestHtml(up)}</div>
             </div>
             <div style="font-size:10px;color:${C.mute};margin-top:7px">4 · each indicator = <b>embedding · (a direction learned toward that metric) + bias → one number</b>, placed on the corpus scatter below.</div>`, 12);
@@ -6341,8 +6383,15 @@ const JarvisRetention = (function () {
         ) {
             STORYBOARD_UI = window.JarvisStoryboardWorkbench.create({
                 escapeHtml: esc,
-                requestJson: (url, options) =>
-                    rtFetchJson(url, options, 3),
+                requestJson: async (url, options) => {
+                    const result =
+                        await rtFetchJson(url, options, 3);
+                    if (
+                        isExperimentLabSurface()
+                        && url === '/api/storyboards/save'
+                    ) refreshExperimentLabContext();
+                    return result;
+                },
                 runJob: (url, body) => rtJob(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -6622,6 +6671,7 @@ const JarvisRetention = (function () {
             );
         }
         SAVED = null;
+        refreshExperimentLabContext();
         return response;
     }
     function openRawVideoPicker() {
@@ -6680,7 +6730,107 @@ const JarvisRetention = (function () {
             ? 'could not reach the server (it may be waking up or mid-deploy) — wait ~30s and retry'
             : m;
     }
+    function isExperimentLabSurface() {
+        return mountSurface === 'experiment-lab';
+    }
+    function experimentLabTargetAccount(options) {
+        if (!isExperimentLabSurface()) return null;
+        if (options && options._labOwnAccount) {
+            return null;
+        }
+        if (options && options._labAccount) {
+            return String(options._labAccount);
+        }
+        return null;
+    }
+    function scopedFetchOptions(options) {
+        const fetchOptions = { ...(options || {}) };
+        const targetAccount =
+            experimentLabTargetAccount(fetchOptions);
+        delete fetchOptions._labAccount;
+        delete fetchOptions._labOwnAccount;
+        if (!isExperimentLabSurface()) return fetchOptions;
+        if (typeof window.Headers === 'function') {
+            const headers = new window.Headers(
+                fetchOptions.headers || {}
+            );
+            headers.set(
+                'X-Business-World-Surface',
+                'experiment-lab'
+            );
+            if (targetAccount) {
+                headers.set(
+                    'X-Experiment-Lab-Account',
+                    targetAccount
+                );
+            }
+            fetchOptions.headers = headers;
+        } else {
+            fetchOptions.headers = {
+                ...(fetchOptions.headers || {}),
+                'X-Business-World-Surface':
+                    'experiment-lab',
+                ...(targetAccount
+                    ? {
+                        'X-Experiment-Lab-Account':
+                            targetAccount,
+                    }
+                    : {}),
+            };
+        }
+        return fetchOptions;
+    }
+    function staleMountPromise() {
+        return new Promise(() => {});
+    }
+    async function rtFetch(
+        url,
+        options,
+        requestGeneration = mountGeneration
+    ) {
+        if (requestGeneration !== mountGeneration) {
+            return staleMountPromise();
+        }
+        try {
+            const response =
+                await fetch(url, scopedFetchOptions(options));
+            return requestGeneration === mountGeneration
+                ? response
+                : staleMountPromise();
+        } catch (error) {
+            if (requestGeneration !== mountGeneration) {
+                return staleMountPromise();
+            }
+            throw error;
+        }
+    }
+    function authenticatedMediaUrl(url, accountId) {
+        const value = String(url || '');
+        if (!value || !value.startsWith('/')) return value;
+        const params = new URLSearchParams();
+        let token = '';
+        try {
+            token = typeof window.getAuthToken === 'function'
+                ? window.getAuthToken() || ''
+                : '';
+        } catch (error) {}
+        if (token) params.set('access_token', token);
+        if (isExperimentLabSurface()) {
+            params.set('surface', 'experiment-lab');
+            if (accountId) {
+                params.set(
+                    'experiment_lab_account',
+                    String(accountId)
+                );
+            }
+        }
+        const query = params.toString();
+        return query
+            ? `${value}${value.includes('?') ? '&' : '?'}${query}`
+            : value;
+    }
     async function rtFetchJson(url, opts, attempts) {
+        const requestGeneration = mountGeneration;
         let last = null;
         const method = String((opts && opts.method) || 'GET').toUpperCase();
         const headers = (opts && opts.headers) || {};
@@ -6689,7 +6839,13 @@ const JarvisRetention = (function () {
         const total = idempotent ? Math.max(1, attempts || 1) : 1;
         const retryDelays = (opts && opts._retryDelays) || [1200, 3000, 6000];
         for (let attempt = 0; attempt < total; attempt++) {
+            if (requestGeneration !== mountGeneration) {
+                return staleMountPromise();
+            }
             if (attempt) await new Promise(resolve => window.setTimeout(resolve, retryDelays[attempt - 1] || retryDelays[retryDelays.length - 1] || 6000));
+            if (requestGeneration !== mountGeneration) {
+                return staleMountPromise();
+            }
             let r, raw;
             const fetchOpts = { ...(opts || {}) };
             const captureResponseHeaders =
@@ -6705,7 +6861,11 @@ const JarvisRetention = (function () {
                 timer = window.setTimeout(() => controller.abort(), timeoutMs);
             }
             try {
-                r = await fetch(url, fetchOpts);
+                r = await rtFetch(
+                    url,
+                    fetchOpts,
+                    requestGeneration
+                );
                 raw = await r.text();
             } catch (e) {
                 last = new Error(e && e.name === 'AbortError'
@@ -6894,9 +7054,91 @@ const JarvisRetention = (function () {
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleClick(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
         if (e.target.closest('[data-rawytgo]')) { rtgScoreYoutube(); return; }
-        const sbank = e.target.closest('[data-savedbank]'); if (sbank) { st.savedBank = sbank.getAttribute('data-savedbank'); rtgUpdateExp(); return; }
+        if (e.target.closest('[data-labcontextretry]')) {
+            st.labContextError = null;
+            loadExperimentLabContext()
+                .then(context => {
+                    LAB_CONTEXT = context;
+                    publishExperimentLabContext();
+                    rtgUpdateExp();
+                })
+                .catch(error => {
+                    st.labContextError = fetchFail(error);
+                    rtgUpdateExp();
+                });
+            return;
+        }
+        const labAccount =
+            e.target.closest('[data-labteamaccount]');
+        if (labAccount) {
+            loadLabTeamAccount(
+                labAccount.getAttribute(
+                    'data-labteamaccount'
+                )
+            );
+            return;
+        }
+        const labHook =
+            e.target.closest('[data-labteamhook]');
+        if (labHook) {
+            openSaved(
+                labHook.getAttribute('data-labteamhook'),
+                {
+                    _labAccount: st.labTeamAccount,
+                    readOnlyInspection: true,
+                }
+            );
+            return;
+        }
+        const sbank = e.target.closest('[data-savedbank]'); if (sbank) {
+            st.savedBank = sbank.getAttribute('data-savedbank');
+            if (
+                st.savedBank === 'team'
+                && !st.labTeamAccount
+                && LAB_CONTEXT
+                && Array.isArray(LAB_CONTEXT.accounts)
+                && LAB_CONTEXT.accounts.length
+            ) {
+                loadLabTeamAccount(
+                    LAB_CONTEXT.accounts[0].account.id
+                );
+                return;
+            }
+            rtgUpdateExp();
+            return;
+        }
         if (e.target.closest('[data-savedchanneladd]')) { startSavedChannel(); return; }
         if (e.target.closest('[data-savedchannelsreload]')) { refreshSavedChannels(false); return; }
+        const channelFolderDelete =
+            e.target.closest(
+                '[data-savedchannelfolderdelete]'
+            );
+        if (channelFolderDelete) {
+            deleteSavedChannelFolder(
+                channelFolderDelete.getAttribute(
+                    'data-savedchannelfolderdelete'
+                )
+            );
+            return;
+        }
+        const channelFolder =
+            e.target.closest('[data-savedchannelfolder]');
+        if (channelFolder) {
+            st.savedChannelFolder =
+                channelFolder.getAttribute(
+                    'data-savedchannelfolder'
+                );
+            rtgUpdateExp();
+            return;
+        }
+        if (
+            e.target.closest(
+                '[data-savedchannelfoldernew]'
+            )
+        ) {
+            createSavedChannelFolder();
+            return;
+        }
         const scopen = e.target.closest('[data-savedchannelopen]'); if (scopen) { openSavedChannel(scopen.getAttribute('data-savedchannelopen')); return; }
         if (e.target.closest('[data-savedretry]')) { SAVED = null; rtgUpdateExp(); return; }
         const screfresh = e.target.closest('[data-savedchannelrefresh]'); if (screfresh) { loadSavedChannelDetail(screfresh.getAttribute('data-savedchannelrefresh'), true).then(() => rtgUpdateExp()); return; }
@@ -7063,7 +7305,7 @@ const JarvisRetention = (function () {
         const egn = e.target.closest('[data-expgenn]'); if (egn) { st.expGenN = +egn.getAttribute('data-expgenn'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-expgen]')) { if (!st.expGenBusy) expGenSubmit(); return; }
         if (e.target.closest('[data-grindstart]')) { st.grindErr = null; grindStart(); return; }
-        if (e.target.closest('[data-grindstop]')) { if (st.grindRid) fetch('/api/hooks/grind/stop/' + st.grindRid, { method: 'POST' }).catch(() => {}); return; }
+        if (e.target.closest('[data-grindstop]')) { if (st.grindRid) rtFetch('/api/hooks/grind/stop/' + st.grindRid, { method: 'POST' }).catch(() => {}); return; }
         const gmet = e.target.closest('[data-grindmetric]'); if (gmet) { st.grindMetric = gmet.getAttribute('data-grindmetric'); rtgUpdateExp(); return; }
         const ghr = e.target.closest('[data-grindhours]'); if (ghr) { st.grindHours = +ghr.getAttribute('data-grindhours'); rtgUpdateExp(); return; }
         const gop = e.target.closest('[data-grindopen]'); if (gop) { if (st.grindOpening == null) grindOpen(+gop.getAttribute('data-grindopen')); return; }
@@ -7207,6 +7449,20 @@ const JarvisRetention = (function () {
         ) return;
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleChange(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleChange(e)) return;
+        if (
+            e.target.hasAttribute
+            && e.target.hasAttribute(
+                'data-savedchannelmove'
+            )
+        ) {
+            moveSavedChannel(
+                e.target.getAttribute(
+                    'data-savedchannelmove'
+                ),
+                e.target.value || null
+            );
+            return;
+        }
         if (e.target.hasAttribute && e.target.hasAttribute('data-expcreatorprofile')) {
             st.expCreatorProfile = String(e.target.value || '').trim().toLowerCase();
             rtgUpdateExp();
@@ -7334,7 +7590,7 @@ const JarvisRetention = (function () {
     }
     // Fetch an image URL → data-URL (so a generated R2 frame can be composed + embedded).
     async function urlToDataUrl(u) {
-        const r = await fetch(u); if (!r.ok) throw new Error('frame ' + r.status);
+        const r = await rtFetch(u); if (!r.ok) throw new Error('frame ' + r.status);
         const b = await r.blob();
         return await new Promise((res, rej) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); });
     }
@@ -7385,12 +7641,12 @@ const JarvisRetention = (function () {
                 payload = Object.assign({}, payload, { montage: await montageFromFrameIds(payload.frame_imgs) });
             }
             const j = await rtFetchJson('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 1);
-            if (j.ok) { st.savedFlash = j.id; SAVED = null; rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 3500); }
+            if (j.ok) { st.savedFlash = j.id; SAVED = null; refreshExperimentLabContext(); rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 3500); }
             else { st.rawUpErr = j.error || 'save failed'; rtgUpdateExp(); }
         } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function deleteSaved(id) {
-        try { await rtFetchJson('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }, 1); SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
+        try { await rtFetchJson('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }, 1); SAVED = null; refreshExperimentLabContext(); rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function createFolder() {
         const name = window.prompt('New folder name:'); if (!name || !name.trim()) return;
@@ -7453,6 +7709,23 @@ const JarvisRetention = (function () {
         ].join('|');
     }
     function savedHookIndexRow(id) {
+        if (
+            isExperimentLabSurface()
+            && st.savedBank === 'team'
+            && st.labTeamAccount
+        ) {
+            const team =
+                LAB_TEAM_DATA[st.labTeamAccount];
+            const row =
+                team
+                && team.hooks
+                && Array.isArray(team.hooks.hooks)
+                && team.hooks.hooks.find(candidate => (
+                    candidate
+                    && String(candidate.id) === String(id)
+                ));
+            if (row) return row;
+        }
         return (
             SAVED
             && Array.isArray(SAVED.hooks)
@@ -7465,7 +7738,9 @@ const JarvisRetention = (function () {
         rec,
         id,
         warning,
-        historicalDisplayOnly
+        historicalDisplayOnly,
+        inspectionReadOnly,
+        inspectionAccountId
     ) {
         return {
             id: rec.id || id,
@@ -7501,16 +7776,23 @@ const JarvisRetention = (function () {
             source: 'saved',
             savedId: id,
             genFrames: rec.frames || [],
-            montageDataUrl: rec.hasMontage ? '/api/raw/saved-montage/' + id : '',
+            montageDataUrl: rec.hasMontage
+                ? authenticatedMediaUrl(
+                    '/api/raw/saved-montage/' + id,
+                    inspectionAccountId
+                )
+                : '',
             _uploadWarning: warning || null,
             _historicalDisplayOnly:
                 historicalDisplayOnly === true,
+            _inspectionReadOnly:
+                inspectionReadOnly === true,
         };
     }
     // Opening a saved hook is read-only. A persisted score keeps the exact
     // scorer revision that produced it; an unscored idea may be scored for
     // display, but that transient result is never written over saved evidence.
-    async function openSaved(id) {
+    async function openSaved(id, options) {
         if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before opening this saved hook.'); return; }
         st.savedSel = id;
         st.savedDetailLoading = true;
@@ -7520,13 +7802,25 @@ const JarvisRetention = (function () {
             const creatorProfile = selectedCreatorProfile();
             const indexRow = savedHookIndexRow(id);
             const indexFingerprint = savedHookEvidenceFingerprint(indexRow);
-            let stored = SAVEDDETAIL[id];
+            const detailCacheKey =
+                options && options._labAccount
+                    ? `${options._labAccount}:${id}`
+                    : id;
+            let stored = SAVEDDETAIL[detailCacheKey];
             if (
                 !stored
                 || stored.indexFingerprint !== indexFingerprint
             ) {
-                const rec = await rtFetchJson('/api/raw/saved-hook/' + id, { cache: 'no-store' }, 4);
-                stored = SAVEDDETAIL[id] = {
+                const rec = await rtFetchJson('/api/raw/saved-hook/' + id, {
+                        cache: 'no-store',
+                        ...(options && options._labAccount
+                            ? {
+                                _labAccount:
+                                    options._labAccount,
+                            }
+                            : {}),
+                    }, 4);
+                stored = SAVEDDETAIL[detailCacheKey] = {
                     rec,
                     montage: null,
                     reconstructed: false,
@@ -7584,7 +7878,11 @@ const JarvisRetention = (function () {
                     id,
                     warning,
                     rec.evidence_state
-                        === 'legacy_unbound_evidence'
+                        === 'legacy_unbound_evidence',
+                    options
+                        && options.readOnlyInspection,
+                    options
+                        && options._labAccount
                 );
                 st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(result);
@@ -7609,7 +7907,11 @@ const JarvisRetention = (function () {
                         rec,
                         id,
                         warning,
-                        true
+                        true,
+                        options
+                            && options.readOnlyInspection,
+                        options
+                            && options._labAccount
                     );
                     st.rawUploads = (st.rawUploads || []).filter(
                         row => !(row && row.source === 'saved')
@@ -7633,6 +7935,13 @@ const JarvisRetention = (function () {
                         + 'It was not silently recalculated.'
                     );
                 } else {
+                if (options && options.readOnlyInspection) {
+                    throw new Error(
+                        'This saved idea has no persisted score ledger. '
+                        + 'Owner inspection never recalculates another '
+                        + 'account’s work.'
+                    );
+                }
                 let montage = stored.montage;
                 if (!montage && rec.hasMontage) {
                     try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
@@ -7692,16 +8001,31 @@ const JarvisRetention = (function () {
         const selected = selectedRawScoreUpload();
         const historical = selected
             && selected._historicalDisplayOnly === true;
+        const inspection = selected
+            && selected._inspectionReadOnly === true;
+        const detailState = st.savedDetailLoading
+            ? 'loading'
+            : st.savedDetailErr
+                ? 'error'
+                : inspection
+                    ? 'team-read-only'
+                    : historical
+                        ? 'historical-read-only'
+                        : selected ? 'canonical' : 'empty';
         const msg = st.savedDetailLoading
             ? 'Loading this saved hook and validating its exact persisted score ledger…'
             : st.savedDetailErr
                 ? 'This saved hook was not opened. Its stored score was not recalculated.'
+                : inspection && historical
+                    ? 'Exact historical persisted team-workspace display loaded read-only. No value was recalculated, no edit can write into this account, and this legacy evidence is excluded from the predictor.'
+                : inspection
+                    ? 'Exact persisted team-workspace score loaded read-only. No value was recalculated and no edit can write into this account.'
                 : historical
                     ? 'Exact historical persisted display loaded read-only. Every scalar above comes from the same hash-bound ledger; none was recalculated or admitted to the predictor.'
                 : selected
                     ? 'Exact persisted score loaded. Every scalar above comes from this card’s canonical ledger.'
                     : 'No canonical score is selected for this saved hook.';
-        return `<div data-saved-detail-state="${st.savedDetailLoading ? 'loading' : st.savedDetailErr ? 'error' : historical ? 'historical-read-only' : selected ? 'canonical' : 'empty'}" style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>${st.savedDetailErr ? `<div data-saved-detail-error style="font-size:9px;color:${C.red};margin:-5px 0 10px;line-height:1.45">${esc(st.savedDetailErr)}</div>` : ''}`;
+        return `<div data-saved-detail-state="${detailState}" style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>${st.savedDetailErr ? `<div data-saved-detail-error style="font-size:9px;color:${C.red};margin:-5px 0 10px;line-height:1.45">${esc(st.savedDetailErr)}</div>` : ''}`;
     }
     function closeSavedDetail() {
         const uploads = st.rawUploads || [];
@@ -7824,7 +8148,33 @@ const JarvisRetention = (function () {
             st.savedChannelUrl = '';
             st.savedChannelSel = j.channel && j.channel.id;
             st.savedChannelTab = 'library';
+            if (
+                isExperimentLabSurface()
+                && st.savedChannelSel
+                && st.savedChannelFolder
+                && st.savedChannelFolder !== 'all'
+                && st.savedChannelFolder !== 'none'
+            ) {
+                await rtFetchJson(
+                    '/api/experimentlab/item/move',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type':
+                                'application/json',
+                        },
+                        body: JSON.stringify({
+                            kind: 'channels',
+                            id: st.savedChannelSel,
+                            folderId:
+                                st.savedChannelFolder,
+                        }),
+                    },
+                    1
+                );
+            }
             await refreshSavedChannels(true);
+            refreshExperimentLabContext();
         } catch (e) { st.savedChannelErr = fetchFail(e); }
         st.savedChannelBusy = false; rtgUpdateExp();
     }
@@ -7839,8 +8189,89 @@ const JarvisRetention = (function () {
                 if (st.savedChannelSel === id) st.savedChannelSel = null;
             }
             await refreshSavedChannels(true);
+            if (action === 'delete') {
+                refreshExperimentLabContext();
+            }
         } catch (e) { st.savedChannelErr = fetchFail(e); }
         st.savedChannelActionBusy = null; rtgUpdateExp();
+    }
+    async function createSavedChannelFolder() {
+        const name = window.prompt('New channel folder name:');
+        if (!name || !name.trim()) return;
+        try {
+            const response = await rtFetchJson(
+                '/api/experimentlab/folder',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        kind: 'channels',
+                        name: name.trim(),
+                    }),
+                },
+                1
+            );
+            st.savedChannelFolder =
+                response.folder && response.folder.id
+                || 'all';
+            await refreshSavedChannels(true);
+        } catch (error) {
+            st.savedChannelErr = fetchFail(error);
+            rtgUpdateExp();
+        }
+    }
+    async function moveSavedChannel(id, folderId) {
+        try {
+            await rtFetchJson(
+                '/api/experimentlab/item/move',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        kind: 'channels',
+                        id,
+                        folderId: folderId || null,
+                    }),
+                },
+                1
+            );
+            await refreshSavedChannels(true);
+        } catch (error) {
+            st.savedChannelErr = fetchFail(error);
+            rtgUpdateExp();
+        }
+    }
+    async function deleteSavedChannelFolder(id) {
+        if (!window.confirm(
+            'Delete this folder? Channels inside become Unfiled.'
+        )) return;
+        try {
+            await rtFetchJson(
+                '/api/experimentlab/folder/delete',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        kind: 'channels',
+                        id,
+                    }),
+                },
+                1
+            );
+            if (st.savedChannelFolder === id) {
+                st.savedChannelFolder = 'all';
+            }
+            await refreshSavedChannels(true);
+        } catch (error) {
+            st.savedChannelErr = fetchFail(error);
+            rtgUpdateExp();
+        }
     }
     async function openSavedChannel(id) {
         st.savedChannelSel = id; st.savedChannelShow = 60; st.savedChannelErr = null;
@@ -8024,7 +8455,9 @@ const JarvisRetention = (function () {
             }
             if (!record) {
                 record = await rtFetchJson(`/api/raw/saved-channel/${channelId}/video/${videoId}`, { cache: 'no-store' }, 4);
-                record.montageDataUrl = `/api/raw/saved-channel/${channelId}/montage/${videoId}`;
+                record.montageDataUrl = authenticatedMediaUrl(
+                    `/api/raw/saved-channel/${channelId}/montage/${videoId}`
+                );
                 record.source = 'saved-channel'; record.savedChannelId = channelId; record.savedChannelVideoId = videoId;
                 if (
                     record.evidence_state
@@ -8054,7 +8487,9 @@ const JarvisRetention = (function () {
                 const record = {
                     ...manifestVideo,
                     montageDataUrl:
-                        `/api/raw/saved-channel/${channelId}/montage/${videoId}`,
+                        authenticatedMediaUrl(
+                            `/api/raw/saved-channel/${channelId}/montage/${videoId}`
+                        ),
                     source: 'saved-channel-manifest',
                     savedChannelId: channelId,
                     savedChannelVideoId: videoId,
@@ -8963,7 +9398,7 @@ const JarvisRetention = (function () {
     }
     function savedChannelViewsEvidenceTable(analysis, points, signalKey, targetViews, cutoff) {
         if (!points.length) return '';
-        return `<div data-savedchannelriskevidence style="overflow:auto;max-height:430px;border:1px solid ${C.border}"><table style="width:100%;min-width:760px;border-collapse:collapse;font-size:9px"><thead style="position:sticky;top:0;background:${C.card2};z-index:1"><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:6px">selected Short · click to open stored score</th><th>${esc(signalKey)} score</th><th>actual views</th><th>score ≥ ${fv(cutoff)}?</th><th>actual ≥ ${fv(targetViews)}?</th></tr></thead><tbody>${points.map(point => `<tr data-savedchannelvideo="${esc(analysis.channelId)}:${esc(point.id)}" style="cursor:pointer;border-top:1px solid ${C.border};background:${point.passed && point.hit ? C.green + '0c' : point.passed ? C.red + '0c' : 'transparent'}"><td style="padding:5px;color:${C.text};max-width:450px"><div style="display:flex;gap:7px;align-items:center;min-width:0"><div style="width:100px;aspect-ratio:5/1;flex:0 0 100px;position:relative;overflow:hidden;background:#020617;border:1px solid ${C.border}"><img src="/api/raw/saved-channel/${esc(analysis.channelId)}/montage/${esc(point.id)}" data-savedchannelmontage-channel="${esc(analysis.channelId)}" data-savedchannelmontage-video="${esc(point.id)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0"/><span data-savedchannelimagestate style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:7px">loading…</span></div><div style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(point.title)} <span style="color:${C.cyan}">open →</span></div></div></td><td style="text-align:right;color:${point.passed ? C.cyan : C.dim}">${fv(point.score)}</td><td style="text-align:right;color:${point.hit ? C.green : C.text}">${fv(point.actualViews)}</td><td style="text-align:right;color:${point.passed ? C.cyan : C.dim}">${point.passed ? 'yes' : 'no'}</td><td style="text-align:right;color:${point.hit ? C.green : C.red}">${point.hit ? 'yes · hit' : 'no · miss'}</td></tr>`).join('')}</tbody></table></div>`;
+        return `<div data-savedchannelriskevidence style="overflow:auto;max-height:430px;border:1px solid ${C.border}"><table style="width:100%;min-width:760px;border-collapse:collapse;font-size:9px"><thead style="position:sticky;top:0;background:${C.card2};z-index:1"><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:6px">selected Short · click to open stored score</th><th>${esc(signalKey)} score</th><th>actual views</th><th>score ≥ ${fv(cutoff)}?</th><th>actual ≥ ${fv(targetViews)}?</th></tr></thead><tbody>${points.map(point => `<tr data-savedchannelvideo="${esc(analysis.channelId)}:${esc(point.id)}" style="cursor:pointer;border-top:1px solid ${C.border};background:${point.passed && point.hit ? C.green + '0c' : point.passed ? C.red + '0c' : 'transparent'}"><td style="padding:5px;color:${C.text};max-width:450px"><div style="display:flex;gap:7px;align-items:center;min-width:0"><div style="width:100px;aspect-ratio:5/1;flex:0 0 100px;position:relative;overflow:hidden;background:#020617;border:1px solid ${C.border}"><img src="${esc(authenticatedMediaUrl(`/api/raw/saved-channel/${analysis.channelId}/montage/${point.id}`))}" data-savedchannelmontage-channel="${esc(analysis.channelId)}" data-savedchannelmontage-video="${esc(point.id)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0"/><span data-savedchannelimagestate style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:7px">loading…</span></div><div style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(point.title)} <span style="color:${C.cyan}">open →</span></div></div></td><td style="text-align:right;color:${point.passed ? C.cyan : C.dim}">${fv(point.score)}</td><td style="text-align:right;color:${point.hit ? C.green : C.text}">${fv(point.actualViews)}</td><td style="text-align:right;color:${point.passed ? C.cyan : C.dim}">${point.passed ? 'yes' : 'no'}</td><td style="text-align:right;color:${point.hit ? C.green : C.red}">${point.hit ? 'yes · hit' : 'no · miss'}</td></tr>`).join('')}</tbody></table></div>`;
     }
     function savedChannelMetricGlossary() {
         const entries = [
@@ -9177,7 +9612,9 @@ const JarvisRetention = (function () {
             const active = st.savedChannelVideoBusy === video.id, complete = video.status === 'done', color = savedChannelStatusColor(video.status);
             const selectedCell = definition ? savedChannelFeatureCell(video, featureKey) : null, selectedScore = complete && featureKey ? scoreOf(video) : null;
             const hasStoredImage = complete && video.hasMontage;
-            const montageUrl = `/api/raw/saved-channel/${detail.id}/montage/${video.id}`;
+            const montageUrl = authenticatedMediaUrl(
+                `/api/raw/saved-channel/${detail.id}/montage/${video.id}`
+            );
             return `<div ${complete ? `data-savedchannelvideo="${detail.id}:${video.id}"` : ''} style="width:220px;min-height:150px;box-sizing:border-box;border:1px solid ${active ? C.cyan : C.border};border-radius:8px;background:${C.card2};padding:7px;cursor:${complete ? 'pointer' : 'default'};display:flex;flex-direction:column;gap:5px">
               ${hasStoredImage ? `<div style="width:100%;aspect-ratio:5/1;position:relative;border-radius:5px;overflow:hidden;background:#020617"><img src="${esc(montageUrl)}" data-savedchannelmontage-channel="${detail.id}" data-savedchannelmontage-video="${video.id}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .15s"/><span data-savedchannelimagestate style="position:absolute;inset:0;align-items:center;justify-content:center;padding:4px;text-align:center;color:${C.mute};font-size:8px;display:flex">loading stored image…</span></div>` : `<div style="width:100%;aspect-ratio:5/1;border-radius:5px;background:${C.card};display:flex;align-items:center;justify-content:center;color:${color};font-size:9px;font-weight:800">${active ? 'loading stored score…' : esc(video.status || 'queued')}</div>`}
               <div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;min-height:26px">${esc(video.title || video.id)}</div>
@@ -10426,7 +10863,6 @@ const JarvisRetention = (function () {
         const validation = SAVEDCHANNELVALIDATION && !SAVEDCHANNELVALIDATION.loading && !SAVEDCHANNELVALIDATION.error
             ? SAVEDCHANNELVALIDATION
             : null;
-        const registry = validation && validation.coordinateRegistry;
         const contract = savedChannelContract(detail);
         const fallbackColumns = (contract.features || []).map(definition => ({
             id: `shorts.stored.${definition.key}`,
@@ -10441,7 +10877,24 @@ const JarvisRetention = (function () {
             status: 'canonical',
             description: 'Exact production score persisted when the video was analyzed.',
         }));
-        const columns = registry && registry.columns || fallbackColumns;
+        const registry =
+            validation && validation.coordinateRegistry
+            || {
+                version: 'workspace-stored-coordinates-v1',
+                columns: fallbackColumns,
+                families: [{
+                    key: 'stored',
+                    label: 'Stored production scores',
+                    count: fallbackColumns.length,
+                }],
+                totals: {
+                    shortsStoredColumns:
+                        fallbackColumns.length,
+                },
+                lineageCatalog: {},
+                lineageAudit: null,
+            };
+        const columns = registry.columns || fallbackColumns;
         const validationRows = new Map(((validation && validation.rows) || []).map(row => [`${row.channelId}:${row.id}`, row]));
         const videos = ((detail && detail.videos) || []).filter(video => video.status === 'done');
         const rows = videos.map(video => {
@@ -10867,14 +11320,22 @@ const JarvisRetention = (function () {
         window.setTimeout(() => URL.revokeObjectURL(url), 0);
     }
     function renderSavedChannelLedger(detail) {
-        if (!SAVEDCHANNELVALIDATION) {
+        if (!isExperimentLabSurface() && !SAVEDCHANNELVALIDATION) {
             window.setTimeout(() => loadSavedChannelValidation(), 0);
             return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry…</div>`;
         }
-        if (SAVEDCHANNELVALIDATION && SAVEDCHANNELVALIDATION.loading) {
+        if (
+            !isExperimentLabSurface()
+            && SAVEDCHANNELVALIDATION
+            && SAVEDCHANNELVALIDATION.loading
+        ) {
             return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry…</div>`;
         }
-        if (SAVEDCHANNELVALIDATION && SAVEDCHANNELVALIDATION.error) {
+        if (
+            !isExperimentLabSurface()
+            && SAVEDCHANNELVALIDATION
+            && SAVEDCHANNELVALIDATION.error
+        ) {
             return `<div style="padding:18px;color:${C.red}">${esc(SAVEDCHANNELVALIDATION.error)} <span data-savedvalidationreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
         }
         const model = savedLedgerModel(detail);
@@ -10882,6 +11343,18 @@ const JarvisRetention = (function () {
         const longColumns = registry && registry.longQuant && Array.isArray(registry.longQuant.columns)
             ? registry.longQuant.columns
             : [];
+        const shortsMapKeys =
+            registry
+            && registry.shortsMapProjections
+            && Array.isArray(registry.shortsMapProjections.keys)
+                ? registry.shortsMapProjections.keys
+                : [];
+        const longMapKeys =
+            registry
+            && registry.longQuant
+            && Array.isArray(registry.longQuant.mapProjections)
+                ? registry.longQuant.mapProjections
+                : [];
         const families = registry && registry.families || [{ key: 'stored', label: 'Stored production scores', count: model.columns.length }];
         const validFamily = st.savedLedgerFamily === 'all' || families.some(item => item.key === st.savedLedgerFamily)
             ? st.savedLedgerFamily : 'stored';
@@ -10970,7 +11443,7 @@ const JarvisRetention = (function () {
                   description: 'The 21 registered Long scalar addresses disclose visual/text/together inputs, fitting population, scalar formula, calibration, artifact, and related map view. Nullable scalar outputs and map placements remain distinct.',
               }
           ) : ''}
-          ${registry ? `<div style="font-size:8px;color:${C.faint};line-height:1.5;margin-top:8px">Shorts map views: ${esc(registry.shortsMapProjections.keys.join(', '))}. Long map views: ${esc(registry.longQuant.mapProjections.join(', '))}. These projection names are registered visualization modes and do not add scalar columns.</div>` : ''}
+          ${shortsMapKeys.length || longMapKeys.length ? `<div style="font-size:8px;color:${C.faint};line-height:1.5;margin-top:8px">Shorts map views: ${esc(shortsMapKeys.join(', ') || 'not included in this account-scoped registry')}. Long map views: ${esc(longMapKeys.join(', ') || 'not included in this account-scoped registry')}. These projection names are registered visualization modes and do not add scalar columns.</div>` : ''}
         </div>`;
     }
     function renderSavedChannelDetail(detail) {
@@ -10979,16 +11452,27 @@ const JarvisRetention = (function () {
         if (detail.error) return cardc(`<div style="padding:16px;color:${C.red}">${esc(detail.error)}</div>`, 10);
         const statusColor = savedChannelStatusColor(detail.status), total = detail.discovered || 0, completed = detail.completed || 0, failed = detail.failed || 0;
         const progress = total ? completed / total * 100 : 0, active = ['queued', 'running', 'stopping'].includes(detail.status);
+        const workspaceControl =
+            detail.workspaceControl !== false;
         const requestedTab = st.savedChannelTab || 'library';
         const tab = requestedTab === 'analysis' || requestedTab === 'atlas'
             ? 'explore'
             : requestedTab;
         if (tab !== requestedTab) st.savedChannelTab = tab;
-        const validationSupported = detail.id === 'chd3f5a3dae83f3382' || detail.id === 'ch87ccaa3dd3383515';
+        const validationSupported =
+            (
+                !isExperimentLabSurface()
+                || LAB_CONTEXT
+                    && LAB_CONTEXT.owner
+            )
+            && (
+                detail.id === 'chd3f5a3dae83f3382'
+                || detail.id === 'ch87ccaa3dd3383515'
+            );
         const tabButton = (key, label) => `<span data-savedchanneltab="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:5px 10px;font-size:11px;font-weight:800">${label}</span>`;
         const actionBusy = st.savedChannelActionBusy;
         const unfinished = Math.max(0, total - completed), continueLabel = unfinished ? `continue ${unfinished} unfinished` : detail.status === 'done' ? 'check for new Shorts' : 'resume / retry';
-        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:14px;font-weight:900;color:${C.text}">${esc(detail.name || detail.url)}</div><a href="${esc(detail.url)}" target="_blank" style="font-size:9px;color:${C.accent}">${esc(detail.url)} ↗</a></div><div style="display:flex;gap:6px;flex-wrap:wrap"><span data-savedchannelrefresh="${detail.id}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 9px;font-size:9px">refresh status</span>${active ? `<span data-savedchannelstop="${detail.id}" style="cursor:pointer;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:4px 9px;font-size:9px;font-weight:800">${actionBusy === 'stop' ? 'stopping…' : 'stop import'}</span>` : `<span data-savedchannelresume="${detail.id}" style="cursor:pointer;border:1px solid ${unfinished ? C.orange : C.green};color:${unfinished ? C.orange : C.green};border-radius:6px;padding:4px 9px;font-size:9px;font-weight:800">${actionBusy === 'resume' ? 'queueing continuation…' : continueLabel}</span>`}<span data-savedchanneldelete="${detail.id}" style="cursor:pointer;border:1px solid ${C.border};color:${C.mute};border-radius:6px;padding:4px 9px;font-size:9px">delete</span></div></div>
+        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:14px;font-weight:900;color:${C.text}">${esc(detail.name || detail.url)}</div><a href="${esc(detail.url)}" target="_blank" style="font-size:9px;color:${C.accent}">${esc(detail.url)} ↗</a></div><div style="display:flex;gap:6px;flex-wrap:wrap"><span data-savedchannelrefresh="${detail.id}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 9px;font-size:9px">refresh status</span>${workspaceControl ? (active ? `<span data-savedchannelstop="${detail.id}" style="cursor:pointer;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:4px 9px;font-size:9px;font-weight:800">${actionBusy === 'stop' ? 'stopping…' : 'stop import'}</span>` : `<span data-savedchannelresume="${detail.id}" style="cursor:pointer;border:1px solid ${unfinished ? C.orange : C.green};color:${unfinished ? C.orange : C.green};border-radius:6px;padding:4px 9px;font-size:9px;font-weight:800">${actionBusy === 'resume' ? 'queueing continuation…' : continueLabel}</span>`) : `<span title="This workspace reuses the canonical channel library without controlling its shared import job." style="border:1px solid ${C.border};color:${C.mute};padding:4px 9px;font-size:9px">shared import · view only</span>`}<span data-savedchanneldelete="${detail.id}" style="cursor:pointer;border:1px solid ${C.border};color:${C.mute};border-radius:6px;padding:4px 9px;font-size:9px">delete</span></div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:6px;margin-bottom:8px">${statc('Status', String(detail.status || 'queued'), statusColor)}${statc('Scored', `${completed}/${total}`, C.green)}${statc('Queued', detail.queued || 0, C.cyan)}${statc('Errors', failed, failed ? C.red : C.dim)}</div>
           <div style="height:7px;background:${C.border};border-radius:5px;overflow:hidden;margin-bottom:5px"><span style="display:block;width:${progress.toFixed(1)}%;height:100%;background:${statusColor}"></span></div>
           <div style="font-size:9px;color:${C.dim};margin-bottom:10px">${detail.current ? `Running now: <b style="color:${C.cyan}">${esc(detail.current.title || detail.current.id)}</b> · ${completed + failed + 1} of ${total}` : unfinished ? `Incomplete: <b style="color:${C.orange}">${completed}/${total} stored</b> · ${unfinished} can continue from the server button above` : detail.status === 'done' ? `Finished: ${completed}/${total} scored and stored` : `Phase: ${esc(detail.phase || detail.status || 'queued')}`}</div>
@@ -10996,23 +11480,240 @@ const JarvisRetention = (function () {
           ${tab === 'ledger' ? renderSavedChannelLedger(detail) : tab === 'explore' ? `<div data-savedchannel-exploratory-public><div style="border-left:3px solid ${C.amber};background:${C.amber}0b;padding:8px;margin-bottom:10px;font-size:8.7px;color:${C.dim};line-height:1.5"><b style="color:${C.amber}">Exploratory only:</b> these two chart groups share one cached 21-feature public-data artifact. They describe within-channel relationships to public views and do not create ledger coordinates or held-out predictions.</div>${renderSavedChannelAnalysis(detail)}${renderSavedChannelRelationshipAtlas(detail)}</div>` : tab === 'validation' && validationSupported ? renderSavedChannelValidation(detail) : renderSavedChannelLibrary(detail)}`, 12);
     }
     function savedChannelsPanel() {
-        const channels = (SAVEDCHANNELS && SAVEDCHANNELS.channels) || [];
+        const allChannels =
+            (SAVEDCHANNELS && SAVEDCHANNELS.channels) || [];
+        const folders =
+            (SAVEDCHANNELS && SAVEDCHANNELS.folders) || [];
+        const currentFolder =
+            st.savedChannelFolder || 'all';
+        const channels = allChannels.filter(channel => (
+            currentFolder === 'all'
+            || (
+                currentFolder === 'none'
+                    ? !channel.folder
+                    : channel.folder === currentFolder
+            )
+        ));
+        const folderCount = id => allChannels.filter(channel => (
+            id === 'none'
+                ? !channel.folder
+                : channel.folder === id
+        )).length;
+        const channelFolderBar =
+            isExperimentLabSurface()
+                ? `<div style="display:flex;gap:5px;align-items:center;overflow-x:auto;padding:2px 0 9px"><span style="font-size:8px;color:${C.mute};text-transform:uppercase">folder</span>${[
+                    ['all', `All (${allChannels.length})`],
+                    ['none', `Unfiled (${folderCount('none')})`],
+                    ...folders.map(folder => [
+                        folder.id,
+                        `${folder.name} (${folderCount(folder.id)})`,
+                    ]),
+                ].map(([id, label]) => `<button type="button" data-savedchannelfolder="${esc(id)}" style="white-space:nowrap;border:1px solid ${currentFolder === id ? C.accent : C.border};background:${currentFolder === id ? C.card2 : C.card};color:${currentFolder === id ? C.accent : C.dim};padding:4px 7px;font-size:8px;cursor:pointer">${esc(label)}${id !== 'all' && id !== 'none' ? ` <span data-savedchannelfolderdelete="${esc(id)}" title="Delete folder">×</span>` : ''}</button>`).join('')}<button type="button" data-savedchannelfoldernew style="white-space:nowrap;border:1px dashed ${C.accent};background:transparent;color:${C.accent};padding:4px 7px;font-size:8px;cursor:pointer">+ New folder</button></div>`
+                : '';
+        const folderOptions = channel =>
+            `<option value="">Unfiled</option>`
+            + folders.map(folder =>
+                `<option value="${esc(folder.id)}" ${channel.folder === folder.id ? 'selected' : ''}>${esc(folder.name)}</option>`
+            ).join('');
         const input = cardc(`<div style="font-size:12px;font-weight:900;color:${C.text};margin-bottom:3px">Save and score an entire Shorts channel</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Every Short uses the exact same first-5-second scorer as “score from link”: montage, transcript, visual/text/both embeddings, six outputs per channel, and three novelty outputs.</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input data-savedchannelurl value="${esc(st.savedChannelUrl || '')}" placeholder="https://youtube.com/@channel" style="flex:1;min-width:260px;background:${C.card2};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:11px"/><span data-savedchanneladd style="cursor:pointer;border:1px solid ${st.savedChannelBusy ? C.amber : C.cyan};background:${st.savedChannelBusy ? C.amber + '18' : C.cyan + '18'};color:${st.savedChannelBusy ? C.amber : C.cyan};border-radius:6px;padding:6px 12px;font-size:10px;font-weight:900">${st.savedChannelBusy ? 'queueing…' : 'Save channel + score every Short'}</span>${st.savedChannelErr ? `<span style="font-size:9px;color:${C.red}">${esc(st.savedChannelErr)}</span>` : ''}</div>`, 12);
         if (SAVEDCHANNELS && SAVEDCHANNELS.loading) return input + cardc(`<div style="padding:18px;text-align:center;color:${C.dim}">Loading saved channels…</div>`, 10);
         const pills = channels.map(channel => {
             const selected = st.savedChannelSel === channel.id, color = savedChannelStatusColor(channel.status);
-            return `<div data-savedchannelopen="${channel.id}" style="cursor:pointer;border:1px solid ${selected ? C.accent : C.border};background:${selected ? C.accent + '12' : C.card2};border-radius:7px;padding:7px 9px;min-width:180px;max-width:260px"><div style="font-size:10px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(channel.name || channel.url)}</div><div style="font-size:8.5px;color:${color};margin-top:2px">${esc(channel.status || 'queued')} · ${channel.completed || 0}/${channel.discovered || 0} scored${channel.failed ? ` · ${channel.failed} errors` : ''}</div></div>`;
+            return `<div data-savedchannelopen="${channel.id}" style="cursor:pointer;border:1px solid ${selected ? C.accent : C.border};background:${selected ? C.accent + '12' : C.card2};border-radius:7px;padding:7px 9px;min-width:180px;max-width:260px"><div style="font-size:10px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(channel.name || channel.url)}</div><div style="font-size:8.5px;color:${color};margin-top:2px">${esc(channel.status || 'queued')} · ${channel.completed || 0}/${channel.discovered || 0} scored${channel.failed ? ` · ${channel.failed} errors` : ''}</div>${isExperimentLabSurface() && folders.length ? `<select data-savedchannelmove="${esc(channel.id)}" onclick="event.stopPropagation()" style="margin-top:5px;width:100%;border:1px solid ${C.border};background:${C.card};color:${C.dim};font-size:8px;padding:3px">${folderOptions(channel)}</select>` : ''}</div>`;
         }).join('');
         const selected = st.savedChannelSel && SAVEDCHANNELDETAIL[st.savedChannelSel];
         const globalLedger = !selected && st.savedChannelTab === 'ledger'
             ? renderSavedChannelLedger({ id: '', videos: [], featureContract: SCORECONTRACT })
             : '';
-        return input + cardc(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:900;color:${C.text}">Saved channels <span style="font-size:9px;color:${C.mute};font-weight:600">${channels.length} total</span></div><span data-savedchannelsreload style="cursor:pointer;font-size:9px;color:${C.accent}">refresh all</span></div>${channels.length ? `<div style="display:flex;gap:7px;flex-wrap:wrap">${pills}</div>` : `<div style="font-size:10px;color:${C.mute}">No channels saved yet. The global coordinate dictionary remains available below.</div>`}`, 10) + (selected ? renderSavedChannelDetail(selected) : globalLedger || (channels.length ? cardc(`<div style="padding:12px;color:${C.dim};font-size:10px">Choose a saved channel to browse every scored Short or open its prediction analysis.</div>`, 10) : ''));
+        return input + cardc(`${channelFolderBar}<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:900;color:${C.text}">Saved channels <span style="font-size:9px;color:${C.mute};font-weight:600">${channels.length} shown · ${allChannels.length} total</span></div><span data-savedchannelsreload style="cursor:pointer;font-size:9px;color:${C.accent}">refresh all</span></div>${channels.length ? `<div style="display:flex;gap:7px;flex-wrap:wrap">${pills}</div>` : `<div style="font-size:10px;color:${C.mute}">No channels in this folder.</div>`}`, 10) + (selected ? renderSavedChannelDetail(selected) : globalLedger || (channels.length ? cardc(`<div style="padding:12px;color:${C.dim};font-size:10px">Choose a saved channel to browse every scored Short or open its prediction analysis.</div>`, 10) : ''));
     }
+
+    function labWorkspaceBanner() {
+        if (!isExperimentLabSurface()) return '';
+        if (st.labContextError) {
+            return note(
+                `<b>Private workspace unavailable.</b> `
+                + `${esc(st.labContextError)} `
+                + '<span data-labcontextretry style="cursor:pointer;text-decoration:underline">retry</span>',
+                C.red
+            );
+        }
+        const inspected =
+            st.savedBank === 'team'
+            && st.labTeamAccount
+            && LAB_TEAM_DATA[st.labTeamAccount];
+        const context = inspected
+            ? inspected.context
+            : LAB_CONTEXT;
+        const account =
+            context && context.activeAccount;
+        if (!account) {
+            return note(
+                'Loading the private Experiment Lab workspace…',
+                C.amber
+            );
+        }
+        const summary = context.summary || {};
+        const counts = summary.counts || {};
+        return `<div data-lab-workspace-banner style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid ${C.border};border-left:4px solid ${C.accent};background:${C.card};padding:10px 12px;margin-bottom:14px">
+          <div><div style="font:700 17px/1.2 Georgia,serif;color:${C.text}">${esc(account.name || account.email || 'My workspace')}</div><div style="font-size:9px;color:${C.mute};margin-top:3px;text-transform:uppercase">private account library · shared canonical scorer · ${counts.hooks || 0} hooks · ${counts.channels || 0} channels · ${counts.storyboards || 0} storyboards</div></div>
+          <div style="font-size:8px;color:${context.readOnly ? C.amber : C.green};font-weight:900;text-transform:uppercase">${context.readOnly ? 'owner inspection · read only' : 'private workspace'}</div>
+        </div>`;
+    }
+
+    async function loadLabTeamAccount(accountId) {
+        if (!accountId || !isExperimentLabSurface()) return;
+        st.labTeamAccount = accountId;
+        st.labTeamLoading = true;
+        st.labTeamError = null;
+        rtgUpdateExp();
+        try {
+            const [context, hooks, channels, storyboards] =
+                await Promise.all([
+                    loadExperimentLabContext(accountId),
+                    rtFetchJson(
+                        '/api/raw/saved-hooks',
+                        {
+                            cache: 'no-store',
+                            _labAccount: accountId,
+                        },
+                        4
+                    ),
+                    rtFetchJson(
+                        '/api/raw/saved-channels',
+                        {
+                            cache: 'no-store',
+                            _labAccount: accountId,
+                        },
+                        4
+                    ),
+                    rtFetchJson(
+                        '/api/storyboards?limit=100&offset=0',
+                        {
+                            cache: 'no-store',
+                            _labAccount: accountId,
+                        },
+                        4
+                    ),
+                ]);
+            LAB_TEAM_DATA[accountId] = {
+                context,
+                hooks,
+                channels,
+                storyboards,
+                loadedAt: Date.now(),
+            };
+        } catch (error) {
+            st.labTeamError = fetchFail(error);
+        }
+        st.labTeamLoading = false;
+        rtgUpdateExp();
+    }
+
+    function renderLabTeamPanel() {
+        if (
+            !isExperimentLabSurface()
+            || !LAB_CONTEXT
+            || !LAB_CONTEXT.owner
+        ) return '';
+        const accounts =
+            Array.isArray(LAB_CONTEXT.accounts)
+                ? LAB_CONTEXT.accounts
+                : [];
+        const selectedId = st.labTeamAccount;
+        const selected =
+            selectedId && LAB_TEAM_DATA[selectedId];
+        const accountButton = summary => {
+            const account = summary.account || {};
+            const active = account.id === selectedId;
+            const counts = summary.counts || {};
+            return `<button type="button" data-labteamaccount="${esc(account.id)}" style="text-align:left;border:1px solid ${active ? C.accent : C.border};border-left:3px solid ${active ? C.accent : C.border2};background:${active ? C.card2 : C.card};color:${C.text};padding:9px 10px;cursor:pointer;min-width:180px"><b style="display:block;font:700 13px/1.25 Georgia,serif">${esc(account.name || account.email || account.id)}</b><span style="display:block;font-size:8px;color:${C.mute};margin-top:3px">${counts.hooks || 0} hooks · ${counts.channels || 0} channels · ${summary.activityCount || 0} actions</span></button>`;
+        };
+        const accountRail = `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:7px;margin-bottom:10px">${accounts.map(accountButton).join('')}</div>`;
+        if (st.labTeamLoading) {
+            return accountRail + cardc(
+                '<div style="padding:20px;text-align:center">Loading the selected account workspace…</div>',
+                10
+            );
+        }
+        if (st.labTeamError) {
+            return accountRail + note(
+                esc(st.labTeamError),
+                C.red
+            );
+        }
+        if (!selected) {
+            return accountRail + cardc(
+                '<div style="padding:18px;color:inherit">Select an account to inspect its private folders, saved work, and generation history. Inspection is read-only.</div>',
+                10
+            );
+        }
+        const workspace =
+            selected.context.workspace || {};
+        const hookRows =
+            selected.hooks.hooks || [];
+        const channelRows =
+            selected.channels.channels || [];
+        const storyboardRows =
+            selected.storyboards.storyboards || [];
+        const hookFolders =
+            selected.hooks.folders || [];
+        const channelFolders =
+            selected.channels.folders || [];
+        const storyboardFolders =
+            selected.storyboards.folders || [];
+        const folderName = (folders, id) => {
+            if (!id) return 'Unfiled';
+            const folder =
+                folders.find(row => row.id === id);
+            return folder ? folder.name : 'Unfiled';
+        };
+        const hookCards = hookRows.map(hook => {
+            const thumb = hook.hasMontage
+                ? authenticatedMediaUrl(
+                    `/api/raw/saved-montage/${hook.id}`,
+                    selectedId
+                )
+                : '';
+            return `<button type="button" data-labteamhook="${esc(hook.id)}" style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:9px;text-align:left;border:1px solid ${C.border};background:${C.card};padding:7px;color:${C.text};cursor:pointer;min-width:0">${thumb ? `<img src="${thumb}" alt="" loading="lazy" style="width:96px;aspect-ratio:16/9;object-fit:cover;background:${C.card2}">` : `<span style="width:96px;aspect-ratio:16/9;background:${C.card2};display:block"></span>`}<span><b style="display:block;font-size:10px;line-height:1.35">${esc(hook.title || 'Saved hook')}</b><small style="display:block;color:${C.mute};font-size:8px;margin-top:5px">${esc(folderName(hookFolders, hook.folder))} · open exact ledger</small></span></button>`;
+        }).join('');
+        const channelCards = channelRows.map(channel =>
+            `<div style="border:1px solid ${C.border};background:${C.card};padding:8px 9px"><b style="display:block;font-size:10px;color:${C.text}">${esc(channel.name || channel.url)}</b><span style="display:block;font-size:8px;color:${C.mute};margin-top:3px">${esc(folderName(channelFolders, channel.folder))} · ${esc(channel.status || 'saved')} · ${channel.completed || 0}/${channel.discovered || 0} scored</span></div>`
+        ).join('');
+        const storyboardCards = storyboardRows.map(storyboard =>
+            `<div style="border:1px solid ${C.border};background:${C.card};padding:8px 9px"><b style="display:block;font-size:10px;color:${C.text}">${esc(storyboard.name || 'Untitled opening')}</b><span style="display:block;font-size:8px;color:${C.mute};margin-top:3px">${esc(folderName(storyboardFolders, storyboard.folder))} · ${storyboard.complete ? 'complete' : 'draft'} · ${storyboard.scored ? 'scored' : 'not scored'} · ${esc(storyboard.model || 'model unavailable')}</span></div>`
+        ).join('');
+        const activity = (workspace.activity || [])
+            .slice(0, 100)
+            .map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:6px;color:${C.text}">${esc(row.title || row.type)}</td><td style="padding:6px;color:${C.mute}">${esc(row.type)}</td><td style="padding:6px;color:${row.saved ? C.green : row.status === 'failed' ? C.red : C.amber}">${esc(row.saved ? 'saved' : row.status || 'complete')}</td><td style="padding:6px;color:${C.mute};white-space:nowrap">${row.updatedAt ? esc(new Date(row.updatedAt).toLocaleString()) : '—'}</td></tr>`)
+            .join('');
+        return accountRail
+            + (st.savedSel ? savedDetail() : '')
+            + `<div data-lab-team-collections style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px"><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.accent};margin-bottom:6px">Saved hooks · ${hookRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${hookCards || '<div style="font-size:9px;color:inherit">No saved hooks.</div>'}</div></section><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.cyan};margin-bottom:6px">Saved channels · ${channelRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${channelCards || '<div style="font-size:9px;color:inherit">No saved channels.</div>'}</div></section><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.amber};margin-bottom:6px">Saved storyboards · ${storyboardRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${storyboardCards || '<div style="font-size:9px;color:inherit">No saved storyboards.</div>'}</div></section></div>`
+            + cardc(`<div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.purple};margin-bottom:6px">Generated, scored, saved, and removed activity</div><div style="overflow:auto;max-height:440px"><table style="border-collapse:collapse;width:100%;min-width:620px;font-size:8.5px"><thead><tr style="text-align:left;color:${C.mute}"><th style="padding:6px">work</th><th style="padding:6px">operation</th><th style="padding:6px">state</th><th style="padding:6px">updated</th></tr></thead><tbody>${activity || '<tr><td colspan="4" style="padding:12px">No recorded activity.</td></tr>'}</tbody></table></div>`, 10);
+    }
+
     function savedBank() {
         const tab = st.savedBank || 'hooks', hookCount = (SAVED && SAVED.hooks || []).length, channelCount = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).length;
         const button = (key, label, count) => `<span data-savedbank="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:6px 12px;font-size:12px;font-weight:900">${label} <span style="font-size:9px;color:${tab === key ? C.accent : C.mute}">${count}</span></span>`;
-        return cardc(`<div style="display:flex;gap:4px">${button('hooks', 'Saved hooks', hookCount)}${button('channels', 'Saved channels', channelCount)}</div>`, 6) + (tab === 'channels' ? savedChannelsPanel() : savedStrip());
+        const teamCount =
+            LAB_CONTEXT
+            && LAB_CONTEXT.owner
+            && Array.isArray(LAB_CONTEXT.accounts)
+                ? LAB_CONTEXT.accounts.length
+                : 0;
+        const teamButton =
+            isExperimentLabSurface()
+            && LAB_CONTEXT
+            && LAB_CONTEXT.owner
+                ? button('team', 'Team workspaces', teamCount)
+                : '';
+        const panel = tab === 'team'
+            ? renderLabTeamPanel()
+            : tab === 'channels'
+                ? savedChannelsPanel()
+                : savedStrip();
+        return cardc(`<div style="display:flex;gap:4px;overflow-x:auto">${button('hooks', 'Saved hooks', hookCount)}${button('channels', 'Saved channels', channelCount)}${teamButton}</div>`, 6) + panel;
     }
     function savedStrip() {
         if (!SAVED || SAVED.loading) return cardc(`<div style="padding:18px;text-align:center;color:${C.dim}">Loading saved hooks…</div>`, 10);
@@ -11104,7 +11805,17 @@ const JarvisRetention = (function () {
         const folderBar = `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:9px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">folder</span>${folderPills.map(([id, lab]) => `<span data-savedfolder="${id}" style="cursor:pointer;font-size:10px;border:1px solid ${curF === id ? C.accent : C.border};background:${curF === id ? C.accent + '22' : 'transparent'};color:${curF === id ? C.accent : C.dim};border-radius:6px;padding:2px 8px">${lab}${(id !== 'all' && id !== 'none') ? ` <span data-savedfolderdel="${id}" title="delete folder" style="color:${C.mute};margin-left:3px">✕</span>` : ''}</span>`).join('')}<span data-savedfoldernew style="cursor:pointer;font-size:10px;border:1px dashed ${C.accent};color:${C.accent};border-radius:6px;padding:2px 8px">+ New folder</span></div>`;
         const folderOpts = h => `<option value="">📁 —</option>` + folders.map(f => `<option value="${f.id}" ${h.folder === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
         const card = h => {
-            const thumb = h.hasMontage ? `/api/raw/saved-montage/${h.id}` : (h.frame_imgs && h.frame_imgs[0] ? `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}` : '');
+            const thumb = h.hasMontage
+                ? authenticatedMediaUrl(
+                    `/api/raw/saved-montage/${h.id}`
+                )
+                : (
+                    h.frame_imgs && h.frame_imgs[0]
+                        ? authenticatedMediaUrl(
+                            `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}`
+                        )
+                        : ''
+                );
             const canonicalKeepIdentity = metricIdentity(h, 'keep');
             const kpct = canonicalKeepIdentity
                 && canonicalKeepIdentity.percentile100 != null
@@ -11161,10 +11872,114 @@ const JarvisRetention = (function () {
           ${hooks.length > SHOW ? `<div style="text-align:center;margin-top:12px"><span data-savedmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:6px 18px;font-size:11px;font-weight:700">Load ${Math.min(window.innerWidth < 700 ? 20 : 60, hooks.length - SHOW)} more · ${hooks.length - SHOW} left</span></div>` : ''}`, 12);
     }
 
+    function applyMountSurface(surface) {
+        const next =
+            surface === 'experiment-lab'
+                ? 'experiment-lab'
+                : 'jarvis';
+        mountSurface = next;
+        Object.assign(
+            C,
+            isExperimentLabSurface()
+                ? EXPERIMENT_LAB_COLORS
+                : BASE_COLORS
+        );
+        SAVED = null;
+        SAVEDDETAIL = {};
+        SAVEDCHANNELS = null;
+        SAVEDCHANNELDETAIL = {};
+        SAVEDCHANNELANALYSIS = {};
+        SAVEDCHANNELVIDEOCACHE = {};
+        EXPDEMO = {};
+        GRINDRUN = null;
+        GRINDLIST = null;
+        STORYBOARD_UI = null;
+        LAB_TEAM_DATA = {};
+        LAB_CONTEXT = null;
+        st.savedBank = 'hooks';
+        st.savedFolder = 'all';
+        st.savedSel = null;
+        st.savedChannelSel = null;
+        st.labTeamAccount = null;
+        st.labTeamError = null;
+        st.expGenRid = null;
+        st.expGenBusy = false;
+        st.expGenStage = null;
+        st.grindRid = null;
+        st.grindBusy = false;
+        st.rawUploads = [];
+        st.rawUpSel = null;
+        st.rawSel = null;
+        st.rawView = 'map';
+    }
+
+    async function loadExperimentLabContext(accountId) {
+        const context = await rtFetchJson(
+            '/api/experimentlab/context',
+            {
+                cache: 'no-store',
+                ...(accountId
+                    ? { _labAccount: accountId }
+                    : { _labOwnAccount: true }),
+            },
+            4
+        );
+        if (!accountId) LAB_CONTEXT = context;
+        return context;
+    }
+
+    function refreshExperimentLabContext() {
+        if (!isExperimentLabSurface()) return;
+        loadExperimentLabContext()
+            .then(context => {
+                LAB_CONTEXT = context;
+                st.labContextError = null;
+                publishExperimentLabContext();
+                if (root && root.isConnected) {
+                    rtgUpdateExp();
+                }
+            })
+            .catch(error => {
+                st.labContextError = fetchFail(error);
+                if (root && root.isConnected) {
+                    rtgUpdateExp();
+                }
+            });
+    }
+
+    function publishExperimentLabContext() {
+        if (
+            !root
+            || !isExperimentLabSurface()
+            || typeof window.CustomEvent !== 'function'
+        ) return;
+        root.dispatchEvent(
+            new window.CustomEvent(
+                'experiment-lab-context',
+                { detail: LAB_CONTEXT }
+            )
+        );
+    }
+
     async function mount(el, options) {
+        mountGeneration += 1;
         root = el;
+        applyMountSurface(
+            options && options.surface
+        );
         mountMode = options && options.mode === 'experiment' ? 'experiment' : 'full';
         if (mountMode === 'experiment') st.sec = 'experiment';
+        if (isExperimentLabSurface()) {
+            try {
+                LAB_CONTEXT =
+                    await loadExperimentLabContext();
+                st.labContextError = null;
+            } catch (error) {
+                LAB_CONTEXT = null;
+                st.labContextError = fetchFail(error);
+            }
+            publishExperimentLabContext();
+        }
         try {
             await ensureShortsLedgerRuntime();
             st.scoreLedgerRuntimeError = null;
@@ -11174,7 +11989,17 @@ const JarvisRetention = (function () {
         if (!root.__rb) {
             root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange); root.addEventListener('keydown', onKeyDown);
             // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing
-            const warmPing = (quiet) => fetch('/api/hooks/warmup', { method: 'POST' }).then(r => r.json()).then(j => { if (j && j.fired) { st.warmFiredAt = Date.now(); if (!quiet) rtgUpdateExp(); } }).catch(() => {});
+            const warmPing = quiet =>
+                rtFetchJson(
+                    '/api/hooks/warmup',
+                    { method: 'POST' },
+                    1
+                ).then(j => {
+                    if (j && j.fired) {
+                        st.warmFiredAt = Date.now();
+                        if (!quiet) rtgUpdateExp();
+                    }
+                }).catch(() => {});
             root.addEventListener('focusin', e => {
                 if (e.target && e.target.id === 'exp-gen-input' && !st.expGenBusy) { st.warmHold = 1; warmPing(); }
             });
@@ -11235,8 +12060,26 @@ const JarvisRetention = (function () {
         }
         render();
     }
-    function mountExperiment(el) { return mount(el, { mode: 'experiment' }); }
-    return { mount, mountExperiment, __st: () => st };
+    function mountExperiment(el, options) {
+        return mount(el, {
+            ...(options || {}),
+            mode: 'experiment',
+        });
+    }
+    function unmountExperiment(el) {
+        if (!el || root === el) {
+            mountGeneration += 1;
+            st.warmHold = 0;
+            root = null;
+        }
+    }
+    return {
+        mount,
+        mountExperiment,
+        unmountExperiment,
+        getExperimentContext: () => LAB_CONTEXT,
+        __st: () => st,
+    };
 })();
 if (typeof window !== 'undefined') window.JarvisRetention = JarvisRetention;
 if (typeof module !== 'undefined' && module.exports) module.exports = JarvisRetention;

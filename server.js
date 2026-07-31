@@ -94,6 +94,9 @@ const creatorAdaptiveKeepForecastContract = require(
 const storyboardContract = require(
     './buildings/jarvis/storyboard-contract'
 );
+const experimentLabWorkspace = require(
+    './buildings/experimentlab/experimentlab-workspace'
+);
 const {
     createR2JsonCasMutator,
 } = require('./buildings/jarvis/r2-json-cas');
@@ -1585,8 +1588,15 @@ async function quantJobGet(jid, namespace = 'longform') {
     return null;   // lost (deploy killed it before any write) — client resubmits
 }
 
-async function sendQuantJobStatus(res, jid, namespace = 'longform') {
-    const rec = await quantJobGet(jid, namespace);
+async function sendQuantJobStatus(
+    res,
+    jid,
+    namespace = 'longform',
+    suppliedRecord
+) {
+    const rec = suppliedRecord === undefined
+        ? await quantJobGet(jid, namespace)
+        : suppliedRecord;
     res.writeHead(rec ? 200 : 404, {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
@@ -2739,6 +2749,449 @@ const r2JsonCasStorage = Object.freeze({
     isPreconditionFailed: error =>
         cloud.isR2PreconditionFailedError(error),
 });
+
+const experimentLabWorkspaceCasCache = new Map();
+
+function experimentLabPermissionBuildings(req) {
+    const permissions = req && req._perms;
+    return new Set(
+        Array.isArray(permissions && permissions.buildings)
+            ? permissions.buildings
+            : []
+    );
+}
+
+function isExperimentLabRequest(req, url) {
+    if (
+        url
+        && String(url.pathname || '').startsWith(
+            '/api/experimentlab/'
+        )
+    ) return true;
+    const surface = String(
+        req && req.headers
+        && req.headers['x-business-world-surface']
+        || url && url.searchParams.get('surface')
+        || ''
+    ).toLowerCase();
+    if (surface === 'experiment-lab') return true;
+    const buildings = experimentLabPermissionBuildings(req);
+    return !!(
+        req
+        && req._account
+        && req._account.role !== 'owner'
+        && buildings.has('Experiment Lab')
+        && !buildings.has('Jarvis')
+    );
+}
+
+function experimentLabTargetId(req, url) {
+    return String(
+        req && req.headers
+        && req.headers['x-experiment-lab-account']
+        || url && url.searchParams.get('experiment_lab_account')
+        || ''
+    ).trim();
+}
+
+async function experimentLabAccountScope(
+    req,
+    url,
+    { write = false } = {}
+) {
+    if (!isExperimentLabRequest(req, url)) return null;
+    const viewer = req && req._account;
+    if (!viewer || !viewer.id) {
+        throw new HttpRequestError(
+            401,
+            'Sign in is required for an Experiment Lab workspace.',
+            'experiment_lab_sign_in_required'
+        );
+    }
+    const targetId = experimentLabTargetId(req, url);
+    if (!targetId) {
+        return {
+            viewer,
+            account: viewer,
+            readOnly: false,
+        };
+    }
+    if (targetId === viewer.id) {
+        if (write) {
+            throw new HttpRequestError(
+                403,
+                'Team workspace inspection is read-only.',
+                'experiment_lab_team_read_only'
+            );
+        }
+        return {
+            viewer,
+            account: viewer,
+            readOnly: true,
+        };
+    }
+    if (viewer.role !== 'owner') {
+        throw new HttpRequestError(
+            403,
+            'You cannot inspect another Experiment Lab account.',
+            'experiment_lab_account_forbidden'
+        );
+    }
+    if (write) {
+        throw new HttpRequestError(
+            403,
+            'Owner team inspection is read-only.',
+            'experiment_lab_team_read_only'
+        );
+    }
+    const target = await dataStore.getById('accounts', targetId);
+    if (!target) {
+        throw new HttpRequestError(
+            404,
+            'Experiment Lab account not found.',
+            'experiment_lab_account_not_found'
+        );
+    }
+    return {
+        viewer,
+        account: target,
+        readOnly: true,
+    };
+}
+
+function experimentLabWorkspaceCas(account) {
+    const identity = experimentLabWorkspace.accountIdentity(account);
+    if (experimentLabWorkspaceCasCache.has(identity.id)) {
+        return experimentLabWorkspaceCasCache.get(identity.id);
+    }
+    const cas = createR2JsonCasMutator({
+        key: experimentLabWorkspace.workspaceKey(identity.id),
+        storage: r2JsonCasStorage,
+        emptyValue: () =>
+            experimentLabWorkspace.emptyWorkspace(identity),
+        validate: value => {
+            const validation =
+                experimentLabWorkspace.validateWorkspace(value);
+            if (
+                value
+                && value.account
+                && value.account.id !== identity.id
+            ) {
+                validation.valid = false;
+                validation.errors = [
+                    ...(validation.errors || []),
+                    'workspace account differs from its storage key',
+                ];
+            }
+            return validation;
+        },
+        bind: value => experimentLabWorkspace.bindWorkspace({
+            ...value,
+            account: identity,
+            updatedAt: Date.now(),
+        }),
+        label: `Experiment Lab workspace ${identity.id}`,
+    });
+    experimentLabWorkspaceCasCache.set(identity.id, cas);
+    return cas;
+}
+
+async function readExperimentLabWorkspace(account) {
+    const revision =
+        await experimentLabWorkspaceCas(account).readRevision();
+    const workspace = revision.value;
+    const validation =
+        experimentLabWorkspace.validateWorkspace(workspace);
+    if (!validation.valid) {
+        throw new Error(
+            'Experiment Lab workspace failed validation: '
+            + validation.errors.join('; ')
+        );
+    }
+    return {
+        workspace,
+        exists: !!revision.revision,
+    };
+}
+
+async function mutateExperimentLabWorkspace(account, mutator) {
+    return experimentLabWorkspaceCas(account).mutate(
+        async workspace => {
+            await mutator(workspace);
+            return workspace;
+        }
+    );
+}
+
+function experimentLabHasItem(workspace, kind, id) {
+    return !!(
+        workspace
+        && workspace.collections
+        && workspace.collections[kind]
+        && workspace.collections[kind].items.some(
+            item => item.id === id
+        )
+    );
+}
+
+function experimentLabCanControlSavedChannel(scope, manifest) {
+    if (!scope) return true;
+    if (scope.viewer && scope.viewer.role === 'owner') return true;
+    return !!(
+        manifest
+        && manifest.experimentLabControlKey
+            === experimentLabWorkspace.accountKey(
+                scope.account.id
+            )
+    );
+}
+
+function experimentLabHasActivityRequest(
+    workspace,
+    requestId,
+    types
+) {
+    const expectedTypes = Array.isArray(types)
+        ? new Set(types)
+        : null;
+    return !!(
+        workspace
+        && Array.isArray(workspace.activity)
+        && workspace.activity.some(activity => (
+            activity.requestId === requestId
+            && (
+                !expectedTypes
+                || expectedTypes.has(activity.type)
+            )
+        ))
+    );
+}
+
+async function requireExperimentLabActivity(
+    req,
+    url,
+    requestId,
+    types,
+    options
+) {
+    const scope = await experimentLabAccountScope(
+        req,
+        url,
+        options
+    );
+    if (!scope) return null;
+    const workspace =
+        await experimentLabWorkspaceForScope(scope);
+    if (
+        !experimentLabHasActivityRequest(
+            workspace,
+            requestId,
+            types
+        )
+    ) {
+        throw new HttpRequestError(
+            404,
+            'This run is not part of the selected Experiment Lab workspace.',
+            'experiment_lab_run_not_found'
+        );
+    }
+    return {
+        ...scope,
+        workspace,
+    };
+}
+
+async function requireExperimentLabItem(
+    req,
+    url,
+    kind,
+    id,
+    options
+) {
+    const scope = await experimentLabAccountScope(
+        req,
+        url,
+        options
+    );
+    if (!scope) return null;
+    const { workspace } =
+        await readExperimentLabWorkspace(scope.account);
+    if (!experimentLabHasItem(workspace, kind, id)) {
+        throw new HttpRequestError(
+            404,
+            `This ${kind.slice(0, -1)} is not saved in the selected workspace.`,
+            'experiment_lab_artifact_not_saved'
+        );
+    }
+    return {
+        ...scope,
+        workspace,
+    };
+}
+
+async function experimentLabWorkspaceForScope(scope) {
+    if (!scope) return null;
+    if (!scope.readOnly) {
+        return ensureInitialExperimentLabWorkspace(
+            scope.account
+        );
+    }
+    return (
+        await readExperimentLabWorkspace(scope.account)
+    ).workspace;
+}
+
+async function attachExperimentLabItem(
+    scope,
+    kind,
+    id,
+    activity
+) {
+    if (!scope) return null;
+    return mutateExperimentLabWorkspace(
+        scope.account,
+        workspace => {
+            experimentLabWorkspace.upsertItem(
+                workspace,
+                kind,
+                { id }
+            );
+            experimentLabWorkspace.addActivity(
+                workspace,
+                {
+                    ...activity,
+                    status: 'saved',
+                    artifactKind: kind,
+                    artifactId: id,
+                    saved: true,
+                }
+            );
+        }
+    );
+}
+
+async function recordExperimentLabActivity(scope, activity) {
+    if (!scope) return null;
+    const requestId = String(
+        activity && activity.requestId || ''
+    ).trim();
+    if (requestId) {
+        const { workspace } =
+            await readExperimentLabWorkspace(scope.account);
+        const existing = workspace.activity.find(
+            candidate => candidate.requestId === requestId
+        );
+        if (
+            existing
+            && Object.entries(activity).every(([key, value]) => (
+                value === undefined
+                || JSON.stringify(existing[key])
+                    === JSON.stringify(value)
+            ))
+        ) return existing;
+    }
+    let recorded;
+    await mutateExperimentLabWorkspace(
+        scope.account,
+        workspace => {
+            recorded = experimentLabWorkspace.addActivity(
+                workspace,
+                activity
+            );
+        }
+    );
+    return recorded;
+}
+
+async function ensureInitialExperimentLabWorkspace(account) {
+    const current = await readExperimentLabWorkspace(account);
+    if (current.exists) return current.workspace;
+    let legacy = {
+        hooks: [],
+        channels: [],
+        storyboards: [],
+    };
+    if (account && account.role === 'owner') {
+        const [hookIndex, channelIndex, storyboardIndex] =
+            await Promise.all([
+                readSavedHookIndex().then(result =>
+                    ensureSavedHookIndexIntegrity(result)
+                ),
+                readSavedChannelIndex(),
+                readStoryboardIndex(),
+            ]);
+        legacy = {
+            hooks: []
+                .concat(
+                    hookIndex && hookIndex.hooks || [],
+                    hookIndex && hookIndex.legacy_hooks || []
+                )
+                .filter(row => (
+                    row
+                    && row.id
+                    && row.score_domain === 'shorts'
+                ))
+                .map(row => row.id),
+            channels: (channelIndex && channelIndex.channels || [])
+                .filter(row => row && row.id)
+                .map(row => row.id),
+            storyboards:
+                (storyboardIndex && storyboardIndex.storyboards || [])
+                    .filter(row => row && row.id)
+                    .map(row => row.id),
+        };
+    }
+    return mutateExperimentLabWorkspace(
+        account,
+        workspace => {
+            for (const kind of experimentLabWorkspace.COLLECTIONS) {
+                for (const id of legacy[kind] || []) {
+                    experimentLabWorkspace.upsertItem(
+                        workspace,
+                        kind,
+                        { id }
+                    );
+                }
+            }
+            experimentLabWorkspace.addActivity(workspace, {
+                type: account && account.role === 'owner'
+                    ? 'legacy-owner-import'
+                    : 'workspace-created',
+                status: 'complete',
+                title: account && account.role === 'owner'
+                    ? 'Imported the existing owner Experiment library'
+                    : 'Created Experiment Lab workspace',
+                detail: account && account.role === 'owner'
+                    ? (
+                        `${legacy.hooks.length} hooks, `
+                        + `${legacy.channels.length} channels, and `
+                        + `${legacy.storyboards.length} storyboards`
+                    )
+                    : null,
+            });
+        }
+    );
+}
+
+async function experimentLabAccountSummaries() {
+    const accounts = await dataStore.getAll('accounts');
+    const eligible = await Promise.all(accounts.map(async account => {
+        const permissions = await auth.permsForAccount(account);
+        if (
+            account.role !== 'owner'
+            && !(
+                Array.isArray(permissions.buildings)
+                && permissions.buildings.includes('Experiment Lab')
+            )
+        ) return null;
+        const { workspace } =
+            await readExperimentLabWorkspace(account);
+        return experimentLabWorkspace.summary(workspace);
+    }));
+    return eligible.filter(Boolean).sort((left, right) => (
+        Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
+    ));
+}
 
 const storyboardIndexCas = createR2JsonCasMutator({
     key: STORYBOARD_INDEX_KEY,
@@ -4992,6 +5445,17 @@ function validateSavedChannelManifestStructure(manifest, id) {
             'saved-channel control revision is invalid'
         );
     }
+    if (
+        manifest
+        && manifest.experimentLabControlKey != null
+        && !/^[a-f0-9]{32}$/.test(
+            String(manifest.experimentLabControlKey)
+        )
+    ) {
+        errors.push(
+            'saved-channel Experiment Lab control key is invalid'
+        );
+    }
     return {
         valid: errors.length === 0,
         errors,
@@ -6643,6 +7107,233 @@ async function handleHttpRequest(req, res) {
             return;
         }
         req._account = decision.account;
+        req._perms = decision.perms;
+    }
+    const experimentLabInspectionTarget =
+        experimentLabTargetId(req, url);
+    if (
+        isExperimentLabRequest(req, url)
+        && experimentLabWorkspace
+            .isReadOnlyInspectionMutation(
+                req._account && req._account.id,
+                experimentLabInspectionTarget,
+                req.method
+            )
+    ) {
+        res.writeHead(403, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+        });
+        res.end(JSON.stringify({
+            error: req._account.role === 'owner'
+                ? 'Owner team inspection is read-only.'
+                : 'You cannot modify another Experiment Lab account.',
+            code: req._account.role === 'owner'
+                ? 'experiment_lab_team_read_only'
+                : 'experiment_lab_account_forbidden',
+        }));
+        return;
+    }
+
+    // =========================================
+    // EXPERIMENT LAB: account-scoped workspace references.
+    // Scoring and generation continue through the canonical Jarvis routes;
+    // only organization, membership, and activity are tenant-specific.
+    // =========================================
+    if (
+        pathname === '/api/experimentlab/context'
+        && req.method === 'GET'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const workspace = scope.readOnly
+                ? (
+                    await readExperimentLabWorkspace(scope.account)
+                ).workspace
+                : await ensureInitialExperimentLabWorkspace(
+                    scope.account
+                );
+            const response = {
+                schema: experimentLabWorkspace.SCHEMA,
+                surface: 'experiment-lab',
+                viewer:
+                    experimentLabWorkspace.accountIdentity(
+                        scope.viewer
+                    ),
+                activeAccount: workspace.account,
+                readOnly: scope.readOnly,
+                workspace,
+                summary:
+                    experimentLabWorkspace.summary(workspace),
+                owner: scope.viewer.role === 'owner',
+                accounts: scope.viewer.role === 'owner'
+                    ? await experimentLabAccountSummaries()
+                    : [],
+            };
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'private, no-store',
+                'Vary':
+                    'Authorization, X-Business-World-Surface, '
+                    + 'X-Experiment-Lab-Account',
+            });
+            res.end(JSON.stringify(response));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_context_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/experimentlab/folder'
+        && req.method === 'POST'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = (await readBody(req)) || {};
+            let folder;
+            const workspace =
+                await mutateExperimentLabWorkspace(
+                    scope.account,
+                    current => {
+                        folder =
+                            experimentLabWorkspace.createFolder(
+                                current,
+                                String(body.kind || ''),
+                                body.name
+                            );
+                    }
+                );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                folder,
+                workspace_sha256:
+                    workspace.workspace_sha256,
+            }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_folder_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/experimentlab/folder/delete'
+        && req.method === 'POST'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = (await readBody(req)) || {};
+            const workspace =
+                await mutateExperimentLabWorkspace(
+                    scope.account,
+                    current => {
+                        experimentLabWorkspace.deleteFolder(
+                            current,
+                            String(body.kind || ''),
+                            body.id
+                        );
+                    }
+                );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                workspace_sha256:
+                    workspace.workspace_sha256,
+            }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_folder_delete_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/experimentlab/item/move'
+        && req.method === 'POST'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = (await readBody(req)) || {};
+            const workspace =
+                await mutateExperimentLabWorkspace(
+                    scope.account,
+                    current => {
+                        experimentLabWorkspace.moveItem(
+                            current,
+                            String(body.kind || ''),
+                            body.id,
+                            body.folderId
+                        );
+                    }
+                );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                workspace_sha256:
+                    workspace.workspace_sha256,
+            }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_item_move_failed',
+            }));
+        }
+        return;
     }
 
     // =========================================
@@ -6737,6 +7428,11 @@ async function handleHttpRequest(req, res) {
     // 5-frame montage + first-5s transcript, embeds and scores — identical record to an upload.
     if (pathname === '/api/raw/embed-youtube' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = await readBody(req);
             const yurl = String(body.url || '').trim().slice(0, 300);
             if (!/^[\w-]{11}$/.test(yurl) && !/youtube\.com|youtu\.be/i.test(yurl)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"paste a YouTube link (watch, shorts, or youtu.be)"}'); return; }
@@ -6983,6 +7679,18 @@ async function handleHttpRequest(req, res) {
                     requestFingerprint
                 );
                 await quantJobReady(jobId, 'shorts');
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'hook-scored-from-link',
+                        status: 'started',
+                        title: yTitle || yurl,
+                        requestId: jobId,
+                        detail:
+                            'Canonical Shorts score from YouTube link',
+                        saved: false,
+                    }
+                );
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({
                     ok: true,
                     jobId,
@@ -6990,11 +7698,30 @@ async function handleHttpRequest(req, res) {
                 })); return;
             }
             const out = await relayRunner();
+            await recordExperimentLabActivity(
+                labScope,
+                {
+                    type: 'hook-scored-from-link',
+                    status: 'complete',
+                    title: yTitle || yurl,
+                    requestId:
+                        quantRequestId(req)
+                        || `youtube:${yurl}`,
+                    detail:
+                        'Canonical Shorts score from YouTube link',
+                    saved: false,
+                }
+            );
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
+        const labScope = await experimentLabAccountScope(
+            req,
+            url,
+            { write: true }
+        );
         const requestId = quantRequestId(req);
         const ext = (req.headers['x-raw-ext'] || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
         const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);
@@ -7192,6 +7919,18 @@ async function handleHttpRequest(req, res) {
                         if (racedJobId) {
                             cleanupTmp();
                             await quantJobReady(racedJobId, 'shorts');
+                            await recordExperimentLabActivity(
+                                labScope,
+                                {
+                                    type: 'hook-upload-scored',
+                                    status: 'started',
+                                    title,
+                                    requestId: racedJobId,
+                                    detail:
+                                        'Reused canonical Shorts score job',
+                                    saved: false,
+                                }
+                            );
                             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
                             res.end(JSON.stringify({
                                 ok: true,
@@ -7208,6 +7947,18 @@ async function handleHttpRequest(req, res) {
                             finally { cleanupTmp(); }
                         }, 'shorts', requestId, requestFingerprint);
                         await quantJobReady(jobId, 'shorts');
+                        await recordExperimentLabActivity(
+                            labScope,
+                            {
+                                type: 'hook-upload-scored',
+                                status: 'started',
+                                title,
+                                requestId: jobId,
+                                detail:
+                                    'Uploaded video sent to canonical Shorts scorer',
+                                saved: false,
+                            }
+                        );
                         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({
                             ok: true,
                             jobId,
@@ -7237,6 +7988,20 @@ async function handleHttpRequest(req, res) {
                 }
                 try {
                     const result = validateRawScoreResult(JSON.parse(await upRunner()));
+                    await recordExperimentLabActivity(
+                        labScope,
+                        {
+                            type: 'hook-upload-scored',
+                            status: 'complete',
+                            title,
+                            requestId:
+                                requestId
+                                || `upload:${transferSha256}`,
+                            detail:
+                                'Uploaded video scored by the canonical Shorts scorer',
+                            saved: false,
+                        }
+                    );
                     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result));
                 } catch (e) {
                     res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
@@ -7251,6 +8016,14 @@ async function handleHttpRequest(req, res) {
     // RAW build-a-hook — a montage (5 frames stitched in the browser) + user-set text.
     // No ffmpeg/transcription: just embed visual/text/together and locate by neighbours.
     if ((pathname === '/api/raw/embed-montage' || pathname === '/api/raw-long/embed-montage') && req.method === 'POST') {
+        const labScope =
+            pathname === '/api/raw/embed-montage'
+                ? await experimentLabAccountScope(
+                    req,
+                    url,
+                    { write: true }
+                )
+                : null;
         let body = ''; let size = 0, tooBig = false; const MAX = 25 * 1024 * 1024;
         // Over cap: stop buffering and drain to end, then reply 413 (see /api/qrd/predict).
         req.on('data', c => {
@@ -7369,6 +8142,20 @@ async function handleHttpRequest(req, res) {
                     finally { try { fs.unlinkSync(tmp); } catch (_) {} }
                 }, 'shorts', quantRequestId(req), requestFingerprint);
                 await quantJobReady(jobId, 'shorts');
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'built-hook-scored',
+                        status: 'started',
+                        title:
+                            (j.title || j.text || 'Built hook')
+                                .toString().slice(0, 180),
+                        requestId: jobId,
+                        detail:
+                            'Five-frame opening sent to canonical Shorts scorer',
+                        saved: false,
+                    }
+                );
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({
                     ok: true,
                     jobId,
@@ -7377,6 +8164,22 @@ async function handleHttpRequest(req, res) {
             }
             try {
                 const result = validateRawScoreResult(JSON.parse(await monRunner()));
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'built-hook-scored',
+                        status: 'complete',
+                        title:
+                            (j.title || j.text || 'Built hook')
+                                .toString().slice(0, 180),
+                        requestId:
+                            quantRequestId(req)
+                            || `montage:${Date.now()}`,
+                        detail:
+                            'Five-frame opening scored by the canonical Shorts scorer',
+                        saved: false,
+                    }
+                );
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
@@ -9194,7 +9997,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
             if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
             else { res.writeHead(404); res.end(); }
-        } catch (e) { res.writeHead(500); res.end(); }
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_channel_montage_failed',
+            }));
+        }
         return;
     }
     // Saved Shorts channels. The server owns the durable manifest/API while the Mac relay
@@ -9223,6 +10034,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/raw/saved-channels' && req.method === 'GET') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
             const index = await readSavedChannelIndex();
             if (index.indexMissing) {
                 throw new HttpRequestError(
@@ -9233,9 +10049,47 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     'saved_channel_index_missing'
                 );
             }
+            let channels = index.channels || [];
+            let folders = [];
+            let workspaceSource = null;
+            if (labScope) {
+                const workspace =
+                    await experimentLabWorkspaceForScope(
+                        labScope
+                    );
+                const collection =
+                    workspace.collections.channels;
+                const references = new Map(
+                    collection.items.map(item => [
+                        item.id,
+                        item,
+                    ])
+                );
+                channels = channels
+                    .filter(channel =>
+                        references.has(channel.id)
+                    )
+                    .map(channel => ({
+                        ...channel,
+                        folder:
+                            references.get(channel.id).folderId,
+                        workspace_saved_at:
+                            references.get(channel.id).savedAt,
+                    }));
+                folders = collection.folders;
+                workspaceSource = {
+                    schema: workspace.schema,
+                    account: workspace.account,
+                    readOnly: labScope.readOnly,
+                    workspace_sha256:
+                        workspace.workspace_sha256,
+                };
+            }
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify({
-                channels: index.channels || [],
+                channels,
+                folders,
+                workspace: workspaceSource,
                 featureContract: savedChannelAnalysis.contract,
                 source_of_truth: {
                     navigation_index_key: SAVED_CHANNEL_INDEX_KEY,
@@ -9253,6 +10107,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/raw/saved-channel' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
             const channelUrl = videoAnalyzer.parseChannelUrl(String(body.url || '').trim());
             if (!channelUrl) {
@@ -9262,6 +10121,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
             const id = savedChannelId(channelUrl);
             let alreadyRunning = false;
+            let attachedExisting = false;
+            const labControlKey = labScope
+                ? experimentLabWorkspace.accountKey(
+                    labScope.account.id
+                )
+                : null;
             const manifest =
                 await mutateSavedChannelManifest(
                     id,
@@ -9277,6 +10142,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             alreadyRunning = true;
                             return null;
                         }
+                        if (
+                            current
+                            && current.status === 'done'
+                            && !body.retryErrors
+                        ) {
+                            attachedExisting = true;
+                            return null;
+                        }
+                        if (
+                            current
+                            && labScope
+                            && labScope.viewer.role !== 'owner'
+                            && current.experimentLabControlKey
+                                !== labControlKey
+                        ) {
+                            attachedExisting = true;
+                            return null;
+                        }
                         const next = current || {
                             version: 1,
                             featureContractVersion:
@@ -9290,7 +10173,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                     .pop(),
                             createdAt: Date.now(),
                             videos: [],
+                            experimentLabControlKey:
+                                labControlKey,
                         };
+                        if (
+                            !current
+                            && labControlKey
+                        ) {
+                            next.experimentLabControlKey =
+                                labControlKey;
+                        }
                         next.url = channelUrl;
                         next.status = 'queued';
                         next.phase = 'queued';
@@ -9303,20 +10195,79 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         );
                     }
                 );
-            if (alreadyRunning) {
+            if (alreadyRunning || attachedExisting) {
+                await attachExperimentLabItem(
+                    labScope,
+                    'channels',
+                    id,
+                    {
+                        type: 'channel-saved',
+                        title: manifest.name || channelUrl,
+                        detail: attachedExisting
+                            ? 'Existing canonical channel library attached'
+                            : 'Existing channel import attached',
+                    }
+                );
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ ok: true, alreadyRunning: true, channel: compactSavedChannel(manifest) }));
+                res.end(JSON.stringify({
+                    ok: true,
+                    alreadyRunning,
+                    attachedExisting,
+                    channel: {
+                        ...compactSavedChannel(manifest),
+                        workspaceControl:
+                            experimentLabCanControlSavedChannel(
+                                labScope,
+                                manifest
+                            ),
+                    },
+                }));
                 return;
             }
             await cloud.uploadToR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`, Buffer.from(JSON.stringify({ id, url: channelUrl, retryErrors: !!body.retryErrors, ts: Date.now() })), 'application/json');
+            await attachExperimentLabItem(
+                labScope,
+                'channels',
+                id,
+                {
+                    type: 'channel-saved',
+                    title: manifest.name || channelUrl,
+                    detail: 'Channel import queued',
+                }
+            );
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            res.end(JSON.stringify({
+                ok: true,
+                channel: {
+                    ...compactSavedChannel(manifest),
+                    workspaceControl:
+                        experimentLabCanControlSavedChannel(
+                            labScope,
+                            manifest
+                        ),
+                },
+            }));
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_channel_video_failed',
+            }));
+        }
         return;
     }
     const savedChannelMontage = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})\/montage\/([\w-]{11})$/);
     if (savedChannelMontage && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
+            await requireExperimentLabItem(
+                req,
+                url,
+                'channels',
+                savedChannelMontage[1],
+                { write: false }
+            );
             const key = `${SAVED_CHANNEL_ROOT}${savedChannelMontage[1]}/montages/${savedChannelMontage[2]}.jpg`;
             // The gallery fetches this route with its bearer token, then creates a local object/data
             // URL for <img>. Stream the private R2 object through this authenticated origin so an
@@ -9331,6 +10282,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const channelId = savedChannelVideo[1];
             const videoId = savedChannelVideo[2];
+            await requireExperimentLabItem(
+                req,
+                url,
+                'channels',
+                channelId,
+                { write: false }
+            );
             const manifest = await readSavedChannelManifest(channelId);
             const manifestRow = manifest
                 && (manifest.videos || []).find(
@@ -9602,15 +10560,44 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         || null,
                     record_artifact_key: recordArtifactKey,
                 }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_channel_action_failed',
+            }));
+        }
         return;
     }
     const savedChannelAction = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})(?:\/(analysis|stop|resume|delete))?$/);
     if (savedChannelAction) {
         const id = savedChannelAction[1], action = savedChannelAction[2] || 'detail';
         try {
+            const labScope = await requireExperimentLabItem(
+                req,
+                url,
+                'channels',
+                id,
+                {
+                    write:
+                        action === 'stop'
+                        || action === 'resume'
+                        || action === 'delete'
+                        || (
+                            action === 'analysis'
+                            && req.method === 'POST'
+                        ),
+                }
+            );
             let manifest = await readSavedChannelManifest(id);
             if (!manifest) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Saved channel not found.' })); return; }
+            const workspaceControl =
+                experimentLabCanControlSavedChannel(
+                    labScope,
+                    manifest
+                );
             if (action === 'detail' && req.method === 'GET') {
                 const summaryOnly =
                     url.searchParams.get('summary') === '1';
@@ -9626,6 +10613,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     });
                     res.end(JSON.stringify({
                         ...compactSavedChannel(manifest),
+                        workspaceControl,
                         summary_only: true,
                         analysisFingerprint,
                         manifestRevision,
@@ -9641,6 +10629,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 const responseManifest = {
                     ...manifest,
                     ...savedChannelCounts(manifest),
+                    workspaceControl,
                     videos: (manifest.videos || []).map(
                         withSavedChannelRowValidation
                     ),
@@ -9743,6 +10732,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             if (action === 'stop' && req.method === 'POST') {
+                if (!workspaceControl) {
+                    throw new HttpRequestError(
+                        409,
+                        'This workspace reuses an existing canonical '
+                            + 'channel import. Only the workspace that '
+                            + 'started it can stop it.',
+                        'saved_channel_control_owned_elsewhere'
+                    );
+                }
                 manifest = await mutateSavedChannelManifest(
                     id,
                     current => {
@@ -9773,6 +10771,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             if (action === 'resume' && req.method === 'POST') {
+                if (!workspaceControl) {
+                    throw new HttpRequestError(
+                        409,
+                        'This workspace reuses an existing canonical '
+                            + 'channel library. Only the workspace that '
+                            + 'started it can resume processing.',
+                        'saved_channel_control_owned_elsewhere'
+                    );
+                }
                 manifest = await mutateSavedChannelManifest(
                     id,
                     current => {
@@ -9845,6 +10852,30 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             if (action === 'delete' && req.method === 'POST') {
+                if (labScope) {
+                    await mutateExperimentLabWorkspace(
+                        labScope.account,
+                        workspace => {
+                            experimentLabWorkspace.removeItem(
+                                workspace,
+                                'channels',
+                                id
+                            );
+                            experimentLabWorkspace
+                                .markArtifactSaved(
+                                    workspace,
+                                    'channels',
+                                    id,
+                                    false
+                                );
+                        }
+                    );
+                    res.writeHead(200, {
+                        'Content-Type': 'application/json',
+                    });
+                    res.end(JSON.stringify({ ok: true }));
+                    return;
+                }
                 await cloud.deleteFromR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`).catch(() => {});
                 await cloud.deleteFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`).catch(() => {});
                 await removeSavedChannelIndex(id).catch(() => {});
@@ -9862,6 +10893,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // ── Saved hooks: generated ideas / scored hooks the user wants to keep (R2 raw/saved-hooks/) ──
     if ((pathname === '/api/raw/hook-save' || pathname === '/api/raw-long/hook-save') && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
             const scoreDomain = pathname === '/api/raw-long/hook-save'
                 ? 'longquant'
@@ -9891,7 +10927,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 kind: body.kind === 'scored' ? 'scored' : 'idea',
                 score_domain: scoreDomain,
                 source: String(body.source || '').slice(0, 20),
-                folder: (String(body.folder || '').slice(0, 40)) || null,
+                folder: labScope
+                    ? null
+                    : (
+                        String(body.folder || '').slice(0, 40)
+                        || null
+                    ),
                 title: String(body.title || 'Saved hook').slice(0, 140),
                 text: String(body.text || '').slice(0, 2000),
                 idea: String(body.idea || '').slice(0, 4000),
@@ -9958,6 +10999,22 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 await cloud.deleteFromR2(recordKey).catch(() => {});
                 throw new Error(`saved-hook index update failed: ${e.message || e}`);
             }
+            await attachExperimentLabItem(
+                labScope,
+                'hooks',
+                id,
+                {
+                    type: 'hook-saved',
+                    title: rec.title,
+                    requestId:
+                        String(
+                            req.headers['x-quant-request-id']
+                            || ''
+                        ) || null,
+                    detail:
+                        `${rec.kind} · ${rec.source || 'experiment'}`,
+                }
+            );
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 ok: true,
@@ -10115,6 +11172,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if ((pathname === '/api/raw/saved-hooks' || pathname === '/api/raw-long/saved-hooks') && req.method === 'GET') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
             const storedIndex = await readSavedHookIndex();
             if (storedIndex.indexMissing) {
                 throw new HttpRequestError(
@@ -10128,17 +11190,51 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const scoreDomain = pathname.includes('/raw-long/')
                 ? 'longquant'
                 : 'shorts';
-            const hooks = idx.hooks
+            let hooks = idx.hooks
                 .concat(idx.legacy_hooks || [])
                 .filter(row => row.score_domain === scoreDomain)
                 .sort((a, b) => (
                     (b.savedAt || 0) - (a.savedAt || 0)
                 ));
+            let folders = idx.folders || [];
+            let workspaceSource = null;
+            if (labScope && scoreDomain === 'shorts') {
+                const workspace =
+                    await experimentLabWorkspaceForScope(
+                        labScope
+                    );
+                const collection =
+                    workspace.collections.hooks;
+                const references = new Map(
+                    collection.items.map(item => [
+                        item.id,
+                        item,
+                    ])
+                );
+                hooks = hooks
+                    .filter(row => references.has(row.id))
+                    .map(row => ({
+                        ...row,
+                        folder:
+                            references.get(row.id).folderId,
+                        workspace_saved_at:
+                            references.get(row.id).savedAt,
+                    }));
+                folders = collection.folders;
+                workspaceSource = {
+                    schema: workspace.schema,
+                    account: workspace.account,
+                    readOnly: labScope.readOnly,
+                    workspace_sha256:
+                        workspace.workspace_sha256,
+                };
+            }
             sendJsonGz(req, res, {
                 hooks,
-                folders: idx.folders || [],
+                folders,
                 indexed: true,
                 score_domain: scoreDomain,
+                workspace: workspaceSource,
                 source_of_truth: {
                     key: SAVED_HOOK_INDEX_KEY,
                     schema: savedHookRuntimeIndex.INDEX_SCHEMA,
@@ -10161,6 +11257,52 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const body = (await readBody(req)) || {};
             const out = { ok: true };
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            if (
+                labScope
+                && !pathname.includes('/raw-long/')
+            ) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        if (pathname === '/api/raw/folder-create') {
+                            const folder =
+                                experimentLabWorkspace
+                                    .createFolder(
+                                        workspace,
+                                        'hooks',
+                                        body.name
+                                    );
+                            out.id = folder.id;
+                            out.name = folder.name;
+                        } else if (
+                            pathname === '/api/raw/hook-move'
+                        ) {
+                            experimentLabWorkspace.moveItem(
+                                workspace,
+                                'hooks',
+                                body.id,
+                                body.folder
+                            );
+                        } else {
+                            experimentLabWorkspace.deleteFolder(
+                                workspace,
+                                'hooks',
+                                body.id
+                            );
+                        }
+                    }
+                );
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify(out));
+                return;
+            }
             if (pathname === '/api/raw/folder-create' || pathname === '/api/raw-long/folder-create') {
                 const name = String(body.name || '').slice(0, 60).trim();
                 if (!name) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no name"}'); return; }
@@ -10253,6 +11395,40 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const body = (await readBody(req)) || {};
             const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            if (
+                labScope
+                && !pathname.includes('/raw-long/')
+            ) {
+                if (id) {
+                    await mutateExperimentLabWorkspace(
+                        labScope.account,
+                        workspace => {
+                            experimentLabWorkspace.removeItem(
+                                workspace,
+                                'hooks',
+                                id
+                            );
+                            experimentLabWorkspace
+                                .markArtifactSaved(
+                                    workspace,
+                                    'hooks',
+                                    id,
+                                    false
+                                );
+                        }
+                    );
+                }
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({ ok: true }));
+                return;
+            }
             if (id) {
                 await updateSavedHookIndex(idx => {
                     idx.hooks = idx.hooks.filter(hook => hook.id !== id);
@@ -10273,6 +11449,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedMon = pathname.match(/^\/api\/raw(?:-long)?\/saved-montage\/([a-z0-9]{1,32})$/);
     if (savedMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
+            if (!pathname.includes('/raw-long/')) {
+                await requireExperimentLabItem(
+                    req,
+                    url,
+                    'hooks',
+                    savedMon[1],
+                    { write: false }
+                );
+            }
             const storedIndex = await readSavedHookIndex();
             if (storedIndex.indexMissing) {
                 throw new HttpRequestError(
@@ -10364,6 +11549,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedOne = pathname.match(/^\/api\/raw(?:-long)?\/saved-hook\/([a-z0-9]{1,32})$/);
     if (savedOne && req.method === 'GET') {
         try {
+            if (!pathname.includes('/raw-long/')) {
+                await requireExperimentLabItem(
+                    req,
+                    url,
+                    'hooks',
+                    savedOne[1],
+                    { write: false }
+                );
+            }
             const storedIndex = await readSavedHookIndex();
             if (storedIndex.indexMissing) {
                 throw new HttpRequestError(
@@ -11314,7 +12508,87 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const quantJob = pathname.match(/^\/api\/(shortsquant|longquant)\/jobs\/(j[a-z0-9]+)$/);
     if (quantJob && req.method === 'GET') {
-        await sendQuantJobStatus(res, quantJob[2], quantJob[1] === 'shortsquant' ? 'shorts' : 'longform');
+        try {
+            const namespace =
+                quantJob[1] === 'shortsquant'
+                    ? 'shorts'
+                    : 'longform';
+            const labScope = quantJob[1] === 'shortsquant'
+                ? await requireExperimentLabActivity(
+                    req,
+                    url,
+                    quantJob[2],
+                    [
+                        'hook-scored-from-link',
+                        'hook-upload-scored',
+                        'built-hook-scored',
+                        'storyboard-generated',
+                        'storyboard-panel-generated',
+                    ],
+                    { write: false }
+                )
+                : await experimentLabAccountScope(
+                    req,
+                    url,
+                    { write: false }
+                );
+            if (labScope && namespace !== 'shorts') {
+                throw new HttpRequestError(
+                    404,
+                    'This job is not part of the Experiment Lab workspace.',
+                    'experiment_lab_run_not_found'
+                );
+            }
+            const record = await quantJobGet(
+                quantJob[2],
+                namespace
+            );
+            if (
+                labScope
+                && !labScope.readOnly
+                && record
+                && ['done', 'error'].includes(record.status)
+            ) {
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type:
+                            labScope.workspace.activity.find(
+                                activity =>
+                                    activity.requestId
+                                    === quantJob[2]
+                            ).type,
+                        status:
+                            record.status === 'done'
+                                ? 'complete'
+                                : 'failed',
+                        requestId: quantJob[2],
+                        detail:
+                            record.status === 'error'
+                                ? record.error || 'Canonical job failed'
+                                : 'Canonical job complete',
+                        saved: false,
+                    }
+                );
+            }
+            await sendQuantJobStatus(
+                res,
+                quantJob[2],
+                namespace,
+                record
+            );
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'quant_job_status_failed',
+            }));
+        }
         return;
     }
     if (pathname === '/api/longquant/exp/score-title' && req.method === 'POST') {
@@ -12187,6 +13461,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // ── 🎯 Grind endpoints: start / stop / poll / images / full score / recent runs ──
     if (pathname === '/api/hooks/grind' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 500);
             if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write the hook/idea first — it grounds every variant' })); return; }
@@ -12228,6 +13507,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     safeCreatorProfile(body.creatorProfile) || null,
                 created_at_ms: Date.now(),
             })), 'application/json');
+            await recordExperimentLabActivity(
+                labScope,
+                {
+                    type: 'shorts-grind',
+                    status: 'queued',
+                    title: premise,
+                    requestId: rid,
+                    detail:
+                        `${coordinateId} · target ${thresholdPercentile}th `
+                        + `· up to ${maxAttempts} attempts`,
+                    saved: false,
+                }
+            );
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 rid,
@@ -12239,13 +13531,55 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const grindStop = pathname.match(/^\/api\/hooks\/grind\/stop\/([a-z0-9]{1,32})$/);
     if (grindStop && req.method === 'POST') {
-        await cloud.uploadToR2(`hooks/grind/stop/${grindStop[1]}`, Buffer.from('1'), 'text/plain').catch(() => {});
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+        try {
+            const labScope = await requireExperimentLabActivity(
+                req,
+                url,
+                grindStop[1],
+                ['shorts-grind'],
+                { write: true }
+            );
+            await cloud.uploadToR2(
+                `hooks/grind/stop/${grindStop[1]}`,
+                Buffer.from('1'),
+                'text/plain'
+            );
+            await recordExperimentLabActivity(
+                labScope,
+                {
+                    type: 'shorts-grind',
+                    status: 'stop-requested',
+                    title: 'Shorts grind',
+                    requestId: grindStop[1],
+                    detail: 'Stop requested',
+                    saved: false,
+                }
+            );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'shorts_grind_stop_failed',
+            }));
+        }
         return;
     }
     const grindRun = pathname.match(/^\/api\/hooks\/grind\/run\/([a-z0-9]{1,32})$/);
     if (grindRun && req.method === 'GET') {
         try {
+            const labScope = await requireExperimentLabActivity(
+                req,
+                url,
+                grindRun[1],
+                ['shorts-grind'],
+                { write: false }
+            );
             const b = await cloud.downloadFromR2(`hooks/grind/runs/${grindRun[1]}.json`);
             if (!b) {
                 res.writeHead(404, {
@@ -12257,6 +13591,23 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
             const stored = JSON.parse(b.toString('utf8'));
             const run = shortsGrindRunForResponse(stored);
+            if (labScope && !labScope.readOnly) {
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'shorts-grind',
+                        status: run.status || 'running',
+                        title:
+                            run.premise
+                            || 'Shorts grind',
+                        requestId: grindRun[1],
+                        detail:
+                            `${run.attempt_count || 0} attempts · `
+                            + `best ${run.best_score == null ? 'unscored' : `${run.best_score}th`}`,
+                        saved: false,
+                    }
+                );
+            }
             res.writeHead(
                 run.run_validation.valid ? 200 : 409,
                 {
@@ -12271,14 +13622,33 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const grindMon = pathname.match(/^\/api\/hooks\/grind\/montage\/([\w-]{1,48})$/);
     if (grindMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
+            const runId = String(grindMon[1]).split('_')[0];
+            await requireExperimentLabActivity(
+                req,
+                url,
+                runId,
+                ['shorts-grind'],
+                { write: false }
+            );
             if (await serveR2ObjectForRequest(req, res, `hooks/grind/montages/${grindMon[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' })) return;
             res.writeHead(404); res.end();
-        } catch (e) { res.writeHead(500); res.end(); }
+        } catch (error) {
+            res.writeHead(error.statusCode || 500);
+            res.end();
+        }
         return;
     }
     const grindScore = pathname.match(/^\/api\/hooks\/grind\/score\/([\w-]{1,48})$/);
     if (grindScore && req.method === 'GET') {
         try {
+            const runId = String(grindScore[1]).split('_')[0];
+            await requireExperimentLabActivity(
+                req,
+                url,
+                runId,
+                ['shorts-grind'],
+                { write: false }
+            );
             const scoreKey = `hooks/grind/scores/${grindScore[1]}.json`;
             const montageKey =
                 `hooks/grind/montages/${grindScore[1]}.jpg`;
@@ -12340,7 +13710,34 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/hooks/grind/runs' && req.method === 'GET') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const labWorkspace = labScope
+                ? await experimentLabWorkspaceForScope(
+                    labScope
+                )
+                : null;
+            const allowedRunIds = labWorkspace
+                ? new Set(
+                    labWorkspace.activity
+                        .filter(activity => (
+                            activity.type === 'shorts-grind'
+                            && activity.requestId
+                        ))
+                        .map(activity => activity.requestId)
+                )
+                : null;
             let keys = []; try { keys = ((await cloud.listR2Keys('hooks/grind/runs/')) || []).filter(k => k.endsWith('.json')); } catch (e) {}
+            if (allowedRunIds) {
+                keys = keys.filter(key => (
+                    allowedRunIds.has(
+                        key.split('/').pop().replace('.json', '')
+                    )
+                ));
+            }
             keys.sort();   // rid embeds a timestamp → lexicographic ≈ chronological
             const out = [];
             for (const k of keys.slice(-6).reverse()) {
@@ -12371,6 +13768,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/hooks/generate' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 400);
             const invent = !!body.invent || !premise;
@@ -12380,6 +13782,27 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             try { const pend = (await cloud.listR2Keys('hooks/grpo/requests/')) || []; if (pend.filter(k => k.endsWith('.json')).length >= 6) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — a few generations are already queued, try again in a moment' })); return; } } catch (e) {}
             const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
             await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, invent, ts: Date.now() })), 'application/json');
+            if (labScope) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        experimentLabWorkspace.addActivity(
+                            workspace,
+                            {
+                                type: 'hook-generated',
+                                status: 'started',
+                                title:
+                                    premise
+                                    || 'Invented Shorts hook',
+                                requestId: rid,
+                                detail:
+                                    `${count} candidate${count === 1 ? '' : 's'}`,
+                                saved: false,
+                            }
+                        );
+                    }
+                );
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ rid, premise, count }));   // poll status + group/demo/<rid> for the result
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -12447,6 +13870,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
 
     if (pathname === '/api/storyboards' && req.method === 'GET') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
             const limit = Math.max(
                 1,
                 Math.min(100, Number(url.searchParams.get('limit')) || 40)
@@ -12458,20 +13886,56 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 ) || 0)
             );
             const index = await readStoryboardIndex();
+            let rows = index.storyboards;
+            let folders = [];
+            let workspaceSource = null;
+            if (labScope) {
+                const workspace =
+                    await experimentLabWorkspaceForScope(
+                        labScope
+                    );
+                const collection =
+                    workspace.collections.storyboards;
+                const references = new Map(
+                    collection.items.map(item => [
+                        item.id,
+                        item,
+                    ])
+                );
+                rows = rows
+                    .filter(row => references.has(row.id))
+                    .map(row => ({
+                        ...row,
+                        folder:
+                            references.get(row.id).folderId,
+                        workspace_saved_at:
+                            references.get(row.id).savedAt,
+                    }));
+                folders = collection.folders;
+                workspaceSource = {
+                    schema: workspace.schema,
+                    account: workspace.account,
+                    readOnly: labScope.readOnly,
+                    workspace_sha256:
+                        workspace.workspace_sha256,
+                };
+            }
             res.writeHead(200, {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-store',
             });
             res.end(JSON.stringify({
                 schema: storyboardContract.INDEX_SCHEMA,
-                storyboards: index.storyboards.slice(
+                storyboards: rows.slice(
                     offset,
                     offset + limit
                 ),
-                total: index.storyboards.length,
+                total: rows.length,
                 offset,
                 limit,
                 updatedAt: index.updatedAt,
+                folders,
+                workspace: workspaceSource,
             }));
         } catch (error) {
             const status = error.statusCode || 500;
@@ -12489,6 +13953,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     );
     if (storyboardRecordMatch && req.method === 'GET') {
         try {
+            await requireExperimentLabItem(
+                req,
+                url,
+                'storyboards',
+                storyboardRecordMatch[1],
+                { write: false }
+            );
             const record = await readStoryboardRecord(
                 storyboardRecordMatch[1]
             );
@@ -12571,6 +14042,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
 
     if (pathname === '/api/storyboards/save' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = await readBody(req, 32 * 1024 * 1024);
             const suppliedId = String(body.id || '');
             const id = suppliedId || storyboardId();
@@ -12579,6 +14055,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     400,
                     'Storyboard id is invalid.',
                     'storyboard_id_invalid'
+                );
+            }
+            if (suppliedId && labScope) {
+                await requireExperimentLabItem(
+                    req,
+                    url,
+                    'storyboards',
+                    suppliedId,
+                    { write: true }
                 );
             }
             const currentRevision = suppliedId
@@ -12750,6 +14235,26 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     });
                 }, 250);
             }
+            await attachExperimentLabItem(
+                labScope,
+                'storyboards',
+                id,
+                {
+                    type: 'storyboard-saved',
+                    title:
+                        record.name
+                        || record.hookText
+                        || 'Storyboard',
+                    requestId:
+                        String(
+                            req.headers['x-quant-request-id']
+                            || ''
+                        ) || null,
+                    detail:
+                        `${record.complete ? 'complete' : 'draft'} `
+                        + `· ${record.model}`,
+                }
+            );
             res.writeHead(200, {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-store',
@@ -12781,6 +14286,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         && req.method === 'POST'
     ) {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = await readBody(req, 32 * 1024 * 1024);
             const model = STORY_MODELS[body.model]
                 ? body.model
@@ -12860,6 +14370,28 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 requestFingerprint
             );
             await quantJobReady(jobId, 'shorts');
+            if (labScope) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        experimentLabWorkspace.addActivity(
+                            workspace,
+                            {
+                                type: 'storyboard-generated',
+                                status: 'started',
+                                title:
+                                    hookText
+                                    || brief
+                                    || 'Generated storyboard',
+                                requestId: jobId,
+                                detail:
+                                    `${model} · coherent five-panel sheet`,
+                                saved: false,
+                            }
+                        );
+                    }
+                );
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 ok: true,
@@ -12882,6 +14414,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         && req.method === 'POST'
     ) {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = await readBody(req, 32 * 1024 * 1024);
             const prompt =
                 String(body.prompt || '').trim().slice(0, 1800);
@@ -12964,6 +14501,25 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 requestFingerprint
             );
             await quantJobReady(jobId, 'shorts');
+            if (labScope) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        experimentLabWorkspace.addActivity(
+                            workspace,
+                            {
+                                type: 'storyboard-panel-generated',
+                                status: 'started',
+                                title: prompt,
+                                requestId: jobId,
+                                detail:
+                                    `${effectiveModel} · ${relation}`,
+                                saved: false,
+                            }
+                        );
+                    }
+                );
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 ok: true,
@@ -13057,10 +14613,53 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     }
     const demoStat = pathname.match(/^\/api\/hooks\/demo\/status\/([\w-]{1,40})$/);
     if (demoStat && req.method === 'GET') {
-        let st = { stage: 'queued' };
-        try { const b = await cloud.downloadFromR2(`hooks/grpo/demo/status/${demoStat[1]}.json`); if (b) st = JSON.parse(b.toString('utf8')); } catch (e) {}
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(JSON.stringify(st));
+        try {
+            const labScope = await requireExperimentLabActivity(
+                req,
+                url,
+                demoStat[1],
+                ['hook-generated'],
+                { write: false }
+            );
+            let status = { stage: 'queued' };
+            try {
+                const b = await cloud.downloadFromR2(
+                    `hooks/grpo/demo/status/${demoStat[1]}.json`
+                );
+                if (b) status = JSON.parse(b.toString('utf8'));
+            } catch (error) {}
+            if (labScope && !labScope.readOnly) {
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'hook-generated',
+                        status:
+                            status.stage
+                            || status.status
+                            || 'queued',
+                        requestId: demoStat[1],
+                        detail:
+                            status.message
+                            || status.note
+                            || null,
+                        saved: false,
+                    }
+                );
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+            });
+            res.end(JSON.stringify(status));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'hook_generation_status_failed',
+            }));
+        }
         return;
     }
     if (pathname === '/api/hooks/grpo/index' && req.method === 'GET') {
@@ -13076,18 +14675,56 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     const grpoGrp = pathname.match(/^\/api\/hooks\/grpo\/group\/([a-z0-9_]{1,24})\/([\w-]{1,32})$/);
     if (grpoGrp && req.method === 'GET') {
         try {
+            if (grpoGrp[1] === 'demo') {
+                await requireExperimentLabActivity(
+                    req,
+                    url,
+                    grpoGrp[2],
+                    ['hook-generated'],
+                    { write: false }
+                );
+            }
             const b = await cloud.downloadFromR2(`hooks/grpo/${grpoGrp[1]}/groups/${grpoGrp[2]}.json`);
             res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(b ? b.toString('utf8') : JSON.stringify({ error: 'not found' }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'hook_generation_group_failed',
+            }));
+        }
         return;
     }
     const grpoMon = pathname.match(/^\/api\/hooks\/grpo\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
     if (grpoMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
+            if (grpoMon[1] === 'demo') {
+                const runId = grpoMon[2].replace(/_\d+$/, '');
+                await requireExperimentLabActivity(
+                    req,
+                    url,
+                    runId,
+                    ['hook-generated'],
+                    { write: false }
+                );
+            }
             if (await serveR2ObjectForRequest(req, res, `hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=3600' })) return;
             res.writeHead(404); res.end();
-        } catch (e) { res.writeHead(500); res.end(); }
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'hook_generation_montage_failed',
+            }));
+        }
         return;
     }
     if (pathname === '/api/library/videos' && req.method === 'GET') {

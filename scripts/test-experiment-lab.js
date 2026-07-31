@@ -164,6 +164,54 @@ const creatorHistoryIds = (account, videoIndex) => (
 
 async function main() {
     const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const labUiSource = fs.readFileSync(
+        path.join(
+            ROOT,
+            'buildings/experimentlab/experimentlab-ui.js'
+        ),
+        'utf8'
+    );
+    assert(
+        labUiSource.includes(
+            'window.JarvisRetention.mountExperiment'
+        ),
+        'Experiment Lab must mount the canonical Jarvis Experiment renderer'
+    );
+    assert(
+        labUiSource.includes(
+            "{ surface: 'experiment-lab' }"
+        ),
+        'Experiment Lab must declare its account-scoped surface'
+    );
+    assert.strictEqual(
+        (labUiSource.match(/\/api\//g) || []).length,
+        0,
+        'Experiment Lab shell must not duplicate canonical API workflows'
+    );
+    const labCssSource = fs.readFileSync(
+        path.join(
+            ROOT,
+            'buildings/experimentlab/experimentlab.css'
+        ),
+        'utf8'
+    );
+    for (const color of [
+        '#14231c',
+        '#eee7d8',
+        '#d7673f',
+        '#1f8a78',
+    ]) {
+        assert(
+            labCssSource.includes(color),
+            `Experiment Lab editorial palette is missing ${color}`
+        );
+    }
+    assert(
+        !/(?:linear|radial|conic)-gradient/i.test(
+            labCssSource
+        ),
+        'Experiment Lab must not use decorative gradients'
+    );
     const featureContract = JSON.parse(fs.readFileSync(path.join(ROOT, 'buildings/jarvis/saved-channel-feature-contract.json'), 'utf8'));
     const featureContractSha256 = crypto.createHash('sha256')
         .update(fs.readFileSync(path.join(ROOT, 'buildings/jarvis/saved-channel-feature-contract.json')))
@@ -338,7 +386,21 @@ async function main() {
         page.on('pageerror', error => console.error('PAGE ERROR:', error.stack || error.message));
         page.on('console', message => { if (message.type() === 'error') console.error('BROWSER ERROR:', message.text()); });
         page.on('requestfailed', request => console.error('REQUEST FAILED:', request.url(), request.failure() && request.failure().errorText));
+        page.on('response', response => {
+            if (response.status() >= 400) {
+                console.error(
+                    'HTTP ERROR:',
+                    response.status(),
+                    response.url()
+                );
+            }
+        });
         await page.route('**/api/raw/saved-channel/**/montage/**', route => route.fulfill({
+            status: 200,
+            contentType: 'image/gif',
+            body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
+        }));
+        await page.route('**/api/raw/montage/**', route => route.fulfill({
             status: 200,
             contentType: 'image/gif',
             body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
@@ -1369,7 +1431,92 @@ async function main() {
                 },
             },
         };
+        const ownerAccountId =
+            '11111111-1111-4111-8111-111111111111';
+        const teamAccountId =
+            '22222222-2222-4222-8222-222222222222';
+        const teamStoryboardId = 'sbcreatorlab01';
+        const accountSummaries = [
+            {
+                account: {
+                    id: ownerAccountId,
+                    email: 'owner@example.com',
+                    name: 'Owner',
+                    role: 'owner',
+                },
+                counts: {
+                    hooks: 1,
+                    channels: 1,
+                    storyboards: 0,
+                },
+                folderCounts: {
+                    hooks: 0,
+                    channels: 0,
+                    storyboards: 0,
+                },
+                activityCount: 0,
+            },
+            {
+                account: {
+                    id: teamAccountId,
+                    email: 'creator@example.com',
+                    name: 'Creator Account',
+                    role: 'member',
+                },
+                counts: {
+                    hooks: 1,
+                    channels: 1,
+                    storyboards: 1,
+                },
+                folderCounts: {
+                    hooks: 1,
+                    channels: 1,
+                    storyboards: 1,
+                },
+                activityCount: 2,
+            },
+        ];
         const replies = {
+            '/api/experimentlab/context': {
+                schema: 'experiment-lab-workspace-v1',
+                viewer: {
+                    id: ownerAccountId,
+                    email: 'owner@example.com',
+                    name: 'Owner',
+                    role: 'owner',
+                },
+                activeAccount: {
+                    id: ownerAccountId,
+                    email: 'owner@example.com',
+                    name: 'Owner',
+                    role: 'owner',
+                },
+                readOnly: false,
+                owner: true,
+                summary: {
+                    counts: {
+                        hooks: 1,
+                        channels: 1,
+                        storyboards: 0,
+                    },
+                    folderCounts: {
+                        hooks: 0,
+                        channels: 0,
+                        storyboards: 0,
+                    },
+                    activityCount: 0,
+                },
+                workspace: {
+                    schema: 'experiment-lab-workspace-v1',
+                    collections: {
+                        hooks: { folders: [], items: [] },
+                        channels: { folders: [], items: [] },
+                        storyboards: { folders: [], items: [] },
+                    },
+                    activity: [],
+                },
+                accounts: accountSummaries,
+            },
             '/api/retention/channels': { channels: [], active: 'tyler' },
             '/api/indicators/registry': { indicators: [], meta: { targets: [] } },
             '/api/raw/saved-hooks': {
@@ -1415,6 +1562,121 @@ async function main() {
             '/api/hooks/grind/runs': { runs: [] },
             '/api/hooks/warmup': { ok: true, fired: false },
         };
+        const teamReplies = {
+            '/api/experimentlab/context': {
+                schema: 'experiment-lab-workspace-v1',
+                viewer: {
+                    id: ownerAccountId,
+                    email: 'owner@example.com',
+                    name: 'Owner',
+                    role: 'owner',
+                },
+                activeAccount: {
+                    id: teamAccountId,
+                    email: 'creator@example.com',
+                    name: 'Creator Account',
+                    role: 'member',
+                },
+                readOnly: true,
+                owner: true,
+                summary: accountSummaries[1],
+                workspace: {
+                    schema: 'experiment-lab-workspace-v1',
+                    collections: {
+                        hooks: {
+                            folders: [{
+                                id: 'elfteamhooks',
+                                name: 'Creator Review',
+                            }],
+                            items: [{
+                                id: historicalSavedHookId,
+                                folderId: 'elfteamhooks',
+                            }],
+                        },
+                        channels: {
+                            folders: [{
+                                id: 'elfteamchannels',
+                                name: 'Reference Channels',
+                            }],
+                            items: [{
+                                id: channelId,
+                                folderId: 'elfteamchannels',
+                            }],
+                        },
+                        storyboards: {
+                            folders: [{
+                                id: 'elfteamstoryboards',
+                                name: 'Opening Boards',
+                            }],
+                            items: [{
+                                id: teamStoryboardId,
+                                folderId: 'elfteamstoryboards',
+                            }],
+                        },
+                    },
+                    activity: [
+                        {
+                            type: 'hook-generated',
+                            status: 'complete',
+                            title: 'Generated but not saved',
+                            saved: false,
+                            updatedAt: Date.now(),
+                        },
+                        {
+                            type: 'score-hook',
+                            status: 'saved',
+                            title: 'Saved creator hook',
+                            saved: true,
+                            updatedAt: Date.now() - 1000,
+                        },
+                    ],
+                },
+                accounts: accountSummaries,
+            },
+            '/api/raw/saved-hooks': {
+                hooks: [{
+                    ...historicalSavedHookRow,
+                    folder: 'elfteamhooks',
+                }],
+                folders: [{
+                    id: 'elfteamhooks',
+                    name: 'Creator Review',
+                }],
+            },
+            '/api/raw/saved-channels': {
+                channels: [{
+                    id: channelId,
+                    name: 'Creator Reference Channel',
+                    url: 'https://youtube.com/@creator',
+                    status: 'done',
+                    discovered: 20,
+                    completed: 20,
+                    failed: 0,
+                    folder: 'elfteamchannels',
+                }],
+                folders: [{
+                    id: 'elfteamchannels',
+                    name: 'Reference Channels',
+                }],
+                featureContract,
+            },
+            '/api/storyboards': {
+                schema: 'shorts-storyboard-index-v1',
+                storyboards: [{
+                    id: teamStoryboardId,
+                    name: 'Creator Storyboard',
+                    model: 'flux-2-pro',
+                    complete: true,
+                    scored: true,
+                    folder: 'elfteamstoryboards',
+                }],
+                total: 1,
+                folders: [{
+                    id: 'elfteamstoryboards',
+                    name: 'Opening Boards',
+                }],
+            },
+        };
         videos.forEach(video => {
             replies[`/api/raw/saved-channel/${channelId}/video/${video.id}`] = {
                 ...video.__record,
@@ -1458,14 +1720,45 @@ async function main() {
 <script>
 const nativeFetch=window.fetch.bind(window);
 const replies=${JSON.stringify(replies)};
+const teamReplies=${JSON.stringify(teamReplies)};
+const teamAccountId=${JSON.stringify(teamAccountId)};
 window.__historicalTamperFixtures=${
     JSON.stringify(historicalTamperFixtures)
 };
 window.__fetchCounts={};
+window.__labSurfaceRequests=[];
+window.__labTargetRequests=[];
 window.fetch=function(url,options){
     const p=new URL(url,location.href).pathname;
     window.__fetchCounts[p]=(window.__fetchCounts[p]||0)+1;
-    if(p.includes('/api/raw/saved-channel/')&&p.includes('/montage/')){
+    const requestHeaders=new Headers(options&&options.headers||{});
+    if(requestHeaders.get('X-Business-World-Surface')==='experiment-lab'){
+        window.__labSurfaceRequests.push(p);
+    }
+    if(requestHeaders.get('X-Experiment-Lab-Account')){
+        window.__labTargetRequests.push({
+            path:p,
+            account:requestHeaders.get(
+                'X-Experiment-Lab-Account'
+            )
+        });
+    }
+    if(
+        requestHeaders.get('X-Experiment-Lab-Account')===teamAccountId
+        && teamReplies[p]
+    ){
+        return Promise.resolve(new Response(
+            JSON.stringify(teamReplies[p]),
+            {
+                status:200,
+                headers:{'Content-Type':'application/json'}
+            }
+        ));
+    }
+    if(
+        (p.includes('/api/raw/saved-channel/')&&p.includes('/montage/'))
+        || p.startsWith('/api/raw/montage/')
+    ){
         const b=Uint8Array.from(
             atob('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='),
             c=>c.charCodeAt(0)
@@ -1518,12 +1811,120 @@ window.fetch=function(url,options){
 <script src="/buildings/jarvis/storyboard-workbench.js"></script><script src="/buildings/jarvis/jarvis-retention.js"></script><script src="/buildings/experimentlab/experimentlab-ui.js"></script><script>BuildingRegistry.get('Experiment Lab').open(document.getElementById('root'));</script></body></html>`, { waitUntil: 'networkidle' });
 
         await page.getByRole('heading', { name: 'Experiment Lab' }).waitFor();
+        await page.getByText('Owner workspace', { exact: true }).waitFor();
+        assert(
+            await page.evaluate(() => (
+                window.__labSurfaceRequests.includes(
+                    '/api/experimentlab/context'
+                )
+                && window.__labSurfaceRequests.includes(
+                    '/api/indicators/registry'
+                )
+            )),
+            'the standalone Lab must scope the canonical Experiment requests'
+        );
         try {
             await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').waitFor();
         } catch (error) {
             console.error('INITIAL ROOT:', (await page.locator('#root').innerText()).slice(0, 1500));
             throw error;
         }
+        await page.locator('[data-savedbank="team"]').click();
+        await page.locator(
+            `[data-labteamaccount="${teamAccountId}"]`
+        ).click();
+        await page.getByText(
+            'Generated but not saved',
+            { exact: true }
+        ).waitFor();
+        await page.getByPlaceholder(
+            'type a video idea — or leave blank and the model invents one…'
+        ).focus();
+        await page.waitForTimeout(50);
+        assert.strictEqual(
+            await page.evaluate(() => (
+                window.__labTargetRequests.some(request => (
+                    request.path === '/api/hooks/warmup'
+                ))
+            )),
+            false,
+            'ordinary canonical operations must never inherit the selected Team account'
+        );
+        assert.strictEqual(
+            await page.getByText(
+                'Creator Review',
+                { exact: false }
+            ).count() > 0,
+            true,
+            'owner inspection must display another account hook folder'
+        );
+        assert.strictEqual(
+            await page.getByText(
+                'Reference Channels',
+                { exact: false }
+            ).count() > 0,
+            true,
+            'owner inspection must display another account channel folder'
+        );
+        assert.strictEqual(
+            await page.getByText(
+                'Opening Boards',
+                { exact: false }
+            ).count() > 0,
+            true,
+            'owner inspection must display another account storyboard folder'
+        );
+        assert(
+            await page.evaluate(accountId => (
+                window.__labTargetRequests.some(request => (
+                    request.account === accountId
+                    && request.path === '/api/raw/saved-hooks'
+                ))
+                && window.__labTargetRequests.some(request => (
+                    request.account === accountId
+                    && request.path === '/api/raw/saved-channels'
+                ))
+                && window.__labTargetRequests.some(request => (
+                    request.account === accountId
+                    && request.path === '/api/storyboards'
+                ))
+            ), teamAccountId),
+            'owner inspection must scope canonical library reads to the selected account'
+        );
+        await page.locator(
+            `[data-labteamhook="${historicalSavedHookId}"]`
+        ).click();
+        try {
+            await page.locator(
+                '[data-saved-detail-state="team-read-only"]'
+            ).waitFor();
+        } catch (error) {
+            console.error(
+                'TEAM DETAIL STATES:',
+                await page.locator(
+                    '[data-saved-detail-state]'
+                ).evaluateAll(nodes => nodes.map(node => ({
+                    state: node.getAttribute(
+                        'data-saved-detail-state'
+                    ),
+                    text: node.textContent,
+                })))
+            );
+            console.error(
+                'TEAM DETAIL TEXT:',
+                (await page.locator('#rtg-exppanel').innerText())
+                    .slice(0, 2200)
+            );
+            throw error;
+        }
+        assert.strictEqual(
+            await page.locator(
+                '[data-saved-detail-state="team-read-only"]'
+            ).count(),
+            1,
+            'owner Team hook inspection must use the exact canonical detail in read-only mode'
+        );
+        await page.locator('[data-savedbank="hooks"]').click();
         const storyboardMode = page.locator(
             '[data-rawbuildmode="1"]'
         ).first();
