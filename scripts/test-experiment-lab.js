@@ -2490,12 +2490,11 @@ window.fetch=function(url,options){
         await page.locator(`[data-savedchannelresume="${channelId}"]`).click();
         const resumePath = `/api/raw/saved-channel/${channelId}/resume`;
         await page.waitForFunction(pathname => window.__fetchCounts[pathname] === 1, resumePath);
-        await page.getByText('Score ledger', { exact: true }).click();
+        await page.getByText('Ledger', { exact: true }).click();
         await page.getByText('Canonical score ledger', { exact: true }).waitFor();
         assert.strictEqual(await page.getByText('LEDGER PARITY AUDIT PASSED', { exact: true }).count(), 1);
-        assert.strictEqual(await page.locator('[data-savedledgercolumn]').count(), 21, 'the default ledger family must be the exact 21 stored score-card coordinates');
+        assert.strictEqual(await page.locator('[data-savedledgercolumn]').count(), shortsCoordinateCount, 'the canonical ledger must expose all registered coordinates by default');
         assert.strictEqual(await page.locator('[data-savedledgercolumn="shorts.stored.text.keep"]').count(), 1);
-        await page.locator('[data-savedledgerfamily="all"]').click();
         assert.strictEqual(await page.locator('[data-savedledgercolumn]').count(), shortsCoordinateCount, 'the full ledger must expose every active registered observed, stored, held-out, and forecast scalar');
         assert((await page.locator('[data-savedledger]').innerText()).includes(`${shortsCoordinateCount} columns are not ${shortsCoordinateCount} embedding spaces.`), 'the ledger must distinguish direct axes from derived values, forecasts, and observations');
         assert.strictEqual(await page.locator('[data-savedledgercolumn="shorts.visual-keep-forecast.v1"]').count(), 1, 'the frozen visual keep forecast must be one canonical ledger coordinate');
@@ -2567,117 +2566,27 @@ window.fetch=function(url,options){
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT), { recursive: true });
             await page.locator('[data-savedledger]').screenshot({ path: process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT });
         }
-        await page.locator('[data-savedledgerfamily="stored"]').click();
-        await page.getByText(
-            'Exploratory public analysis',
-            { exact: true }
-        ).click();
-        try {
-            await page.getByText('Execution-risk research · does an embedding score separate later view outcomes?', { exact: true }).waitFor();
-        } catch (error) {
-            console.error('ANALYSIS PANEL:', (await page.locator('#rtg-exppanel').innerText()).slice(-3000));
-            throw error;
-        }
-        assert((await page.locator('[data-savedchannelriskthresholdtable]').innerText()).includes('30.00M'), 'risk table must expose literal normal-views embedding thresholds');
-        assert.strictEqual(await page.getByText('47–91%', { exact: true }).count(), 1, 'risk table must show confidence rather than a bare hit rate');
+        await page.locator('[data-savedledgercolumn="shorts.stored.text.ret5"] button').click();
         assert.strictEqual(
-            await page.getByText(
-                'Historical diagnostic 10M tail model · combinations and retrospective time split',
-                { exact: true }
-            ).count(),
-            1,
-            'historical saved-channel scores must never be presented as blind or prospective evidence'
+            await page.locator('[data-savedledger]').getAttribute('data-selected-coordinate-id'),
+            'shorts.stored.text.ret5',
+            'ledger selection must use the shared canonical coordinate state'
         );
-        await page.locator('[data-savedchannelmatrix]').waitFor();
-        assert(await page.locator('[data-savedchannelmatrix]').evaluate(canvas => {
-            const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
-            for (let index = 0; index < pixels.length; index += 4) if (pixels[index] || pixels[index + 1] || pixels[index + 2]) return true;
-            return false;
-        }), 'the 21-indicator matrix canvas must contain rendered pixels');
-        assert.strictEqual(await page.getByText('All videos × all 21 indicators', { exact: true }).count(), 1);
-        for (const selector of ['[data-savedchannelprocessmap]', '[data-savedchanneloutcomehist]', '[data-savedchannelagescatter]', '[data-savedchannelevidence]', '[data-savedchannelindicatorplayground]', '[data-savedchannelprofileatlas]', '[data-savedchannelrelationships]', '[data-savedchannelresiduals]', '[data-savedchannelcontinuouscalibration]', '[data-savedchannelranktrace]', '[data-savedchannelselectionfrequency]', '[data-savedchannelcombinationlandscape]', '[data-savedchannelriskroc]', '[data-savedchannelriskpr]', '[data-savedchannelriskreliability]', '[data-savedchannelriskoutcomes]', '[data-savedchanneltargetlandscape]', '[data-savedchannelrisksignalatlas]']) {
-            assert.strictEqual(await page.locator(selector).count(), 1, `visual analysis is missing ${selector}`);
-        }
-        assert.strictEqual(await page.locator('[data-savedchannelrelationships] rect').count(), 441, 'redundancy heatmap must render all 21 × 21 relationships');
-        assert.strictEqual(await page.locator('[data-savedchannelprofileatlas] > [data-savedchannelanalysisfeature]').count(), 21, 'trajectory atlas must render one graph per indicator');
-        assert.strictEqual(await page.locator('[data-savedchannelrisksignalatlas] > [data-savedchannelrisksignal]').count(), riskSignals.length, 'risk atlas must show every ordinary views signal together');
-        const visualViewsButton = page.locator('[data-savedchannelindicatorplayground] [data-savedchannelanalysisfeature="visual.views"]');
-        assert.strictEqual(await visualViewsButton.count(), 1);
-        await visualViewsButton.click();
-        await page.getByText('Indicator playground · visual.views', { exact: true }).waitFor();
-        assert((await page.locator('[data-savedchannelindicatorscatter] circle[data-savedchannelvideo]').count()) >= videos.length, 'selected-indicator scatter must expose every underlying video as a drill-down point');
-
-        await page.getByText(
-            'Leakage-controlled retrospective validation',
-            { exact: true }
-        ).click();
+        await page.locator('[data-savedledger-open-visualization]').click();
         const canonicalValidation = page.locator('[data-savedvalidation-canonical]');
         await canonicalValidation.waitFor();
         assert.strictEqual(await canonicalValidation.getAttribute('data-coordinate-count'), String(shortsCoordinateCount));
         assert.strictEqual(await canonicalValidation.getAttribute('data-outcome-count'), String(observedOutcomeCount));
-        const creatorKeepStudy = page.locator('[data-savedcreatorkeep-study]');
-        await creatorKeepStudy.waitFor();
-        const creatorKeepStudyText = await creatorKeepStudy.innerText();
-        assert(creatorKeepStudyText.includes('Known-creator prequential multimodal keep mixture'));
-        assert(creatorKeepStudyText.includes('RESEARCH ONLY · NOT PREDICTOR-ELIGIBLE'));
-        assert(creatorKeepStudyText.includes('2/2 ACCOUNT-MAE CEILING MET'));
-        assert(creatorKeepStudyText.includes('INPUT 1 · VISUAL'));
-        assert(creatorKeepStudyText.includes('INPUT 2 · TOGETHER'));
-        assert(creatorKeepStudyText.includes('PRIOR-OUTCOME HISTORY'));
-        assert(/incremental MAE value/i.test(creatorKeepStudyText));
-        assert(creatorKeepStudyText.includes('PREQUENTIAL ±10 COVERAGE'));
-        assert.strictEqual(await creatorKeepStudy.locator('[data-savedcreatorkeep-scatter] circle[data-savedchannelvideo], [data-savedcreatorkeep-scatter] circle[data-savedvalidationrow]').count(), 40);
-        const pooledPrequentialDistribution = creatorKeepStudy.locator('[data-savedcreatorkeep-error-distribution="prequential"]');
-        const pooledFrozenDistribution = creatorKeepStudy.locator('[data-savedcreatorkeep-error-distribution="frozen"]');
-        assert.strictEqual(await pooledPrequentialDistribution.getAttribute('data-account'), 'all');
-        assert.strictEqual(await pooledPrequentialDistribution.getAttribute('data-error-n'), '40');
-        assert.strictEqual(await pooledFrozenDistribution.getAttribute('data-error-n'), '40');
-        assert((await pooledPrequentialDistribution.locator('[data-error-histogram-bin]').count()) > 0, 'the empirical absolute-error histogram must render bins');
-        assert.strictEqual(await pooledPrequentialDistribution.locator('[data-error-cdf]').count(), 1, 'the empirical cumulative coverage curve must render');
-        assert((await pooledPrequentialDistribution.innerText()).includes('No bell curve or normality assumption is imposed.'));
-        const firstCreatorKeepPoint = creatorKeepStudy.locator('[data-savedcreatorkeep-scatter] circle[data-savedvalidationrow]').first();
-        const firstCreatorKeepPointTitle = await firstCreatorKeepPoint.locator('title').textContent();
-        assert(firstCreatorKeepPointTitle.includes('Component A:'));
-        assert(firstCreatorKeepPointTitle.includes('Component B:'));
-        await firstCreatorKeepPoint.click();
-        const creatorKeepPointDetail = await creatorKeepStudy.locator('[data-savedcreatorkeep-scatter]').innerText();
-        assert(/component A .*centered-together residual analog/i.test(creatorKeepPointDetail));
-        assert(/component B .*visual\+together semantic stack/i.test(creatorKeepPointDetail));
-        await creatorKeepStudy.locator('[data-savedcreatorkeepaccount="hafu"]').click();
-        assert.strictEqual(await creatorKeepStudy.locator('[data-savedcreatorkeep-scatter] circle[data-savedchannelvideo], [data-savedcreatorkeep-scatter] circle[data-savedvalidationrow]').count(), 20);
-        const hafuPrequentialDistribution = creatorKeepStudy.locator('[data-savedcreatorkeep-error-distribution="prequential"]');
-        assert.strictEqual(await hafuPrequentialDistribution.getAttribute('data-account'), 'hafu');
-        assert.strictEqual(await hafuPrequentialDistribution.getAttribute('data-error-n'), '20');
-        assert(Math.abs(Number(await hafuPrequentialDistribution.getAttribute('data-error-max')) - 6.35) < 1e-6, 'Hafu maximum miss must be derived from the same plotted predictions');
-        const hafuWithinOne = hafuPrequentialDistribution.locator('[data-error-coverage-threshold="1"]');
-        assert.strictEqual(await hafuWithinOne.getAttribute('data-count'), '3');
-        assert(Math.abs(Number(await hafuWithinOne.getAttribute('data-percentage')) - 15) < 1e-6, 'Hafu within-one-point coverage must match the empirical errors');
-        const hafuHistogramCount = await hafuPrequentialDistribution.locator('[data-error-histogram-bin]').evaluateAll(bins => bins.reduce((sum, bin) => sum + Number(bin.dataset.count || 0), 0));
-        assert.strictEqual(hafuHistogramCount, 20, 'every Hafu prediction must occur in exactly one histogram bin');
-        assert(await hafuPrequentialDistribution.evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'the distribution panel must not overflow its mobile-width parent');
-        if (process.env.EXPERIMENT_LAB_KEEP_DISTRIBUTION_SCREENSHOT) {
-            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_KEEP_DISTRIBUTION_SCREENSHOT), { recursive: true });
-            await hafuPrequentialDistribution.screenshot({ path: process.env.EXPERIMENT_LAB_KEEP_DISTRIBUTION_SCREENSHOT });
-        }
-        await creatorKeepStudy.locator('[data-savedcreatorkeepaccount="all"]').click();
-        const visualKeepStudy = page.locator('[data-savedvisualkeep-study]');
-        await visualKeepStudy.waitFor();
-        assert((await visualKeepStudy.innerText()).includes('Best tested visual-only keep-rate predictor'));
-        assert((await visualKeepStudy.innerText()).includes('RESEARCH ONLY'));
-        assert.strictEqual(await visualKeepStudy.locator('[data-savedvisualkeepprotocol]').count(), 3);
-        assert.strictEqual(await visualKeepStudy.locator('[data-savedvisualkeep-scatter] circle[data-savedchannelvideo-embedding], [data-savedvisualkeep-scatter] circle[data-savedvalidationrow]').count(), 40);
-        await visualKeepStudy.locator('[data-savedvisualkeepprotocol="forwardTime"]').click();
-        assert((await visualKeepStudy.innerText()).includes('Future upload simulation'));
-        await visualKeepStudy.locator('[data-savedvisualkeepaccount="hafu"]').click();
-        assert.strictEqual(await visualKeepStudy.locator('[data-savedvisualkeep-scatter] circle[data-savedchannelvideo-embedding], [data-savedvisualkeep-scatter] circle[data-savedvalidationrow]').count(), 20);
-        await visualKeepStudy.locator('[data-savedvisualkeepprotocol="videoHoldout"]').click();
-        assert.strictEqual(await page.getByText('What predicts performance?', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText(new RegExp(`${shortsCoordinateCount} ledger columns do not mean ${shortsCoordinateCount} independent embeddings`)).count(), 1);
-        assert.strictEqual(await page.getByText(/Leakage audit passed.*does not imply universal creator transfer/).count(), 1);
-        assert.strictEqual(await page.locator('[data-savedvalidation-ledger-classification]').innerText(), ledgerClassificationText);
-        assert.strictEqual(await page.locator('[data-savedvalidationtarget]').count(), observedOutcomeCount, 'all observed outcomes and curve checkpoints must be selectable');
+        assert.strictEqual(await page.getByText('Ledger visualization', { exact: true }).count(), 1);
+        assert((await page.locator('[data-savedvalidation-ledger-classification]').innerText()).includes(ledgerClassificationText));
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').count(), shortsCoordinateCount, 'the visualization picker must expose all canonical ledger coordinates');
+        assert.strictEqual(await page.locator('[data-savedvalidation-outcome-picker] option').count(), observedOutcomeCount, 'the visualization picker must expose every measured outcome');
+        assert(await page.locator('[data-savedvalidation-ledger-navigator]').evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'the canonical coordinate/outcome navigator must fit its mobile parent');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker]').inputValue(), 'shorts.stored.text.ret5', 'the coordinate selected in the ledger must remain selected in Visualization');
+        assert.strictEqual(await page.locator('[data-savedcreatorkeep-study]').count(), 0, 'one-off creator keep panels must not duplicate the canonical inspector');
+        assert.strictEqual(await page.locator('[data-savedvisualkeep-study]').count(), 0, 'one-off visual keep panels must not duplicate the canonical inspector');
         assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), shortsCoordinateCount, 'the heatmap must preserve the canonical active ledger');
-        assert.strictEqual(await page.getByText(`All ${shortsCoordinateCount} coordinates × all ${observedOutcomeCount} observed outcomes`, { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText(`All ${shortsCoordinateCount} ledger coordinates × all ${observedOutcomeCount} observed outcomes`, { exact: true }).count(), 1);
         assert.strictEqual(await page.locator('[data-savedvalidationcell]').count(), shortsCoordinateCount * observedOutcomeCount, 'every ledger coordinate must be compared with every observed outcome');
         assert.strictEqual(await page.locator('[data-savedvalidationfeature="shorts.observed.keep"] [data-savedvalidationcell]').first().innerText(), 'TRUTH\nnot predictor', 'actual outcomes must be visibly blocked from predictor use');
         for (const term of ['Stored', 'Video held out', 'Account held out', 'Direct axis', 'Derived score', 'Forecast', 'Prequential next upload', 'Compatibility alias', 'Observed outcome', 'Prediction R²', 'MAE / factor error', 'Global exploratory q']) {
@@ -2686,14 +2595,6 @@ window.fetch=function(url,options){
         await page.locator('[data-savedvalidationfamily="strict"]').click();
         assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), heldoutClassification.columns, 'held-out predictor filter must exclude research-only coordinates');
         await page.locator('[data-savedvalidationfamily="all"]').click();
-        const creatorResearchCell = page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.creator-prequential-forecast.keep"][data-savedvalidationoutcome="keep"]');
-        assert.strictEqual(await creatorResearchCell.innerText(), 'RESEARCH\nclick for honest baseline');
-        await creatorResearchCell.click();
-        const creatorVideoTableText = await page.locator('[data-savedvalidation-video-table]').innerText();
-        assert(creatorVideoTableText.includes('History-only baseline'));
-        assert(creatorVideoTableText.includes('Incremental absolute-error value'));
-        assert(creatorVideoTableText.includes('66.0%'), 'creator validation rows must expose the exact matched history baseline');
-        await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.stored.text.ret5"][data-savedvalidationoutcome="keep"]').click();
         await page.locator('[data-savedvalidation-selected]').waitFor();
         const selectedTextRet5 = await page.locator('[data-savedvalidation-selected]').innerText();
         assert(selectedTextRet5.includes('shorts.stored.text.ret5'));
@@ -2727,34 +2628,43 @@ window.fetch=function(url,options){
             0,
             'a cross-target pairing must not expose a prediction toggle'
         );
-        await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.video-heldout.text.realviews"][data-savedvalidationoutcome="views"]').click();
-        const selectedRealViews = await page.locator('[data-savedvalidation-selected]').innerText();
-        assert(selectedRealViews.includes('Text input only'));
-        assert(selectedRealViews.includes('combines predicted keep, predicted five-second retention, and duration'));
-        assert(selectedRealViews.includes('derived, not a new embedding direction'));
-        await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.creator-excluded.together.views"][data-savedvalidationoutcome="views"]').click();
-        await page.locator('[data-savedvalidation-selected]').waitFor();
-        assert((await page.locator('[data-savedvalidation-selected]').innerText()).includes('shorts.creator-excluded.together.views'));
-        const blindViewsPoint = page.locator('[data-savedvalidation-scatter] circle[data-savedvalidationrow="vid00000002"]').first();
-        const blindViewsTooltip = await blindViewsPoint.locator('title').textContent();
-        assert(blindViewsTooltip.includes('Coordinate: shorts.creator-excluded.together.views'), 'the hover must name the exact selected coordinate');
-        assert(blindViewsTooltip.includes('Actual Current lifetime views:'), 'the hover must name the independently observed outcome');
-        await blindViewsPoint.dispatchEvent('click');
-        const selectedPointDetail = page.locator('[data-savedvalidation-point-detail]');
-        await selectedPointDetail.waitFor();
-        assert((await selectedPointDetail.innerText()).includes('shorts.creator-excluded.together.views'));
-        assert.strictEqual(await selectedPointDetail.locator('[data-savedchannelvideo]').count(), 1, 'matched points must drill into the original saved score card without recomputation');
-        await selectedPointDetail.locator('[data-savedchannelvideo]').click();
-        await page.waitForFunction(id => {
-            const image = document.querySelector('#rtg-exppanel img[style*="width:260px"]');
-            return image && image.src.includes(id);
-        }, 'vid00000002');
-        if (process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT) {
-            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT), { recursive: true });
-            await page.locator('#rtg-exppanel').screenshot({ path: process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT });
+        const associationEntry = validationArtifact.scopes.pooled.ledgerOutcomeMatrix.keep.coordinates.find(entry => entry.coordinateId === 'shorts.stored.text.ret5');
+        assert.strictEqual(await page.locator('[data-savedvalidation-metric]').count(), Object.keys(associationEntry.metrics).length, 'the inspector must render every metric registered for an association-only pair');
+        assert((await page.locator('[data-savedvalidation-error-distribution]').innerText()).includes('association-only'));
+        assert.strictEqual(await page.locator('[data-savedvalidation-error-cdf]').count(), 0, 'association-only pairs must not invent a prediction-error curve');
+        await page.locator('[data-savedvalidation-outcome-picker]').selectOption('views');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker]').inputValue(), 'shorts.stored.text.ret5', 'changing outcomes must never silently change the selected coordinate');
+        await page.locator('[data-savedvalidation-coordinate-picker]').selectOption('shorts.video-forecast.views');
+        const nativePredictionEntry = validationArtifact.scopes.pooled.ledgerOutcomeMatrix.views.coordinates.find(entry => entry.coordinateId === 'shorts.video-forecast.views');
+        assert(nativePredictionEntry && nativePredictionEntry.evaluation, 'fixture must contain a native registered held-out views prediction');
+        assert.strictEqual(await page.locator('[data-savedvalidation-scatter]').getAttribute('data-plot-mode'), 'prediction');
+        assert.strictEqual(await page.locator('[data-savedvalidation-metric]').count(), Object.keys(nativePredictionEntry.metrics).length, 'the native inspector must render the complete registered metric schema');
+        const nativeErrorDistributionText = await page.locator('[data-savedvalidation-error-distribution]').innerText();
+        assert(/median miss/i.test(nativeErrorDistributionText), nativeErrorDistributionText);
+        assert.strictEqual(await page.locator('[data-savedvalidation-error-cdf]').count(), 1, 'every native prediction must visualize its empirical error CDF');
+        assert.notStrictEqual((await page.locator('[data-savedvalidation-metric="evidence"]').innerText()).trim(), '—', 'the categorical evidence verdict must remain visible rather than being treated as a missing number');
+        assert.strictEqual(await page.locator('[data-savedvalidation-evidence-json]').count(), 1, 'every selected relationship must expose its complete registered record');
+        assert((await page.locator('[data-savedvalidation-account-metrics]').innerText()).includes('Per-creator validation'));
+        await page.locator('[data-savedvalidation-outcome-picker]').selectOption('keep');
+        await page.locator('[data-savedvalidation-coordinate-picker]').selectOption('shorts.creator-prequential-forecast.keep');
+        const creatorResearchCell = page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.creator-prequential-forecast.keep"][data-savedvalidationoutcome="keep"]');
+        assert((await creatorResearchCell.innerText()).includes('RESEARCH ONLY'), 'research-only coordinates must retain their metrics while remaining visibly unpromoted');
+        const creatorVideoTableText = await page.locator('[data-savedvalidation-video-table]').innerText();
+        assert(creatorVideoTableText.includes('History-only baseline'));
+        assert(creatorVideoTableText.includes('Incremental absolute-error value'));
+        assert(creatorVideoTableText.includes('66.0%'), 'creator validation rows must expose the exact matched history baseline');
+        assert(/p90 miss/i.test(await page.locator('[data-savedvalidation-error-distribution]').innerText()), 'the winning prequential coordinate must use the same generic error-distribution component as every other prediction');
+        await page.locator('[data-savedvalidation-open-ledger]').click();
+        await page.locator('[data-savedledger]').waitFor();
+        assert.strictEqual(await page.locator('[data-savedledger]').getAttribute('data-selected-coordinate-id'), 'shorts.creator-prequential-forecast.keep', 'Visualization must round-trip the exact coordinate back into the ledger');
+        await page.locator('[data-savedledger-open-visualization]').click();
+        await page.locator('[data-savedvalidation-coordinate-picker]').selectOption('shorts.visual-keep-forecast.v1');
+        await page.locator('[data-savedvalidation-outcome-picker]').selectOption('keep');
+        if (process.env.EXPERIMENT_LAB_VISUALIZATION_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_VISUALIZATION_SCREENSHOT), { recursive: true });
+            await page.locator('[data-savedvalidation-ledger-navigator]').evaluate(element => element.scrollIntoView({ block: 'start' }));
+            await page.screenshot({ path: process.env.EXPERIMENT_LAB_VISUALIZATION_SCREENSHOT, fullPage: false });
         }
-        assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'reopening an older cached validation video must not fetch or recompute it again');
-        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), explicitRescoreEmbedCount, 'validation inspection must never recalculate a stored embedding');
         const lineageDetails = page.locator('[data-savedvalidation-canonical] details').filter({ hasText: 'show the complete raw-input' }).first();
         await lineageDetails.locator(':scope > summary').click();
         const validationLineageText = await lineageDetails.innerText();
@@ -2769,26 +2679,12 @@ window.fetch=function(url,options){
                 + 'once; swipe remains a display transform of keep'
         );
         await page.locator('[data-savedvalidationfamily="all"]').click();
-        await visualKeepStudy.evaluate(element => element.scrollIntoView({ block: 'center' }));
+        const frozenVisualPoint = page.locator('[data-savedvalidation-scatter] circle[data-savedvalidationrow="vid00000002"]').first();
+        await frozenVisualPoint.evaluate(element => element.scrollIntoView({ block: 'center' }));
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const visualKeepDrilldowns = page.locator('[data-savedvisualkeep-scatter] circle[data-savedvalidationrow]');
-        const visibleVisualKeepIndex = await visualKeepDrilldowns.evaluateAll(nodes => nodes.findIndex(node => {
-            const rect = node.getBoundingClientRect();
-            const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-            return rect.width > 0
-                && rect.height > 0
-                && rect.left >= 0
-                && rect.right <= document.documentElement.clientWidth
-                && rect.top >= 0
-                && rect.bottom <= document.documentElement.clientHeight
-                && hit === node;
-        }));
-        assert(visibleVisualKeepIndex >= 0, 'the mobile validation chart must expose at least one directly clickable stored-video point');
-        const visualKeepDrilldown = visualKeepDrilldowns.nth(visibleVisualKeepIndex);
-        const visualKeepTooltip = await visualKeepDrilldown.locator('title').textContent();
-        assert(visualKeepTooltip.includes('shorts.visual-keep-protocol.video-heldout.v1:'), 'the validation point must name and disclose its leakage-controlled protocol coordinate');
-        assert(visualKeepTooltip.includes('shorts.visual-keep-forecast.v1:'), 'the validation point must separately name and disclose the frozen raw ledger coordinate');
-        const visualKeepHitAudit = await visualKeepDrilldown.evaluate(node => {
+        const visualKeepTooltip = await frozenVisualPoint.locator('title').textContent();
+        assert(visualKeepTooltip.includes('Coordinate: shorts.visual-keep-forecast.v1'), 'the generic inspector point must name the selected canonical coordinate');
+        const visualKeepHitAudit = await frozenVisualPoint.evaluate(node => {
             const rect = node.getBoundingClientRect();
             const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
             return {
@@ -2799,52 +2695,15 @@ window.fetch=function(url,options){
             };
         });
         assert(visualKeepHitAudit.direct, `the selected mobile validation point must be physically hit-testable: ${JSON.stringify(visualKeepHitAudit)}`);
-        const visualKeepVideoId = String(await visualKeepDrilldown.getAttribute('data-savedvalidationrow'));
+        const visualKeepVideoId = String(await frozenVisualPoint.getAttribute('data-savedvalidationrow'));
         const visualKeepVideo = videos.find(video => video.id === visualKeepVideoId);
         assert(visualKeepVideo, 'the clickable validation point must resolve to its saved-video fixture');
-        await visualKeepDrilldown.click({ force: true });
-        const visualKeepPointDetail = visualKeepStudy.locator('[data-savedvisualkeep-point-detail]');
+        await frozenVisualPoint.click({ force: true });
+        const visualKeepPointDetail = page.locator('[data-savedvalidation-point-detail]');
         await visualKeepPointDetail.waitFor();
-        const protocolValue = Number(await visualKeepDrilldown.getAttribute('data-coordinate-value'));
-        const protocolPoint = visualKeepPoints.find(point => point.id === visualKeepVideoId);
-        assert(protocolPoint);
-        assert(Math.abs(protocolValue - protocolPoint.predicted) < 1e-8, 'the plotted point must use the registered protocol ledger value');
         const visualKeepPointText = await visualKeepPointDetail.innerText();
-        assert(visualKeepPointText.includes('shorts.visual-keep-protocol.video-heldout.v1'));
         assert(visualKeepPointText.includes('shorts.visual-keep-forecast.v1'));
         assert(visualKeepPointText.includes('shorts.observed.keep'));
-        await visualKeepPointDetail.locator('button[data-savedchannelvideo]:not([data-savedchannelvideo-embedding])').click();
-        const keepCoordinateTable = page.locator('[data-visual-keep-coordinate-table]');
-        await keepCoordinateTable.waitFor();
-        assert.strictEqual(await keepCoordinateTable.locator('[data-visual-keep-coordinate-row]').count(), 11, 'the score card must show all three held-out protocols, the frozen score-time forecast, the historical creator-prequential validation row, three stored modality maps, two blind axes, and observed truth');
-        const registeredVideoProtocolRow = keepCoordinateTable.locator('[data-coordinate-id="shorts.visual-keep-protocol.video-heldout.v1"]');
-        assert.strictEqual(Number(await registeredVideoProtocolRow.getAttribute('data-coordinate-value')), protocolPoint.predicted);
-        const keepCoordinateTableText = await keepCoordinateTable.innerText();
-        assert(
-            keepCoordinateTableText.includes('artifact.runtime.shorts.blind-predictor.v1'),
-            'the protocol value must disclose the exact predictor-study artifact family',
-        );
-        assert(
-            keepCoordinateTableText.includes('artifact.shorts.visual-keep-model.v1'),
-            'the frozen pooled value must disclose its separate visual-model artifact family',
-        );
-        assert((await keepCoordinateTable.locator('[data-visual-keep-error-equation]').innerText()).includes(
-            `${protocolPoint.predicted.toFixed(1)}% protocol prediction`
-        ), 'the score card error equation must use the same protocol value as the plotted point');
-        assert.strictEqual(
-            Number(await keepCoordinateTable.locator('[data-coordinate-id="shorts.visual-keep-forecast.v1"]').getAttribute('data-coordinate-value')),
-            visualKeepVideo.visual_keep_forecast.raw,
-            'the frozen production forecast must remain a separate exact ledger value',
-        );
-        if (process.env.EXPERIMENT_LAB_KEEP_COORDINATE_SCREENSHOT) {
-            fs.mkdirSync(
-                path.dirname(process.env.EXPERIMENT_LAB_KEEP_COORDINATE_SCREENSHOT),
-                { recursive: true },
-            );
-            await keepCoordinateTable.screenshot({
-                path: process.env.EXPERIMENT_LAB_KEEP_COORDINATE_SCREENSHOT,
-            });
-        }
         await visualKeepPointDetail.locator('button[data-savedchannelvideo-embedding="visual:keep"]').click();
         await page.locator('[data-rawproj="keep"]').waitFor();
         const rawMapForecast = page.locator('[data-visual-keep-raw-map-value]');
@@ -2865,6 +2724,7 @@ window.fetch=function(url,options){
             '#fff',
             'the exact existing map point must be visibly selected'
         );
+        assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'validation inspection must reuse the cached stored score artifact');
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), explicitRescoreEmbedCount, 'opening the normal embedding must reuse the stored vector and never re-embed');
         assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 390, scroll: 390 });
         if (process.env.EXPERIMENT_LAB_SCREENSHOT) {
@@ -2879,7 +2739,7 @@ window.fetch=function(url,options){
         }
         const finalParity = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
         assert(finalParity.ok, `final rendered embedding parity failed: ${JSON.stringify(finalParity.conflicts)}`);
-        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, matrixColumns: 21, relationshipCells: 441, trajectoryCharts: 21, riskSignalCharts: riskSignals.length, riskThreshold: '30M', blindValidationCoordinates: shortsCoordinateCount, blindValidationOutcomes: observedOutcomeCount, embeddingParity: finalParity }));
+        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, ledgerCoordinates: shortsCoordinateCount, observedOutcomes: observedOutcomeCount, ledgerOutcomeCells: shortsCoordinateCount * observedOutcomeCount, embeddingParity: finalParity }));
     } finally {
         await browser.close();
     }
