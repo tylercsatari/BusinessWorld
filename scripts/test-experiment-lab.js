@@ -2663,9 +2663,35 @@ window.fetch=function(url,options){
         await page.locator('[data-savedledger-open-visualization]').click();
         const canonicalValidation = page.locator('[data-savedvalidation-canonical]');
         await canonicalValidation.waitFor();
+        const scoreCoordinateIds = new Set(
+            coordinateRegistry.columns
+                .filter(column => column.family !== 'observed'
+                    && column.valueClass !== 'observed_outcome')
+                .map(column => column.id)
+        );
+        const rankedEntries = (outcomeKey, mode = 'absolute') => validationArtifact.scopes.tyler.ledgerOutcomeMatrix[outcomeKey].coordinates
+            .filter(entry => scoreCoordinateIds.has(entry.coordinateId))
+            .map((entry, ledgerIndex) => ({
+                entry,
+                ledgerIndex,
+                rho: entry.metrics && Number.isFinite(+entry.metrics.spearman)
+                    ? +entry.metrics.spearman
+                    : null,
+            }))
+            .sort((left, right) => {
+                if (mode === 'ledger') return left.ledgerIndex - right.ledgerIndex;
+                if ((left.rho != null) !== (right.rho != null)) return left.rho != null ? -1 : 1;
+                if (left.rho == null) return left.ledgerIndex - right.ledgerIndex;
+                const leftValue = mode === 'absolute' ? Math.abs(left.rho) : left.rho;
+                const rightValue = mode === 'absolute' ? Math.abs(right.rho) : right.rho;
+                return (mode === 'negative' ? leftValue - rightValue : rightValue - leftValue)
+                    || left.ledgerIndex - right.ledgerIndex;
+            });
+        const topKeepEntry = rankedEntries('keep')[0].entry;
         assert.strictEqual(await canonicalValidation.getAttribute('data-coordinate-count'), String(shortsCoordinateCount));
         assert.strictEqual(await canonicalValidation.getAttribute('data-score-coordinate-count'), String(scoreCoordinateCount));
         assert.strictEqual(await canonicalValidation.getAttribute('data-outcome-count'), String(observedOutcomeCount));
+        assert.strictEqual(await canonicalValidation.getAttribute('data-coordinate-order'), 'absolute');
         assert.strictEqual(await page.getByText('Ledger visualization', { exact: true }).count(), 1);
         assert((await page.locator('[data-savedvalidation-ledger-classification]').innerText()).includes(ledgerClassificationText));
         assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').count(), scoreCoordinateCount, 'the Y-axis picker must expose every non-outcome score coordinate exactly once');
@@ -2673,6 +2699,13 @@ window.fetch=function(url,options){
         assert.strictEqual(await page.locator('[data-savedvalidation-outcome-picker] option').count(), observedOutcomeCount, 'the visualization picker must expose every measured outcome');
         assert.strictEqual(await page.locator('[data-savedvalidation-ledger-navigator] [data-axis-role="score"]').count(), 1, 'the score axis must be explicit');
         assert.strictEqual(await page.locator('[data-savedvalidation-ledger-navigator] [data-axis-role="observed"]').count(), 1, 'the observed axis must be explicit');
+        assert.strictEqual(await page.locator('[data-savedvalidation-ledger-navigator] [data-axis-role="order"]').count(), 1, 'the selected outcome must expose a coordinate ordering control');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-order]').inputValue(), 'absolute');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').first().getAttribute('value'), topKeepEntry.coordinateId, 'default Y-axis order must rank strongest absolute raw Spearman relationship first');
+        assert.strictEqual(+await page.locator('[data-savedvalidation-coordinate-picker] option').first().getAttribute('data-correlation'), +topKeepEntry.metrics.spearman);
+        assert.strictEqual(await page.locator('[data-savedvalidation-correlation-ranking]').getAttribute('data-outcome'), 'keep');
+        assert.strictEqual(await page.locator('[data-savedvalidation-ranked-coordinate]').count(), Math.min(10, rankedEntries('keep').filter(item => item.rho != null).length));
+        assert.strictEqual(await page.locator('[data-savedvalidation-ranked-coordinate]').first().getAttribute('data-savedvalidation-ranked-coordinate'), topKeepEntry.coordinateId);
         assert(await page.locator('[data-savedvalidation-ledger-navigator]').evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'the canonical coordinate/outcome navigator must fit its mobile parent');
         assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker]').inputValue(), 'shorts.stored.text.ret5', 'the coordinate selected in the ledger must remain selected in Visualization');
         assert.strictEqual(await page.locator('[data-savedcreatorkeep-study]').count(), 0, 'one-off creator keep panels must not duplicate the canonical inspector');
@@ -2688,6 +2721,7 @@ window.fetch=function(url,options){
         );
         await page.locator('[data-savedvalidationview="atlas"]').click();
         assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), scoreCoordinateCount, 'the atlas must contain score interpretations only');
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').first().getAttribute('data-savedvalidationfeature'), topKeepEntry.coordinateId, 'atlas rows must share the selected outcome-aware ordering');
         assert.strictEqual(await page.getByText(`All ${scoreCoordinateCount} score interpretations × all ${observedOutcomeCount} raw observed metrics`, { exact: true }).count(), 1);
         assert.strictEqual(await page.locator('[data-savedvalidationcell]').count(), scoreCoordinateCount * observedOutcomeCount, 'every score interpretation must be compared with every independently selected observed metric');
         assert.strictEqual(await page.locator('[data-savedvalidationfeature^="shorts.observed."]').count(), 0, 'raw outcomes belong exclusively to the X axis');
@@ -2743,6 +2777,22 @@ window.fetch=function(url,options){
         assert.strictEqual(await page.locator('[data-savedvalidation-error-cdf]').count(), 0, 'association-only pairs must not invent a prediction-error curve');
         await page.locator('[data-savedvalidation-outcome-picker]').selectOption('views');
         assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker]').inputValue(), 'shorts.stored.text.ret5', 'changing outcomes must never silently change the selected coordinate');
+        const topViewsEntry = rankedEntries('views')[0].entry;
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').first().getAttribute('value'), topViewsEntry.coordinateId, 'changing the measured outcome must rerank coordinates against that outcome');
+        assert.strictEqual(await page.locator('[data-savedvalidation-correlation-ranking]').getAttribute('data-outcome'), 'views');
+        await page.locator('[data-savedvalidation-coordinate-order]').selectOption('positive');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').first().getAttribute('value'), rankedEntries('views', 'positive')[0].entry.coordinateId, 'positive mode must sort signed rho descending');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker]').inputValue(), 'shorts.stored.text.ret5', 'reordering must preserve the chosen coordinate');
+        await page.locator('[data-savedvalidation-coordinate-order]').selectOption('negative');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').first().getAttribute('value'), rankedEntries('views', 'negative')[0].entry.coordinateId, 'inverse mode must sort signed rho ascending');
+        await page.locator('[data-savedvalidation-coordinate-order]').selectOption('ledger');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').first().getAttribute('value'), rankedEntries('views', 'ledger')[0].entry.coordinateId, 'ledger mode must restore canonical registry order');
+        await page.locator('[data-savedvalidation-coordinate-order]').selectOption('absolute');
+        const topRankedButton = page.locator('[data-savedvalidation-ranked-coordinate]').first();
+        const topRankedCoordinate = await topRankedButton.getAttribute('data-savedvalidation-ranked-coordinate');
+        await topRankedButton.click();
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker]').inputValue(), topRankedCoordinate, 'ranked quick picks must select the exact ledger coordinate');
+        assert.strictEqual(await page.locator('[data-savedvalidation-outcome-picker]').inputValue(), 'views', 'ranked quick picks must preserve the measured outcome');
         await page.locator('[data-savedvalidation-coordinate-picker]').selectOption('shorts.video-forecast.views');
         const nativePredictionEntry = validationArtifact.scopes.tyler.ledgerOutcomeMatrix.views.coordinates.find(entry => entry.coordinateId === 'shorts.video-forecast.views');
         assert(nativePredictionEntry && nativePredictionEntry.evaluation, 'fixture must contain a native registered held-out views prediction');

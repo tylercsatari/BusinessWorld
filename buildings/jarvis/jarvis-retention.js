@@ -30,7 +30,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -7273,6 +7273,12 @@ const JarvisRetention = (function () {
         const scvalidationscope = e.target.closest('[data-savedvalidationscope]'); if (scvalidationscope) { st.savedValidationScope = scvalidationscope.getAttribute('data-savedvalidationscope'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
         const scvalidationview = e.target.closest('[data-savedvalidationview]'); if (scvalidationview) { st.savedValidationView = scvalidationview.getAttribute('data-savedvalidationview'); rtgUpdateExp(); return; }
         const scvalidationfamily = e.target.closest('[data-savedvalidationfamily]'); if (scvalidationfamily) { st.savedValidationFamily = scvalidationfamily.getAttribute('data-savedvalidationfamily'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scrankedcoordinate = e.target.closest('[data-savedvalidation-ranked-coordinate]'); if (scrankedcoordinate) {
+            st.savedLedgerCoordinate = scrankedcoordinate.getAttribute('data-savedvalidation-ranked-coordinate');
+            st.savedValidationShow = 60;
+            rtgUpdateExp();
+            return;
+        }
         const scvalidationcell = e.target.closest('[data-savedvalidationcell]'); if (scvalidationcell) {
             st.savedLedgerCoordinate = scvalidationcell.getAttribute('data-savedvalidationcoordinate');
             st.savedValidationTarget = scvalidationcell.getAttribute('data-savedvalidationoutcome');
@@ -7573,6 +7579,11 @@ const JarvisRetention = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedvalidation-outcome-picker')) {
             st.savedValidationTarget = String(e.target.value || 'keep');
             st.savedValidationShow = 60;
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-savedvalidation-coordinate-order')) {
+            st.savedValidationCoordinateOrder = String(e.target.value || 'absolute');
             rtgUpdateExp();
             return;
         }
@@ -9968,6 +9979,51 @@ const JarvisRetention = (function () {
         }
         return 'Feed and retention';
     }
+    function savedValidationCorrelation(entry) {
+        const value = entry && entry.metrics && entry.metrics.spearman;
+        return value == null || !isFinite(+value) ? null : +value;
+    }
+    function savedValidationCorrelationN(entry) {
+        const metrics = entry && entry.metrics || {};
+        const coverage = entry && entry.coverage || {};
+        const value = metrics.predictionN != null
+            ? metrics.predictionN
+            : metrics.n != null
+                ? metrics.n
+                : coverage.pairedRows;
+        return value == null || !isFinite(+value) ? 0 : +value;
+    }
+    function savedValidationRankedScoreColumns(columns, entryById, requestedMode) {
+        const modes = new Set(['absolute', 'positive', 'negative', 'ledger']);
+        const mode = modes.has(requestedMode) ? requestedMode : 'absolute';
+        const items = (columns || []).map((column, ledgerIndex) => {
+            const entry = entryById && entryById.get(column.id);
+            return {
+                column,
+                entry,
+                ledgerIndex,
+                correlation: savedValidationCorrelation(entry),
+                n: savedValidationCorrelationN(entry),
+            };
+        });
+        if (mode === 'ledger') return items;
+        return items.sort((left, right) => {
+            const leftAvailable = left.correlation != null;
+            const rightAvailable = right.correlation != null;
+            if (leftAvailable !== rightAvailable) return leftAvailable ? -1 : 1;
+            if (!leftAvailable) return left.ledgerIndex - right.ledgerIndex;
+            const leftValue = mode === 'absolute'
+                ? Math.abs(left.correlation)
+                : left.correlation;
+            const rightValue = mode === 'absolute'
+                ? Math.abs(right.correlation)
+                : right.correlation;
+            const difference = mode === 'negative'
+                ? leftValue - rightValue
+                : rightValue - leftValue;
+            return difference || left.ledgerIndex - right.ledgerIndex;
+        });
+    }
     function savedValidationLedgerMatrix(scope, outcomeKey) {
         return scope && scope.ledgerOutcomeMatrix && scope.ledgerOutcomeMatrix[outcomeKey] || null;
     }
@@ -11222,13 +11278,33 @@ const JarvisRetention = (function () {
             ['forecast', 'Forecasts'],
         ];
         const selectedById = new Map(selectedEntries.map(entry => [entry.coordinateId || entry.id || entry.key, entry]));
-        const visibleColumns = scoreColumns.filter(column => {
+        const coordinateOrderOptions = [
+            ['absolute', 'Strongest relationship |ρ|'],
+            ['positive', 'Most positive relationship ρ'],
+            ['negative', 'Strongest inverse relationship ρ'],
+            ['ledger', 'Ledger / type order'],
+        ];
+        const coordinateOrder = coordinateOrderOptions.some(([key]) => key === st.savedValidationCoordinateOrder)
+            ? st.savedValidationCoordinateOrder
+            : 'absolute';
+        st.savedValidationCoordinateOrder = coordinateOrder;
+        const rankedScoreItems = savedValidationRankedScoreColumns(
+            scoreColumns,
+            selectedById,
+            coordinateOrder
+        );
+        const filteredColumns = scoreColumns.filter(column => {
             const entry = selectedById.get(column.id);
             if (!savedValidationCoordinateFilter(column, entry, filter)) return false;
             if (!query) return true;
             return [column.id, column.label, column.family, column.group, column.target, savedValidationPlainMeaning(column, entry)]
                 .join(' ').toLowerCase().includes(query);
         });
+        const visibleColumns = savedValidationRankedScoreColumns(
+            filteredColumns,
+            selectedById,
+            coordinateOrder
+        ).map(item => item.column);
         const strictFamilies = new Set(['creatorExcludedPublic', 'videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepPrequential']);
         const heldoutColumnCount = allColumns.filter(column => (
             strictFamilies.has(column.family)
@@ -11266,13 +11342,46 @@ const JarvisRetention = (function () {
             const count = scoreColumns.filter(column => savedValidationCoordinateFilter(column, selectedById.get(column.id), key)).length;
             return `<span data-savedvalidationfamily="${key}" style="cursor:pointer;border:1px solid ${filter === key ? C.cyan : C.border};background:${filter === key ? C.cyan + '12' : 'transparent'};color:${filter === key ? C.cyan : C.dim};padding:4px 7px;font-size:8px;font-weight:850;white-space:nowrap">${esc(label)} <b>${count}</b></span>`;
         }).join('');
-        const coordinateGroups = new Map();
-        scoreColumns.forEach(column => {
-            const group = savedValidationAxisGroup(column);
-            if (!coordinateGroups.has(group)) coordinateGroups.set(group, []);
-            coordinateGroups.get(group).push(column);
-        });
-        const coordinateOptions = Array.from(coordinateGroups.entries()).map(([group, columns]) => `<optgroup label="${esc(`${group} · ${columns.length}`)}">${columns.map(column => `<option data-score-coordinate-option value="${esc(column.id)}" ${selectedId === column.id ? 'selected' : ''}>${esc(`${column.label} · ${savedValidationFamilyMeta(column).label}`)}</option>`).join('')}</optgroup>`).join('');
+        const rankedAvailableCount = rankedScoreItems.filter(item => item.correlation != null).length;
+        const coordinateOption = (item, rank) => {
+            const correlationText = item.correlation == null
+                ? 'ρ unavailable'
+                : `ρ ${sgn(item.correlation, 3)} · n=${item.n}`;
+            const rankText = coordinateOrder === 'ledger' ? '' : `#${rank} · `;
+            return `<option data-score-coordinate-option data-correlation="${item.correlation == null ? '' : esc(item.correlation)}" data-correlation-n="${item.n}" value="${esc(item.column.id)}" ${selectedId === item.column.id ? 'selected' : ''}>${esc(`${rankText}${correlationText} · ${item.column.label} · ${savedValidationFamilyMeta(item.column).label}`)}</option>`;
+        };
+        let coordinateOptions = '';
+        if (coordinateOrder === 'ledger') {
+            const coordinateGroups = new Map();
+            rankedScoreItems.forEach(item => {
+                const group = savedValidationAxisGroup(item.column);
+                if (!coordinateGroups.has(group)) coordinateGroups.set(group, []);
+                coordinateGroups.get(group).push(item);
+            });
+            coordinateOptions = Array.from(coordinateGroups.entries()).map(([group, items]) => `<optgroup label="${esc(`${group} · ${items.length}`)}">${items.map((item, index) => coordinateOption(item, index + 1)).join('')}</optgroup>`).join('');
+        } else {
+            coordinateOptions = `<optgroup label="${esc(`${coordinateOrderOptions.find(([key]) => key === coordinateOrder)[1]} · ${outcome.label}`)}">${rankedScoreItems.map((item, index) => coordinateOption(item, index + 1)).join('')}</optgroup>`;
+        }
+        const coordinateOrderSelect = coordinateOrderOptions.map(([key, label]) => `<option value="${key}" ${coordinateOrder === key ? 'selected' : ''}>${esc(label)}</option>`).join('');
+        const selectedRankIndex = rankedScoreItems.findIndex(item => item.column.id === selectedId);
+        const selectedRankItem = selectedRankIndex < 0 ? null : rankedScoreItems[selectedRankIndex];
+        const selectedRankText = selectedRankIndex < 0
+            ? 'not ranked'
+            : selectedRankItem.correlation == null
+                ? 'correlation unavailable for this outcome'
+            : coordinateOrder === 'ledger'
+                ? `ledger position ${selectedRankIndex + 1} of ${scoreColumns.length}`
+                : `${coordinateOrderOptions.find(([key]) => key === coordinateOrder)[1]} rank ${selectedRankIndex + 1} of ${rankedAvailableCount}`;
+        const quickRankedItems = rankedScoreItems.filter(item => item.correlation != null).slice(0, 10);
+        const correlationRankingTitle = coordinateOrder === 'ledger'
+            ? `Ledger-order coordinates with ${outcome.label} coverage`
+            : `Ledger coordinates ranked against ${outcome.label}`;
+        const correlationRanking = quickRankedItems.length ? `<div data-savedvalidation-correlation-ranking data-order-mode="${coordinateOrder}" data-outcome="${esc(outcome.key)}" style="border:1px solid ${C.border};background:${C.card};padding:9px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:end;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:950">${esc(correlationRankingTitle)}</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">Raw Spearman ρ from the selected scope. |ρ| ranks monotonic strength regardless of direction; signed ρ shows whether the relationship rises or falls. This is descriptive association, not causal evidence or prediction accuracy.</div></div><div style="font-size:7px;color:${C.cyan};font-weight:900">${rankedAvailableCount}/${scoreColumns.length} with matched values</div></div><div style="display:grid;grid-auto-flow:column;grid-auto-columns:minmax(175px,220px);gap:5px;margin-top:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:3px">${quickRankedItems.map((item, index) => {
+            const selected = item.column.id === selectedId;
+            const color = item.correlation >= 0 ? C.green : C.orange;
+            const displayRank = coordinateOrder === 'ledger' ? item.ledgerIndex + 1 : index + 1;
+            return `<button type="button" data-savedvalidation-ranked-coordinate="${esc(item.column.id)}" data-correlation-rank="${displayRank}" data-correlation="${esc(item.correlation)}" data-correlation-n="${item.n}" style="border:1px solid ${selected ? color : C.border};border-left:3px solid ${color};background:${selected ? color + '0d' : C.card2};padding:7px;text-align:left;cursor:pointer;min-width:0"><div style="display:flex;justify-content:space-between;gap:5px;align-items:baseline"><span style="font-size:7px;color:${C.mute};font-weight:900">#${displayRank}</span><span style="font-size:13px;color:${color};font-weight:950">ρ ${sgn(item.correlation, 3)}</span></div><div style="font-size:8px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(item.column.label)}</div><div style="font-size:6.5px;color:${C.faint};margin-top:2px">n=${item.n} · ${esc(savedValidationFamilyMeta(item.column).label)}</div></button>`;
+        }).join('')}</div></div>` : note(`No matched score/outcome pairs are available for ${esc(outcome.label)} in this scope.`, C.amber);
         const outcomeGroups = new Map();
         outcomes.forEach(item => {
             const group = savedValidationOutcomeGroup(item);
@@ -11308,7 +11417,7 @@ const JarvisRetention = (function () {
                     ? 'EXACT LEDGER PREDICTION'
                     : 'ASSOCIATION ONLY';
         const selectedPair = selectedColumn ? `<div data-savedvalidation-selected style="border:1px solid ${selectedFamily.color};background:${selectedFamily.color}08;padding:10px;margin:10px 0">
-          <div data-savedvalidation-axis-pair style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:7px"><div data-axis-role="score" style="border-left:3px solid ${selectedFamily.color};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">Y-axis · score interpretation</div><div style="font-size:12px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div><div style="font-size:6.8px;color:${selectedFamily.color};margin-top:3px">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div></div><div data-axis-role="observed" style="border-left:3px solid ${C.green};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;color:${C.green};font-weight:950;text-transform:uppercase">X-axis · raw observed video data</div><div style="font-size:12px;color:${C.text};font-weight:950;margin-top:2px">${esc(outcome.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">shorts.observed.${esc(outcome.key)}</div><div style="font-size:6.8px;color:${C.green};margin-top:3px">Measured channel outcome · ${esc(outcome.unit || 'number')}${outcome.derived ? ` · ${esc(outcome.derived)}` : ''}</div></div></div>
+          <div data-savedvalidation-axis-pair style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:7px"><div data-axis-role="score" style="border-left:3px solid ${selectedFamily.color};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">Y-axis · score interpretation</div><div style="font-size:12px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div><div style="font-size:6.8px;color:${selectedFamily.color};margin-top:3px">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div><div data-savedvalidation-selected-rank style="font-size:6.8px;color:${C.cyan};font-weight:900;margin-top:3px">${esc(selectedRankText)} · ρ ${fmtv(savedValidationCorrelation(selectedEntry), 3)} · n=${savedValidationCorrelationN(selectedEntry)}</div></div><div data-axis-role="observed" style="border-left:3px solid ${C.green};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;color:${C.green};font-weight:950;text-transform:uppercase">X-axis · raw observed video data</div><div style="font-size:12px;color:${C.text};font-weight:950;margin-top:2px">${esc(outcome.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">shorts.observed.${esc(outcome.key)}</div><div style="font-size:6.8px;color:${C.green};margin-top:3px">Measured channel outcome · ${esc(outcome.unit || 'number')}${outcome.derived ? ` · ${esc(outcome.derived)}` : ''}</div></div></div>
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid ${C.border};margin-top:7px;padding-top:7px"><div><div style="font-size:6.8px;color:${C.mute}">${esc(selectedPredictionLabel)}</div><div style="font-size:10px;color:${selectedEvidence.color};font-weight:950;line-height:1.4;overflow-wrap:anywhere">${esc(savedValidationMetricLine(selectedEntry, outcome))}</div></div><div style="text-align:right;max-width:100%"><div style="font-size:7px;color:${C.mute}">RELATIONSHIP VERDICT</div><div style="font-size:12px;color:${selectedEvidence.color};font-weight:950">${esc(selectedEvidence.label)}</div></div></div>
           <details data-savedvalidation-selected-explanation style="border-top:1px solid ${C.border};margin-top:7px;padding-top:7px"><summary style="cursor:pointer;color:${C.text};font-size:8px;font-weight:900">Interpretation and claim boundary</summary><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:7px">${esc(selectedMeaning)}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px;margin-top:7px"><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">RAW ASSOCIATION</div><div style="font-size:14px;color:${C.text};font-weight:950">ρ ${fmtv(selectedMetrics.spearman, 3)}</div><div style="font-size:7px;color:${C.dim}">relationship only; not calibrated accuracy</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE</div><div style="font-size:14px;color:${C.text};font-weight:950">${selectedMetrics.predictionN || selectedMetrics.n || 0} videos</div><div style="font-size:7px;color:${C.dim}">${fmtv(selectedEntry && selectedEntry.coverage && selectedEntry.coverage.pairedFraction != null ? selectedEntry.coverage.pairedFraction * 100 : null, 1)}% of eligible scope · ${selectedEntry && selectedEntry.coverage && selectedEntry.coverage.accountCount || 0} creator accounts</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">VALIDATION CLAIM</div><div style="font-size:8px;color:${selectedFamily.color};font-weight:900;line-height:1.4">${esc(selectedFamily.claim)}</div></div></div></details>
         </div>` : '';
@@ -11419,7 +11528,7 @@ const JarvisRetention = (function () {
         const accuracyPane = `<section data-savedvalidation-pane="accuracy">${selectedPredictionScatter ? `<div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 5px">Native prediction accuracy</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This second graph appears only because the selected score is registered as a numerical prediction of this exact observed metric. It does not replace the independent raw-axis relationship graph.</div>${selectedPredictionScatter}` : note('The selected score and observed metric form a raw association only. No calibrated cross-outcome prediction is invented.', C.amber)}${selectedFullEvidence}</section>`;
         const videosPane = `<section data-savedvalidation-pane="videos"><div style="display:flex;justify-content:space-between;gap:8px;align-items:end;flex-wrap:wrap;margin:2px 0 7px"><div><div style="font-size:12px;color:${C.text};font-weight:950">Every video behind this relationship</div><div style="font-size:8px;color:${C.dim};margin-top:2px">${selectedRows.length} paired videos, sorted by the selected plotted value. The table and graph read the same ledger cells.</div></div></div>${rowTable}</section>`;
         const methodPane = `<section data-savedvalidation-pane="method"><details open style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Raw input to registered coordinate</summary>${selectedColumn ? renderSavedLedgerPipeline(selectedColumn, registry) : note('Choose a coordinate to inspect its lineage.', C.amber)}</details><details style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Terms used in this analysis</summary><div data-savedvalidation-glossary style="margin-top:7px">${glossary}</div></details><details style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Known limits and claim boundary</summary><div style="margin-top:7px">${note(`<b>Known limits:</b> ${(audit.warnings || []).map(esc).join(' ')}`, C.amber)}</div></details></section>`;
-        const atlasPane = `<section data-savedvalidation-pane="atlas"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 4px">All ${scoreColumns.length} score interpretations × all ${outcomes.length} raw observed metrics</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This ${scoreColumns.length * outcomes.length}-cell atlas is the Cartesian product of two independent axes. Rows are non-outcome score-ledger coordinates; columns are measured video data. Click any cell to inspect that exact relationship, including unavailable and research-only states.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:min(100%,190px);background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px"/></div><div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Y · score interpretation</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div></section>`;
+        const atlasPane = `<section data-savedvalidation-pane="atlas"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 4px">All ${scoreColumns.length} score interpretations × all ${outcomes.length} raw observed metrics</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This ${scoreColumns.length * outcomes.length}-cell atlas is the Cartesian product of two independent axes. Rows are non-outcome score-ledger coordinates; columns are measured video data. Rows currently follow <b>${esc(coordinateOrderOptions.find(([key]) => key === coordinateOrder)[1])}</b> for <b>${esc(outcome.label)}</b>. Click any cell to inspect that exact relationship, including unavailable and research-only states.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:min(100%,190px);background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px"/></div><div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Y · score interpretation</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div></section>`;
         const viewPane = view === 'accuracy'
             ? accuracyPane
             : view === 'videos'
@@ -11429,10 +11538,11 @@ const JarvisRetention = (function () {
                     : view === 'atlas'
                         ? atlasPane
                         : relationshipPane;
-        return `<div data-savedvalidation-canonical data-coordinate-count="${allColumns.length}" data-score-coordinate-count="${scoreColumns.length}" data-outcome-count="${outcomes.length}" style="min-width:0">
+        return `<div data-savedvalidation-canonical data-coordinate-count="${allColumns.length}" data-score-coordinate-count="${scoreColumns.length}" data-outcome-count="${outcomes.length}" data-coordinate-order="${coordinateOrder}" style="min-width:0">
           <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">Ledger visualization</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">Build a graph from two independent axes: one persisted score interpretation and one raw observed video metric. Changing either selector never changes the other. IDs and values remain identical in this view, the source ledger, and every video card.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${allColumns.length} total registered scalar columns · ${scoreColumns.length} selectable score interpretations × ${outcomes.length} raw observed metrics · ${heldoutColumnCount} leakage-controlled held-out columns · ${uniqueHeldoutPredictionCount} unique held-out predictions · ${activeAliasColumnCount} active aliases · ${compatibilityAliasCount} compatibility aliases outside the ledger · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
           <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:10px">${scopeButtons}</div>
-          <div data-savedvalidation-ledger-navigator data-independent-axis-picker style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:7px;align-items:stretch;background:${C.card2};padding:9px;margin-bottom:10px"><label data-axis-role="score" style="min-width:0;border-top:3px solid ${C.purple};padding-top:7px"><span style="display:block;font-size:7px;color:${C.purple};font-weight:950;text-transform:uppercase;margin-bottom:3px">Y-axis · score interpretation</span><select data-savedvalidation-coordinate-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px">${coordinateOptions}</select><span style="display:block;font-size:6.5px;color:${C.faint};word-break:break-all;margin-top:4px">${esc(selectedId || 'No score selected')}</span></label><label data-axis-role="observed" style="min-width:0;border-top:3px solid ${C.green};padding-top:7px"><span style="display:block;font-size:7px;color:${C.green};font-weight:950;text-transform:uppercase;margin-bottom:3px">X-axis · raw observed video metric</span><select data-savedvalidation-outcome-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px">${outcomeOptions}</select><span style="display:block;font-size:6.5px;color:${C.faint};word-break:break-all;margin-top:4px">shorts.observed.${esc(outcome.key)}</span></label><div style="display:flex;align-items:end"><button type="button" data-savedvalidation-open-ledger="${esc(selectedId || '')}" style="width:100%;border:1px solid ${C.purple};background:transparent;color:${C.purple};padding:7px 9px;font-size:8px;font-weight:900;cursor:pointer;white-space:normal">inspect Y-axis source in ledger</button></div></div>
+          <div data-savedvalidation-ledger-navigator data-independent-axis-picker data-coordinate-order="${coordinateOrder}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:7px;align-items:stretch;background:${C.card2};padding:9px;margin-bottom:10px"><label data-axis-role="score" style="min-width:0;border-top:3px solid ${C.purple};padding-top:7px"><span style="display:block;font-size:7px;color:${C.purple};font-weight:950;text-transform:uppercase;margin-bottom:3px">Y-axis · score interpretation</span><select data-savedvalidation-coordinate-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px">${coordinateOptions}</select><span style="display:block;font-size:6.5px;color:${C.faint};word-break:break-all;margin-top:4px">${esc(selectedId || 'No score selected')}</span></label><label data-axis-role="observed" style="min-width:0;border-top:3px solid ${C.green};padding-top:7px"><span style="display:block;font-size:7px;color:${C.green};font-weight:950;text-transform:uppercase;margin-bottom:3px">X-axis · raw observed video metric</span><select data-savedvalidation-outcome-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px">${outcomeOptions}</select><span style="display:block;font-size:6.5px;color:${C.faint};word-break:break-all;margin-top:4px">shorts.observed.${esc(outcome.key)}</span></label><label data-axis-role="order" style="min-width:0;border-top:3px solid ${C.cyan};padding-top:7px"><span style="display:block;font-size:7px;color:${C.cyan};font-weight:950;text-transform:uppercase;margin-bottom:3px">Order Y-axis for selected X-axis</span><select data-savedvalidation-coordinate-order style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px">${coordinateOrderSelect}</select><span style="display:block;font-size:6.5px;color:${C.faint};margin-top:4px">Raw Spearman ρ · missing pairs last</span></label><div style="display:flex;align-items:end"><button type="button" data-savedvalidation-open-ledger="${esc(selectedId || '')}" style="width:100%;border:1px solid ${C.purple};background:transparent;color:${C.purple};padding:7px 9px;font-size:8px;font-weight:900;cursor:pointer;white-space:normal">inspect Y-axis source in ledger</button></div></div>
+          ${correlationRanking}
           ${note(`<b>Axis contract:</b> the Y selector contains only non-outcome score coordinates. The X selector contains only raw measured channel data. ${allColumns.length} total ledger columns therefore become ${scoreColumns.length} selectable score interpretations plus ${observedCount} stored outcome coordinates; derived display outcomes such as swipe remain on the observed side without minting another predictor. A prediction-error distribution appears only in Accuracy when the selected score is natively registered for the selected outcome.`, C.cyan)}
           <div style="font-size:12px;color:${C.text};font-weight:950;margin:14px 0 4px">Selected ledger relationship</div>
           ${selectedPair}
