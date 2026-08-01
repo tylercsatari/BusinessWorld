@@ -58,19 +58,8 @@ function loadPrivateApi(source, marker, replacement) {
 
 const shortApi = loadPrivateApi(
     SHORT_SOURCE,
-    `    return {
-        mount,
-        mountExperiment,
-        unmountExperiment,
-        getExperimentContext: () => LAB_CONTEXT,
-        __st: () => st,
-    };`,
-    `    return {
-        mount,
-        mountExperiment,
-        unmountExperiment,
-        getExperimentContext: () => LAB_CONTEXT,
-        __st: () => st,
+    '        getExperimentContext: () => LAB_CONTEXT,',
+    `        getExperimentContext: () => LAB_CONTEXT,
         __releaseConsistency: {
             compactPlotCacheKey: rtCompactPlotCacheKey,
             compactPlotRelease: rtCompactPlotRelease,
@@ -78,8 +67,7 @@ const shortApi = loadPrivateApi(
             predictorReleasePair,
             rawMapRelease: rtRawMapRelease,
             releaseResponseIsCurrent: rtReleaseResponseIsCurrent,
-        },
-    };`
+        },`
 );
 const longApi = loadPrivateApi(
     LONG_SOURCE,

@@ -141,13 +141,8 @@ function shortsBrowserLedgerApi() {
         ROOT,
         'buildings/jarvis/jarvis-retention.js'
     );
-    const marker = `    return {
-        mount,
-        mountExperiment,
-        unmountExperiment,
-        getExperimentContext: () => LAB_CONTEXT,
-        __st: () => st,
-    };`;
+    const marker =
+        '        getExperimentContext: () => LAB_CONTEXT,';
     const source = fs.readFileSync(uiPath, 'utf8');
     assert(
         source.includes(marker),
@@ -155,20 +150,14 @@ function shortsBrowserLedgerApi() {
     );
     const instrumented = source.replace(
         marker,
-        `    return {
-            mount,
-            mountExperiment,
-            unmountExperiment,
-            getExperimentContext: () => LAB_CONTEXT,
-            __st: () => st,
-            __test: {
-                shortsLedgerState,
-                shortsRegisteredCoordinate,
-                savedChannelFeatureCell,
-                savedChannelFeatureDisplay,
-                savedChannelFeatureStatus,
-            },
-        };`
+        `        getExperimentContext: () => LAB_CONTEXT,
+        __test: {
+            shortsLedgerState,
+            shortsRegisteredCoordinate,
+            savedChannelFeatureCell,
+            savedChannelFeatureDisplay,
+            savedChannelFeatureStatus,
+        },`
     );
     const noTimer = () => 0;
     const document = {

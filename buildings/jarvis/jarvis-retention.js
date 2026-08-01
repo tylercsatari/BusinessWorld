@@ -10,25 +10,8 @@ const JarvisRetention = (function () {
     const BASE_COLORS = Object.freeze({ bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' });
-    const EXPERIMENT_LAB_COLORS = Object.freeze({
-        bg: '#eee7d8',
-        card: '#f7f0e2',
-        card2: '#e4dccb',
-        border: '#b9b1a1',
-        border2: '#8e968f',
-        text: '#14231c',
-        dim: '#526158',
-        mute: '#617067',
-        faint: '#899087',
-        cyan: '#1f8a78',
-        green: '#257b62',
-        orange: '#d7673f',
-        red: '#b54e35',
-        purple: '#6671b9',
-        yellow: '#d5a33f',
-        amber: '#b98424',
-        accent: '#d7673f',
-    });
+    const SHORTS_EXPERIMENT_RENDERER_ID =
+        'shorts-quant-experiment-surface-v1';
     const C = { ...BASE_COLORS };
     let mountSurface = 'jarvis';
     let mountGeneration = 0;
@@ -3061,7 +3044,7 @@ const JarvisRetention = (function () {
     function rawViewTabs() {
         const active = st.rawView || 'map';
         const tab = (id, label) => `<span data-rawview="${id}" style="cursor:pointer;border:1px solid ${active === id ? C.cyan : C.border};background:${active === id ? C.cyan + '18' : 'transparent'};color:${active === id ? C.cyan : C.dim};padding:5px 12px;font-size:11px;font-weight:900">${label}</span>`;
-        return `<div style="display:flex;gap:0;margin-bottom:14px">${tab('map', 'Embedding map')}${isExperimentLabSurface() ? '' : tab('predictor', 'Predictor lab')}</div>`;
+        return `<div style="display:flex;gap:0;margin-bottom:14px">${tab('map', 'Embedding map')}${tab('predictor', 'Predictor lab')}</div>`;
     }
     function predictorMetric(label, value, detail, color) {
         return `<div style="background:${C.card2};border:1px solid ${C.border};padding:9px 11px;min-width:125px"><div style="font-size:8px;color:${C.mute};text-transform:uppercase;font-weight:800">${label}</div><div style="font-size:19px;color:${color || C.text};font-weight:900;margin-top:2px">${value}</div><div style="font-size:8px;color:${C.faint};margin-top:2px;line-height:1.3">${detail || ''}</div></div>`;
@@ -4379,7 +4362,7 @@ const JarvisRetention = (function () {
     }
     function renderExperiment() {
         scoreContractEnsure();
-        const head = labWorkspaceBanner() + h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
+        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; rtFetchJson('/api/indicators/registry', { cache: 'no-store' }, 4).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(e => { EXPREG = { error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if ((st.savedBank || 'hooks') === 'channels' && SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
@@ -6516,14 +6499,17 @@ const JarvisRetention = (function () {
         } catch (e) { console.warn('[channel] load failed', e); }
         render();
     }
+    function renderShortsExperimentSurface() {
+        return `<div id="rtg-exppanel" class="shorts-experiment-surface" data-shorts-experiment-renderer="${SHORTS_EXPERIMENT_RENDERER_ID}">${renderExperiment()}</div>`;
+    }
     function render() {
         if (!root) return;
         if (mountMode === 'experiment') {
             const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:0 0 8px;font-weight:600">Loading corpus context (${BGPEND} file${BGPEND > 1 ? 's' : ''} left)</div>` : '';
             const body = st.sec === 'raw'
                 ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button type="button" data-experiment-raw-back style="cursor:pointer;border:1px solid ${C.border};background:${C.card2};color:${C.text};padding:6px 10px;font:inherit;font-size:10px;font-weight:900">← Back to experiments</button><span style="font-size:9px;color:${C.dim}">Canonical Shorts Quant embedding view</span></div><div id="rtg-rawpanel">${renderRaw()}</div>`
-                : `<div id="rtg-exppanel">${renderExperiment()}</div>`;
-            root.innerHTML = `<div style="background:${C.bg};padding:14px;color:${C.text};font-family:'Nunito',sans-serif">${bgNote}${body}</div>`;
+                : renderShortsExperimentSurface();
+            root.innerHTML = `<div style="background:${C.bg};padding:14px;color:${C.text};font-family:'Nunito',sans-serif">${labWorkspaceBanner()}${bgNote}${body}</div>`;
             try { rtgAfterRender(); } catch (e) { }
             return;
         }
@@ -6567,7 +6553,7 @@ const JarvisRetention = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : st.sec === 'operations' ? `<div id="shorts-operations-panel">${renderOperationsLab()}</div>` : st.sec === 'promise' ? `<div id="shorts-promise-panel">${renderPromiseLab()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? renderShortsExperimentSurface() : st.sec === 'operations' ? `<div id="shorts-operations-panel">${renderOperationsLab()}</div>` : st.sec === 'promise' ? `<div id="shorts-promise-panel">${renderPromiseLab()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
@@ -7227,10 +7213,6 @@ const JarvisRetention = (function () {
             if (
                 st.savedChannelTab === 'visualization'
                 || st.savedChannelTab === 'ledger'
-                    && (
-                        !isExperimentLabSurface()
-                        || LAB_CONTEXT && LAB_CONTEXT.owner
-                    )
             ) {
                 loadSavedChannelValidation();
             }
@@ -11881,16 +11863,14 @@ const JarvisRetention = (function () {
         window.setTimeout(() => URL.revokeObjectURL(url), 0);
     }
     function renderSavedChannelLedger(detail) {
-        const canLoadPrivateValidation = !isExperimentLabSurface()
-            || !!(LAB_CONTEXT && LAB_CONTEXT.owner);
-        if (canLoadPrivateValidation && !SAVEDCHANNELVALIDATION) {
+        if (!SAVEDCHANNELVALIDATION) {
             window.setTimeout(() => loadSavedChannelValidation(), 0);
             return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry…</div>`;
         }
-        if (canLoadPrivateValidation && SAVEDCHANNELVALIDATION.loading) {
+        if (SAVEDCHANNELVALIDATION.loading) {
             return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry…</div>`;
         }
-        if (canLoadPrivateValidation && SAVEDCHANNELVALIDATION.error) {
+        if (SAVEDCHANNELVALIDATION.error) {
             return `<div style="padding:18px;color:${C.red}">${esc(SAVEDCHANNELVALIDATION.error)} <span data-savedvalidationreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
         }
         const model = savedLedgerModel(detail);
@@ -12016,15 +11996,8 @@ const JarvisRetention = (function () {
             : requestedTab;
         if (tab !== requestedTab) st.savedChannelTab = tab;
         const validationSupported =
-            (
-                !isExperimentLabSurface()
-                || LAB_CONTEXT
-                    && LAB_CONTEXT.owner
-            )
-            && (
-                detail.id === 'chd3f5a3dae83f3382'
-                || detail.id === 'ch87ccaa3dd3383515'
-            );
+            detail.id === 'chd3f5a3dae83f3382'
+            || detail.id === 'ch87ccaa3dd3383515';
         const tabButton = (key, label) => `<span data-savedchanneltab="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:5px 10px;font-size:11px;font-weight:800">${label}</span>`;
         const actionBusy = st.savedChannelActionBusy;
         const unfinished = Math.max(0, total - completed), continueLabel = unfinished ? `continue ${unfinished} unfinished` : detail.status === 'done' ? 'check for new Shorts' : 'resume / retry';
@@ -12435,12 +12408,7 @@ const JarvisRetention = (function () {
                 ? 'experiment-lab'
                 : 'jarvis';
         mountSurface = next;
-        Object.assign(
-            C,
-            isExperimentLabSurface()
-                ? EXPERIMENT_LAB_COLORS
-                : BASE_COLORS
-        );
+        Object.assign(C, BASE_COLORS);
         SAVED = null;
         SAVEDDETAIL = {};
         SAVEDCHANNELS = null;
@@ -12617,13 +12585,13 @@ const JarvisRetention = (function () {
         }
         render();
     }
-    function mountExperiment(el, options) {
+    function mountShortsExperiment(el, options) {
         return mount(el, {
             ...(options || {}),
             mode: 'experiment',
         });
     }
-    function unmountExperiment(el) {
+    function unmountShortsExperiment(el) {
         if (!el || root === el) {
             mountGeneration += 1;
             st.warmHold = 0;
@@ -12632,8 +12600,25 @@ const JarvisRetention = (function () {
     }
     return {
         mount,
-        mountExperiment,
-        unmountExperiment,
+        mountShortsExperiment,
+        unmountShortsExperiment,
+        mountExperiment: mountShortsExperiment,
+        unmountExperiment: unmountShortsExperiment,
+        getExperimentSurfaceContract: () => ({
+            rendererId: SHORTS_EXPERIMENT_RENDERER_ID,
+            canonicalRenderer: 'renderShortsExperimentSurface',
+            canonicalInteractionHandlers: [
+                'onClick',
+                'onInput',
+                'onChange',
+                'onKeyDown',
+            ],
+            workspaceExtensions: [
+                'account-scope',
+                'folders',
+                'team-inspection',
+            ],
+        }),
         getExperimentContext: () => LAB_CONTEXT,
         __st: () => st,
     };

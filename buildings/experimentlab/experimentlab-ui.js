@@ -58,7 +58,7 @@ const ExperimentLabUI = (() => {
                 <div id="experiment-lab-workspace" class="experiment-lab-workspace"></div>
             </section>`;
         workspace = container.querySelector('#experiment-lab-workspace');
-        if (!window.JarvisRetention || typeof window.JarvisRetention.mountExperiment !== 'function') {
+        if (!window.JarvisRetention || typeof window.JarvisRetention.mountShortsExperiment !== 'function') {
             workspace.innerHTML = '<div class="experiment-lab-error">The Shorts experiment engine did not load. Reload Business World and try again.</div>';
             return;
         }
@@ -68,7 +68,7 @@ const ExperimentLabUI = (() => {
             contextHandler
         );
         Promise.resolve(
-            window.JarvisRetention.mountExperiment(
+            window.JarvisRetention.mountShortsExperiment(
                 workspace,
                 { surface: 'experiment-lab' }
             )
@@ -97,9 +97,9 @@ const ExperimentLabUI = (() => {
             workspace
             && window.JarvisRetention
             && typeof window.JarvisRetention
-                .unmountExperiment === 'function'
+                .unmountShortsExperiment === 'function'
         ) {
-            window.JarvisRetention.unmountExperiment(workspace);
+            window.JarvisRetention.unmountShortsExperiment(workspace);
         }
         const modal = document.getElementById('modal');
         if (modal) modal.classList.remove('experiment-lab-modal');

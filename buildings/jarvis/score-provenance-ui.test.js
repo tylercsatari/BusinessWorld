@@ -147,19 +147,8 @@ shortsRecord.non_authoritative_geometry = {
 
 const shortsUi = loadUi(
     path.join(__dirname, 'jarvis-retention.js'),
-    `    return {
-        mount,
-        mountExperiment,
-        unmountExperiment,
-        getExperimentContext: () => LAB_CONTEXT,
-        __st: () => st,
-    };`,
-    `    return {
-        mount,
-        mountExperiment,
-        unmountExperiment,
-        getExperimentContext: () => LAB_CONTEXT,
-        __st: () => st,
+    '        getExperimentContext: () => LAB_CONTEXT,',
+    `        getExperimentContext: () => LAB_CONTEXT,
         __test: {
             embeddingIdentityAttrs,
             shortsGeometryChannel,
@@ -167,8 +156,7 @@ const shortsUi = loadUi(
             shortsLedgerState,
             shortsRegisteredCoordinate,
             steerOf,
-        },
-    };`,
+        },`,
     {
         __SHORTS_SCORE_LEDGER_RUNTIME__: shortsBrowserRuntime,
     }

@@ -173,7 +173,7 @@ async function main() {
     );
     assert(
         labUiSource.includes(
-            'window.JarvisRetention.mountExperiment'
+            'window.JarvisRetention.mountShortsExperiment'
         ),
         'Experiment Lab must mount the canonical Jarvis Experiment renderer'
     );
@@ -187,6 +187,52 @@ async function main() {
         (labUiSource.match(/\/api\//g) || []).length,
         0,
         'Experiment Lab shell must not duplicate canonical API workflows'
+    );
+    const retentionSource = fs.readFileSync(
+        path.join(ROOT, 'buildings/jarvis/jarvis-retention.js'),
+        'utf8'
+    );
+    assert.strictEqual(
+        (retentionSource.match(/function renderExperiment\(\)/g) || []).length,
+        1,
+        'Shorts Quant and Experiment Lab must have exactly one Experiment renderer'
+    );
+    assert(
+        retentionSource.includes(
+            'function renderShortsExperimentSurface()'
+        )
+            && retentionSource.includes(
+                "st.sec === 'experiment' ? renderShortsExperimentSurface()"
+            )
+            && retentionSource.includes(
+                ': renderShortsExperimentSurface();'
+            ),
+        'both hosts must render the same canonical Shorts experiment surface'
+    );
+    assert(
+        !retentionSource.includes(
+            "isExperimentLabSurface() ? '' : tab('predictor'"
+        )
+            && !retentionSource.includes('canLoadPrivateValidation'),
+        'workspace tenancy must not suppress canonical Experiment functionality'
+    );
+    const functionBody = (name, nextName) => retentionSource.slice(
+        retentionSource.indexOf(`function ${name}(`),
+        retentionSource.indexOf(`function ${nextName}(`)
+    );
+    assert(
+        !functionBody('renderExperiment', 'renderFusion')
+            .includes('isExperimentLabSurface()')
+            && !functionBody(
+                'renderSavedChannelLedger',
+                'renderSavedChannelDetail'
+            ).includes('isExperimentLabSurface()')
+            && !functionBody(
+                'renderSavedChannelDetail',
+                'savedChannelsPanel'
+            ).includes('isExperimentLabSurface()'),
+        'canonical rendering, ledger, and validation methods must be '
+            + 'surface-agnostic'
     );
     const labCssSource = fs.readFileSync(
         path.join(
@@ -211,6 +257,14 @@ async function main() {
             labCssSource
         ),
         'Experiment Lab must not use decorative gradients'
+    );
+    assert(
+        labCssSource.includes('.shorts-experiment-surface')
+            && !/\.experiment-lab-workspace\s+(?:button|input|select|textarea|table|img|svg|video|canvas|\[data-saved)/.test(
+                labCssSource
+            ),
+        'shared Shorts controls must use shared responsive CSS instead of a '
+            + 'host-specific restyle'
     );
     const featureContract = JSON.parse(fs.readFileSync(path.join(ROOT, 'buildings/jarvis/saved-channel-feature-contract.json'), 'utf8'));
     const featureContractSha256 = crypto.createHash('sha256')
@@ -1910,6 +1964,38 @@ window.fetch=function(url,options){
 
         await page.getByRole('heading', { name: 'Experiment Lab' }).waitFor();
         await page.getByText('Owner workspace', { exact: true }).waitFor();
+        const experimentContract = await page.evaluate(() =>
+            window.JarvisRetention.getExperimentSurfaceContract()
+        );
+        assert.deepStrictEqual(experimentContract, {
+            rendererId: 'shorts-quant-experiment-surface-v1',
+            canonicalRenderer: 'renderShortsExperimentSurface',
+            canonicalInteractionHandlers: [
+                'onClick',
+                'onInput',
+                'onChange',
+                'onKeyDown',
+            ],
+            workspaceExtensions: [
+                'account-scope',
+                'folders',
+                'team-inspection',
+            ],
+        });
+        assert.strictEqual(
+            await page.locator(
+                '[data-shorts-experiment-renderer="shorts-quant-experiment-surface-v1"]'
+            ).count(),
+            1,
+            'Experiment Lab must expose the canonical Shorts Quant surface identity'
+        );
+        assert.strictEqual(
+            await page.locator(
+                '[data-shorts-experiment-renderer] [data-lab-workspace-banner]'
+            ).count(),
+            0,
+            'workspace chrome must wrap the canonical surface instead of forking it'
+        );
         assert(
             await page.evaluate(() => (
                 window.__labSurfaceRequests.includes(
@@ -2754,6 +2840,11 @@ window.fetch=function(url,options){
         assert(visualKeepPointText.includes('shorts.observed.keep'));
         await visualKeepPointDetail.locator('button[data-savedchannelvideo-embedding="visual:keep"]').click();
         await page.locator('[data-rawproj="keep"]').waitFor();
+        assert.strictEqual(
+            await page.getByText('Predictor lab', { exact: true }).count(),
+            1,
+            'Experiment Lab must not hide a canonical Shorts Quant raw-view control'
+        );
         const rawMapForecast = page.locator('[data-visual-keep-raw-map-value]');
         await rawMapForecast.waitFor();
         assert((await rawMapForecast.innerText()).includes(`${visualKeepVideo.visual_keep_forecast.raw.toFixed(1)}%`), 'clicking a validation point must open its normal embedding with the same raw ledger value');
@@ -2785,9 +2876,75 @@ window.fetch=function(url,options){
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT), { recursive: true });
             await page.screenshot({ path: process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT, fullPage: false });
         }
+        const mobileScrollTop = await workspace.evaluate(
+            element => element.scrollTop
+        );
+        if (await page.locator('[data-experiment-raw-back]').count()) {
+            await page.locator('[data-experiment-raw-back]').click();
+        }
+        const canonicalControlSignature = async () => page.evaluate(() => {
+            const surface = document.querySelector(
+                '[data-shorts-experiment-renderer]'
+            );
+            if (!surface) return null;
+            return Array.from(surface.querySelectorAll('*'))
+                .flatMap(element => Array.from(element.attributes)
+                    .filter(attribute => attribute.name.startsWith('data-'))
+                    .filter(attribute => !(
+                        attribute.name === 'data-savedbank'
+                        && attribute.value === 'team'
+                    ))
+                    .filter(attribute => !attribute.name.startsWith('data-lab'))
+                    .map(attribute =>
+                        `${attribute.name}=${attribute.value}`
+                    ))
+                .sort();
+        });
+        await page.evaluate(() => {
+            BuildingRegistry.get('Experiment Lab').close();
+            const host = document.getElementById('root');
+            host.innerHTML = '';
+            BuildingRegistry.get('Experiment Lab').open(host);
+        });
+        await page.locator(
+            '[data-shorts-experiment-renderer="shorts-quant-experiment-surface-v1"]'
+        ).waitFor();
+        await page.locator(`[data-savedopen="${historicalSavedHookId}"]`).waitFor();
+        const labControlSignature = await canonicalControlSignature();
+        const labCanonicalColor = await page.locator(
+            '[data-shorts-experiment-renderer]'
+        ).evaluate(element => getComputedStyle(element).color);
+        await page.evaluate(async () => {
+            BuildingRegistry.get('Experiment Lab').close();
+            const host = document.getElementById('root');
+            host.innerHTML = '';
+            await window.JarvisRetention.mountShortsExperiment(
+                host,
+                { surface: 'jarvis' }
+            );
+        });
+        await page.locator(
+            '[data-shorts-experiment-renderer="shorts-quant-experiment-surface-v1"]'
+        ).waitFor();
+        await page.locator(`[data-savedopen="${historicalSavedHookId}"]`).waitFor();
+        const jarvisControlSignature = await canonicalControlSignature();
+        const jarvisCanonicalColor = await page.locator(
+            '[data-shorts-experiment-renderer]'
+        ).evaluate(element => getComputedStyle(element).color);
+        assert.deepStrictEqual(
+            labControlSignature,
+            jarvisControlSignature,
+            'Experiment Lab and Shorts Quant must expose the same canonical '
+                + 'controls; Team Workspaces is the only allowed extension'
+        );
+        assert.strictEqual(
+            labCanonicalColor,
+            jarvisCanonicalColor,
+            'the shared Experiment surface must not be recolored by its host'
+        );
         const finalParity = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
         assert(finalParity.ok, `final rendered embedding parity failed: ${JSON.stringify(finalParity.conflicts)}`);
-        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, ledgerCoordinates: shortsCoordinateCount, observedOutcomes: observedOutcomeCount, ledgerOutcomeCells: shortsCoordinateCount * observedOutcomeCount, embeddingParity: finalParity }));
+        console.log(JSON.stringify({ ok: true, sharedExperimentControls: labControlSignature.length, exactControlParity: true, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop, storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, ledgerCoordinates: shortsCoordinateCount, observedOutcomes: observedOutcomeCount, ledgerOutcomeCells: shortsCoordinateCount * observedOutcomeCount, embeddingParity: finalParity }));
     } finally {
         await browser.close();
     }
