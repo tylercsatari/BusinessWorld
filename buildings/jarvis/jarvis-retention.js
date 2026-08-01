@@ -47,7 +47,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'prediction', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'prediction', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -7249,6 +7249,7 @@ const JarvisRetention = (function () {
             const coordinateId = scledgervisualize.getAttribute('data-savedledger-open-visualization');
             if (coordinateId) st.savedLedgerCoordinate = coordinateId;
             st.savedChannelTab = 'visualization';
+            st.savedValidationView = 'relationship';
             st.savedValidationShow = 60;
             loadSavedChannelValidation();
             rtgUpdateExp();
@@ -7274,14 +7275,16 @@ const JarvisRetention = (function () {
             return;
         }
         const scvalidationscope = e.target.closest('[data-savedvalidationscope]'); if (scvalidationscope) { st.savedValidationScope = scvalidationscope.getAttribute('data-savedvalidationscope'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scvalidationview = e.target.closest('[data-savedvalidationview]'); if (scvalidationview) { st.savedValidationView = scvalidationview.getAttribute('data-savedvalidationview'); rtgUpdateExp(); return; }
         const scvalidationplot = e.target.closest('[data-savedvalidationplotmode]'); if (scvalidationplot) { st.savedLedgerPlotMode = scvalidationplot.getAttribute('data-savedvalidationplotmode'); rtgUpdateExp(); return; }
         const scvalidationfamily = e.target.closest('[data-savedvalidationfamily]'); if (scvalidationfamily) { st.savedValidationFamily = scvalidationfamily.getAttribute('data-savedvalidationfamily'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
         const scvalidationcell = e.target.closest('[data-savedvalidationcell]'); if (scvalidationcell) {
             st.savedLedgerCoordinate = scvalidationcell.getAttribute('data-savedvalidationcoordinate');
             st.savedValidationTarget = scvalidationcell.getAttribute('data-savedvalidationoutcome');
+            st.savedValidationView = 'relationship';
             st.savedValidationShow = 60; rtgUpdateExp(); return;
         }
-        const scvalidationfeature = e.target.closest('[data-savedvalidationfeature]'); if (scvalidationfeature) { st.savedLedgerCoordinate = scvalidationfeature.getAttribute('data-savedvalidationfeature'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scvalidationfeature = e.target.closest('[data-savedvalidationfeature]'); if (scvalidationfeature) { st.savedLedgerCoordinate = scvalidationfeature.getAttribute('data-savedvalidationfeature'); st.savedValidationView = 'relationship'; st.savedValidationShow = 60; rtgUpdateExp(); return; }
         const scvalidationrow = e.target.closest('[data-savedvalidationrow]'); if (scvalidationrow) { st.savedValidationCurveVideo = scvalidationrow.getAttribute('data-savedvalidationrow'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedvalidationmore]')) { st.savedValidationShow = (st.savedValidationShow || 60) + 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedvalidationreload]')) { loadSavedChannelValidation(true); return; }
@@ -10401,6 +10404,167 @@ const JarvisRetention = (function () {
         }
         return Number.isInteger(+value) ? (+value).toLocaleString() : fmtv(value, 3);
     }
+    function savedValidationErrorProfile(pairs, outcome) {
+        const binary = outcome.unit === 'binary';
+        const ratio = ['views', 'outlier'].includes(outcome.key);
+        const observations = (pairs || []).map(pair => {
+            if (ratio) {
+                if (!(pair.predicted >= 0) || !(pair.actual >= 0)) return null;
+                const signed = Math.log10(pair.predicted + 1) - Math.log10(pair.actual + 1);
+                return {
+                    absolute: Math.pow(10, Math.abs(signed)),
+                    magnitude: Math.abs(signed),
+                    signed,
+                    accountId: pair.accountId,
+                };
+            }
+            if (binary && (
+                pair.predicted < 0 || pair.predicted > 1
+                || (pair.actual !== 0 && pair.actual !== 1)
+            )) return null;
+            const signed = (pair.predicted - pair.actual) * (binary ? 100 : 1);
+            return {
+                absolute: Math.abs(signed),
+                magnitude: Math.abs(signed),
+                signed,
+                accountId: pair.accountId,
+            };
+        }).filter(Boolean);
+        if (!observations.length) return null;
+        const absolute = observations.map(item => item.absolute);
+        const signed = observations.map(item => item.signed);
+        const magnitude = observations.map(item => item.magnitude);
+        const mean = values => values.reduce((sum, value) => sum + value, 0) / values.length;
+        return {
+            binary,
+            ratio,
+            observations,
+            absolute,
+            signed,
+            magnitude,
+            meanAbsolute: ratio ? Math.pow(10, mean(magnitude)) : mean(absolute),
+            meanSigned: mean(signed),
+            medianAbsolute: savedValidationQuantile(absolute, .5),
+            p90Absolute: savedValidationQuantile(absolute, .9),
+            maximumAbsolute: Math.max(...absolute),
+        };
+    }
+    function savedValidationErrorDensity(profile) {
+        if (!profile) return '';
+        const W = 520, H = 190, left = 38, right = 12, top = 12, bottom = 34;
+        const width = profile.ratio ? .1 : 1;
+        const maximumMagnitude = Math.max(width, ...profile.magnitude);
+        const sideBins = Math.max(1, Math.ceil(maximumMagnitude / width));
+        const binCount = sideBins * 2 + 1;
+        const counts = Array.from({ length: binCount }, () => 0);
+        profile.signed.forEach(value => {
+            const index = Math.max(0, Math.min(binCount - 1, Math.round(value / width) + sideBins));
+            counts[index] += 1;
+        });
+        const maximumCount = Math.max(1, ...counts);
+        const plotWidth = W - left - right, plotHeight = H - top - bottom;
+        const slot = plotWidth / counts.length;
+        const bars = counts.map((count, index) => {
+            const x = left + index * slot + Math.min(1, slot * .08);
+            const barWidth = Math.max(.45, slot - Math.min(2, slot * .16));
+            const barHeight = count / maximumCount * plotHeight;
+            const center = (index - sideBins) * width;
+            const lower = center - width / 2;
+            const upper = center + width / 2;
+            const interval = profile.ratio
+                ? `${fmtv(lower, 2)}–${fmtv(upper, 2)} log10 residual`
+                : `${fmtv(lower, 1)}–${fmtv(upper, 1)} pp residual`;
+            return `<rect x="${x.toFixed(2)}" y="${(top + plotHeight - barHeight).toFixed(2)}" width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" fill="${C.cyan}" opacity=".58"><title>${esc(`${interval}: ${count} videos · ${fmtv(count / profile.observations.length * 100, 1)}%`)}</title></rect>`;
+        }).join('');
+        const line = counts.map((count, index) => {
+            const x = left + (index + .5) * slot;
+            const y = top + plotHeight - count / maximumCount * plotHeight;
+            return `${x.toFixed(2)},${y.toFixed(2)}`;
+        }).join(' ');
+        const span = sideBins * width;
+        const xMinimum = profile.ratio
+            ? `${fmtv(Math.pow(10, -span), 2)}× actual`
+            : `${fmtv(-span, 0)} pp`;
+        const xMaximum = profile.ratio
+            ? `${fmtv(Math.pow(10, span), 2)}× actual`
+            : `+${fmtv(span, 0)} pp`;
+        const axis = profile.ratio
+            ? 'signed log10(predicted + 1) − log10(observed + 1) residual'
+            : 'signed prediction − observation residual (one-percentage-point bins)';
+        return `<svg data-savedvalidation-error-density data-bin-width="${width}" data-residual-scale="${profile.ratio ? 'log10(value+1)' : 'percentage_points'}" data-residual-sign="predicted-minus-observed" viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto;margin-top:8px"><rect x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" fill="${C.card}"/><line x1="${left}" y1="${top + plotHeight}" x2="${W - right}" y2="${top + plotHeight}" stroke="${C.border}"/><line x1="${left}" y1="${top}" x2="${left}" y2="${top + plotHeight}" stroke="${C.border}"/><line x1="${left + (sideBins + .5) * slot}" y1="${top}" x2="${left + (sideBins + .5) * slot}" y2="${top + plotHeight}" stroke="${C.green}" stroke-dasharray="3 3"/>${bars}<polyline points="${line}" fill="none" stroke="${C.text}" stroke-width="1.5" opacity=".9"/><text x="${left}" y="${H - 17}" fill="${C.faint}" font-size="7">${esc(xMinimum)}</text><text x="${W / 2}" y="${H - 17}" text-anchor="middle" fill="${C.green}" font-size="7">exact</text><text x="${W - right}" y="${H - 17}" text-anchor="end" fill="${C.faint}" font-size="7">${esc(xMaximum)}</text><text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="7">${esc(axis)}</text><text x="5" y="${top + 5}" fill="${C.faint}" font-size="7">${maximumCount}</text><text x="5" y="${top + plotHeight}" fill="${C.faint}" font-size="7">0</text></svg>`;
+    }
+    function savedValidationErrorCdf(profile) {
+        if (!profile) return '';
+        const sorted = profile.absolute.slice().sort((left, right) => left - right);
+        const minimum = profile.ratio ? 1 : 0;
+        const maximum = Math.max(minimum + 1e-9, sorted[sorted.length - 1]);
+        const W = 420, H = 150, left = 34, right = 8, top = 8, bottom = 25;
+        const transform = value => profile.ratio ? Math.log10(value) : value;
+        const transformedMinimum = transform(minimum);
+        const transformedMaximum = Math.max(transformedMinimum + 1e-9, transform(maximum));
+        const pointList = [`${left},${H - bottom}`];
+        sorted.forEach((value, index) => {
+            const x = left + (transform(value) - transformedMinimum) / (transformedMaximum - transformedMinimum) * (W - left - right);
+            const previousY = H - bottom - index / sorted.length * (H - top - bottom);
+            const nextY = H - bottom - (index + 1) / sorted.length * (H - top - bottom);
+            pointList.push(`${x.toFixed(1)},${previousY.toFixed(1)}`);
+            pointList.push(`${x.toFixed(1)},${nextY.toFixed(1)}`);
+        });
+        const points = pointList.join(' ');
+        const unit = profile.ratio ? '×' : ' pp';
+        return `<svg data-savedvalidation-error-cdf data-axis-scale="${profile.ratio ? 'log10-factor' : 'linear-percentage-points'}" data-curve="empirical-step" viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto;margin-top:7px"><rect x="${left}" y="${top}" width="${W - left - right}" height="${H - top - bottom}" fill="${C.card}"/><line x1="${left}" y1="${H - bottom}" x2="${W - right}" y2="${H - bottom}" stroke="${C.border}"/><line x1="${left}" y1="${top}" x2="${left}" y2="${H - bottom}" stroke="${C.border}"/><polyline points="${points}" fill="none" stroke="${C.cyan}" stroke-width="2"/><text x="${left}" y="${H - 7}" fill="${C.faint}" font-size="7">${esc(`${fmtv(minimum, profile.ratio ? 1 : 0)}${unit}`)}</text><text x="${W - right}" y="${H - 7}" text-anchor="end" fill="${C.faint}" font-size="7">${esc(`${fmtv(maximum, 2)}${unit}`)}</text><text x="5" y="${top + 5}" fill="${C.faint}" font-size="7">100%</text><text x="5" y="${H - bottom}" fill="${C.faint}" font-size="7">0%</text><text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="7">share of videos within absolute-miss threshold</text></svg>`;
+    }
+    function savedValidationErrorDistribution(pairs, outcome) {
+        const profile = savedValidationErrorProfile(pairs, outcome);
+        if (!profile) return '';
+        const unit = profile.ratio ? '×' : ' pp';
+        const bias = profile.ratio
+            ? `${fmtv(Math.pow(10, profile.meanSigned), 2)}× actual`
+            : `${profile.meanSigned >= 0 ? '+' : ''}${fmtv(profile.meanSigned, 2)} pp`;
+        const accountGroups = new Map();
+        profile.observations.forEach(item => {
+            const key = item.accountId || 'unknown';
+            if (!accountGroups.has(key)) accountGroups.set(key, []);
+            accountGroups.get(key).push(item);
+        });
+        const accountMeans = [...accountGroups.values()].map(items => (
+            profile.ratio
+                ? items.reduce((sum, item) => sum + item.magnitude, 0) / items.length
+                : items.reduce((sum, item) => sum + item.absolute, 0) / items.length
+        ));
+        const creatorBalancedMean = profile.ratio
+            ? Math.pow(10, accountMeans.reduce((sum, value) => sum + value, 0) / accountMeans.length)
+            : accountMeans.reduce((sum, value) => sum + value, 0) / accountMeans.length;
+        const summary = [
+            ['Videos', profile.observations.length.toLocaleString()],
+            ['Median miss', `${fmtv(profile.medianAbsolute, 2)}${unit}`],
+            ['P75 miss', `${fmtv(savedValidationQuantile(profile.absolute, .75), 2)}${unit}`],
+            [profile.ratio ? 'Geometric mean miss' : 'Mean miss', `${fmtv(profile.meanAbsolute, 2)}${unit}`],
+            ['Creator-balanced mean', `${fmtv(creatorBalancedMean, 2)}${unit}`],
+            ['P90 miss', `${fmtv(profile.p90Absolute, 2)}${unit}`],
+            ['P95 miss', `${fmtv(savedValidationQuantile(profile.absolute, .95), 2)}${unit}`],
+            ['Largest miss', `${fmtv(profile.maximumAbsolute, 2)}${unit}`],
+            [profile.ratio ? 'Geometric bias' : 'Signed bias', bias],
+        ].map(([label, value]) => `<div style="background:${C.card};padding:7px"><div style="font-size:6.8px;color:${C.mute};text-transform:uppercase">${esc(label)}</div><div style="font-size:14px;color:${C.text};font-weight:950;margin-top:2px">${esc(value)}</div></div>`).join('');
+        const thresholds = profile.ratio
+            ? [1.05, 1.1, 1.25, 1.5, 2, 3, 5]
+            : [.5, 1, 2, 3, 5, 7.5, 10, 15, 20];
+        const coverage = thresholds.map(threshold => {
+            const count = profile.absolute.filter(value => value <= threshold).length;
+            const label = profile.ratio ? `within ${threshold}×` : `within ±${threshold} pp`;
+            return `<div data-savedvalidation-error-coverage="${esc(String(threshold))}" style="border-left:2px solid ${C.cyan};background:${C.card};padding:7px"><div style="font-size:6.8px;color:${C.mute};text-transform:uppercase">${esc(label)}</div><div style="font-size:14px;color:${C.text};font-weight:950">${fmtv(count / profile.observations.length * 100, 1)}%</div><div style="font-size:6.8px;color:${C.dim}">${count}/${profile.observations.length} videos · descriptive</div></div>`;
+        }).join('');
+        const nearZero = profile.ratio
+            ? profile.absolute.filter(value => value <= 1.05).length
+            : profile.absolute.filter(value => value <= .5).length;
+        const over = profile.signed.filter(value => value > (profile.ratio ? Math.log10(1.05) : .5)).length;
+        const under = profile.signed.filter(value => value < (profile.ratio ? -Math.log10(1.05) : -.5)).length;
+        const direction = `<div data-savedvalidation-error-direction style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:8px"><div style="background:${C.card};padding:7px"><div style="font-size:6.8px;color:${C.mute}">UNDERPREDICTED</div><div style="font-size:13px;color:${C.amber};font-weight:950">${under} · ${fmtv(under / profile.observations.length * 100, 1)}%</div></div><div style="background:${C.card};padding:7px"><div style="font-size:6.8px;color:${C.mute}">${profile.ratio ? 'WITHIN 1.05×' : 'WITHIN ±0.5 PP'}</div><div style="font-size:13px;color:${C.green};font-weight:950">${nearZero} · ${fmtv(nearZero / profile.observations.length * 100, 1)}%</div></div><div style="background:${C.card};padding:7px"><div style="font-size:6.8px;color:${C.mute}">OVERPREDICTED</div><div style="font-size:13px;color:${C.red};font-weight:950">${over} · ${fmtv(over / profile.observations.length * 100, 1)}%</div></div></div>`;
+        const outcomeDependency = outcome.derived
+            ? `<div style="font-size:7.2px;color:${C.amber};line-height:1.45;margin-top:3px">Derived outcome: ${esc(outcome.derived)}. This is another view of shared outcome data, not an independent confirmation.</div>`
+            : '';
+        return `<section data-savedvalidation-error-distribution data-outcome-transform="${esc(outcome.transform || 'identity')}" data-weighting="video-weighted-with-creator-balanced-summary" style="background:${C.card2};padding:10px;min-width:0"><div style="font-size:10px;color:${C.text};font-weight:950">Empirical prediction-error distribution</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">Every miss comes directly from this selected ledger coordinate and measured outcome. Observed frequencies only: no Gaussian distribution, fitted density, or normality assumption is used. The pooled histogram is video-weighted; the creator-balanced mean gives each creator equal weight.</div>${outcomeDependency}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:5px;margin-top:8px">${summary}</div>${direction}<div style="font-size:8px;color:${C.text};font-weight:900;margin-top:9px">Signed empirical residual frequency</div>${savedValidationErrorDensity(profile)}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:5px;margin-top:8px">${coverage}</div><div style="font-size:8px;color:${C.text};font-weight:900;margin-top:9px">Cumulative absolute accuracy</div>${savedValidationErrorCdf(profile)}</section>`;
+    }
     function savedValidationEvidencePanel(selectedRows, entry, column, outcome) {
         if (!entry || !column) return '';
         const metrics = entry.metrics || {};
@@ -10424,52 +10588,7 @@ const JarvisRetention = (function () {
         }).filter(Boolean);
         let distribution = '';
         if (hasPrediction && pairs.length) {
-            const binary = outcome.unit === 'binary';
-            const ratio = ['views', 'outlier'].includes(outcome.key);
-            const errors = pairs.map(pair => {
-                if (ratio) {
-                    const low = Math.max(1e-9, Math.min(pair.actual, pair.predicted));
-                    const high = Math.max(pair.actual, pair.predicted);
-                    return high / low;
-                }
-                return binary
-                    ? Math.abs(pair.predicted - pair.actual) * 100
-                    : Math.abs(pair.predicted - pair.actual);
-            });
-            const signed = ratio || binary ? [] : pairs.map(pair => pair.predicted - pair.actual);
-            const thresholds = ratio
-                ? [1.25, 1.5, 2, 5, Infinity]
-                : binary
-                    ? [5, 10, 20, 30, Infinity]
-                    : [2, 5, 10, 15, Infinity];
-            const labels = ratio
-                ? ['≤1.25×', '1.25–1.5×', '1.5–2×', '2–5×', '>5×']
-                : binary
-                    ? ['≤5 pp', '5–10 pp', '10–20 pp', '20–30 pp', '>30 pp']
-                    : ['≤2 pp', '2–5 pp', '5–10 pp', '10–15 pp', '>15 pp'];
-            const counts = thresholds.map((threshold, index) => errors.filter(error => (
-                error <= threshold
-                && (index === 0 || error > thresholds[index - 1])
-            )).length);
-            const maximum = Math.max(1, ...counts);
-            const errorUnit = ratio ? '×' : binary ? ' probability points' : ' pp';
-            const summary = [
-                ['Median miss', `${fmtv(savedValidationQuantile(errors, .5), 2)}${errorUnit}`],
-                ['P90 miss', `${fmtv(savedValidationQuantile(errors, .9), 2)}${errorUnit}`],
-                ['Mean miss', `${fmtv(errors.reduce((sum, value) => sum + value, 0) / errors.length, 2)}${errorUnit}`],
-                ['Signed bias', signed.length ? `${signed.reduce((sum, value) => sum + value, 0) / signed.length >= 0 ? '+' : ''}${fmtv(signed.reduce((sum, value) => sum + value, 0) / signed.length, 2)} pp` : 'not applicable'],
-            ].map(([label, value]) => `<div style="background:${C.card};padding:7px"><div style="font-size:6.8px;color:${C.mute};text-transform:uppercase">${esc(label)}</div><div style="font-size:14px;color:${C.text};font-weight:950;margin-top:2px">${esc(value)}</div></div>`).join('');
-            const bars = counts.map((count, index) => `<div style="display:grid;grid-template-columns:64px minmax(0,1fr) 58px;gap:6px;align-items:center;margin-top:5px"><span style="font-size:7px;color:${C.dim}">${esc(labels[index])}</span><span style="height:8px;background:${C.border};overflow:hidden"><span style="display:block;height:100%;width:${(count / maximum * 100).toFixed(1)}%;background:${index < 2 ? C.green : index === 2 ? C.amber : C.red}"></span></span><span style="font-size:7px;color:${C.text};text-align:right">${count} · ${fmtv(count / errors.length * 100, 1)}%</span></div>`).join('');
-            const sortedErrors = errors.slice().sort((left, right) => left - right);
-            const cdfMaximum = Math.max(1e-9, sortedErrors[sortedErrors.length - 1]);
-            const cdfWidth = 420, cdfHeight = 150, cdfLeft = 34, cdfRight = 8, cdfTop = 8, cdfBottom = 25;
-            const cdfPoints = sortedErrors.map((value, index) => {
-                const x = cdfLeft + value / cdfMaximum * (cdfWidth - cdfLeft - cdfRight);
-                const y = cdfHeight - cdfBottom - (index + 1) / sortedErrors.length * (cdfHeight - cdfTop - cdfBottom);
-                return `${x.toFixed(1)},${y.toFixed(1)}`;
-            }).join(' ');
-            const cdf = `<svg data-savedvalidation-error-cdf viewBox="0 0 ${cdfWidth} ${cdfHeight}" style="display:block;width:100%;height:auto;margin-top:7px"><rect x="${cdfLeft}" y="${cdfTop}" width="${cdfWidth - cdfLeft - cdfRight}" height="${cdfHeight - cdfTop - cdfBottom}" fill="${C.card}"/><line x1="${cdfLeft}" y1="${cdfHeight - cdfBottom}" x2="${cdfWidth - cdfRight}" y2="${cdfHeight - cdfBottom}" stroke="${C.border}"/><line x1="${cdfLeft}" y1="${cdfTop}" x2="${cdfLeft}" y2="${cdfHeight - cdfBottom}" stroke="${C.border}"/><polyline points="${cdfPoints}" fill="none" stroke="${C.cyan}" stroke-width="2"/><text x="${cdfLeft}" y="${cdfHeight - 7}" fill="${C.faint}" font-size="7">0</text><text x="${cdfWidth - cdfRight}" y="${cdfHeight - 7}" text-anchor="end" fill="${C.faint}" font-size="7">${esc(`${fmtv(cdfMaximum, 2)}${errorUnit}`)}</text><text x="5" y="${cdfTop + 5}" fill="${C.faint}" font-size="7">100%</text><text x="5" y="${cdfHeight - cdfBottom}" fill="${C.faint}" font-size="7">0%</text><text x="${cdfWidth / 2}" y="${cdfHeight - 7}" text-anchor="middle" fill="${C.mute}" font-size="7">absolute miss</text></svg>`;
-            distribution = `<section data-savedvalidation-error-distribution style="background:${C.card2};padding:10px;min-width:0"><div style="font-size:10px;color:${C.text};font-weight:950">Prediction-error distribution</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">Computed directly from the selected ledger coordinate and measured outcome shown above. No chart-only calibration is fitted.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:5px;margin-top:8px">${summary}</div><div style="margin-top:8px">${bars}</div>${cdf}</section>`;
+            distribution = savedValidationErrorDistribution(pairs, outcome);
         } else {
             distribution = `<section data-savedvalidation-error-distribution style="background:${C.card2};padding:10px"><div style="font-size:10px;color:${C.text};font-weight:950">Prediction-error distribution</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">Unavailable because this coordinate/outcome pairing is association-only. The interface will not invent a calibration merely to create prediction errors.</div></section>`;
         }
@@ -10505,7 +10624,7 @@ const JarvisRetention = (function () {
                 modelSelectionEligible: entry.modelSelectionEligible === true,
             },
         };
-        return `<div data-savedvalidation-full-evidence style="margin-top:10px"><div style="font-size:12px;color:${C.text};font-weight:950;margin-bottom:5px">Complete registered evidence for this ledger relationship</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:5px">${metricCards}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));gap:8px;margin-top:8px">${distribution}${perAccount}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px;margin-top:8px"><div style="border-left:3px solid ${C.cyan};background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE CONTRACT</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">${coverage.pairedRows || 0}/${coverage.cohortRows || 0} paired rows · ${fmtv((coverage.pairedFraction || 0) * 100, 1)}% scope coverage · ${coverage.accountCount || 0} independent creator accounts · browser-fitted parameters ${coverage.chartFittedParameterCount || 0}</div></div><div style="border-left:3px solid ${inference.confirmatoryEligible ? C.green : C.amber};background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">INFERENCE CONTRACT</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">${esc(inference.interpretation || inference.warning || 'No inferential claim registered.')}</div></div></div><details data-savedvalidation-evidence-json style="margin-top:8px"><summary style="cursor:pointer;color:${C.purple};font-size:8px;font-weight:900">show every registered field for this coordinate × outcome cell</summary><pre style="white-space:pre-wrap;overflow:auto;max-height:520px;background:${C.bg};border:1px solid ${C.border};padding:8px;font-size:7px;color:${C.dim}">${esc(savedLedgerJson(contract))}</pre></details></div>`;
+        return `<div data-savedvalidation-full-evidence style="margin-top:4px"><div style="font-size:12px;color:${C.text};font-weight:950;margin-bottom:5px">Accuracy evidence for this ledger relationship</div>${distribution}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px;margin-top:8px"><div style="border-left:3px solid ${C.cyan};background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE CONTRACT</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">${coverage.pairedRows || 0}/${coverage.cohortRows || 0} paired rows · ${fmtv((coverage.pairedFraction || 0) * 100, 1)}% scope coverage · ${coverage.accountCount || 0} independent creator accounts · browser-fitted parameters ${coverage.chartFittedParameterCount || 0}</div></div><div style="border-left:3px solid ${inference.confirmatoryEligible ? C.green : C.amber};background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">INFERENCE CONTRACT</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">${esc(inference.interpretation || inference.warning || 'No inferential claim registered.')}</div></div></div><details data-savedvalidation-statistics style="border-top:1px solid ${C.border};padding:9px 0;margin-top:9px"><summary style="cursor:pointer;color:${C.text};font-size:9px;font-weight:950">All ${Object.keys(metrics).length} registered statistics</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:5px;margin-top:7px">${metricCards}</div></details><details data-savedvalidation-account-breakdown style="border-top:1px solid ${C.border};padding:9px 0"><summary style="cursor:pointer;color:${C.text};font-size:9px;font-weight:950">Per-creator validation</summary><div style="margin-top:7px">${perAccount}</div></details><details data-savedvalidation-evidence-json style="border-top:1px solid ${C.border};padding:9px 0"><summary style="cursor:pointer;color:${C.text};font-size:9px;font-weight:950">Every registered field for this coordinate × outcome cell</summary><pre style="white-space:pre-wrap;overflow:auto;max-height:520px;background:${C.bg};border:1px solid ${C.border};padding:8px;font-size:7px;color:${C.dim}">${esc(savedLedgerJson(contract))}</pre></details></div>`;
     }
     function savedVisualKeepStudyScatter(
         protocol,
@@ -11146,15 +11265,10 @@ const JarvisRetention = (function () {
                 : selectedHasPrediction
                     ? 'EXACT LEDGER PREDICTION'
                     : 'ASSOCIATION ONLY';
-        const selectedPair = selectedColumn ? `<div data-savedvalidation-selected style="border:1px solid ${selectedFamily.color};background:${selectedFamily.color}08;padding:11px;margin:12px 0">
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:8px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div><div style="font-size:15px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:7px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div></div><div style="text-align:right"><div style="font-size:8px;color:${C.mute}">Prediction verdict for ${esc(outcome.label)}</div><div style="font-size:14px;color:${selectedEvidence.color};font-weight:950">${esc(selectedEvidence.label)}</div></div></div>
-          <div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:8px">${esc(selectedMeaning)}</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px;margin-top:9px">
-            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">${esc(selectedPredictionLabel)}</div><div style="font-size:15px;color:${selectedEvidence.color};font-weight:950">${esc(savedValidationMetricLine(selectedEntry, outcome))}</div></div>
-            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">RAW ASSOCIATION</div><div style="font-size:15px;color:${C.text};font-weight:950">ρ ${fmtv(selectedMetrics.spearman, 3)}</div><div style="font-size:7px;color:${C.dim}">relationship only; not calibrated accuracy</div></div>
-            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE</div><div style="font-size:15px;color:${C.text};font-weight:950">${selectedMetrics.predictionN || selectedMetrics.n || 0} videos</div><div style="font-size:7px;color:${C.dim}">${fmtv(selectedEntry && selectedEntry.coverage && selectedEntry.coverage.pairedFraction != null ? selectedEntry.coverage.pairedFraction * 100 : null, 1)}% of eligible scope · ${selectedEntry && selectedEntry.coverage && selectedEntry.coverage.accountCount || 0} creator accounts</div></div>
-            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">VALIDATION CLAIM</div><div style="font-size:8px;color:${selectedFamily.color};font-weight:900;line-height:1.4">${esc(selectedFamily.claim)}</div></div>
-          </div>
+        const selectedPair = selectedColumn ? `<div data-savedvalidation-selected style="border:1px solid ${selectedFamily.color};background:${selectedFamily.color}08;padding:10px;margin:10px 0">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div style="min-width:0"><div style="font-size:7px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div><div style="font-size:13px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div></div><div style="text-align:right;max-width:100%"><div style="font-size:7px;color:${C.mute}">VERDICT FOR ${esc(outcome.label).toUpperCase()}</div><div style="font-size:12px;color:${selectedEvidence.color};font-weight:950">${esc(selectedEvidence.label)}</div></div></div>
+          <div style="border-top:1px solid ${C.border};margin-top:7px;padding-top:7px"><div style="font-size:6.8px;color:${C.mute}">${esc(selectedPredictionLabel)}</div><div style="font-size:10px;color:${selectedEvidence.color};font-weight:950;line-height:1.4;overflow-wrap:anywhere">${esc(savedValidationMetricLine(selectedEntry, outcome))}</div></div>
+          <details data-savedvalidation-selected-explanation style="border-top:1px solid ${C.border};margin-top:7px;padding-top:7px"><summary style="cursor:pointer;color:${C.text};font-size:8px;font-weight:900">Interpretation and claim boundary</summary><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:7px">${esc(selectedMeaning)}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px;margin-top:7px"><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">RAW ASSOCIATION</div><div style="font-size:14px;color:${C.text};font-weight:950">ρ ${fmtv(selectedMetrics.spearman, 3)}</div><div style="font-size:7px;color:${C.dim}">relationship only; not calibrated accuracy</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE</div><div style="font-size:14px;color:${C.text};font-weight:950">${selectedMetrics.predictionN || selectedMetrics.n || 0} videos</div><div style="font-size:7px;color:${C.dim}">${fmtv(selectedEntry && selectedEntry.coverage && selectedEntry.coverage.pairedFraction != null ? selectedEntry.coverage.pairedFraction * 100 : null, 1)}% of eligible scope · ${selectedEntry && selectedEntry.coverage && selectedEntry.coverage.accountCount || 0} creator accounts</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">VALIDATION CLAIM</div><div style="font-size:8px;color:${selectedFamily.color};font-weight:900;line-height:1.4">${esc(selectedFamily.claim)}</div></div></div></details>
         </div>` : '';
         const selectedScatter = selectedColumn && selectedEntry
             ? savedValidationLedgerScatter(validation, rows, selectedColumn, selectedEntry, outcome)
@@ -11250,22 +11364,41 @@ const JarvisRetention = (function () {
             ['tyler', `Tyler (${scopes.tyler && (scopes.tyler.validationN || scopes.tyler.n) || 0})`],
             ['hafu', `Hafu (${scopes.hafu && (scopes.hafu.validationN || scopes.hafu.n) || 0})`],
         ].map(([key, label]) => `<span data-savedvalidationscope="${key}" style="cursor:pointer;border-bottom:2px solid ${scopeKey === key ? C.cyan : 'transparent'};color:${scopeKey === key ? C.text : C.dim};padding:5px 9px;font-size:9px;font-weight:900;white-space:nowrap">${esc(label)}</span>`).join('');
+        const viewOptions = [
+            ['relationship', 'Relationship', `${selectedRows.length} plotted`],
+            ['accuracy', 'Accuracy', selectedHasPrediction ? 'errors + coverage' : 'association only'],
+            ['videos', 'Videos', `${selectedRows.length} rows`],
+            ['method', 'Method', 'lineage + terms'],
+            ['atlas', 'Atlas', `${allColumns.length} × ${outcomes.length}`],
+        ];
+        const view = viewOptions.some(([key]) => key === st.savedValidationView)
+            ? st.savedValidationView
+            : 'relationship';
+        st.savedValidationView = view;
+        const viewTabs = viewOptions.map(([key, label, meta]) => `<button type="button" data-savedvalidationview="${key}" aria-pressed="${view === key ? 'true' : 'false'}" style="min-width:112px;min-height:44px;border:0;border-bottom:3px solid ${view === key ? C.cyan : 'transparent'};background:${view === key ? C.cyan + '0d' : 'transparent'};color:${view === key ? C.text : C.dim};padding:6px 9px;text-align:left;cursor:pointer"><span style="display:block;font-size:9px;font-weight:950">${esc(label)}</span><span style="display:block;font-size:6.8px;color:${view === key ? C.cyan : C.faint};margin-top:2px;white-space:nowrap">${esc(meta)}</span></button>`).join('');
+        const relationshipPane = `<section data-savedvalidation-pane="relationship"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 5px">Strongest eligible coordinate by primary outcome</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;margin-bottom:12px">${summaryCards}</div><div style="font-size:8px;color:${C.cyan};font-weight:900;margin:2px 0 6px">Every one of the ${selectedRows.length} paired videos is plotted below. Click any point for its exact ledger value, prediction, outcome, and source.</div>${selectedScatter}</section>`;
+        const accuracyPane = `<section data-savedvalidation-pane="accuracy">${selectedFullEvidence}</section>`;
+        const videosPane = `<section data-savedvalidation-pane="videos"><div style="display:flex;justify-content:space-between;gap:8px;align-items:end;flex-wrap:wrap;margin:2px 0 7px"><div><div style="font-size:12px;color:${C.text};font-weight:950">Every video behind this relationship</div><div style="font-size:8px;color:${C.dim};margin-top:2px">${selectedRows.length} paired videos, sorted by the selected plotted value. The table and graph read the same ledger cells.</div></div></div>${rowTable}</section>`;
+        const methodPane = `<section data-savedvalidation-pane="method"><details open style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Raw input to registered coordinate</summary>${selectedColumn ? renderSavedLedgerPipeline(selectedColumn, registry) : note('Choose a coordinate to inspect its lineage.', C.amber)}</details><details style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Terms used in this analysis</summary><div data-savedvalidation-glossary style="margin-top:7px">${glossary}</div></details><details style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Known limits and claim boundary</summary><div style="margin-top:7px">${note(`<b>Known limits:</b> ${(audit.warnings || []).map(esc).join(' ')}`, C.amber)}</div></details></section>`;
+        const atlasPane = `<section data-savedvalidation-pane="atlas"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 4px">All ${allColumns.length} ledger coordinates × all ${outcomes.length} observed outcomes</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This ${allColumns.length * outcomes.length}-cell atlas indexes the same inspector. Click any cell to open that exact coordinate and outcome, including unavailable and research-only states.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:min(100%,190px);background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px"/></div><div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Canonical coordinate</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div></section>`;
+        const viewPane = view === 'accuracy'
+            ? accuracyPane
+            : view === 'videos'
+                ? videosPane
+                : view === 'method'
+                    ? methodPane
+                    : view === 'atlas'
+                        ? atlasPane
+                        : relationshipPane;
         return `<div data-savedvalidation-canonical data-coordinate-count="${allColumns.length}" data-outcome-count="${outcomes.length}" style="min-width:0">
           <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">Ledger visualization</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">Select one canonical ledger coordinate and one measured outcome. The same registered ID, value, lineage, and availability state are used here, in the ledger, and on every video card.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${allColumns.length} registered scalar columns × ${outcomes.length} observed outcomes · ${heldoutColumnCount} leakage-controlled held-out columns · ${uniqueHeldoutPredictionCount} unique held-out predictions · ${activeAliasColumnCount} active aliases · ${compatibilityAliasCount} compatibility aliases outside the ledger · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
           <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:10px">${scopeButtons}</div>
           <div data-savedvalidation-ledger-navigator style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:7px;align-items:end;background:${C.card2};padding:9px;margin-bottom:10px"><label style="min-width:0"><span style="display:block;font-size:7px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">Ledger coordinate</span><select data-savedvalidation-coordinate-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:6px;font-size:8px">${coordinateOptions}</select></label><label style="min-width:0"><span style="display:block;font-size:7px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">Measured outcome</span><select data-savedvalidation-outcome-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:6px;font-size:8px">${outcomeOptions}</select></label><button type="button" data-savedvalidation-open-ledger="${esc(selectedId || '')}" style="width:100%;border:1px solid ${C.purple};background:transparent;color:${C.purple};padding:6px 9px;font-size:8px;font-weight:900;cursor:pointer;white-space:normal">open in ledger</button></div>
           ${note(`<b>Read this first:</b> ${allColumns.length} ledger columns do not mean ${allColumns.length} independent embeddings. Direct axes, deterministic transforms, forecasts, diagnostics, and outcomes are explicitly classified. Old aliases and retired IDs live only in compatibility metadata, so they cannot duplicate tests or values. A prediction-error distribution appears only when the selected coordinate is already registered as a native prediction of the selected outcome. Every other pairing remains association-only.`, C.cyan)}
-          <div style="font-size:12px;color:${C.text};font-weight:950;margin:12px 0 5px">Strongest eligible coordinate by primary outcome</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;margin-bottom:12px">${summaryCards}</div>
           <div style="font-size:12px;color:${C.text};font-weight:950;margin:14px 0 4px">Selected ledger relationship</div>
           ${selectedPair}
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:10px;align-items:start">${selectedScatter}<div style="background:${C.card2};padding:10px"><div style="font-size:10px;color:${C.text};font-weight:950;margin-bottom:3px">Terms used on this screen</div>${glossary}</div></div>
-          ${selectedFullEvidence}
-          <div style="font-size:12px;color:${C.text};font-weight:950;margin:14px 0 4px">Every video behind this relationship</div>${rowTable}
-          ${selectedColumn ? `<details style="margin-top:12px"><summary style="cursor:pointer;color:${C.purple};font-size:9px;font-weight:900">show the complete raw-input → embedding → fit population → rotation → calibration lineage</summary>${renderSavedLedgerPipeline(selectedColumn, registry)}</details>` : ''}
-          <div style="font-size:12px;color:${C.text};font-weight:950;margin:16px 0 4px">All ${allColumns.length} ledger coordinates × all ${outcomes.length} observed outcomes</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This ${allColumns.length * outcomes.length}-cell matrix is the index for the inspector above. Click any cell to preserve that exact coordinate and outcome, including unavailable and research-only states.</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:190px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:8px"/></div>
-          <div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Canonical coordinate</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div>
-          <div style="margin-top:12px">${note(`<b>Known limits:</b> ${(audit.warnings || []).map(esc).join(' ')}`, C.amber)}</div>
+          <nav data-savedvalidation-view-tabs style="display:flex;overflow-x:auto;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};margin:12px 0 10px;-webkit-overflow-scrolling:touch">${viewTabs}</nav>
+          <div data-savedvalidation-view-content="${view}" style="min-width:0">${viewPane}</div>
         </div>`;
     }
     function savedLedgerStoredValue(detail, video, column) {
