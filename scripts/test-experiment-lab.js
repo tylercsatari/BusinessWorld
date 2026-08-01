@@ -1411,6 +1411,8 @@ async function main() {
             coordinateRegistry.classification.diagnostics;
         const outcomeClassification =
             coordinateRegistry.classification.outcomes;
+        const scoreCoordinateCount =
+            shortsCoordinateCount - outcomeClassification.columns;
         const ledgerClassificationText = (
             `${heldoutClassification.columns} leakage-controlled held-out columns`
             + ` · ${heldoutClassification.uniquePredictions}`
@@ -2662,11 +2664,15 @@ window.fetch=function(url,options){
         const canonicalValidation = page.locator('[data-savedvalidation-canonical]');
         await canonicalValidation.waitFor();
         assert.strictEqual(await canonicalValidation.getAttribute('data-coordinate-count'), String(shortsCoordinateCount));
+        assert.strictEqual(await canonicalValidation.getAttribute('data-score-coordinate-count'), String(scoreCoordinateCount));
         assert.strictEqual(await canonicalValidation.getAttribute('data-outcome-count'), String(observedOutcomeCount));
         assert.strictEqual(await page.getByText('Ledger visualization', { exact: true }).count(), 1);
         assert((await page.locator('[data-savedvalidation-ledger-classification]').innerText()).includes(ledgerClassificationText));
-        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').count(), shortsCoordinateCount, 'the visualization picker must expose all canonical ledger coordinates');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option').count(), scoreCoordinateCount, 'the Y-axis picker must expose every non-outcome score coordinate exactly once');
+        assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker] option[value^="shorts.observed."]').count(), 0, 'observed truth must never appear in the score-axis picker');
         assert.strictEqual(await page.locator('[data-savedvalidation-outcome-picker] option').count(), observedOutcomeCount, 'the visualization picker must expose every measured outcome');
+        assert.strictEqual(await page.locator('[data-savedvalidation-ledger-navigator] [data-axis-role="score"]').count(), 1, 'the score axis must be explicit');
+        assert.strictEqual(await page.locator('[data-savedvalidation-ledger-navigator] [data-axis-role="observed"]').count(), 1, 'the observed axis must be explicit');
         assert(await page.locator('[data-savedvalidation-ledger-navigator]').evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'the canonical coordinate/outcome navigator must fit its mobile parent');
         assert.strictEqual(await page.locator('[data-savedvalidation-coordinate-picker]').inputValue(), 'shorts.stored.text.ret5', 'the coordinate selected in the ledger must remain selected in Visualization');
         assert.strictEqual(await page.locator('[data-savedcreatorkeep-study]').count(), 0, 'one-off creator keep panels must not duplicate the canonical inspector');
@@ -2681,10 +2687,10 @@ window.fetch=function(url,options){
             'the relationship plot must render every paired validation video'
         );
         await page.locator('[data-savedvalidationview="atlas"]').click();
-        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), shortsCoordinateCount, 'the heatmap must preserve the canonical active ledger');
-        assert.strictEqual(await page.getByText(`All ${shortsCoordinateCount} ledger coordinates × all ${observedOutcomeCount} observed outcomes`, { exact: true }).count(), 1);
-        assert.strictEqual(await page.locator('[data-savedvalidationcell]').count(), shortsCoordinateCount * observedOutcomeCount, 'every ledger coordinate must be compared with every observed outcome');
-        assert.strictEqual(await page.locator('[data-savedvalidationfeature="shorts.observed.keep"] [data-savedvalidationcell]').first().innerText(), 'TRUTH\nnot predictor', 'actual outcomes must be visibly blocked from predictor use');
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), scoreCoordinateCount, 'the atlas must contain score interpretations only');
+        assert.strictEqual(await page.getByText(`All ${scoreCoordinateCount} score interpretations × all ${observedOutcomeCount} raw observed metrics`, { exact: true }).count(), 1);
+        assert.strictEqual(await page.locator('[data-savedvalidationcell]').count(), scoreCoordinateCount * observedOutcomeCount, 'every score interpretation must be compared with every independently selected observed metric');
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature^="shorts.observed."]').count(), 0, 'raw outcomes belong exclusively to the X axis');
         await page.locator('[data-savedvalidationview="method"]').click();
         await page.locator('[data-savedvalidation-pane="method"] details').filter({ hasText: 'Terms used in this analysis' }).locator(':scope > summary').click();
         for (const term of ['Stored', 'Video held out', 'Account held out', 'Direct axis', 'Derived score', 'Forecast', 'Prequential next upload', 'Compatibility alias', 'Observed outcome', 'Prediction R²', 'MAE / factor error', 'Global exploratory q']) {
@@ -2706,14 +2712,14 @@ window.fetch=function(url,options){
         assert(/Raw .*5s retention.* vs observed Stayed to watch/.test(
             await relationshipScatter.innerText()
         ));
-        assert((await relationshipScatter.innerText()).includes('Only association is shown; no cross-outcome estimator is invented.'));
-        assert((await relationshipScatter.innerText()).includes('association-only; no numerical prediction range exists'));
+        assert.strictEqual(await relationshipScatter.getAttribute('data-score-axis'), 'shorts.stored.text.ret5');
+        assert.strictEqual(await relationshipScatter.getAttribute('data-observed-axis'), 'shorts.observed.keep');
+        assert((await relationshipScatter.innerText()).includes('no chart-specific fit or cross-outcome estimator is created'));
+        assert((await relationshipScatter.innerText()).includes('Raw relationship only'));
         const crossTargetPoint = relationshipScatter.locator('circle[data-savedvalidationrow="vid00000002"]').first();
         const crossTargetTooltip = await crossTargetPoint.locator('title').textContent();
-        assert(/Raw .*5s retention.*:/.test(crossTargetTooltip), 'cross-target hover must name the plotted score coordinate');
-        assert(crossTargetTooltip.includes('Actual Stayed to watch:'), 'hover must expose the measured outcome without inventing a cross-target prediction');
-        assert(crossTargetTooltip.includes('Actual Stayed to watch:'), 'cross-target hover must name the independent outcome');
-        assert(crossTargetTooltip.includes('Coordinate: shorts.stored.text.ret5'));
+        assert(crossTargetTooltip.includes('Y · score ledger shorts.stored.text.ret5:'), 'cross-target hover must name the plotted score coordinate');
+        assert(crossTargetTooltip.includes('X · raw observed shorts.observed.keep:'), 'hover must name the independent measured outcome');
         await crossTargetPoint.dispatchEvent('click');
         const crossTargetDetail = page.locator('[data-savedvalidation-point-detail]');
         await crossTargetDetail.waitFor();
@@ -2721,7 +2727,7 @@ window.fetch=function(url,options){
         assert((await crossTargetDetail.innerText()).includes('shorts.observed.keep'));
         assert((await crossTargetDetail.innerText()).includes('saved score + private outcomes'));
         assert.strictEqual(await page.locator('[data-savedvalidation-scatter]').getAttribute('data-plot-mode'), 'raw');
-        assert((await page.locator('[data-savedvalidation-scatter]').innerText()).includes('Only association is shown'));
+        assert((await page.locator('[data-savedvalidation-scatter]').innerText()).includes('no chart-specific fit or cross-outcome estimator is created'));
         assert.strictEqual(
             await page.locator(
                 '[data-savedvalidation-scatter] [data-savedvalidationplotmode="prediction"]'
@@ -2741,9 +2747,10 @@ window.fetch=function(url,options){
         const nativePredictionEntry = validationArtifact.scopes.tyler.ledgerOutcomeMatrix.views.coordinates.find(entry => entry.coordinateId === 'shorts.video-forecast.views');
         assert(nativePredictionEntry && nativePredictionEntry.evaluation, 'fixture must contain a native registered held-out views prediction');
         await page.locator('[data-savedvalidationview="relationship"]').click();
-        assert.strictEqual(await page.locator('[data-savedvalidation-scatter]').getAttribute('data-plot-mode'), 'prediction');
+        assert.strictEqual(await page.locator('[data-savedvalidation-scatter]').getAttribute('data-plot-mode'), 'raw', 'Relationship must preserve the selected raw score axis even for native predictions');
         assert.strictEqual(await page.locator('[data-savedvalidation-scatter] circle[data-savedvalidationrow]').count(), nativePredictionEntry.coverage.pairedRows, 'the native relationship plot must include every registered paired row');
         await page.locator('[data-savedvalidationview="accuracy"]').click();
+        assert.strictEqual(await page.locator('[data-savedvalidation-scatter]').getAttribute('data-plot-mode'), 'prediction', 'Accuracy must render the registered native prediction separately');
         await page.locator('[data-savedvalidation-statistics] > summary').click();
         await page.locator('[data-savedvalidation-account-breakdown] > summary').click();
         assert.strictEqual(await page.locator('[data-savedvalidation-metric]').count(), Object.keys(nativePredictionEntry.metrics).length, 'the native inspector must render the complete registered metric schema');
@@ -2804,20 +2811,17 @@ window.fetch=function(url,options){
             assert(validationLineageText.includes(stage), `canonical coordinate lineage is missing ${stage}`);
         }
         await page.locator('[data-savedvalidationview="atlas"]').click();
-        await page.locator('[data-savedvalidationfamily="outcome"]').click();
         assert.strictEqual(
-            await page.locator('[data-savedvalidationfeature]').count(),
-            outcomeClassification.columns,
-            'the outcomes filter must expose each stored truth coordinate '
-                + 'once; swipe remains a display transform of keep'
+            await page.locator('[data-savedvalidationfamily="outcome"]').count(),
+            0,
+            'raw outcomes must be isolated to the observed axis instead of masquerading as score coordinates'
         );
-        await page.locator('[data-savedvalidationfamily="all"]').click();
         await page.locator('[data-savedvalidationview="relationship"]').click();
         const frozenVisualPoint = page.locator('[data-savedvalidation-scatter] circle[data-savedvalidationrow="vid00000002"]').first();
         await frozenVisualPoint.evaluate(element => element.scrollIntoView({ block: 'center' }));
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const visualKeepTooltip = await frozenVisualPoint.locator('title').textContent();
-        assert(visualKeepTooltip.includes('Coordinate: shorts.visual-keep-forecast.v1'), 'the generic inspector point must name the selected canonical coordinate');
+        assert(visualKeepTooltip.includes('Y · score ledger shorts.visual-keep-forecast.v1:'), 'the generic inspector point must name the selected canonical score axis');
         const visualKeepHitAudit = await frozenVisualPoint.evaluate(node => {
             const rect = node.getBoundingClientRect();
             const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -2944,7 +2948,7 @@ window.fetch=function(url,options){
         );
         const finalParity = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
         assert(finalParity.ok, `final rendered embedding parity failed: ${JSON.stringify(finalParity.conflicts)}`);
-        console.log(JSON.stringify({ ok: true, sharedExperimentControls: labControlSignature.length, exactControlParity: true, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop, storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, ledgerCoordinates: shortsCoordinateCount, observedOutcomes: observedOutcomeCount, ledgerOutcomeCells: shortsCoordinateCount * observedOutcomeCount, embeddingParity: finalParity }));
+        console.log(JSON.stringify({ ok: true, sharedExperimentControls: labControlSignature.length, exactControlParity: true, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop, storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, ledgerCoordinates: shortsCoordinateCount, scoreCoordinates: scoreCoordinateCount, observedOutcomes: observedOutcomeCount, visualizedRelationshipCells: scoreCoordinateCount * observedOutcomeCount, embeddingParity: finalParity }));
     } finally {
         await browser.close();
     }

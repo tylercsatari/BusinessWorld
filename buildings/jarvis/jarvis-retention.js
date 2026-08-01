@@ -30,7 +30,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'prediction', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -7229,7 +7229,21 @@ const JarvisRetention = (function () {
         }
         const scledgervisualize = e.target.closest('[data-savedledger-open-visualization]'); if (scledgervisualize) {
             const coordinateId = scledgervisualize.getAttribute('data-savedledger-open-visualization');
-            if (coordinateId) st.savedLedgerCoordinate = coordinateId;
+            const registry = SAVEDCHANNELVALIDATION
+                && SAVEDCHANNELVALIDATION.coordinateRegistry;
+            const column = registry && (registry.columns || []).find(
+                item => item.id === savedResolveCoordinateId(
+                    coordinateId,
+                    SAVEDCHANNELVALIDATION
+                )
+            );
+            if (savedValidationIsObservedColumn(column)) {
+                if ((SAVEDCHANNELVALIDATION.outcomeDefinitions || []).some(
+                    outcome => outcome.key === column.key
+                )) st.savedValidationTarget = column.key;
+            } else if (coordinateId) {
+                st.savedLedgerCoordinate = coordinateId;
+            }
             st.savedChannelTab = 'visualization';
             st.savedValidationView = 'relationship';
             st.savedValidationShow = 60;
@@ -7258,7 +7272,6 @@ const JarvisRetention = (function () {
         }
         const scvalidationscope = e.target.closest('[data-savedvalidationscope]'); if (scvalidationscope) { st.savedValidationScope = scvalidationscope.getAttribute('data-savedvalidationscope'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
         const scvalidationview = e.target.closest('[data-savedvalidationview]'); if (scvalidationview) { st.savedValidationView = scvalidationview.getAttribute('data-savedvalidationview'); rtgUpdateExp(); return; }
-        const scvalidationplot = e.target.closest('[data-savedvalidationplotmode]'); if (scvalidationplot) { st.savedLedgerPlotMode = scvalidationplot.getAttribute('data-savedvalidationplotmode'); rtgUpdateExp(); return; }
         const scvalidationfamily = e.target.closest('[data-savedvalidationfamily]'); if (scvalidationfamily) { st.savedValidationFamily = scvalidationfamily.getAttribute('data-savedvalidationfamily'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
         const scvalidationcell = e.target.closest('[data-savedvalidationcell]'); if (scvalidationcell) {
             st.savedLedgerCoordinate = scvalidationcell.getAttribute('data-savedvalidationcoordinate');
@@ -9927,6 +9940,34 @@ const JarvisRetention = (function () {
         return fmtv(value, 1) + '%';
     }
     const SAVED_VALIDATION_PRIMARY_OUTCOMES = Object.freeze(['keep', 'ret5', 'averageRetention', 'views']);
+    function savedValidationIsObservedColumn(column) {
+        return !!column && (
+            column.family === 'observed'
+            || column.valueClass === 'observed_outcome'
+        );
+    }
+    function savedValidationScoreColumns(columns) {
+        return (columns || []).filter(column => !savedValidationIsObservedColumn(column));
+    }
+    function savedValidationAxisGroup(column) {
+        const valueClass = savedLedgerValueClass(column);
+        const groups = {
+            direct_embedding_axis: 'Direct embedding axes',
+            embedding_derived_transform: 'Embedding-derived transforms',
+            combined_forecast: 'Combined forecasts',
+            legacy_diagnostic: 'Legacy diagnostics',
+        };
+        return groups[valueClass] || 'Other registered scores';
+    }
+    function savedValidationOutcomeGroup(outcome) {
+        if (['views', 'outlier', 'hit10M'].includes(outcome && outcome.key)) {
+            return 'Reach and scale';
+        }
+        if (/^(survival|drop)/.test(outcome && outcome.key || '')) {
+            return 'Retention-curve geometry';
+        }
+        return 'Feed and retention';
+    }
     function savedValidationLedgerMatrix(scope, outcomeKey) {
         return scope && scope.ledgerOutcomeMatrix && scope.ledgerOutcomeMatrix[outcomeKey] || null;
     }
@@ -10220,12 +10261,12 @@ const JarvisRetention = (function () {
             ? Math.max(0, Math.pow(10, +value) - 1)
             : +value;
     }
-    function savedValidationLedgerScatter(validation, rows, column, entry, outcome) {
+    function savedValidationLedgerScatter(validation, rows, column, entry, outcome, requestedMode = 'raw') {
         const hasPrediction = entry && entry.evaluation
             && entry.evaluation.identity === true;
-        const plotMode = st.savedLedgerPlotMode === 'raw' || !hasPrediction
-            ? 'raw'
-            : 'prediction';
+        const plotMode = requestedMode === 'prediction' && hasPrediction
+            ? 'prediction'
+            : 'raw';
         const evaluationMode = entry && entry.evaluationMode || '';
         const prequential = evaluationMode.includes('prequential');
         const protocolPrediction = evaluationMode.includes('heldout');
@@ -10300,7 +10341,10 @@ const JarvisRetention = (function () {
                 point.prediction,
                 outcome.key
             );
-            const title = `${point.row.accountName} · ${point.row.title}\nRaw ${column.label}: ${savedLedgerFormat(point.score, column)}\n${predictionPhrase}: ${savedValidationOutcomeFormat(predictedOutput, outcome.key, outcome.unit === 'binary')}\nActual ${outcome.label}: ${savedValidationOutcomeFormat(point.actual, outcome.key)}\nCoordinate: ${column.id}${creatorMixture ? '\nDerived from visual + together embeddings + strictly earlier creator history; not a point on either raw plane. Click to pin details.' : ''}`;
+            const predictionTitle = plotMode === 'prediction'
+                ? `\n${predictionPhrase}: ${savedValidationOutcomeFormat(predictedOutput, outcome.key, outcome.unit === 'binary')}`
+                : '';
+            const title = `${point.row.accountName} · ${point.row.title}\nY · score ledger ${column.id}: ${savedLedgerFormat(point.score, column)}${predictionTitle}\nX · raw observed shorts.observed.${outcome.key}: ${savedValidationOutcomeFormat(point.actual, outcome.key)}${creatorMixture ? '\nDerived from visual + together embeddings + strictly earlier creator history; not a point on either raw plane. Click to pin details.' : ''}`;
             const selected = st.savedValidationCurveVideo === point.row.id;
             const pointAction = `data-savedvalidationrow="${esc(point.row.id)}"`;
             svg += `<circle ${pointAction} cx="${X(point.x).toFixed(1)}" cy="${Y(point.y).toFixed(1)}" r="${selected ? 6 : 3.4}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .68}" style="cursor:pointer"><title>${esc(title)}</title></circle>`;
@@ -10312,7 +10356,7 @@ const JarvisRetention = (function () {
         const yLabel = plotMode === 'prediction'
             ? `${prequential ? 'prequential predicted' : protocolPrediction ? 'held-out predicted' : inSampleModelScore ? 'in-sample model fit' : 'exact ledger predicted'} ${outcome.label}`
             : `raw ${column.label}`;
-        svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">observed ${esc(outcome.label)}${xLog}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(yLabel)}${yLog}</text>`;
+        svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">X · raw observed ${esc(outcome.label)}${xLog}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">Y · ${esc(yLabel)}${yLog}</text>`;
         const selectedPoint = points.find(point => point.row.id === st.savedValidationCurveVideo);
         const selectedPrediction = selectedPoint && savedValidationModelOutput(
             selectedPoint.prediction,
@@ -10333,27 +10377,26 @@ const JarvisRetention = (function () {
                 outcome.key,
                 outcome.unit === 'binary'
             );
-        const pointDetail = selectedPoint ? `<div data-savedvalidation-point-detail style="border-left:3px solid ${savedValidationAccountColor(selectedPoint.row.accountId)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selectedPoint.row.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">ledger ${esc(column.id)} = <b style="color:${C.text}">${esc(savedLedgerFormat(selectedPoint.score, column))}</b><br>${esc(predictionPhrase)} = <b style="color:${C.cyan}">${esc(predictionDetail)}</b><br>shorts.observed.${esc(outcome.key)} = <b style="color:${C.text}">${esc(savedValidationOutcomeFormat(selectedPoint.actual, outcome.key))}</b><br>${esc(selectedPoint.row.accountName)} · ${esc(evaluationMode || 'association only')} · ${esc(selectedPoint.row.validationSource === 'predictor_blind_inputs_only' ? 'blind-only private row' : 'saved score + private outcomes')}${creatorMixture ? '<br><b>This scalar is the selected visual + together + creator-history mixture. It is not the visual:keep or together:keep plane.</b>' : ''}</div>${detailActions}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to pin its exact ledger coordinate and measured outcome${creatorMixture ? ', then open either contributing raw embedding separately' : ''}.</div>`;
+        const predictionDetailLine = plotMode === 'prediction'
+            ? `<br>${esc(predictionPhrase)} = <b style="color:${C.cyan}">${esc(predictionDetail)}</b>`
+            : '';
+        const pointDetail = selectedPoint ? `<div data-savedvalidation-point-detail style="border-left:3px solid ${savedValidationAccountColor(selectedPoint.row.accountId)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selectedPoint.row.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">Y · score ledger ${esc(column.id)} = <b style="color:${C.text}">${esc(savedLedgerFormat(selectedPoint.score, column))}</b>${predictionDetailLine}<br>X · raw observed shorts.observed.${esc(outcome.key)} = <b style="color:${C.text}">${esc(savedValidationOutcomeFormat(selectedPoint.actual, outcome.key))}</b><br>${esc(selectedPoint.row.accountName)} · ${esc(evaluationMode || 'association only')} · ${esc(selectedPoint.row.validationSource === 'predictor_blind_inputs_only' ? 'blind-only private row' : 'saved score + private outcomes')}${creatorMixture ? '<br><b>This scalar is the selected visual + together + creator-history mixture. It is not the visual:keep or together:keep plane.</b>' : ''}</div>${detailActions}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to pin the exact score-ledger value and independently measured outcome${creatorMixture ? ', then open either contributing raw embedding separately' : ''}.</div>`;
         const diagnostics = entry && entry.evaluation
             && entry.evaluation.diagnostics || {};
         const actualMinimum = savedValidationModelOutput(diagnostics.actualMin, outcome.key);
         const actualMaximum = savedValidationModelOutput(diagnostics.actualMax, outcome.key);
         const predictedMinimum = savedValidationModelOutput(diagnostics.predictedMin, outcome.key);
         const predictedMaximum = savedValidationModelOutput(diagnostics.predictedMax, outcome.key);
-        const rangeLine = diagnostics.n ? `Exact ledger prediction range ${savedValidationOutcomeFormat(predictedMinimum, outcome.key, outcome.unit === 'binary')}–${savedValidationOutcomeFormat(predictedMaximum, outcome.key, outcome.unit === 'binary')} versus observed ${savedValidationOutcomeFormat(actualMinimum, outcome.key)}–${savedValidationOutcomeFormat(actualMaximum, outcome.key)} · transformed-span coverage ${fmtv((diagnostics.rangeRatio || 0) * 100, 1)}%` : 'This coordinate/outcome pair is association-only; no numerical prediction range exists.';
-        const toggleOptions = hasPrediction
-            ? [['prediction', 'Exact ledger prediction'], ['raw', 'Raw coordinate']]
-            : [['raw', 'Raw association only']];
-        const toggle = toggleOptions.map(([key, label]) => `<span data-savedvalidationplotmode="${key}" style="cursor:pointer;border-bottom:2px solid ${plotMode === key ? C.cyan : 'transparent'};color:${plotMode === key ? C.text : C.dim};padding:4px 7px;font-size:8px;font-weight:900">${label}</span>`).join('');
+        const rangeLine = plotMode === 'prediction' && diagnostics.n
+            ? `Exact ledger prediction range ${savedValidationOutcomeFormat(predictedMinimum, outcome.key, outcome.unit === 'binary')}–${savedValidationOutcomeFormat(predictedMaximum, outcome.key, outcome.unit === 'binary')} versus observed ${savedValidationOutcomeFormat(actualMinimum, outcome.key)}–${savedValidationOutcomeFormat(actualMaximum, outcome.key)} · transformed-span coverage ${fmtv((diagnostics.rangeRatio || 0) * 100, 1)}%`
+            : 'Raw relationship only: this chart fits no conversion between the selected score coordinate and observed outcome.';
         const headline = plotMode === 'prediction'
             ? `${prequential ? 'Prequential predicted' : protocolPrediction ? 'Held-out predicted' : inSampleModelScore ? 'In-sample frozen-model fit' : 'Exact ledger predicted'} ${outcome.label} vs observed ${outcome.label}`
             : `Raw ${column.label} vs observed ${outcome.label}`;
         const explanation = plotMode === 'prediction'
             ? `${inSampleModelScore ? 'This is a fitting-population diagnostic, not blind forecast evidence. ' : ''}Every dot, tooltip, row-table value, and error reads the same registered score-ledger cell. The browser fits zero parameters and performs no recalibration.`
-            : (hasPrediction
-                ? 'This is the same registered scalar shown in its native ledger units for geometric inspection.'
-                : `This coordinate is registered for ${entry.nativeOutcomeKey || column.target}, not ${outcome.key}. Only association is shown; no cross-outcome estimator is invented.`);
-        return `<div data-savedvalidation-scatter data-plot-mode="${plotMode}" style="border:1px solid ${C.border};background:${C.card};padding:10px;min-width:0"><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div><div style="font-size:12px;color:${C.text};font-weight:950">${esc(headline)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:3px 0 2px;max-width:780px">${esc(explanation)}</div></div><div style="display:flex;border-bottom:1px solid ${C.border}">${toggle}</div></div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:0 0 2px">${esc(savedValidationMetricLine(entry, outcome))}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:6px">${esc(rangeLine)}</div><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${pointDetail}</div>`;
+            : `Every dot pairs one persisted score-ledger scalar with one independently measured video outcome. Neither selector changes the other, and no chart-specific fit or cross-outcome estimator is created.${hasPrediction ? ' Its calibrated native prediction is shown separately in Accuracy.' : ''}`;
+        return `<div data-savedvalidation-scatter data-plot-mode="${plotMode}" data-score-axis="${esc(column.id)}" data-observed-axis="shorts.observed.${esc(outcome.key)}" style="border:1px solid ${C.border};background:${C.card};padding:10px;min-width:0"><div><div style="font-size:12px;color:${C.text};font-weight:950">${esc(headline)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:3px 0 2px;max-width:780px">${esc(explanation)}</div></div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:0 0 2px">${esc(savedValidationMetricLine(entry, outcome))}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:6px">${esc(rangeLine)}</div><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${pointDetail}</div>`;
     }
     function savedValidationQuantile(values, quantile) {
         const sorted = (values || []).filter(Number.isFinite).slice().sort((a, b) => a - b);
@@ -11127,6 +11170,7 @@ const JarvisRetention = (function () {
         if (validation.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Joining the canonical coordinate ledger to measured outcomes…</div>`;
         if (validation.error) return `<div style="padding:18px;color:${C.red}">${esc(validation.error)} <span data-savedvalidationreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
         const registry = validation.coordinateRegistry || {}, allColumns = registry.columns || [];
+        const scoreColumns = savedValidationScoreColumns(allColumns);
         const totals = registry.totals || {};
         const scopes = validation.scopes || {};
         const scopeKey = scopes[st.savedValidationScope] ? st.savedValidationScope : 'pooled';
@@ -11146,15 +11190,20 @@ const JarvisRetention = (function () {
             st.savedLedgerCoordinate,
             validation
         );
-        let selectedEntry = selectedEntries.find(entry => (
-            entry.coordinateId || entry.id || entry.key
-        ) === requestedCoordinate);
+        let selectedEntry = scoreColumns.some(column => column.id === requestedCoordinate)
+            ? selectedEntries.find(entry => (
+                entry.coordinateId || entry.id || entry.key
+            ) === requestedCoordinate)
+            : null;
         if (!selectedEntry) {
             selectedEntry = selectedEntries.find(entry => (
                 ['creatorExcludedPublic', 'videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast', 'creatorAdaptiveKeepPrequential'].includes(entry.family)
                 && entry.available !== false
                 && entry.predictorEligible !== false
-            )) || selectedEntries.find(entry => entry.available !== false);
+            )) || selectedEntries.find(entry => (
+                entry.available !== false
+                && scoreColumns.some(column => column.id === (entry.coordinateId || entry.id || entry.key))
+            ));
         }
         const selectedId = selectedEntry && (selectedEntry.coordinateId || selectedEntry.id || selectedEntry.key);
         const selectedColumn = savedValidationLedgerColumn(validation, selectedId);
@@ -11163,7 +11212,7 @@ const JarvisRetention = (function () {
         const filter = st.savedValidationFamily || 'all';
         const query = String(st.savedValidationQuery || '').trim().toLowerCase();
         const filterOptions = [
-            ['all', `All ${allColumns.length}`],
+            ['all', `All ${scoreColumns.length}`],
             ['strict', 'Held-out predictors'],
             ['public', 'Creator-excluded public'],
             ['video', 'Video held out'],
@@ -11171,10 +11220,9 @@ const JarvisRetention = (function () {
             ['stored', 'Stored'],
             ['derived', 'Derived'],
             ['forecast', 'Forecasts'],
-            ['outcome', 'Outcomes'],
         ];
         const selectedById = new Map(selectedEntries.map(entry => [entry.coordinateId || entry.id || entry.key, entry]));
-        const visibleColumns = allColumns.filter(column => {
+        const visibleColumns = scoreColumns.filter(column => {
             const entry = selectedById.get(column.id);
             if (!savedValidationCoordinateFilter(column, entry, filter)) return false;
             if (!query) return true;
@@ -11199,7 +11247,7 @@ const JarvisRetention = (function () {
             ['stored', 'visualKeepForecast', 'visualKeepProtocolForecast'].includes(column.family)
             || column.predictorEligible === false
         )).length;
-        const observedCount = allColumns.filter(column => column.family === 'observed').length;
+        const observedCount = allColumns.filter(savedValidationIsObservedColumn).length;
         const summaryCards = SAVED_VALIDATION_PRIMARY_OUTCOMES.map(outcomeKey => {
             const candidateOutcome = outcomeMap.get(outcomeKey);
             const candidates = savedValidationLedgerEntries(scope, outcomeKey).filter(entry => (
@@ -11215,12 +11263,24 @@ const JarvisRetention = (function () {
             return `<button type="button" ${best ? `data-savedvalidationcell data-savedvalidationcoordinate="${esc(best.coordinateId)}" data-savedvalidationoutcome="${esc(outcomeKey)}"` : 'disabled'} style="border:0;border-top:3px solid ${evidence.color};background:${C.card2};padding:9px;min-width:0;text-align:left;cursor:${best ? 'pointer' : 'default'}"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">${esc(candidateOutcome && candidateOutcome.label || outcomeKey)} · strongest eligible</div><div style="font-size:18px;color:${evidence.color};font-weight:950">${best && metric.value != null ? `${metric.key} ${fmtv(metric.value, 3)}` : 'not enough data'}</div><div style="font-size:8px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${best ? esc(best.label || best.coordinateId) : '—'}</div><div style="font-size:7px;color:${C.dim};margin-top:2px">${best ? esc(best.coordinateId) : ''}</div></button>`;
         }).join('');
         const familyButtons = filterOptions.map(([key, label]) => {
-            const count = allColumns.filter(column => savedValidationCoordinateFilter(column, selectedById.get(column.id), key)).length;
+            const count = scoreColumns.filter(column => savedValidationCoordinateFilter(column, selectedById.get(column.id), key)).length;
             return `<span data-savedvalidationfamily="${key}" style="cursor:pointer;border:1px solid ${filter === key ? C.cyan : C.border};background:${filter === key ? C.cyan + '12' : 'transparent'};color:${filter === key ? C.cyan : C.dim};padding:4px 7px;font-size:8px;font-weight:850;white-space:nowrap">${esc(label)} <b>${count}</b></span>`;
         }).join('');
-        const coordinateOptions = allColumns.map(column => `<option value="${esc(column.id)}" ${selectedId === column.id ? 'selected' : ''}>${esc(`${savedValidationFamilyMeta(column).label} · ${column.label} · ${column.id}`)}</option>`).join('');
-        const outcomeOptions = outcomes.map(item => `<option value="${esc(item.key)}" ${outcome.key === item.key ? 'selected' : ''}>${esc(`${item.label} · shorts.observed.${item.key}`)}</option>`).join('');
-        const heatmapHeader = heatmapOutcomes.map(item => `<th style="padding:7px;min-width:130px;text-align:left"><div>${esc(item.label)}</div><div style="font-size:6.5px;color:${C.faint};font-weight:500">shorts.observed.${esc(item.key)}</div></th>`).join('');
+        const coordinateGroups = new Map();
+        scoreColumns.forEach(column => {
+            const group = savedValidationAxisGroup(column);
+            if (!coordinateGroups.has(group)) coordinateGroups.set(group, []);
+            coordinateGroups.get(group).push(column);
+        });
+        const coordinateOptions = Array.from(coordinateGroups.entries()).map(([group, columns]) => `<optgroup label="${esc(`${group} · ${columns.length}`)}">${columns.map(column => `<option data-score-coordinate-option value="${esc(column.id)}" ${selectedId === column.id ? 'selected' : ''}>${esc(`${column.label} · ${savedValidationFamilyMeta(column).label}`)}</option>`).join('')}</optgroup>`).join('');
+        const outcomeGroups = new Map();
+        outcomes.forEach(item => {
+            const group = savedValidationOutcomeGroup(item);
+            if (!outcomeGroups.has(group)) outcomeGroups.set(group, []);
+            outcomeGroups.get(group).push(item);
+        });
+        const outcomeOptions = Array.from(outcomeGroups.entries()).map(([group, items]) => `<optgroup label="${esc(`${group} · ${items.length}`)}">${items.map(item => `<option data-observed-outcome-option value="${esc(item.key)}" ${outcome.key === item.key ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}</optgroup>`).join('');
+        const heatmapHeader = heatmapOutcomes.map(item => `<th style="padding:7px;min-width:130px;text-align:left"><div>X · ${esc(item.label)}</div><div style="font-size:6.5px;color:${C.faint};font-weight:500">shorts.observed.${esc(item.key)}</div></th>`).join('');
         const heatmapRows = visibleColumns.map(column => {
             const entry = selectedById.get(column.id);
             const family = savedValidationFamilyMeta(column);
@@ -11248,13 +11308,16 @@ const JarvisRetention = (function () {
                     ? 'EXACT LEDGER PREDICTION'
                     : 'ASSOCIATION ONLY';
         const selectedPair = selectedColumn ? `<div data-savedvalidation-selected style="border:1px solid ${selectedFamily.color};background:${selectedFamily.color}08;padding:10px;margin:10px 0">
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div style="min-width:0"><div style="font-size:7px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div><div style="font-size:13px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div></div><div style="text-align:right;max-width:100%"><div style="font-size:7px;color:${C.mute}">VERDICT FOR ${esc(outcome.label).toUpperCase()}</div><div style="font-size:12px;color:${selectedEvidence.color};font-weight:950">${esc(selectedEvidence.label)}</div></div></div>
-          <div style="border-top:1px solid ${C.border};margin-top:7px;padding-top:7px"><div style="font-size:6.8px;color:${C.mute}">${esc(selectedPredictionLabel)}</div><div style="font-size:10px;color:${selectedEvidence.color};font-weight:950;line-height:1.4;overflow-wrap:anywhere">${esc(savedValidationMetricLine(selectedEntry, outcome))}</div></div>
+          <div data-savedvalidation-axis-pair style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:7px"><div data-axis-role="score" style="border-left:3px solid ${selectedFamily.color};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">Y-axis · score interpretation</div><div style="font-size:12px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div><div style="font-size:6.8px;color:${selectedFamily.color};margin-top:3px">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div></div><div data-axis-role="observed" style="border-left:3px solid ${C.green};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;color:${C.green};font-weight:950;text-transform:uppercase">X-axis · raw observed video data</div><div style="font-size:12px;color:${C.text};font-weight:950;margin-top:2px">${esc(outcome.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all">shorts.observed.${esc(outcome.key)}</div><div style="font-size:6.8px;color:${C.green};margin-top:3px">Measured channel outcome · ${esc(outcome.unit || 'number')}${outcome.derived ? ` · ${esc(outcome.derived)}` : ''}</div></div></div>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid ${C.border};margin-top:7px;padding-top:7px"><div><div style="font-size:6.8px;color:${C.mute}">${esc(selectedPredictionLabel)}</div><div style="font-size:10px;color:${selectedEvidence.color};font-weight:950;line-height:1.4;overflow-wrap:anywhere">${esc(savedValidationMetricLine(selectedEntry, outcome))}</div></div><div style="text-align:right;max-width:100%"><div style="font-size:7px;color:${C.mute}">RELATIONSHIP VERDICT</div><div style="font-size:12px;color:${selectedEvidence.color};font-weight:950">${esc(selectedEvidence.label)}</div></div></div>
           <details data-savedvalidation-selected-explanation style="border-top:1px solid ${C.border};margin-top:7px;padding-top:7px"><summary style="cursor:pointer;color:${C.text};font-size:8px;font-weight:900">Interpretation and claim boundary</summary><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:7px">${esc(selectedMeaning)}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px;margin-top:7px"><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">RAW ASSOCIATION</div><div style="font-size:14px;color:${C.text};font-weight:950">ρ ${fmtv(selectedMetrics.spearman, 3)}</div><div style="font-size:7px;color:${C.dim}">relationship only; not calibrated accuracy</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE</div><div style="font-size:14px;color:${C.text};font-weight:950">${selectedMetrics.predictionN || selectedMetrics.n || 0} videos</div><div style="font-size:7px;color:${C.dim}">${fmtv(selectedEntry && selectedEntry.coverage && selectedEntry.coverage.pairedFraction != null ? selectedEntry.coverage.pairedFraction * 100 : null, 1)}% of eligible scope · ${selectedEntry && selectedEntry.coverage && selectedEntry.coverage.accountCount || 0} creator accounts</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">VALIDATION CLAIM</div><div style="font-size:8px;color:${selectedFamily.color};font-weight:900;line-height:1.4">${esc(selectedFamily.claim)}</div></div></div></details>
         </div>` : '';
         const selectedScatter = selectedColumn && selectedEntry
-            ? savedValidationLedgerScatter(validation, rows, selectedColumn, selectedEntry, outcome)
-            : note('Choose a coordinate with matched values.', C.amber);
+            ? savedValidationLedgerScatter(validation, rows, selectedColumn, selectedEntry, outcome, 'raw')
+            : note('Choose a score interpretation with matched observed data.', C.amber);
+        const selectedPredictionScatter = selectedColumn && selectedEntry && selectedHasPrediction
+            ? savedValidationLedgerScatter(validation, rows, selectedColumn, selectedEntry, outcome, 'prediction')
+            : '';
         const selectedRows = selectedColumn ? rows.map(row => ({
             row,
             score: savedValidationCoordinateValue(validation, row, selectedColumn.id),
@@ -11274,14 +11337,8 @@ const JarvisRetention = (function () {
                 && row.predictions.creatorAdaptiveKeepBaseline != null
                 ? +row.predictions.creatorAdaptiveKeepBaseline
                 : null,
-        })).filter(item => item.score != null && item.actual != null).sort((left, right) => {
-            if (st.savedLedgerPlotMode === 'raw' || !selectedHasPrediction) {
-                return right.score - left.score;
-            }
-            const rightPrediction = Number.isFinite(+right.predicted) ? +right.predicted : -Infinity;
-            const leftPrediction = Number.isFinite(+left.predicted) ? +left.predicted : -Infinity;
-            return rightPrediction - leftPrediction;
-        }) : [];
+        })).filter(item => item.score != null && item.actual != null)
+            .sort((left, right) => right.score - left.score) : [];
         const rowLimit = st.savedValidationShow || 60;
         const selectedShowsHistoryBaseline = selectedColumn
             && selectedColumn.family === 'creatorAdaptiveKeepPrequential'
@@ -11351,18 +11408,18 @@ const JarvisRetention = (function () {
             ['accuracy', 'Accuracy', selectedHasPrediction ? 'errors + coverage' : 'association only'],
             ['videos', 'Videos', `${selectedRows.length} rows`],
             ['method', 'Method', 'lineage + terms'],
-            ['atlas', 'Atlas', `${allColumns.length} × ${outcomes.length}`],
+            ['atlas', 'Atlas', `${scoreColumns.length} × ${outcomes.length}`],
         ];
         const view = viewOptions.some(([key]) => key === st.savedValidationView)
             ? st.savedValidationView
             : 'relationship';
         st.savedValidationView = view;
         const viewTabs = viewOptions.map(([key, label, meta]) => `<button type="button" data-savedvalidationview="${key}" aria-pressed="${view === key ? 'true' : 'false'}" style="min-width:112px;min-height:44px;border:0;border-bottom:3px solid ${view === key ? C.cyan : 'transparent'};background:${view === key ? C.cyan + '0d' : 'transparent'};color:${view === key ? C.text : C.dim};padding:6px 9px;text-align:left;cursor:pointer"><span style="display:block;font-size:9px;font-weight:950">${esc(label)}</span><span style="display:block;font-size:6.8px;color:${view === key ? C.cyan : C.faint};margin-top:2px;white-space:nowrap">${esc(meta)}</span></button>`).join('');
-        const relationshipPane = `<section data-savedvalidation-pane="relationship"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 5px">Strongest eligible coordinate by primary outcome</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;margin-bottom:12px">${summaryCards}</div><div style="font-size:8px;color:${C.cyan};font-weight:900;margin:2px 0 6px">Every one of the ${selectedRows.length} paired videos is plotted below. Click any point for its exact ledger value, prediction, outcome, and source.</div>${selectedScatter}</section>`;
-        const accuracyPane = `<section data-savedvalidation-pane="accuracy">${selectedFullEvidence}</section>`;
+        const relationshipPane = `<section data-savedvalidation-pane="relationship"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 5px">Strongest eligible score by primary observed metric</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;margin-bottom:12px">${summaryCards}</div><div style="font-size:8px;color:${C.cyan};font-weight:900;margin:2px 0 6px">Every one of the ${selectedRows.length} paired videos is plotted below as raw score-ledger value versus raw observed video data. Click any point for both source values.</div>${selectedScatter}</section>`;
+        const accuracyPane = `<section data-savedvalidation-pane="accuracy">${selectedPredictionScatter ? `<div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 5px">Native prediction accuracy</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This second graph appears only because the selected score is registered as a numerical prediction of this exact observed metric. It does not replace the independent raw-axis relationship graph.</div>${selectedPredictionScatter}` : note('The selected score and observed metric form a raw association only. No calibrated cross-outcome prediction is invented.', C.amber)}${selectedFullEvidence}</section>`;
         const videosPane = `<section data-savedvalidation-pane="videos"><div style="display:flex;justify-content:space-between;gap:8px;align-items:end;flex-wrap:wrap;margin:2px 0 7px"><div><div style="font-size:12px;color:${C.text};font-weight:950">Every video behind this relationship</div><div style="font-size:8px;color:${C.dim};margin-top:2px">${selectedRows.length} paired videos, sorted by the selected plotted value. The table and graph read the same ledger cells.</div></div></div>${rowTable}</section>`;
         const methodPane = `<section data-savedvalidation-pane="method"><details open style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Raw input to registered coordinate</summary>${selectedColumn ? renderSavedLedgerPipeline(selectedColumn, registry) : note('Choose a coordinate to inspect its lineage.', C.amber)}</details><details style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Terms used in this analysis</summary><div data-savedvalidation-glossary style="margin-top:7px">${glossary}</div></details><details style="border-top:1px solid ${C.border};padding:8px 0"><summary style="cursor:pointer;color:${C.text};font-size:10px;font-weight:950">Known limits and claim boundary</summary><div style="margin-top:7px">${note(`<b>Known limits:</b> ${(audit.warnings || []).map(esc).join(' ')}`, C.amber)}</div></details></section>`;
-        const atlasPane = `<section data-savedvalidation-pane="atlas"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 4px">All ${allColumns.length} ledger coordinates × all ${outcomes.length} observed outcomes</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This ${allColumns.length * outcomes.length}-cell atlas indexes the same inspector. Click any cell to open that exact coordinate and outcome, including unavailable and research-only states.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:min(100%,190px);background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px"/></div><div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Canonical coordinate</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div></section>`;
+        const atlasPane = `<section data-savedvalidation-pane="atlas"><div style="font-size:12px;color:${C.text};font-weight:950;margin:2px 0 4px">All ${scoreColumns.length} score interpretations × all ${outcomes.length} raw observed metrics</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">This ${scoreColumns.length * outcomes.length}-cell atlas is the Cartesian product of two independent axes. Rows are non-outcome score-ledger coordinates; columns are measured video data. Click any cell to inspect that exact relationship, including unavailable and research-only states.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:min(100%,190px);background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px"/></div><div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Y · score interpretation</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div></section>`;
         const viewPane = view === 'accuracy'
             ? accuracyPane
             : view === 'videos'
@@ -11372,11 +11429,11 @@ const JarvisRetention = (function () {
                     : view === 'atlas'
                         ? atlasPane
                         : relationshipPane;
-        return `<div data-savedvalidation-canonical data-coordinate-count="${allColumns.length}" data-outcome-count="${outcomes.length}" style="min-width:0">
-          <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">Ledger visualization</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">Select one canonical ledger coordinate and one measured outcome. The same registered ID, value, lineage, and availability state are used here, in the ledger, and on every video card.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${allColumns.length} registered scalar columns × ${outcomes.length} observed outcomes · ${heldoutColumnCount} leakage-controlled held-out columns · ${uniqueHeldoutPredictionCount} unique held-out predictions · ${activeAliasColumnCount} active aliases · ${compatibilityAliasCount} compatibility aliases outside the ledger · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
+        return `<div data-savedvalidation-canonical data-coordinate-count="${allColumns.length}" data-score-coordinate-count="${scoreColumns.length}" data-outcome-count="${outcomes.length}" style="min-width:0">
+          <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">Ledger visualization</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">Build a graph from two independent axes: one persisted score interpretation and one raw observed video metric. Changing either selector never changes the other. IDs and values remain identical in this view, the source ledger, and every video card.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${allColumns.length} total registered scalar columns · ${scoreColumns.length} selectable score interpretations × ${outcomes.length} raw observed metrics · ${heldoutColumnCount} leakage-controlled held-out columns · ${uniqueHeldoutPredictionCount} unique held-out predictions · ${activeAliasColumnCount} active aliases · ${compatibilityAliasCount} compatibility aliases outside the ledger · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
           <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:10px">${scopeButtons}</div>
-          <div data-savedvalidation-ledger-navigator style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:7px;align-items:end;background:${C.card2};padding:9px;margin-bottom:10px"><label style="min-width:0"><span style="display:block;font-size:7px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">Ledger coordinate</span><select data-savedvalidation-coordinate-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:6px;font-size:8px">${coordinateOptions}</select></label><label style="min-width:0"><span style="display:block;font-size:7px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">Measured outcome</span><select data-savedvalidation-outcome-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:6px;font-size:8px">${outcomeOptions}</select></label><button type="button" data-savedvalidation-open-ledger="${esc(selectedId || '')}" style="width:100%;border:1px solid ${C.purple};background:transparent;color:${C.purple};padding:6px 9px;font-size:8px;font-weight:900;cursor:pointer;white-space:normal">open in ledger</button></div>
-          ${note(`<b>Read this first:</b> ${allColumns.length} ledger columns do not mean ${allColumns.length} independent embeddings. Direct axes, deterministic transforms, forecasts, diagnostics, and outcomes are explicitly classified. Old aliases and retired IDs live only in compatibility metadata, so they cannot duplicate tests or values. A prediction-error distribution appears only when the selected coordinate is already registered as a native prediction of the selected outcome. Every other pairing remains association-only.`, C.cyan)}
+          <div data-savedvalidation-ledger-navigator data-independent-axis-picker style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:7px;align-items:stretch;background:${C.card2};padding:9px;margin-bottom:10px"><label data-axis-role="score" style="min-width:0;border-top:3px solid ${C.purple};padding-top:7px"><span style="display:block;font-size:7px;color:${C.purple};font-weight:950;text-transform:uppercase;margin-bottom:3px">Y-axis · score interpretation</span><select data-savedvalidation-coordinate-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px">${coordinateOptions}</select><span style="display:block;font-size:6.5px;color:${C.faint};word-break:break-all;margin-top:4px">${esc(selectedId || 'No score selected')}</span></label><label data-axis-role="observed" style="min-width:0;border-top:3px solid ${C.green};padding-top:7px"><span style="display:block;font-size:7px;color:${C.green};font-weight:950;text-transform:uppercase;margin-bottom:3px">X-axis · raw observed video metric</span><select data-savedvalidation-outcome-picker style="width:100%;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:7px;font-size:8px">${outcomeOptions}</select><span style="display:block;font-size:6.5px;color:${C.faint};word-break:break-all;margin-top:4px">shorts.observed.${esc(outcome.key)}</span></label><div style="display:flex;align-items:end"><button type="button" data-savedvalidation-open-ledger="${esc(selectedId || '')}" style="width:100%;border:1px solid ${C.purple};background:transparent;color:${C.purple};padding:7px 9px;font-size:8px;font-weight:900;cursor:pointer;white-space:normal">inspect Y-axis source in ledger</button></div></div>
+          ${note(`<b>Axis contract:</b> the Y selector contains only non-outcome score coordinates. The X selector contains only raw measured channel data. ${allColumns.length} total ledger columns therefore become ${scoreColumns.length} selectable score interpretations plus ${observedCount} stored outcome coordinates; derived display outcomes such as swipe remain on the observed side without minting another predictor. A prediction-error distribution appears only in Accuracy when the selected score is natively registered for the selected outcome.`, C.cyan)}
           <div style="font-size:12px;color:${C.text};font-weight:950;margin:14px 0 4px">Selected ledger relationship</div>
           ${selectedPair}
           <nav data-savedvalidation-view-tabs style="display:flex;overflow-x:auto;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};margin:12px 0 10px;-webkit-overflow-scrolling:touch">${viewTabs}</nav>
