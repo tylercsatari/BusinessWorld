@@ -3,11 +3,38 @@
 
 const assert = require('assert');
 const {
+    OWNER_EMAIL,
+    isPrimaryOwnerAccount,
     isShortsExperimentSharedRoute,
     isPublic,
     permsAllow,
     routeBuilding,
 } = require('../auth');
+
+assert.strictEqual(
+    isPrimaryOwnerAccount({
+        role: 'owner',
+        email: OWNER_EMAIL.toUpperCase(),
+    }),
+    true,
+    'the configured primary owner must receive Team inspection access'
+);
+assert.strictEqual(
+    isPrimaryOwnerAccount({
+        role: 'owner',
+        email: 'another-owner@example.com',
+    }),
+    false,
+    'an owner role alone must not grant Tyler-only Team inspection access'
+);
+assert.strictEqual(
+    isPrimaryOwnerAccount({
+        role: 'member',
+        email: OWNER_EMAIL,
+    }),
+    false,
+    'the configured email must still have the authenticated owner role'
+);
 
 const jarvis = { buildings: ['Jarvis'], features: {} };
 const experimentLab = { buildings: ['Experiment Lab'], features: {} };

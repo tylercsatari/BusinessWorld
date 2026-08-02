@@ -12312,7 +12312,7 @@ const JarvisRetention = (function () {
         if (
             !isExperimentLabSurface()
             || !LAB_CONTEXT
-            || !LAB_CONTEXT.owner
+            || !LAB_CONTEXT.teamAccess
         ) return '';
         const accounts =
             Array.isArray(LAB_CONTEXT.accounts)
@@ -12389,7 +12389,7 @@ const JarvisRetention = (function () {
         const ownerTeamAllowed = !!(
             isExperimentLabSurface()
             && LAB_CONTEXT
-            && LAB_CONTEXT.owner
+            && LAB_CONTEXT.teamAccess
         );
         const channelsAllowed = !isExperimentLabSurface();
         const allowedTabs = ['hooks']
@@ -12404,7 +12404,7 @@ const JarvisRetention = (function () {
         const button = (key, label, count) => `<span data-savedbank="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:6px 12px;font-size:12px;font-weight:900">${label} <span style="font-size:9px;color:${tab === key ? C.accent : C.mute}">${count}</span></span>`;
         const teamCount =
             LAB_CONTEXT
-            && LAB_CONTEXT.owner
+            && LAB_CONTEXT.teamAccess
             && Array.isArray(LAB_CONTEXT.accounts)
                 ? LAB_CONTEXT.accounts.length
                 : 0;
@@ -12621,7 +12621,7 @@ const JarvisRetention = (function () {
         if (!isExperimentLabSurface()) return false;
         const next = view === 'team'
             && LAB_CONTEXT
-            && LAB_CONTEXT.owner
+            && LAB_CONTEXT.teamAccess
             ? 'team'
             : 'hooks';
         if (st.savedBank === next) return true;

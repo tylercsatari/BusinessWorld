@@ -1607,6 +1607,7 @@ async function main() {
                 },
                 readOnly: false,
                 owner: true,
+                teamAccess: true,
                 summary: {
                     counts: {
                         hooks: 1,
@@ -1695,6 +1696,7 @@ async function main() {
                 },
                 readOnly: true,
                 owner: true,
+                teamAccess: true,
                 summary: accountSummaries[1],
                 workspace: {
                     schema: 'experiment-lab-workspace-v1',
@@ -1836,6 +1838,7 @@ async function main() {
 <script>
 const nativeFetch=window.fetch.bind(window);
 const replies=${JSON.stringify(replies)};
+window.__labReplies=replies;
 const teamReplies=${JSON.stringify(teamReplies)};
 const teamAccountId=${JSON.stringify(teamAccountId)};
 const historicalSavedHookId=${JSON.stringify(historicalSavedHookId)};
@@ -2537,6 +2540,65 @@ window.fetch=function(url,options){
                 fullPage: false,
             });
         }
+
+        await page.evaluate(() => {
+            window.__labReplies['/api/experimentlab/context'] = {
+                schema: 'experiment-lab-workspace-v1',
+                viewer: {
+                    id: '33333333-3333-4333-8333-333333333333',
+                    email: 'another-owner@example.com',
+                    name: 'Another Owner',
+                    role: 'owner',
+                },
+                activeAccount: {
+                    id: '33333333-3333-4333-8333-333333333333',
+                    email: 'another-owner@example.com',
+                    name: 'Another Owner',
+                    role: 'owner',
+                },
+                readOnly: false,
+                owner: true,
+                teamAccess: false,
+                summary: {
+                    counts: {
+                        hooks: 0,
+                        channels: 0,
+                        storyboards: 0,
+                    },
+                    folderCounts: {
+                        hooks: 0,
+                        channels: 0,
+                        storyboards: 0,
+                    },
+                    activityCount: 0,
+                },
+                workspace: {
+                    schema: 'experiment-lab-workspace-v1',
+                    collections: {
+                        hooks: { folders: [], items: [] },
+                        channels: { folders: [], items: [] },
+                        storyboards: { folders: [], items: [] },
+                    },
+                    activity: [],
+                },
+                accounts: [],
+            };
+            BuildingRegistry.get('Experiment Lab').close();
+            const host = document.getElementById('root');
+            host.innerHTML = '';
+            BuildingRegistry.get('Experiment Lab').open(host);
+        });
+        await page.locator(
+            '[data-experiment-lab-account]'
+        ).getByText('Another Owner', { exact: true }).waitFor();
+        assert.strictEqual(
+            await page.locator(
+                '.experiment-lab-tab[data-lab-view="team"]'
+            ).count(),
+            0,
+            'a non-Tyler account must not receive a Team tab in the DOM, '
+                + 'even if its stored role is owner'
+        );
 
         // Saved-channel research remains a Jarvis capability. Exercise the
         // same canonical renderer directly so removing it from Experiment Lab

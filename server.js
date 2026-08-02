@@ -2757,6 +2757,10 @@ const r2JsonCasStorage = Object.freeze({
 
 const experimentLabWorkspaceCasCache = new Map();
 
+function experimentLabCanInspectTeam(account) {
+    return auth.isPrimaryOwnerAccount(account);
+}
+
 function experimentLabPermissionBuildings(req) {
     const permissions = req && req._perms;
     return new Set(
@@ -2835,7 +2839,7 @@ async function experimentLabAccountScope(
             readOnly: true,
         };
     }
-    if (viewer.role !== 'owner') {
+    if (!experimentLabCanInspectTeam(viewer)) {
         throw new HttpRequestError(
             403,
             'You cannot inspect another Experiment Lab account.',
@@ -2931,7 +2935,7 @@ function experimentLabHasItem(workspace, kind, id) {
 
 function experimentLabCanControlSavedChannel(scope, manifest) {
     if (!scope) return true;
-    if (scope.viewer && scope.viewer.role === 'owner') return true;
+    if (experimentLabCanInspectTeam(scope.viewer)) return true;
     return !!(
         manifest
         && manifest.experimentLabControlKey
@@ -3101,12 +3105,14 @@ async function recordExperimentLabActivity(scope, activity) {
 async function ensureInitialExperimentLabWorkspace(account) {
     const current = await readExperimentLabWorkspace(account);
     if (current.exists) return current.workspace;
+    const importsLegacyOwnerWorkspace =
+        experimentLabCanInspectTeam(account);
     let legacy = {
         hooks: [],
         channels: [],
         storyboards: [],
     };
-    if (account && account.role === 'owner') {
+    if (importsLegacyOwnerWorkspace) {
         const [hookIndex, channelIndex, storyboardIndex] =
             await Promise.all([
                 readSavedHookIndex().then(result =>
@@ -3149,14 +3155,14 @@ async function ensureInitialExperimentLabWorkspace(account) {
                 }
             }
             experimentLabWorkspace.addActivity(workspace, {
-                type: account && account.role === 'owner'
+                type: importsLegacyOwnerWorkspace
                     ? 'legacy-owner-import'
                     : 'workspace-created',
                 status: 'complete',
-                title: account && account.role === 'owner'
+                title: importsLegacyOwnerWorkspace
                     ? 'Imported the existing owner Experiment library'
                     : 'Created Experiment Lab workspace',
-                detail: account && account.role === 'owner'
+                detail: importsLegacyOwnerWorkspace
                     ? (
                         `${legacy.hooks.length} hooks, `
                         + `${legacy.channels.length} channels, and `
@@ -7140,6 +7146,8 @@ async function handleHttpRequest(req, res) {
     }
     const experimentLabInspectionTarget =
         experimentLabTargetId(req, url);
+    const experimentLabTeamAccess =
+        experimentLabCanInspectTeam(req._account);
     if (
         isExperimentLabRequest(req, url)
         && experimentLabWorkspace
@@ -7154,10 +7162,10 @@ async function handleHttpRequest(req, res) {
             'Cache-Control': 'no-store',
         });
         res.end(JSON.stringify({
-            error: req._account.role === 'owner'
+            error: experimentLabTeamAccess
                 ? 'Owner team inspection is read-only.'
                 : 'You cannot modify another Experiment Lab account.',
-            code: req._account.role === 'owner'
+            code: experimentLabTeamAccess
                 ? 'experiment_lab_team_read_only'
                 : 'experiment_lab_account_forbidden',
         }));
@@ -7186,6 +7194,8 @@ async function handleHttpRequest(req, res) {
                 : await ensureInitialExperimentLabWorkspace(
                     scope.account
                 );
+            const teamAccess =
+                experimentLabCanInspectTeam(scope.viewer);
             const response = {
                 schema: experimentLabWorkspace.SCHEMA,
                 surface: 'experiment-lab',
@@ -7198,8 +7208,9 @@ async function handleHttpRequest(req, res) {
                 workspace,
                 summary:
                     experimentLabWorkspace.summary(workspace),
-                owner: scope.viewer.role === 'owner',
-                accounts: scope.viewer.role === 'owner'
+                owner: teamAccess,
+                teamAccess,
+                accounts: teamAccess
                     ? await experimentLabAccountSummaries()
                     : [],
             };
@@ -10182,7 +10193,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         if (
                             current
                             && labScope
-                            && labScope.viewer.role !== 'owner'
+                            && !experimentLabCanInspectTeam(
+                                labScope.viewer
+                            )
                             && current.experimentLabControlKey
                                 !== labControlKey
                         ) {

@@ -25,6 +25,15 @@ const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'tylerdaviscsatari@gmail.com').t
 
 const ROLES = ['owner', 'storage', 'pending'];
 
+function isPrimaryOwnerAccount(account) {
+    return !!(
+        account
+        && account.role === 'owner'
+        && String(account.email || '').trim().toLowerCase()
+            === OWNER_EMAIL
+    );
+}
+
 // ── Verify a Supabase access token against the Auth API → { id, email, name } ──
 const tokenCache = new Map(); // token → { user, exp }
 async function verifyToken(token) {
@@ -242,4 +251,5 @@ module.exports = {
     verifyToken, getOrCreateAccount, accountForRequest, gate, permsForAccount,
     routeBuilding, permsAllow, isPublic,
     isShortsExperimentSharedRoute,
+    isPrimaryOwnerAccount,
 };

@@ -24,6 +24,9 @@ const ExperimentLabUI = (() => {
         '[data-savedopen]',
         '[data-labteamhook]',
     ].join(',');
+    const PRIMARY_VIEW_KEYS = Object.freeze(
+        Object.keys(VIEWS).filter(key => key !== 'team')
+    );
 
     let container = null;
     let panel = null;
@@ -41,7 +44,7 @@ const ExperimentLabUI = (() => {
 
     function viewButton(key) {
         const view = VIEWS[key];
-        return `<button class="experiment-lab-tab" type="button" role="tab" data-lab-view="${key}" aria-selected="${key === activeView}" tabindex="${key === activeView ? 0 : -1}"${key === 'team' ? ' hidden' : ''}><span>${view.title}</span>${key === 'hooks' ? '<small data-lab-hook-count></small>' : ''}</button>`;
+        return `<button class="experiment-lab-tab" type="button" role="tab" data-lab-view="${key}" aria-selected="${key === activeView}" tabindex="${key === activeView ? 0 : -1}"><span>${view.title}</span>${key === 'hooks' ? '<small data-lab-hook-count></small>' : ''}</button>`;
     }
 
     function shellMarkup() {
@@ -65,7 +68,7 @@ const ExperimentLabUI = (() => {
                     </div>
                 </header>
                 <nav class="experiment-lab-tabs" aria-label="Experiment Lab" role="tablist">
-                    <div class="experiment-lab-tabs-inner">${Object.keys(VIEWS).map(viewButton).join('')}</div>
+                    <div class="experiment-lab-tabs-inner">${PRIMARY_VIEW_KEYS.map(viewButton).join('')}</div>
                 </nav>
                 <div class="experiment-lab-view-heading">
                     <div>
@@ -162,15 +165,40 @@ const ExperimentLabUI = (() => {
         if (text) text.textContent = label;
     }
 
+    function syncTeamNavigation(teamAccess) {
+        if (!panel) return;
+        const navigation = panel.querySelector(
+            '.experiment-lab-tabs-inner'
+        );
+        let teamTab = panel.querySelector(
+            '.experiment-lab-tab[data-lab-view="team"]'
+        );
+        if (!teamAccess) {
+            if (activeView === 'team') setView('hooks');
+            if (teamTab) teamTab.remove();
+            return;
+        }
+        if (!teamTab && navigation) {
+            navigation.insertAdjacentHTML(
+                'beforeend',
+                viewButton('team')
+            );
+            teamTab = navigation.querySelector(
+                '.experiment-lab-tab[data-lab-view="team"]'
+            );
+        }
+        if (teamTab) teamTab.hidden = false;
+    }
+
     function renderContext(context) {
         if (!panel) return;
         currentContext = context || null;
         const accountLabel = panel.querySelector('[data-experiment-lab-account]');
-        const teamTab = panel.querySelector('[data-lab-view="team"]');
         const hookCount = panel.querySelector('[data-lab-hook-count]');
         const active = context && context.activeAccount;
         const owner = !!(context && context.owner);
-        if (teamTab) teamTab.hidden = !owner;
+        const teamAccess = !!(context && context.teamAccess);
+        syncTeamNavigation(teamAccess);
         if (!active) {
             setStatus('error', 'Workspace unavailable');
             if (accountLabel) accountLabel.textContent = 'Account scope unavailable';
@@ -194,7 +222,7 @@ const ExperimentLabUI = (() => {
                 ? String(+counts.hooks)
                 : '';
         }
-        if (!owner && activeView === 'team') setView('hooks');
+        if (!teamAccess && activeView === 'team') setView('hooks');
     }
 
     function onShellClick(event) {
@@ -226,7 +254,10 @@ const ExperimentLabUI = (() => {
 
     function setView(nextView, restoreScroll) {
         if (!VIEWS[nextView] || !panel || !workspace) return;
-        if (nextView === 'team' && !(currentContext && currentContext.owner)) return;
+        if (
+            nextView === 'team'
+            && !(currentContext && currentContext.teamAccess)
+        ) return;
         scrollPositions[activeView] = workspace.scrollTop;
         activeView = nextView;
         if (
