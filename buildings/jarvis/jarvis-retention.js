@@ -10,6 +10,9 @@ const JarvisRetention = (function () {
     const BASE_COLORS = Object.freeze({ bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' });
+    const EXPERIMENT_LAB_COLORS = Object.freeze({ bg: '#f5f5f7', card: '#ffffff', card2: '#f7f7fa', border: '#dedee5', border2: '#c8c8d0',
+        text: '#1d1d1f', dim: '#515159', mute: '#777780', faint: '#a0a0aa', cyan: '#087f8c', green: '#16845b',
+        orange: '#bd5d2b', red: '#cf3f45', purple: '#6c5bb8', yellow: '#9a6b0b', amber: '#ad6900', accent: '#006edb' });
     const SHORTS_EXPERIMENT_RENDERER_ID =
         'shorts-quant-experiment-surface-v1';
     const C = { ...BASE_COLORS };
@@ -4360,6 +4363,9 @@ const JarvisRetention = (function () {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${dots}</div>
             <div style="font-size:11px;color:${C.cyan};margin-top:8px;font-weight:600">⏳ ${esc(sub)}${cold ? ` <span style="color:${C.mute};font-weight:400">· first run this session spins up the GPU (~2 min), then it's fast</span>` : ''}</div></div>`;
     }
+    function experimentRegion(name, html) {
+        return `<section data-experiment-region="${name}">${html}</section>`;
+    }
     function renderExperiment() {
         scoreContractEnsure();
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
@@ -4383,8 +4389,8 @@ const JarvisRetention = (function () {
             ? `<div style="margin-top:10px">${renderStoryboardWorkbench()}</div>`
             : '';
         const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, 'Storyboard')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video(s)'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${expCreatorProfileHtml()}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
-        if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
-        if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
+        if (!EXPREG || EXPREG.loading) return experimentRegion('create', head) + experimentRegion('score', controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`)) + experimentRegion('library', savedBank());
+        if (EXPREG.error || !EXPREG.indicators) return experimentRegion('create', head) + experimentRegion('score', controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`)) + experimentRegion('library', savedBank());
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
         const scorableKind = d => d.kind === 'content' || d.kind === 'novelty';
         const val = EXPREG.indicators.filter(d => d.validated && scorableKind(d));
@@ -4394,7 +4400,9 @@ const JarvisRetention = (function () {
         const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
         if (!up) {
             const byT = {}; val.forEach(d => { (byT[d.target] = byT[d.target] || []).push(d); });
-            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12) + savedBank();
+            return experimentRegion('create', head)
+                + experimentRegion('score', controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12))
+                + experimentRegion('library', savedBank());
         }
         scoreContractEnsure();
         const upMontageSrc = up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : '');
@@ -4722,15 +4730,18 @@ const JarvisRetention = (function () {
             ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
-        return head
-            + controls
-            + '<div id="exp-scoreout"></div>'
-            + trace
-            + savedVisualKeepCoordinateTableHtml(up)
-            + rawScoreProvenanceHtml(up)
-            + keepDecisionReadout
-            + boxes
-            + savedBank();
+        return experimentRegion('create', head)
+            + experimentRegion(
+                'score',
+                controls
+                + '<div id="exp-scoreout"></div>'
+                + trace
+                + savedVisualKeepCoordinateTableHtml(up)
+                + rawScoreProvenanceHtml(up)
+                + keepDecisionReadout
+                + boxes
+            )
+            + experimentRegion('library', savedBank());
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
@@ -12251,8 +12262,8 @@ const JarvisRetention = (function () {
         }
         const summary = context.summary || {};
         const counts = summary.counts || {};
-        return `<div data-lab-workspace-banner style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid ${C.border};border-left:4px solid ${C.accent};background:${C.card};padding:10px 12px;margin-bottom:14px">
-          <div><div style="font:700 17px/1.2 Georgia,serif;color:${C.text}">${esc(account.name || account.email || 'My workspace')}</div><div style="font-size:9px;color:${C.mute};margin-top:3px;text-transform:uppercase">private account library · shared canonical scorer · ${counts.hooks || 0} hooks · ${counts.channels || 0} channels · ${counts.storyboards || 0} storyboards</div></div>
+        return `<div data-lab-workspace-banner style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid ${C.border};background:${C.card};padding:10px 12px;margin-bottom:14px">
+          <div><div style="font-size:17px;font-weight:750;line-height:1.2;color:${C.text}">${esc(account.name || account.email || 'My workspace')}</div><div style="font-size:9px;color:${C.mute};margin-top:3px">Private hook library · shared canonical scorer · ${counts.hooks || 0} hooks · ${counts.storyboards || 0} storyboards</div></div>
           <div style="font-size:8px;color:${context.readOnly ? C.amber : C.green};font-weight:900;text-transform:uppercase">${context.readOnly ? 'owner inspection · read only' : 'private workspace'}</div>
         </div>`;
     }
@@ -12264,19 +12275,11 @@ const JarvisRetention = (function () {
         st.labTeamError = null;
         rtgUpdateExp();
         try {
-            const [context, hooks, channels, storyboards] =
+            const [context, hooks, storyboards] =
                 await Promise.all([
                     loadExperimentLabContext(accountId),
                     rtFetchJson(
                         '/api/raw/saved-hooks',
-                        {
-                            cache: 'no-store',
-                            _labAccount: accountId,
-                        },
-                        4
-                    ),
-                    rtFetchJson(
-                        '/api/raw/saved-channels',
                         {
                             cache: 'no-store',
                             _labAccount: accountId,
@@ -12295,7 +12298,6 @@ const JarvisRetention = (function () {
             LAB_TEAM_DATA[accountId] = {
                 context,
                 hooks,
-                channels,
                 storyboards,
                 loadedAt: Date.now(),
             };
@@ -12324,7 +12326,7 @@ const JarvisRetention = (function () {
             const active = account.id === selectedId;
             const counts = summary.counts || {};
             const unavailable = summary.unavailable === true;
-            return `<button type="button" ${unavailable ? 'disabled' : `data-labteamaccount="${esc(account.id)}"`} title="${unavailable ? esc(summary.error || 'Workspace unavailable') : ''}" style="text-align:left;border:1px solid ${active ? C.accent : unavailable ? C.red : C.border};border-left:3px solid ${active ? C.accent : unavailable ? C.red : C.border2};background:${active ? C.card2 : C.card};color:${C.text};padding:9px 10px;cursor:${unavailable ? 'not-allowed' : 'pointer'};opacity:${unavailable ? '0.62' : '1'};min-width:180px"><b style="display:block;font:700 13px/1.25 Georgia,serif">${esc(account.name || account.email || account.id)}</b><span style="display:block;font-size:8px;color:${unavailable ? C.red : C.mute};margin-top:3px">${unavailable ? 'workspace unavailable · active workspace remains usable' : `${counts.hooks || 0} hooks · ${counts.channels || 0} channels · ${summary.activityCount || 0} actions`}</span></button>`;
+            return `<button type="button" ${unavailable ? 'disabled' : `data-labteamaccount="${esc(account.id)}"`} title="${unavailable ? esc(summary.error || 'Workspace unavailable') : ''}" style="text-align:left;border:1px solid ${active ? C.accent : unavailable ? C.red : C.border};background:${active ? C.card2 : C.card};color:${C.text};padding:9px 10px;cursor:${unavailable ? 'not-allowed' : 'pointer'};opacity:${unavailable ? '0.62' : '1'};min-width:180px"><b style="display:block;font-size:13px;font-weight:750;line-height:1.25">${esc(account.name || account.email || account.id)}</b><span style="display:block;font-size:8px;color:${unavailable ? C.red : C.mute};margin-top:3px">${unavailable ? 'workspace unavailable · active workspace remains usable' : `${counts.hooks || 0} hooks · ${counts.storyboards || 0} storyboards · ${summary.activityCount || 0} actions`}</span></button>`;
         };
         const accountRail = `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:7px;margin-bottom:10px">${accounts.map(accountButton).join('')}</div>`;
         if (st.labTeamLoading) {
@@ -12349,14 +12351,10 @@ const JarvisRetention = (function () {
             selected.context.workspace || {};
         const hookRows =
             selected.hooks.hooks || [];
-        const channelRows =
-            selected.channels.channels || [];
         const storyboardRows =
             selected.storyboards.storyboards || [];
         const hookFolders =
             selected.hooks.folders || [];
-        const channelFolders =
-            selected.channels.folders || [];
         const storyboardFolders =
             selected.storyboards.folders || [];
         const folderName = (folders, id) => {
@@ -12374,9 +12372,6 @@ const JarvisRetention = (function () {
                 : '';
             return `<button type="button" data-labteamhook="${esc(hook.id)}" style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:9px;text-align:left;border:1px solid ${C.border};background:${C.card};padding:7px;color:${C.text};cursor:pointer;min-width:0">${thumb ? `<img src="${thumb}" alt="" loading="lazy" style="width:96px;aspect-ratio:16/9;object-fit:cover;background:${C.card2}">` : `<span style="width:96px;aspect-ratio:16/9;background:${C.card2};display:block"></span>`}<span><b style="display:block;font-size:10px;line-height:1.35">${esc(hook.title || 'Saved hook')}</b><small style="display:block;color:${C.mute};font-size:8px;margin-top:5px">${esc(folderName(hookFolders, hook.folder))} · open exact ledger</small></span></button>`;
         }).join('');
-        const channelCards = channelRows.map(channel =>
-            `<div style="border:1px solid ${C.border};background:${C.card};padding:8px 9px"><b style="display:block;font-size:10px;color:${C.text}">${esc(channel.name || channel.url)}</b><span style="display:block;font-size:8px;color:${C.mute};margin-top:3px">${esc(folderName(channelFolders, channel.folder))} · ${esc(channel.status || 'saved')} · ${channel.completed || 0}/${channel.discovered || 0} scored</span></div>`
-        ).join('');
         const storyboardCards = storyboardRows.map(storyboard =>
             `<div style="border:1px solid ${C.border};background:${C.card};padding:8px 9px"><b style="display:block;font-size:10px;color:${C.text}">${esc(storyboard.name || 'Untitled opening')}</b><span style="display:block;font-size:8px;color:${C.mute};margin-top:3px">${esc(folderName(storyboardFolders, storyboard.folder))} · ${storyboard.complete ? 'complete' : 'draft'} · ${storyboard.scored ? 'scored' : 'not scored'} · ${esc(storyboard.model || 'model unavailable')}</span></div>`
         ).join('');
@@ -12386,12 +12381,26 @@ const JarvisRetention = (function () {
             .join('');
         return accountRail
             + (st.savedSel ? savedDetail() : '')
-            + `<div data-lab-team-collections style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px"><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.accent};margin-bottom:6px">Saved hooks · ${hookRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${hookCards || '<div style="font-size:9px;color:inherit">No saved hooks.</div>'}</div></section><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.cyan};margin-bottom:6px">Saved channels · ${channelRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${channelCards || '<div style="font-size:9px;color:inherit">No saved channels.</div>'}</div></section><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.amber};margin-bottom:6px">Saved storyboards · ${storyboardRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${storyboardCards || '<div style="font-size:9px;color:inherit">No saved storyboards.</div>'}</div></section></div>`
+            + `<div data-lab-team-collections style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px"><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.accent};margin-bottom:6px">Saved hooks · ${hookRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${hookCards || '<div style="font-size:9px;color:inherit">No saved hooks.</div>'}</div></section><section><div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.amber};margin-bottom:6px">Saved storyboards · ${storyboardRows.length}</div><div style="display:grid;gap:6px;max-height:460px;overflow:auto">${storyboardCards || '<div style="font-size:9px;color:inherit">No saved storyboards.</div>'}</div></section></div>`
             + cardc(`<div style="font-size:10px;font-weight:900;text-transform:uppercase;color:${C.purple};margin-bottom:6px">Generated, scored, saved, and removed activity</div><div style="overflow:auto;max-height:440px"><table style="border-collapse:collapse;width:100%;min-width:620px;font-size:8.5px"><thead><tr style="text-align:left;color:${C.mute}"><th style="padding:6px">work</th><th style="padding:6px">operation</th><th style="padding:6px">state</th><th style="padding:6px">updated</th></tr></thead><tbody>${activity || '<tr><td colspan="4" style="padding:12px">No recorded activity.</td></tr>'}</tbody></table></div>`, 10);
     }
 
     function savedBank() {
-        const tab = st.savedBank || 'hooks', hookCount = (SAVED && SAVED.hooks || []).length, channelCount = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).length;
+        const ownerTeamAllowed = !!(
+            isExperimentLabSurface()
+            && LAB_CONTEXT
+            && LAB_CONTEXT.owner
+        );
+        const channelsAllowed = !isExperimentLabSurface();
+        const allowedTabs = ['hooks']
+            .concat(channelsAllowed ? ['channels'] : [])
+            .concat(ownerTeamAllowed ? ['team'] : []);
+        const requestedTab = st.savedBank || 'hooks';
+        const tab = allowedTabs.includes(requestedTab)
+            ? requestedTab
+            : 'hooks';
+        if (tab !== requestedTab) st.savedBank = tab;
+        const hookCount = (SAVED && SAVED.hooks || []).length, channelCount = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).length;
         const button = (key, label, count) => `<span data-savedbank="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:6px 12px;font-size:12px;font-weight:900">${label} <span style="font-size:9px;color:${tab === key ? C.accent : C.mute}">${count}</span></span>`;
         const teamCount =
             LAB_CONTEXT
@@ -12399,10 +12408,7 @@ const JarvisRetention = (function () {
             && Array.isArray(LAB_CONTEXT.accounts)
                 ? LAB_CONTEXT.accounts.length
                 : 0;
-        const teamButton =
-            isExperimentLabSurface()
-            && LAB_CONTEXT
-            && LAB_CONTEXT.owner
+        const teamButton = ownerTeamAllowed
                 ? button('team', 'Team workspaces', teamCount)
                 : '';
         const panel = tab === 'team'
@@ -12410,7 +12416,8 @@ const JarvisRetention = (function () {
             : tab === 'channels'
                 ? savedChannelsPanel()
                 : savedStrip();
-        return cardc(`<div style="display:flex;gap:4px;overflow-x:auto">${button('hooks', 'Saved hooks', hookCount)}${button('channels', 'Saved channels', channelCount)}${teamButton}</div>`, 6) + panel;
+        if (isExperimentLabSurface()) return panel;
+        return cardc(`<div style="display:flex;gap:4px;overflow-x:auto">${button('hooks', 'Saved hooks', hookCount)}${channelsAllowed ? button('channels', 'Saved channels', channelCount) : ''}${teamButton}</div>`, 6) + panel;
     }
     function savedStrip() {
         if (!SAVED || SAVED.loading) return cardc(`<div style="padding:18px;text-align:center;color:${C.dim}">Loading saved hooks…</div>`, 10);
@@ -12575,7 +12582,12 @@ const JarvisRetention = (function () {
                 ? 'experiment-lab'
                 : 'jarvis';
         mountSurface = next;
-        Object.assign(C, BASE_COLORS);
+        Object.assign(
+            C,
+            next === 'experiment-lab'
+                ? EXPERIMENT_LAB_COLORS
+                : BASE_COLORS
+        );
         SAVED = null;
         SAVEDDETAIL = {};
         SAVEDCHANNELS = null;
@@ -12603,6 +12615,19 @@ const JarvisRetention = (function () {
         st.rawUpSel = null;
         st.rawSel = null;
         st.rawView = 'map';
+    }
+
+    function setExperimentLabLibraryView(view) {
+        if (!isExperimentLabSurface()) return false;
+        const next = view === 'team'
+            && LAB_CONTEXT
+            && LAB_CONTEXT.owner
+            ? 'team'
+            : 'hooks';
+        if (st.savedBank === next) return true;
+        st.savedBank = next;
+        if (root && root.isConnected) rtgUpdateExp();
+        return true;
     }
 
     async function loadExperimentLabContext(accountId) {
@@ -12783,10 +12808,13 @@ const JarvisRetention = (function () {
             workspaceExtensions: [
                 'account-scope',
                 'folders',
-                'team-inspection',
+                'surface-navigation',
+                'private-saved-hooks',
+                'owner-team-inspection',
             ],
         }),
         getExperimentContext: () => LAB_CONTEXT,
+        setExperimentLabLibraryView,
         __st: () => st,
     };
 })();

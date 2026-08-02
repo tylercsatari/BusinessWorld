@@ -188,6 +188,13 @@ async function main() {
         0,
         'Experiment Lab shell must not duplicate canonical API workflows'
     );
+    assert(
+        labUiSource.includes("hooks: {")
+            && labUiSource.includes("team: {")
+            && !labUiSource.includes("channels: {"),
+        'Experiment Lab navigation must expose private hooks and owner Team '
+            + 'oversight without exposing the Jarvis Saved Channels product'
+    );
     const retentionSource = fs.readFileSync(
         path.join(ROOT, 'buildings/jarvis/jarvis-retention.js'),
         'utf8'
@@ -242,14 +249,14 @@ async function main() {
         'utf8'
     );
     for (const color of [
-        '#14231c',
-        '#eee7d8',
-        '#d7673f',
-        '#1f8a78',
+        '#f5f5f7',
+        '#ffffff',
+        '#1d1d1f',
+        '#006edb',
     ]) {
         assert(
             labCssSource.includes(color),
-            `Experiment Lab editorial palette is missing ${color}`
+            `Experiment Lab light product palette is missing ${color}`
         );
     }
     assert(
@@ -260,11 +267,17 @@ async function main() {
     );
     assert(
         labCssSource.includes('.shorts-experiment-surface')
-            && !/\.experiment-lab-workspace\s+(?:button|input|select|textarea|table|img|svg|video|canvas|\[data-saved)/.test(
-                labCssSource
-            ),
-        'shared Shorts controls must use shared responsive CSS instead of a '
-            + 'host-specific restyle'
+            && labCssSource.includes('.experiment-lab-tab')
+            && labCssSource.includes('border-radius: 26px')
+            && labCssSource.includes('@media (max-width: 760px)'),
+        'Experiment Lab must give the shared controls a dedicated rounded, '
+            + 'responsive product presentation'
+    );
+    assert(
+        retentionSource.includes('const channelsAllowed = !isExperimentLabSurface();')
+            && retentionSource.includes("if (isExperimentLabSurface()) return panel;"),
+        'surface policy must remove Saved Channels only from Experiment Lab '
+            + 'without forking the canonical saved-library renderer'
     );
     const featureContract = JSON.parse(fs.readFileSync(path.join(ROOT, 'buildings/jarvis/saved-channel-feature-contract.json'), 'utf8'));
     const featureContractSha256 = crypto.createHash('sha256')
@@ -1981,7 +1994,9 @@ window.fetch=function(url,options){
             workspaceExtensions: [
                 'account-scope',
                 'folders',
-                'team-inspection',
+                'surface-navigation',
+                'private-saved-hooks',
+                'owner-team-inspection',
             ],
         });
         assert.strictEqual(
@@ -2015,7 +2030,7 @@ window.fetch=function(url,options){
             console.error('INITIAL ROOT:', (await page.locator('#root').innerText()).slice(0, 1500));
             throw error;
         }
-        await page.locator('[data-savedbank="team"]').click();
+        await page.locator('.experiment-lab-tab[data-lab-view="team"]').click();
         await page.locator(
             `[data-labteamaccount="${teamAccountId}"]`
         ).click();
@@ -2048,9 +2063,9 @@ window.fetch=function(url,options){
             await page.getByText(
                 'Reference Channels',
                 { exact: false }
-            ).count() > 0,
-            true,
-            'owner inspection must display another account channel folder'
+            ).count(),
+            0,
+            'Experiment Lab owner inspection must not expose saved channels'
         );
         assert.strictEqual(
             await page.getByText(
@@ -2068,14 +2083,15 @@ window.fetch=function(url,options){
                 ))
                 && window.__labTargetRequests.some(request => (
                     request.account === accountId
-                    && request.path === '/api/raw/saved-channels'
-                ))
-                && window.__labTargetRequests.some(request => (
-                    request.account === accountId
                     && request.path === '/api/storyboards'
                 ))
+                && !window.__labTargetRequests.some(request => (
+                    request.account === accountId
+                    && request.path === '/api/raw/saved-channels'
+                ))
             ), teamAccountId),
-            'owner inspection must scope canonical library reads to the selected account'
+            'owner inspection must scope hooks and storyboards to the selected '
+                + 'account without loading its saved-channel research library'
         );
         await page.locator(
             `[data-labteamhook="${historicalSavedHookId}"]`
@@ -2083,7 +2099,7 @@ window.fetch=function(url,options){
         try {
             await page.locator(
                 '[data-saved-detail-state="team-read-only"]'
-            ).waitFor();
+            ).waitFor({ state: 'attached' });
         } catch (error) {
             console.error(
                 'TEAM DETAIL STATES:',
@@ -2118,10 +2134,13 @@ window.fetch=function(url,options){
             'team inspection must never expose a write-capable re-score action'
         );
         await page.locator(
+            '.experiment-lab-tab[data-lab-view="team"]'
+        ).click();
+        await page.locator(
             `[data-labteamaccount="${ownerAccountId}"]`
         ).click();
         await page.getByText('Owner workspace', { exact: true }).waitFor();
-        await page.locator('[data-savedbank="hooks"]').click();
+        await page.locator('.experiment-lab-tab[data-lab-view="score"]').click();
         const storyboardMode = page.locator(
             '[data-rawbuildmode="1"]'
         ).first();
@@ -2150,6 +2169,7 @@ window.fetch=function(url,options){
         await page.getByPlaceholder(
             'or paste a YouTube link…'
         ).waitFor();
+        await page.locator('.experiment-lab-tab[data-lab-view="hooks"]').click();
         const historicalSavedHookCard = page.locator(
             `[data-savedopen="${historicalSavedHookId}"]`
         );
@@ -2205,7 +2225,7 @@ window.fetch=function(url,options){
         );
         await page.locator(
             '[data-saved-detail-state="historical-read-only"]'
-        ).waitFor();
+        ).waitFor({ state: 'attached' });
         const openedHistoricalCoordinate = page.locator(
             '#rtg-exppanel '
                 + '[data-coordinate-id="shorts.stored.together.keep"]'
@@ -2363,6 +2383,120 @@ window.fetch=function(url,options){
             'the upgrade must persist the exact canonical JPEG returned '
                 + 'by the scorer instead of the older display montage'
         );
+        assert.strictEqual(
+            await page.locator('[data-savedbank="channels"]').count(),
+            0,
+            'Experiment Lab must not expose the Jarvis Saved Channels tab'
+        );
+        assert.strictEqual(
+            await page.getByPlaceholder('https://youtube.com/@channel').count(),
+            0,
+            'Experiment Lab must not load the saved-channel intake form'
+        );
+        assert.strictEqual(
+            await page.locator('.experiment-lab-tab[data-lab-view="team"]').count(),
+            1,
+            'the owner must receive exactly one Team workspace tab'
+        );
+        assert.deepStrictEqual(
+            await page.evaluate(() => ({
+                width: document.documentElement.clientWidth,
+                scroll: document.documentElement.scrollWidth,
+            })),
+            { width: 1280, scroll: 1280 }
+        );
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        assert.deepStrictEqual(
+            await page.evaluate(() => ({
+                width: document.documentElement.clientWidth,
+                scroll: document.documentElement.scrollWidth,
+            })),
+            { width: 390, scroll: 390 }
+        );
+        const labWorkspace = page.locator('.experiment-lab-workspace');
+        const scrollState = await labWorkspace.evaluate(element => ({
+            overflowY: getComputedStyle(element).overflowY,
+            clientHeight: element.clientHeight,
+            scrollHeight: element.scrollHeight,
+            top: element.scrollTop,
+        }));
+        assert.strictEqual(
+            scrollState.overflowY,
+            'auto',
+            'the lab workspace must own vertical scrolling'
+        );
+        assert(
+            scrollState.scrollHeight > scrollState.clientHeight,
+            'mobile workspace should contain enough content to scroll'
+        );
+        await labWorkspace.evaluate(element => {
+            element.scrollTop = element.scrollHeight;
+        });
+        const mobileScrollTop = await labWorkspace.evaluate(
+            element => element.scrollTop
+        );
+        assert(
+            mobileScrollTop > 0,
+            'mobile Experiment Lab must scroll independently of the hidden page body'
+        );
+        await labWorkspace.evaluate(element => {
+            element.scrollTop = 0;
+        });
+        if (process.env.EXPERIMENT_LAB_SCREENSHOT) {
+            fs.mkdirSync(
+                path.dirname(process.env.EXPERIMENT_LAB_SCREENSHOT),
+                { recursive: true }
+            );
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_SCREENSHOT,
+                fullPage: false,
+            });
+        }
+        await page.setViewportSize({ width: 1280, height: 820 });
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="create"]'
+        ).click();
+        assert.strictEqual(
+            await page.locator(
+                '.experiment-lab-tab[data-lab-view="create"]'
+            ).getAttribute('aria-selected'),
+            'true',
+            'Create must own the selected navigation state after switching views'
+        );
+        assert.strictEqual(
+            await page.locator(
+                '.experiment-lab-tab[data-lab-view="score"]'
+            ).getAttribute('aria-selected'),
+            'false',
+            'Score must release the selected navigation state after switching views'
+        );
+        if (process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT) {
+            fs.mkdirSync(
+                path.dirname(process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT),
+                { recursive: true }
+            );
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT,
+                fullPage: false,
+            });
+        }
+
+        // Saved-channel research remains a Jarvis capability. Exercise the
+        // same canonical renderer directly so removing it from Experiment Lab
+        // does not reduce ledger and validation coverage.
+        await page.evaluate(async () => {
+            BuildingRegistry.get('Experiment Lab').close();
+            const host = document.getElementById('root');
+            host.innerHTML = '';
+            await window.JarvisRetention.mountShortsExperiment(
+                host,
+                { surface: 'jarvis' }
+            );
+        });
+        await page.locator(
+            '[data-shorts-experiment-renderer="shorts-quant-experiment-surface-v1"]'
+        ).waitFor();
         await page.locator('[data-savedbank="channels"]').click();
         assert.strictEqual(await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder("the hook you're writing — every variant stays grounded on this…").count(), 1);
@@ -2373,12 +2507,6 @@ window.fetch=function(url,options){
 
         await page.setViewportSize({ width: 390, height: 844 });
         assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 390, scroll: 390 });
-        const workspace = page.locator('.experiment-lab-workspace');
-        const scrollState = await workspace.evaluate(element => ({ overflowY: getComputedStyle(element).overflowY, clientHeight: element.clientHeight, scrollHeight: element.scrollHeight, top: element.scrollTop }));
-        assert.strictEqual(scrollState.overflowY, 'auto', 'the lab workspace must own vertical scrolling');
-        assert(scrollState.scrollHeight > scrollState.clientHeight, 'mobile workspace should contain enough content to scroll');
-        await workspace.evaluate(element => { element.scrollTop = element.scrollHeight; });
-        assert((await workspace.evaluate(element => element.scrollTop)) > 0, 'mobile Experiment Lab must scroll independently of the hidden page body');
         await page.getByText('Mobile Risk Channel', { exact: true }).click();
         await page.getByText('continue 1 unfinished', { exact: true }).waitFor();
         assert.strictEqual(await page.locator('[data-savedchannelvideo]').first().getAttribute('data-savedchannelvideo'), `${channelId}:vid00000001`, 'raw-view mode must begin with the actual highest-view Short');
@@ -2920,19 +3048,6 @@ window.fetch=function(url,options){
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'validation inspection must reuse the cached stored score artifact');
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), explicitRescoreEmbedCount, 'opening the normal embedding must reuse the stored vector and never re-embed');
         assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 390, scroll: 390 });
-        if (process.env.EXPERIMENT_LAB_SCREENSHOT) {
-            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_SCREENSHOT), { recursive: true });
-            await page.screenshot({ path: process.env.EXPERIMENT_LAB_SCREENSHOT, fullPage: false });
-        }
-        if (process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT) {
-            await page.setViewportSize({ width: 1280, height: 820 });
-            assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 1280, scroll: 1280 });
-            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT), { recursive: true });
-            await page.screenshot({ path: process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT, fullPage: false });
-        }
-        const mobileScrollTop = await workspace.evaluate(
-            element => element.scrollTop
-        );
         if (await page.locator('[data-experiment-raw-back]').count()) {
             await page.locator('[data-experiment-raw-back]').click();
         }
@@ -2944,10 +3059,7 @@ window.fetch=function(url,options){
             return Array.from(surface.querySelectorAll('*'))
                 .flatMap(element => Array.from(element.attributes)
                     .filter(attribute => attribute.name.startsWith('data-'))
-                    .filter(attribute => !(
-                        attribute.name === 'data-savedbank'
-                        && attribute.value === 'team'
-                    ))
+                    .filter(attribute => attribute.name !== 'data-savedbank')
                     .filter(attribute => !attribute.name.startsWith('data-lab'))
                     .map(attribute =>
                         `${attribute.name}=${attribute.value}`
@@ -2963,11 +3075,19 @@ window.fetch=function(url,options){
         await page.locator(
             '[data-shorts-experiment-renderer="shorts-quant-experiment-surface-v1"]'
         ).waitFor();
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
         await page.locator(`[data-savedopen="${historicalSavedHookId}"]`).waitFor();
         const labControlSignature = await canonicalControlSignature();
         const labCanonicalColor = await page.locator(
             '[data-shorts-experiment-renderer]'
         ).evaluate(element => getComputedStyle(element).color);
+        assert.strictEqual(
+            await page.locator('[data-savedbank="channels"]').count(),
+            0,
+            'Experiment Lab must remain free of Saved Channels after remount'
+        );
         await page.evaluate(async () => {
             BuildingRegistry.get('Experiment Lab').close();
             const host = document.getElementById('root');
@@ -2985,20 +3105,27 @@ window.fetch=function(url,options){
         const jarvisCanonicalColor = await page.locator(
             '[data-shorts-experiment-renderer]'
         ).evaluate(element => getComputedStyle(element).color);
+        assert.strictEqual(
+            await page.locator('[data-savedbank="channels"]').count(),
+            1,
+            'Jarvis must retain its Saved Channels research tab'
+        );
         assert.deepStrictEqual(
             labControlSignature,
             jarvisControlSignature,
             'Experiment Lab and Shorts Quant must expose the same canonical '
-                + 'controls; Team Workspaces is the only allowed extension'
+                + 'creation, scoring, and private-hook controls after filtering '
+                + 'the intentional Lab navigation policy'
         );
-        assert.strictEqual(
+        assert.notStrictEqual(
             labCanonicalColor,
             jarvisCanonicalColor,
-            'the shared Experiment surface must not be recolored by its host'
+            'Experiment Lab must be allowed to present the shared engine in its '
+                + 'own light product language without changing its behavior'
         );
         const finalParity = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
         assert(finalParity.ok, `final rendered embedding parity failed: ${JSON.stringify(finalParity.conflicts)}`);
-        console.log(JSON.stringify({ ok: true, sharedExperimentControls: labControlSignature.length, exactControlParity: true, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop, storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, ledgerCoordinates: shortsCoordinateCount, scoreCoordinates: scoreCoordinateCount, observedOutcomes: observedOutcomeCount, visualizedRelationshipCells: scoreCoordinateCount * observedOutcomeCount, embeddingParity: finalParity }));
+        console.log(JSON.stringify({ ok: true, sharedExperimentControls: labControlSignature.length, coreControlParity: true, labSavedChannels: false, jarvisSavedChannels: true, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop, storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, ledgerCoordinates: shortsCoordinateCount, scoreCoordinates: scoreCoordinateCount, observedOutcomes: observedOutcomeCount, visualizedRelationshipCells: scoreCoordinateCount * observedOutcomeCount, embeddingParity: finalParity }));
     } finally {
         await browser.close();
     }

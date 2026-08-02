@@ -83,7 +83,7 @@ async function main() {
     }
     assert(
         indexSource.indexOf('storyboard-workbench.js?v=1')
-            < indexSource.indexOf('jarvis-retention.js?v=storyboard-workbench-v1'),
+            < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
     assert(
