@@ -82,7 +82,7 @@ async function main() {
         );
     }
     assert(
-        indexSource.indexOf('storyboard-workbench.js?v=1')
+        indexSource.indexOf('storyboard-workbench.js?v=2')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -433,6 +433,27 @@ async function main() {
         window.__calls = calls;
         window.__stored = stored;
     }, { scoreLedger: ledger });
+
+    assert.strictEqual(
+        await page.locator('[data-sb-workflow]').count(),
+        1,
+        'compose must expose one navigable storyboard workflow'
+    );
+    assert.deepStrictEqual(
+        await page.locator('[data-sb-section]').evaluateAll(nodes => (
+            nodes.map(node => node.getAttribute('data-sb-section'))
+        )),
+        ['brief', 'generate', 'refine', 'score'],
+        'the workbench must preserve the four explicit workflow stages'
+    );
+    await page.click('[data-sb-step="generate"]');
+    assert.strictEqual(
+        await page.locator('[data-sb-step="generate"]').getAttribute(
+            'aria-current'
+        ),
+        'step',
+        'workflow navigation must identify the selected stage'
+    );
 
     await page.fill(
         '[data-sb-hook-text]',

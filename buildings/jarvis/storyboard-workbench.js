@@ -90,6 +90,7 @@
         const initial = blankCandidate('Opening 1');
         const state = {
             view: 'compose',
+            activeStep: 'brief',
             candidates: [initial],
             selectedCandidateId: initial.id,
             busy: false,
@@ -386,39 +387,132 @@
             </div>`;
         }
 
+        function renderWorkflowNav(current) {
+            const frameCount = current.panels.filter(
+                entry => entry.image
+            ).length;
+            const hasBrief = !!(
+                current.brief.trim()
+                || current.hookText.trim()
+                || current.panels.some(entry => entry.prompt.trim())
+            );
+            const complete = frameCount === PANEL_COUNT;
+            const refined = current.panels.some(entry => (
+                entry.revisions.length
+                || ['panel-edit', 'annotated-frame'].includes(entry.source)
+            ));
+            const steps = [
+                {
+                    key: 'brief',
+                    number: 1,
+                    title: 'Brief',
+                    detail: hasBrief ? 'Direction added' : 'Start here',
+                    done: hasBrief,
+                },
+                {
+                    key: 'generate',
+                    number: 2,
+                    title: 'Generate',
+                    detail: `${frameCount} of ${PANEL_COUNT} frames`,
+                    done: complete,
+                },
+                {
+                    key: 'refine',
+                    number: 3,
+                    title: 'Refine',
+                    detail: refined
+                        ? 'Edits applied'
+                        : complete
+                            ? 'Optional edits'
+                            : current.panels[current.selectedPanel].image
+                                ? `Frame ${current.selectedPanel + 1} selected`
+                                : 'Select a frame',
+                    done: refined,
+                },
+                {
+                    key: 'score',
+                    number: 4,
+                    title: 'Score',
+                    detail: current.score
+                        ? 'Scored'
+                        : complete ? 'Ready' : 'Needs five frames',
+                    done: !!current.score,
+                },
+            ];
+            return `<nav class="sb-workflow" aria-label="Storyboard workflow" data-sb-workflow>${steps.map(step => {
+                const active = state.activeStep === step.key;
+                return `<button type="button" class="sb-workflow-step${active ? ' is-current' : ''}${step.done ? ' is-done' : ''}" data-sb-step="${step.key}" data-sb-focus="step-${step.key}" aria-current="${active ? 'step' : 'false'}">
+                    <span class="sb-workflow-number">${step.done ? '&#10003;' : step.number}</span>
+                    <span class="sb-workflow-copy"><strong>${step.title}</strong><small>${step.detail}</small></span>
+                </button>`;
+            }).join('')}</nav>`;
+        }
+
+        function renderWorkflowHeader(number, title, detail, status) {
+            return `<header class="sb-workflow-section-head">
+                <span class="sb-workflow-section-number">${number}</span>
+                <span class="sb-workflow-section-copy"><strong>${title}</strong><small>${detail}</small></span>
+                <span class="sb-workflow-section-status">${status}</span>
+            </header>`;
+        }
+
         function renderComposer(current) {
             const complete = completeFrames(current);
+            const frameCount = current.panels.filter(
+                entry => entry.image
+            ).length;
             const modeButton = (mode, label) => (
                 `<button type="button" data-sb-generation-mode="${mode}" class="${current.generationMode === mode ? 'is-active' : ''}">${label}</button>`
             );
             return `<div class="sb-compose">
-                <div class="sb-brief-grid">
-                    <label>
-                        <span>Visual brief</span>
-                        <textarea rows="3" data-sb-brief data-sb-focus="brief" placeholder="What happens across the opening?">${esc(current.brief || '')}</textarea>
-                    </label>
-                    <label>
-                        <span>Spoken opening</span>
-                        <textarea rows="3" data-sb-hook-text data-sb-focus="hook-text" placeholder="What is said in the first five seconds?">${esc(current.hookText || '')}</textarea>
-                    </label>
-                </div>
-                <div class="sb-generation-bar">
-                    <div class="sb-segmented">${modeButton('composite', 'Coherent sheet')}${modeButton('directed', 'Directed panels')}</div>
-                    <select data-sb-model aria-label="Image model">${MODEL_OPTIONS.map(([value, label]) => `<option value="${value}" ${current.model === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
-                    <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate five frames</button>
-                    <button type="button" data-sb-upload-strips ${state.busy ? 'disabled' : ''}>Upload strip(s)</button>
-                </div>
-                ${renderPanelRail(current)}
-                ${renderSelectedPanel(current)}
-                <div class="sb-score-bar">
-                    <div>
-                        <strong>${complete ? 'Ready to score' : `${current.panels.filter(entry => entry.image).length}/5 frames`}</strong>
-                        <span>${scoreLedgerSha(current) ? `Ledger ${esc(scoreLedgerSha(current).slice(0, 12))}...` : 'Canonical Shorts score ledger'}</span>
+                ${renderWorkflowNav(current)}
+                <section id="sb-workflow-brief" class="sb-workflow-section${state.activeStep === 'brief' ? ' is-current' : ''}" data-sb-section="brief" tabindex="-1">
+                    ${renderWorkflowHeader(1, 'Define the opening', 'Visual sequence and spoken line', current.brief.trim() || current.hookText.trim() ? 'Direction added' : 'Not started')}
+                    <div class="sb-workflow-section-body">
+                        <div class="sb-brief-grid">
+                            <label>
+                                <span>Visual brief</span>
+                                <textarea rows="3" data-sb-brief data-sb-focus="brief" placeholder="What happens across the opening?">${esc(current.brief || '')}</textarea>
+                            </label>
+                            <label>
+                                <span>Spoken opening</span>
+                                <textarea rows="3" data-sb-hook-text data-sb-focus="hook-text" placeholder="What is said in the first five seconds?">${esc(current.hookText || '')}</textarea>
+                            </label>
+                        </div>
                     </div>
-                    <button type="button" class="is-primary" data-sb-score-current ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
-                    ${current.score ? '<button type="button" data-sb-open-score>Open all embeddings</button>' : ''}
-                    <button type="button" data-sb-save ${complete && !state.busy ? '' : 'disabled'}>${current.serverId ? 'Save revision' : 'Save storyboard'}</button>
-                </div>
+                </section>
+                <section id="sb-workflow-generate" class="sb-workflow-section${state.activeStep === 'generate' ? ' is-current' : ''}" data-sb-section="generate" tabindex="-1">
+                    ${renderWorkflowHeader(2, 'Build the five-frame sequence', 'Generation method and image model', `${frameCount}/${PANEL_COUNT} frames`)}
+                    <div class="sb-workflow-section-body">
+                        <div class="sb-generation-bar">
+                            <div class="sb-segmented" aria-label="Generation method">${modeButton('composite', 'Coherent sheet')}${modeButton('directed', 'Directed panels')}</div>
+                            <label class="sb-model-picker"><span>Image model</span><select data-sb-model>${MODEL_OPTIONS.map(([value, label]) => `<option value="${value}" ${current.model === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+                            <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate five frames</button>
+                            <button type="button" data-sb-upload-strips ${state.busy ? 'disabled' : ''}>Upload strip(s)</button>
+                        </div>
+                    </div>
+                </section>
+                <section id="sb-workflow-refine" class="sb-workflow-section${state.activeStep === 'refine' ? ' is-current' : ''}" data-sb-section="refine" tabindex="-1">
+                    ${renderWorkflowHeader(3, 'Refine each frame', 'Frame prompt, references, and revisions', `Frame ${current.selectedPanel + 1} of ${PANEL_COUNT}`)}
+                    <div class="sb-workflow-section-body">
+                        ${renderPanelRail(current)}
+                        ${renderSelectedPanel(current)}
+                    </div>
+                </section>
+                <section id="sb-workflow-score" class="sb-workflow-section${state.activeStep === 'score' ? ' is-current' : ''}" data-sb-section="score" tabindex="-1">
+                    ${renderWorkflowHeader(4, 'Score and save', '21 canonical coordinates and saved result', current.score ? 'Scored' : complete ? 'Ready' : 'Waiting for frames')}
+                    <div class="sb-workflow-section-body">
+                        <div class="sb-score-bar">
+                            <div>
+                                <strong>${complete ? 'Ready to score' : `${frameCount}/${PANEL_COUNT} frames`}</strong>
+                                <span>${scoreLedgerSha(current) ? `Ledger ${esc(scoreLedgerSha(current).slice(0, 12))}...` : 'Canonical Shorts score ledger'}</span>
+                            </div>
+                            <button type="button" class="is-primary" data-sb-score-current ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
+                            ${current.score ? '<button type="button" data-sb-open-score>Open all embeddings</button>' : ''}
+                            <button type="button" data-sb-save ${complete && !state.busy ? '' : 'disabled'}>${current.serverId ? 'Save revision' : 'Save storyboard'}</button>
+                        </div>
+                    </div>
+                </section>
             </div>`;
         }
 
@@ -938,6 +1032,7 @@
                 );
                 return;
             }
+            state.activeStep = 'generate';
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
@@ -945,6 +1040,7 @@
                 if (current.generationMode === 'directed') await generateDirected(current);
                 else await generateComposite(current);
                 state.status = 'Five frames are ready.';
+                state.activeStep = 'refine';
             } catch (error) {
                 fail(error);
                 return;
@@ -1000,6 +1096,7 @@
         async function generateSelected() {
             const current = candidate();
             if (!current || state.busy) return;
+            state.activeStep = 'refine';
             const index = current.selectedPanel;
             const selected = current.panels[index];
             const prompt = String(
@@ -1158,6 +1255,7 @@
         async function scoreCurrent() {
             const current = candidate();
             if (!current || state.busy) return;
+            state.activeStep = 'score';
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
@@ -1448,6 +1546,7 @@
                 }
                 state.selectedCandidateId = loaded.id;
                 state.view = 'compose';
+                state.activeStep = 'refine';
                 state.drawEnabled = false;
                 state.status = `${loaded.name} loaded.`;
                 if (loaded.hydrationWarnings.length) {
@@ -1775,6 +1874,7 @@
                 state.candidates.push(created);
                 state.selectedCandidateId = created.id;
                 state.view = 'compose';
+                state.activeStep = 'brief';
                 state.drawEnabled = false;
                 paint();
                 return true;
@@ -1784,13 +1884,35 @@
                 paint();
                 return true;
             }
+            if (button.hasAttribute('data-sb-step')) {
+                const step = button.getAttribute('data-sb-step');
+                if (!['brief', 'generate', 'refine', 'score'].includes(step)) {
+                    return true;
+                }
+                state.activeStep = step;
+                paint();
+                window.requestAnimationFrame(() => {
+                    const section = host && host.querySelector(
+                        `[data-sb-section="${step}"]`
+                    );
+                    if (section) {
+                        section.scrollIntoView({
+                            block: 'start',
+                            behavior: 'smooth',
+                        });
+                    }
+                });
+                return true;
+            }
             if (button.hasAttribute('data-sb-generation-mode')) {
+                state.activeStep = 'generate';
                 candidate().generationMode = button.getAttribute('data-sb-generation-mode');
                 touchCandidate(candidate());
                 paint();
                 return true;
             }
             if (button.hasAttribute('data-sb-panel')) {
+                state.activeStep = 'refine';
                 candidate().selectedPanel = Number(button.getAttribute('data-sb-panel')) || 0;
                 paint();
                 return true;
@@ -1921,6 +2043,7 @@
             if (button.hasAttribute('data-sb-select-candidate')) {
                 state.selectedCandidateId = button.getAttribute('data-sb-select-candidate');
                 state.view = 'compose';
+                state.activeStep = 'refine';
                 state.drawEnabled = false;
                 paint();
                 return true;

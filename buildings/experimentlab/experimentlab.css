@@ -425,6 +425,421 @@
     border-collapse: collapse;
 }
 
+/* The storyboard engine is shared with Shorts Quant. Only its Lab presentation
+   changes here, so scoring, generation, persistence, and comparisons stay canonical. */
+.experiment-lab-panel #shorts-storyboard-workbench {
+    --sb-bg: #f5f5f7;
+    --sb-panel: #ffffff;
+    --sb-panel-2: #f7f7fa;
+    --sb-line: #e1e1e7;
+    --sb-line-strong: #c9c9d2;
+    --sb-text: #1d1d1f;
+    --sb-dim: #5f6068;
+    --sb-muted: #85858e;
+    --sb-accent: #006edb;
+    --sb-green: #16845b;
+    --sb-red: #cf3f45;
+    color: var(--sb-text);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-shell {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-topbar {
+    padding: 15px 16px;
+    border: 1px solid var(--lab-line);
+    border-radius: 18px 18px 0 0;
+    background: var(--lab-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 12px 32px rgba(0, 0, 0, 0.035);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-title {
+    gap: 3px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-title strong {
+    color: var(--lab-ink);
+    font-size: 17px;
+    font-weight: 680;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-title span {
+    color: var(--lab-tertiary);
+    font-size: 10px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench button {
+    border-color: var(--lab-line);
+    border-radius: 10px;
+    color: var(--lab-secondary);
+    font-weight: 650;
+    transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench button:hover {
+    border-color: var(--lab-line-strong);
+    background: #f7f7fa;
+    color: var(--lab-ink);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench button.is-primary {
+    border-color: var(--lab-blue);
+    background: var(--lab-blue);
+    color: #ffffff;
+    box-shadow: 0 5px 14px rgba(0, 110, 219, 0.15);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench button.is-primary:hover {
+    border-color: #087be7;
+    background: #087be7;
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench button.is-active {
+    border-color: rgba(0, 110, 219, 0.34);
+    background: var(--lab-blue-soft);
+    color: var(--lab-blue);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs {
+    gap: 3px;
+    padding: 3px;
+    border-radius: 12px;
+    background: #f0f0f3;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button:first-child,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button:last-child {
+    min-height: 32px;
+    border: 0;
+    border-radius: 9px;
+    padding: 5px 11px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button.is-active {
+    background: var(--lab-paper);
+    color: var(--lab-ink);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-saved-picker label > span {
+    color: var(--lab-tertiary);
+    font-size: 8px;
+    text-transform: none;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-name-row {
+    padding: 9px 16px 12px;
+    border: 1px solid var(--lab-line);
+    border-top: 0;
+    border-radius: 0 0 18px 18px;
+    background: var(--lab-paper);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-name-row input {
+    min-height: 34px;
+    padding: 5px 9px !important;
+    border: 1px solid transparent !important;
+    border-radius: 9px !important;
+    background: #f7f7fa !important;
+    color: var(--lab-ink) !important;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-name-row input:focus {
+    border-color: var(--lab-blue) !important;
+    background: #ffffff !important;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-status,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-error {
+    margin-top: 10px;
+    border: 1px solid var(--lab-line);
+    border-radius: 12px;
+    background: var(--lab-paper);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-status {
+    color: var(--lab-blue);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-error {
+    border-color: rgba(207, 63, 69, 0.24);
+    background: #fff4f4;
+    color: var(--lab-red);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compose,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
+    padding: 14px 0 0;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compose {
+    gap: 14px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow {
+    gap: 5px;
+    padding: 6px;
+    border-color: var(--lab-line);
+    border-radius: 16px;
+    background: var(--lab-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 8px 24px rgba(0, 0, 0, 0.025);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step {
+    min-height: 54px;
+    gap: 9px;
+    padding: 8px 10px;
+    border-color: transparent;
+    border-radius: 11px;
+    background: transparent;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step:hover {
+    border-color: transparent;
+    background: #f5f5f7;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step.is-current {
+    border-color: rgba(0, 110, 219, 0.16);
+    background: var(--lab-blue-soft);
+    color: var(--lab-blue);
+    box-shadow: inset 0 0 0 1px rgba(0, 110, 219, 0.03);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-number,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-number {
+    width: 25px;
+    height: 25px;
+    border-color: var(--lab-line-strong);
+    background: var(--lab-paper);
+    color: var(--lab-secondary);
+    font-size: 10px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step.is-current .sb-workflow-number,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step.is-done .sb-workflow-number {
+    border-color: var(--lab-blue);
+    background: var(--lab-blue);
+    color: #ffffff;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-copy strong {
+    color: inherit;
+    font-size: 11px;
+    font-weight: 680;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-copy small {
+    color: var(--lab-tertiary);
+    font-size: 9px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section {
+    border-color: var(--lab-line);
+    border-radius: 18px;
+    background: var(--lab-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 10px 30px rgba(0, 0, 0, 0.03);
+    scroll-margin-top: 14px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section.is-current {
+    border-color: rgba(0, 110, 219, 0.28);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-head {
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom-color: var(--lab-line);
+    background: #fbfbfc;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-copy strong {
+    color: var(--lab-ink);
+    font-size: 13px;
+    font-weight: 680;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-copy small {
+    color: var(--lab-tertiary);
+    font-size: 9px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-status {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #eeeef2;
+    color: var(--lab-secondary);
+    font-size: 8px;
+    text-transform: none;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-body {
+    padding: 16px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench label > span,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-section-head > span {
+    color: var(--lab-secondary);
+    font-size: 9px;
+    font-weight: 680;
+    text-transform: none;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench textarea,
+.experiment-lab-panel #shorts-storyboard-workbench input,
+.experiment-lab-panel #shorts-storyboard-workbench select {
+    border-color: var(--lab-line-strong) !important;
+    border-radius: 11px !important;
+    background: #f8f8fa !important;
+    color: var(--lab-ink) !important;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench textarea:focus,
+.experiment-lab-panel #shorts-storyboard-workbench input:focus,
+.experiment-lab-panel #shorts-storyboard-workbench select:focus {
+    border-color: var(--lab-blue) !important;
+    background: #ffffff !important;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-generation-bar {
+    gap: 9px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented {
+    gap: 3px;
+    padding: 3px;
+    border-radius: 11px;
+    background: #f0f0f3;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button:first-child,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button:last-child {
+    min-height: 34px;
+    border: 0;
+    border-radius: 8px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button.is-active {
+    background: var(--lab-paper);
+    color: var(--lab-ink);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.09);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-model-picker {
+    min-width: 170px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-rail {
+    grid-auto-columns: minmax(90px, 122px);
+    margin: 0 0 14px;
+    padding: 2px 2px 8px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-tile {
+    border-color: var(--lab-line);
+    border-radius: 12px;
+    background: #eeeef2;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.035);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-tile.is-selected {
+    border-color: var(--lab-blue);
+    box-shadow: 0 0 0 2px rgba(0, 110, 219, 0.14), 0 5px 14px rgba(0, 0, 0, 0.06);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-empty {
+    color: #a4a4ad;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-editor {
+    gap: 18px;
+    grid-template-columns: minmax(250px, 340px) minmax(300px, 1fr);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-stage {
+    border-color: #d5d5dc;
+    border-radius: 14px;
+    background: #111216;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-blank-stage {
+    background: #eeeef2;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-draw-tools {
+    margin-top: 10px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-inspector {
+    gap: 13px;
+    border-left-color: var(--lab-line);
+    padding-left: 18px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-lineage {
+    color: var(--lab-tertiary);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-reference-section {
+    border-top-color: var(--lab-line);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-reference {
+    border-color: var(--lab-line);
+    border-radius: 11px;
+    background: #f8f8fa;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-score-bar strong {
+    color: var(--lab-ink);
+    font-size: 12px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-score-bar span {
+    color: var(--lab-tertiary);
+    font-size: 9px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
+    overflow: hidden;
+    border: 1px solid var(--lab-line);
+    border-radius: 18px;
+    background: var(--lab-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 10px 30px rgba(0, 0, 0, 0.03);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-contract-note {
+    border-left-color: var(--lab-blue);
+    background: var(--lab-blue-soft);
+    color: var(--lab-secondary);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compare-table-wrap {
+    border-color: var(--lab-line);
+    border-radius: 12px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compare-table th {
+    background: #f7f7fa;
+    color: var(--lab-tertiary);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compare-table td {
+    border-top-color: var(--lab-line);
+    color: var(--lab-ink);
+}
+
 .experiment-lab-error {
     margin: 24px;
     padding: 14px 16px;
@@ -682,6 +1097,92 @@
     .experiment-lab-panel .shorts-experiment-surface [data-savedopen] {
         width: min(100%, 168px) !important;
         flex: 1 1 145px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-shell {
+        width: 100%;
+        margin-right: 0;
+        margin-left: 0;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-topbar {
+        padding: 13px;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-title strong {
+        font-size: 16px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-name-row {
+        padding: 8px 12px 11px;
+        border-radius: 0 0 16px 16px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-compose,
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
+        padding: 12px 0 0;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow {
+        max-width: 100%;
+        margin-right: 0;
+        padding-right: 6px;
+        border-radius: 14px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step {
+        min-height: 58px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section {
+        border-radius: 16px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-head {
+        padding: 12px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-status {
+        justify-self: start;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-body {
+        padding: 12px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-model-picker {
+        min-width: 0;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-panel-rail {
+        grid-auto-columns: 82px;
+        margin-right: 0;
+        padding-right: 2px;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-editor {
+        gap: 14px;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-stage {
+        max-width: min(100%, 350px);
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-inspector {
+        gap: 12px;
+        padding-top: 14px;
+        padding-left: 0;
+        border-top-color: var(--lab-line);
+        border-left: 0;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
+        padding: 12px;
+        border-radius: 16px;
     }
 }
 

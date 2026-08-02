@@ -2165,6 +2165,62 @@ window.fetch=function(url,options){
             'the integrated storyboard must expose the canonical Shorts '
                 + 'score action'
         );
+        assert.deepStrictEqual(
+            await integratedStoryboard.locator(
+                '[data-sb-section]'
+            ).evaluateAll(nodes => nodes.map(node => (
+                node.getAttribute('data-sb-section')
+            ))),
+            ['brief', 'generate', 'refine', 'score'],
+            'Experiment Lab must organize the shared workbench into the '
+                + 'canonical four-stage workflow'
+        );
+        assert.strictEqual(
+            await integratedStoryboard.evaluate(element => (
+                getComputedStyle(element).getPropertyValue(
+                    '--sb-panel'
+                ).trim()
+            )),
+            '#ffffff',
+            'Experiment Lab must apply its light visual language without '
+                + 'forking the storyboard engine'
+        );
+        if (process.env.EXPERIMENT_LAB_STORYBOARD_DESKTOP_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_STORYBOARD_DESKTOP_SCREENSHOT
+            ), { recursive: true });
+            await integratedStoryboard.scrollIntoViewIfNeeded();
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_STORYBOARD_DESKTOP_SCREENSHOT,
+                fullPage: false,
+            });
+        }
+        if (process.env.EXPERIMENT_LAB_STORYBOARD_MOBILE_SCREENSHOT) {
+            const previousViewport = page.viewportSize();
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.waitForTimeout(100);
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_STORYBOARD_MOBILE_SCREENSHOT
+            ), { recursive: true });
+            await integratedStoryboard.scrollIntoViewIfNeeded();
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_STORYBOARD_MOBILE_SCREENSHOT,
+                fullPage: false,
+            });
+            await page.setViewportSize(previousViewport);
+            await page.waitForTimeout(100);
+        }
+        await integratedStoryboard.locator(
+            '[data-sb-step="refine"]'
+        ).click();
+        assert.strictEqual(
+            await integratedStoryboard.locator(
+                '[data-sb-step="refine"]'
+            ).getAttribute('aria-current'),
+            'step',
+            'the staged navigation must remain interactive inside the '
+                + 'canonical Experiment surface'
+        );
         await page.locator('[data-rawbuildmode="0"]').first().click();
         await page.getByPlaceholder(
             'or paste a YouTube link…'
