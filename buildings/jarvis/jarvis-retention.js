@@ -4373,9 +4373,13 @@ const JarvisRetention = (function () {
         if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if ((st.savedBank || 'hooks') === 'channels' && SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
+        const uploads = st.rawUploads || [];
         const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
         const UPSTAGES = ['Uploading…', 'Extracting 5 frames…', 'Transcribing…', 'Embedding…', 'Scoring indicators…'];
-        const upLabel = st.rawUpQueue && st.rawUpQueue.preparing
+        const upBatchPrefix = st.rawUpQueue && Number(st.rawUpQueue.total) > 1
+            ? `${Number(st.rawUpQueue.i) || 1}/${Number(st.rawUpQueue.total)} · `
+            : '';
+        const upLabel = upBatchPrefix + (st.rawUpQueue && st.rawUpQueue.preparing
             ? 'Preparing a phone-safe opening…'
             : st.rawUpQueue && st.rawUpQueue.rescore
                 ? 'Re-scoring the saved video and validating its new ledger…'
@@ -4383,18 +4387,26 @@ const JarvisRetention = (function () {
                 ? 'Recovering with the 5 visual frames…'
                 : st.rawUpQueue && st.rawUpQueue.transferMB
                     ? `Uploading ${st.rawUpQueue.transferMB} MB opening…`
-                    : UPSTAGES[Math.min(st.rawUpStage || 0, 4)];
+                    : UPSTAGES[Math.min(st.rawUpStage || 0, 4)]);
         const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${upLabel}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
+        const uploadBatchStart = Math.max(0, uploads.length - 12);
+        const uploadBatchRail = uploads.length > 1
+            ? `<div data-raw-score-batch style="display:flex;gap:6px;overflow-x:auto;padding:9px 1px 2px;margin-top:9px;border-top:1px solid ${C.border};scrollbar-width:thin">${uploads.slice(uploadBatchStart).map((upload, localIndex) => {
+                const index = uploadBatchStart + localIndex;
+                const selected = st.rawUpSel === index;
+                const scored = !!(upload && upload.score_ledger);
+                return `<button type="button" data-rawupmark="${index}" style="flex:0 0 auto;max-width:210px;cursor:pointer;border:1px solid ${selected ? CY : C.border};background:${selected ? CY + '18' : C.card};color:${selected ? CY : C.dim};border-radius:7px;padding:6px 9px;text-align:left"><span style="display:block;font-size:10px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${index + 1}. ${esc(upload && upload.title || 'Scored opening')}</span><span style="display:block;font-size:8px;margin-top:2px;color:${scored ? C.green : C.mute}">${scored ? 'scored independently' : 'processing result'}</span></button>`;
+            }).join('')}</div>`
+            : '';
         const builder = st.rawBuildMode
             ? `<div style="margin-top:10px">${renderStoryboardWorkbench()}</div>`
             : '';
-        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, 'Storyboard')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video(s)'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${expCreatorProfileHtml()}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
+        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, 'Storyboard')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video batch in progress' : 'Upload videos'}</span><span style="font-size:9px;color:${C.mute}">up to 12 · scored one at a time</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${expCreatorProfileHtml()}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${uploadBatchRail}${builder}`, 12);
         if (!EXPREG || EXPREG.loading) return experimentRegion('create', head) + experimentRegion('score', controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`)) + experimentRegion('library', savedBank());
         if (EXPREG.error || !EXPREG.indicators) return experimentRegion('create', head) + experimentRegion('score', controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`)) + experimentRegion('library', savedBank());
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
         const scorableKind = d => d.kind === 'content' || d.kind === 'novelty';
         const val = EXPREG.indicators.filter(d => d.validated && scorableKind(d));
-        const uploads = st.rawUploads || [];
         const up = selectedRawScoreUpload();
         const keyOf = d => d.kind === 'content' ? `${d.name}__${d.target}` : d.name;
         const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
@@ -7623,6 +7635,7 @@ const JarvisRetention = (function () {
             return;
         }
         st.rawUploading = true; st.rawUpErr = null; st.rawUpShow = true; rtgUpdateRaw();
+        const batchErrors = [];
         for (let n = 0; n < list.length; n++) {
             const file = list[n];
             st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, preparing: true }; rtgUpdateRaw();
@@ -7691,7 +7704,10 @@ const JarvisRetention = (function () {
                     throw error;
                 }
                 rawTrace('scored', { err: (j && j.error) ? String(j.error).slice(0, 80) : null });
-                if (!j || j.error) { st.rawUpErr = (file.name || '') + ': ' + ((j && j.error) || 'embed failed'); }
+                if (!j || j.error) {
+                    batchErrors.push((file.name || '') + ': ' + ((j && j.error) || 'embed failed'));
+                    st.rawUpErr = batchErrors.join(' | ').slice(0, 1000);
+                }
                 else {
                     j._uploadMode = prepared.mode;
                     j._originalBytes = prepared.originalBytes || file.size;
@@ -7700,11 +7716,15 @@ const JarvisRetention = (function () {
                 }
             } catch (e) {
                 rawTrace('js-error', { msg: String(e.message || e).slice(0, 120) });
-                st.rawUpErr = (file.name || '') + ': ' + fetchFail(e);
+                batchErrors.push((file.name || '') + ': ' + fetchFail(e));
+                st.rawUpErr = batchErrors.join(' | ').slice(0, 1000);
             }
             window.clearInterval(tick);
         }
         rawTraceEnd();   // finished (with or without an error the panel already shows) — journal only unfinished runs
+        st.rawUpErr = batchErrors.length
+            ? batchErrors.join(' | ').slice(0, 1000)
+            : null;
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         rtgUpdateRaw();
     }

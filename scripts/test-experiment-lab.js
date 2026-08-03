@@ -2144,6 +2144,25 @@ window.fetch=function(url,options){
         ).click();
         await page.getByText('Owner workspace', { exact: true }).waitFor();
         await page.locator('.experiment-lab-tab[data-lab-view="score"]').click();
+        await page.locator('[data-rawbuildmode="0"]').first().click();
+        const batchVideoUpload = page.locator(
+            '#rtg-exppanel [data-rawupload]'
+        ).first();
+        await batchVideoUpload.waitFor();
+        assert.match(
+            await batchVideoUpload.innerText(),
+            /Upload videos/,
+            'Score must expose one multi-video picker'
+        );
+        assert.strictEqual(
+            await page.getByText(
+                'up to 12 · scored one at a time',
+                { exact: true }
+            ).count(),
+            1,
+            'Score must disclose that one picker accepts a sequential '
+                + 'multi-video batch'
+        );
         const storyboardMode = page.locator(
             '[data-rawbuildmode="1"]'
         ).first();
@@ -2174,9 +2193,9 @@ window.fetch=function(url,options){
             ).evaluateAll(nodes => nodes.map(node => (
                 node.getAttribute('data-sb-section')
             ))),
-            ['brief', 'generate', 'refine', 'score'],
-            'Experiment Lab must organize the shared workbench into the '
-                + 'canonical four-stage workflow'
+            ['upload', 'build', 'refine'],
+            'Experiment Lab must expose the shared upload and AI entry '
+                + 'paths before their common refinement surface'
         );
         assert.strictEqual(
             await integratedStoryboard.evaluate(element => (
@@ -2213,16 +2232,13 @@ window.fetch=function(url,options){
             await page.setViewportSize(previousViewport);
             await page.waitForTimeout(100);
         }
-        await integratedStoryboard.locator(
-            '[data-sb-step="refine"]'
-        ).click();
         assert.strictEqual(
             await integratedStoryboard.locator(
-                '[data-sb-step="refine"]'
-            ).getAttribute('aria-current'),
-            'step',
-            'the staged navigation must remain interactive inside the '
-                + 'canonical Experiment surface'
+                '[data-sb-view], [data-sb-generation-mode]'
+            ).count(),
+            0,
+            'Experiment Lab must not reintroduce separate comparison or '
+                + 'inert generation modes'
         );
         await page.locator('[data-rawbuildmode="0"]').first().click();
         await page.getByPlaceholder(
@@ -2271,7 +2287,7 @@ window.fetch=function(url,options){
         await historicalSavedHookCard.click();
         await page.locator(
             '[data-saved-detail-state="loading"]'
-        ).waitFor();
+        ).waitFor({ state: 'attached' });
         const historicalLoadingText =
             await page.locator('#rtg-exppanel').innerText();
         assert(
@@ -2521,7 +2537,7 @@ window.fetch=function(url,options){
                 '.experiment-lab-tab[data-lab-view="create"]'
             ).getAttribute('aria-selected'),
             'true',
-            'Create must own the selected navigation state after switching views'
+            'Auto must own the selected navigation state after switching views'
         );
         assert.strictEqual(
             await page.locator(

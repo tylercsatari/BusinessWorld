@@ -54,6 +54,10 @@
                 source: 'empty',
                 relation: 'new',
                 sourcePanels: [],
+                contextPanels: Array.from(
+                    { length: PANEL_COUNT },
+                    (_, panelIndex) => panelIndex
+                ).filter(panelIndex => panelIndex !== index),
                 revisions: [],
                 futureRevisions: [],
                 strokes: [],
@@ -89,8 +93,6 @@
 
         const initial = blankCandidate('Opening 1');
         const state = {
-            view: 'compose',
-            activeStep: 'brief',
             candidates: [initial],
             selectedCandidateId: initial.id,
             busy: false,
@@ -101,8 +103,6 @@
             drawTool: 'pen',
             drawColor: DRAW_COLORS[0],
             drawSize: 7,
-            compareCoordinate: '',
-            compareExpanded: false,
             saved: [],
             savedTotal: 0,
             savedLoaded: false,
@@ -191,47 +191,9 @@
                 revision: manifest.revision_fingerprint,
             };
         };
-        const activeCompareContract = () => {
-            const groups = new Map();
-            for (const item of state.candidates) {
-                const contract = scoreContract(item);
-                if (!contract) continue;
-                const group = groups.get(contract.key) || {
-                    contract,
-                    count: 0,
-                    latest: 0,
-                };
-                group.count++;
-                group.latest = Math.max(
-                    group.latest,
-                    Number(
-                        item.score
-                        && item.score.storyboardScoredAt
-                        || item.updatedAt
-                        || 0
-                    )
-                );
-                groups.set(contract.key, group);
-            }
-            return [...groups.values()]
-                .sort((left, right) => (
-                    right.count - left.count
-                    || right.latest - left.latest
-                ))[0]?.contract || null;
-        };
-        const comparableScore = (item, contract) => {
-            const candidateContract = scoreContract(item);
-            return !!(
-                contract
-                && candidateContract
-                && candidateContract.key === contract.key
-            );
-        };
-        const needsComparisonScore = item => {
+        const needsScore = item => {
             if (!item || !completeFrames(item)) return false;
-            if (!item.score) return true;
-            const contract = activeCompareContract();
-            return !!contract && !comparableScore(item, contract);
+            return !item.score;
         };
         const touchCandidate = item => {
             if (!item) return;
@@ -346,6 +308,38 @@
             </div>`;
         }
 
+        function renderFrameContext(current, panelIndex) {
+            const selected = current.panels[panelIndex];
+            const configured = new Set(
+                contextPanelIndexes(current, panelIndex)
+            );
+            const exactInputs = uniqueReferences([
+                selected.image,
+                ...continuityReferences(current, panelIndex),
+                ...activeReferences(current, panelIndex),
+            ]);
+            const overLimit = exactInputs.length > MAX_REFERENCES;
+            return `<div class="sb-frame-context">
+                <div class="sb-section-head">
+                    <span>Frame context</span>
+                    <small class="${overLimit ? 'is-error' : ''}">${exactInputs.length}/${MAX_REFERENCES} model images</small>
+                </div>
+                <div class="sb-context-grid" aria-label="Other storyboard frames sent to the image model">${current.panels.map((entry, index) => {
+                    if (index === panelIndex) return '';
+                    const active = configured.has(index);
+                    return `<button type="button" class="sb-context-frame${active ? ' is-active' : ''}" data-sb-context-panel="${index}" aria-pressed="${active}" ${entry.image ? '' : 'disabled'} title="${active ? 'Remove' : 'Add'} frame ${index + 1} as image context">
+                        ${entry.image
+                            ? `<img src="${imageSource(entry.image)}" alt="Frame ${index + 1}">`
+                            : '<span class="sb-context-empty"></span>'}
+                        <span>Frame ${index + 1}</span>
+                    </button>`;
+                }).join('')}</div>
+                <div class="sb-context-summary${overLimit ? ' is-error' : ''}">${overLimit
+                    ? `Deselect ${exactInputs.length - MAX_REFERENCES} image${exactInputs.length - MAX_REFERENCES === 1 ? '' : 's'} before generating.`
+                    : 'Selected frames and scoped references are sent with this edit.'}</div>
+            </div>`;
+        }
+
         function renderSelectedPanel(current) {
             const index = current.selectedPanel;
             const selected = current.panels[index];
@@ -373,6 +367,7 @@
                         <span>Edit instruction</span>
                         <textarea rows="2" data-sb-edit-prompt data-sb-focus="edit-prompt" placeholder="Change only what should be different">${esc(current.editPrompt || '')}</textarea>
                     </label>
+                    ${renderFrameContext(current, index)}
                     <div class="sb-inspector-actions">
                         <button type="button" class="is-primary" data-sb-generate-panel ${state.busy ? 'disabled' : ''}>${selected.image ? 'Edit selected' : 'Generate selected'}</button>
                         <button type="button" data-sb-restore-panel="previous" ${selected.revisions.length ? '' : 'disabled'}>Previous</button>
@@ -387,7 +382,7 @@
             </div>`;
         }
 
-        function renderWorkflowNav(current) {
+        function renderBuildProgress(current) {
             const frameCount = current.panels.filter(
                 entry => entry.image
             ).length;
@@ -396,56 +391,21 @@
                 || current.hookText.trim()
                 || current.panels.some(entry => entry.prompt.trim())
             );
-            const complete = frameCount === PANEL_COUNT;
             const refined = current.panels.some(entry => (
                 entry.revisions.length
                 || ['panel-edit', 'annotated-frame'].includes(entry.source)
             ));
             const steps = [
-                {
-                    key: 'brief',
-                    number: 1,
-                    title: 'Brief',
-                    detail: hasBrief ? 'Direction added' : 'Start here',
-                    done: hasBrief,
-                },
-                {
-                    key: 'generate',
-                    number: 2,
-                    title: 'Generate',
-                    detail: `${frameCount} of ${PANEL_COUNT} frames`,
-                    done: complete,
-                },
-                {
-                    key: 'refine',
-                    number: 3,
-                    title: 'Refine',
-                    detail: refined
-                        ? 'Edits applied'
-                        : complete
-                            ? 'Optional edits'
-                            : current.panels[current.selectedPanel].image
-                                ? `Frame ${current.selectedPanel + 1} selected`
-                                : 'Select a frame',
-                    done: refined,
-                },
-                {
-                    key: 'score',
-                    number: 4,
-                    title: 'Score',
-                    detail: current.score
-                        ? 'Scored'
-                        : complete ? 'Ready' : 'Needs five frames',
-                    done: !!current.score,
-                },
+                ['Brief', hasBrief ? 'Ready' : 'Add direction', hasBrief],
+                ['Generate', `${frameCount}/${PANEL_COUNT} frames`, frameCount === PANEL_COUNT],
+                ['Refine', refined ? 'Edited' : 'Optional', refined],
             ];
-            return `<nav class="sb-workflow" aria-label="Storyboard workflow" data-sb-workflow>${steps.map(step => {
-                const active = state.activeStep === step.key;
-                return `<button type="button" class="sb-workflow-step${active ? ' is-current' : ''}${step.done ? ' is-done' : ''}" data-sb-step="${step.key}" data-sb-focus="step-${step.key}" aria-current="${active ? 'step' : 'false'}">
-                    <span class="sb-workflow-number">${step.done ? '&#10003;' : step.number}</span>
-                    <span class="sb-workflow-copy"><strong>${step.title}</strong><small>${step.detail}</small></span>
-                </button>`;
-            }).join('')}</nav>`;
+            return `<div class="sb-workflow" aria-label="AI build path" data-sb-manual-progress>${steps.map((step, index) => (
+                `<div class="sb-workflow-step${step[2] ? ' is-done' : ''}">
+                    <span class="sb-workflow-number">${step[2] ? '&#10003;' : index + 1}</span>
+                    <span class="sb-workflow-copy"><strong>${step[0]}</strong><small>${step[1]}</small></span>
+                </div>`
+            )).join('')}</div>`;
         }
 
         function renderWorkflowHeader(number, title, detail, status) {
@@ -456,82 +416,29 @@
             </header>`;
         }
 
-        function renderComposer(current) {
+        function renderScoreBar(current, placement) {
             const complete = completeFrames(current);
             const frameCount = current.panels.filter(
                 entry => entry.image
             ).length;
-            const modeButton = (mode, label) => (
-                `<button type="button" data-sb-generation-mode="${mode}" class="${current.generationMode === mode ? 'is-active' : ''}">${label}</button>`
-            );
-            return `<div class="sb-compose">
-                ${renderWorkflowNav(current)}
-                <section id="sb-workflow-brief" class="sb-workflow-section${state.activeStep === 'brief' ? ' is-current' : ''}" data-sb-section="brief" tabindex="-1">
-                    ${renderWorkflowHeader(1, 'Define the opening', 'Visual sequence and spoken line', current.brief.trim() || current.hookText.trim() ? 'Direction added' : 'Not started')}
-                    <div class="sb-workflow-section-body">
-                        <div class="sb-brief-grid">
-                            <label>
-                                <span>Visual brief</span>
-                                <textarea rows="3" data-sb-brief data-sb-focus="brief" placeholder="What happens across the opening?">${esc(current.brief || '')}</textarea>
-                            </label>
-                            <label>
-                                <span>Spoken opening</span>
-                                <textarea rows="3" data-sb-hook-text data-sb-focus="hook-text" placeholder="What is said in the first five seconds?">${esc(current.hookText || '')}</textarea>
-                            </label>
-                        </div>
-                    </div>
-                </section>
-                <section id="sb-workflow-generate" class="sb-workflow-section${state.activeStep === 'generate' ? ' is-current' : ''}" data-sb-section="generate" tabindex="-1">
-                    ${renderWorkflowHeader(2, 'Build the five-frame sequence', 'Generation method and image model', `${frameCount}/${PANEL_COUNT} frames`)}
-                    <div class="sb-workflow-section-body">
-                        <div class="sb-generation-bar">
-                            <div class="sb-segmented" aria-label="Generation method">${modeButton('composite', 'Coherent sheet')}${modeButton('directed', 'Directed panels')}</div>
-                            <label class="sb-model-picker"><span>Image model</span><select data-sb-model>${MODEL_OPTIONS.map(([value, label]) => `<option value="${value}" ${current.model === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
-                            <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate five frames</button>
-                            <button type="button" data-sb-upload-strips ${state.busy ? 'disabled' : ''}>Upload strip(s)</button>
-                        </div>
-                    </div>
-                </section>
-                <section id="sb-workflow-refine" class="sb-workflow-section${state.activeStep === 'refine' ? ' is-current' : ''}" data-sb-section="refine" tabindex="-1">
-                    ${renderWorkflowHeader(3, 'Refine each frame', 'Frame prompt, references, and revisions', `Frame ${current.selectedPanel + 1} of ${PANEL_COUNT}`)}
-                    <div class="sb-workflow-section-body">
-                        ${renderPanelRail(current)}
-                        ${renderSelectedPanel(current)}
-                    </div>
-                </section>
-                <section id="sb-workflow-score" class="sb-workflow-section${state.activeStep === 'score' ? ' is-current' : ''}" data-sb-section="score" tabindex="-1">
-                    ${renderWorkflowHeader(4, 'Score and save', '21 canonical coordinates and saved result', current.score ? 'Scored' : complete ? 'Ready' : 'Waiting for frames')}
-                    <div class="sb-workflow-section-body">
-                        <div class="sb-score-bar">
-                            <div>
-                                <strong>${complete ? 'Ready to score' : `${frameCount}/${PANEL_COUNT} frames`}</strong>
-                                <span>${scoreLedgerSha(current) ? `Ledger ${esc(scoreLedgerSha(current).slice(0, 12))}...` : 'Canonical Shorts score ledger'}</span>
-                            </div>
-                            <button type="button" class="is-primary" data-sb-score-current ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
-                            ${current.score ? '<button type="button" data-sb-open-score>Open all embeddings</button>' : ''}
-                            <button type="button" data-sb-save ${complete && !state.busy ? '' : 'disabled'}>${current.serverId ? 'Save revision' : 'Save storyboard'}</button>
-                        </div>
-                    </div>
-                </section>
-            </div>`;
-        }
-
-        function entryValue(entry) {
-            if (!entry || entry.available !== true) return 'Not scored';
-            const value = Number(entry.value);
-            if (!Number.isFinite(value)) return 'Not scored';
-            if (entry.unit === 'views') {
-                if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(value >= 1e7 ? 1 : 2)}M`;
-                if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(0)}K`;
-                return Math.round(value).toLocaleString();
+            const primaryAttribute = placement === 'top'
+                ? 'data-sb-score-current'
+                : 'data-sb-score-bottom';
+            if (placement === 'bottom') {
+                return `<div class="sb-bottom-score">
+                    <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score this opening again' : complete ? 'Score this opening' : `Add ${PANEL_COUNT - frameCount} more frame${PANEL_COUNT - frameCount === 1 ? '' : 's'} to score`}</button>
+                </div>`;
             }
-            if (entry.unit === 'probability') return `${(value * 100).toFixed(1)}%`;
-            if (entry.unit === 'percent') return `${value.toFixed(1)}%`;
-            return value.toFixed(2);
-        }
-
-        function coordinateLabel(entry) {
-            return `${entry.group || ''} ${entry.target || entry.feature_key || ''}`.trim();
+            return `<div class="sb-score-dock" data-sb-score-dock="top">
+                <div class="sb-score-summary">
+                    <strong>${current.score ? 'Opening scored' : complete ? 'Ready to score' : `${frameCount}/${PANEL_COUNT} frames ready`}</strong>
+                    <span>${scoreLedgerSha(current) ? `Ledger ${esc(scoreLedgerSha(current).slice(0, 12))}...` : 'One canonical 21-coordinate score'}</span>
+                </div>
+                <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
+                ${state.candidates.length > 1 ? `<button type="button" data-sb-batch-score ${state.busy || !state.candidates.some(needsScore) ? 'disabled' : ''}>Score all ready</button>` : ''}
+                ${current.score ? '<button type="button" data-sb-open-score>Open embeddings</button>' : ''}
+                <button type="button" data-sb-save ${complete && !state.busy ? '' : 'disabled'}>${current.serverId ? 'Save revision' : 'Save'}</button>
+            </div>`;
         }
 
         function renderCandidatePreview(item) {
@@ -542,68 +449,137 @@
             )).join('')}</div>`;
         }
 
-        function compareRows(contract) {
-            const rows = state.candidates.slice();
-            if (!state.compareCoordinate) return rows;
-            return rows.sort((left, right) => {
-                const value = item => {
-                    if (!comparableScore(item, contract)) {
-                        return -Infinity;
-                    }
-                    const found = scoreEntries(item).find(entry => entry.coordinate_id === state.compareCoordinate);
-                    return found && found.available === true ? Number(found.value) : -Infinity;
-                };
-                return value(right) - value(left);
-            });
+        function candidateMetricValue(entry) {
+            const value = Number(entry && entry.value);
+            if (!entry || entry.available !== true || !Number.isFinite(value)) {
+                return '—';
+            }
+            if (entry.unit === 'views') {
+                if (Math.abs(value) >= 1e6) {
+                    return `${(value / 1e6).toFixed(value >= 1e7 ? 1 : 2)}M`;
+                }
+                if (Math.abs(value) >= 1e3) {
+                    return `${Math.round(value / 1e3)}K`;
+                }
+                return Math.round(value).toLocaleString();
+            }
+            if (entry.unit === 'probability') {
+                return `${(value * 100).toFixed(1)}%`;
+            }
+            if (
+                entry.unit === 'percent'
+                || entry.unit === 'retention_percent_rewatch_capable'
+            ) return `${value.toFixed(1)}%`;
+            return value.toFixed(2);
         }
 
-        function renderCompare() {
-            const contract = activeCompareContract();
-            const coordinates = [];
-            const byId = new Map();
-            state.candidates
-                .filter(item => comparableScore(item, contract))
-                .forEach(item => scoreEntries(item).forEach(entry => {
-                if (!byId.has(entry.coordinate_id)) {
-                    byId.set(entry.coordinate_id, entry);
-                    coordinates.push(entry);
-                }
-                }));
-            const visible = state.compareExpanded ? coordinates : coordinates.slice(0, 8);
-            const rows = compareRows(contract);
-            const incompatible = state.candidates.filter(item => (
-                item.score && !comparableScore(item, contract)
-            )).length;
-            return `<div class="sb-compare">
-                ${contract ? `<div class="sb-contract-note">Scorer revision <strong>${esc(contract.revision.slice(0, 12))}...</strong> · exactly 21 canonical coordinates${incompatible ? ` · ${incompatible} candidate${incompatible === 1 ? '' : 's'} must be rescored before comparison` : ''}</div>` : '<div class="sb-contract-note">Score a candidate to establish the canonical 21-coordinate comparison contract.</div>'}
-                <div class="sb-batch-toolbar">
-                    <button type="button" data-sb-upload-strips>Upload strip(s)</button>
-                    <button type="button" data-sb-batch-score class="is-primary" ${state.busy || !state.candidates.some(needsComparisonScore) ? 'disabled' : ''}>Score ready</button>
-                    <label><span>Sort</span><select data-sb-compare-coordinate><option value="">Input order</option>${coordinates.map(entry => `<option value="${esc(entry.coordinate_id)}" ${state.compareCoordinate === entry.coordinate_id ? 'selected' : ''}>${esc(coordinateLabel(entry))}</option>`).join('')}</select></label>
-                    <button type="button" data-sb-compare-expand ${coordinates.length > 8 ? '' : 'disabled'}>${state.compareExpanded ? 'Fewer metrics' : `All ${coordinates.length || 21} metrics`}</button>
+        function renderCandidateMetrics(item) {
+            const entries = scoreEntries(item);
+            if (!entries.length) return '';
+            const targets = [
+                ['keep', 'Keep'],
+                ['ret5', '5s'],
+                ['views', 'Views'],
+            ];
+            return `<span class="sb-candidate-metrics">${targets.map(([target, label]) => {
+                const entry = entries.find(candidateEntry => (
+                    candidateEntry.target === target
+                    && candidateEntry.group === 'together'
+                    && candidateEntry.available === true
+                )) || entries.find(candidateEntry => (
+                    candidateEntry.target === target
+                    && candidateEntry.group === 'visual'
+                    && candidateEntry.available === true
+                )) || entries.find(candidateEntry => (
+                    candidateEntry.target === target
+                    && candidateEntry.available === true
+                ));
+                return `<span title="${esc(entry && entry.coordinate_id || `${target} unavailable`)}"><small>${label}</small><strong>${candidateMetricValue(entry)}</strong></span>`;
+            }).join('')}</span>`;
+        }
+
+        function renderCandidateQueue() {
+            if (state.candidates.length < 2) return '';
+            return `<section class="sb-candidate-queue" aria-label="Opening batch">
+                <div class="sb-candidate-queue-head">
+                    <div><strong>Openings</strong><span>${state.candidates.length} in this batch</span></div>
+                    <div>
+                        <button type="button" data-sb-upload-strips ${state.busy ? 'disabled' : ''}>Add strips</button>
+                        <button type="button" class="is-primary" data-sb-batch-score ${state.busy || !state.candidates.some(needsScore) ? 'disabled' : ''}>Score all ready</button>
+                    </div>
                 </div>
-                <div class="sb-compare-table-wrap">
-                    <table class="sb-compare-table">
-                        <thead><tr><th>Candidate</th><th>Status</th>${visible.map(entry => `<th title="${esc(entry.coordinate_id)}">${esc(coordinateLabel(entry))}</th>`).join('')}<th>Actions</th></tr></thead>
-                        <tbody>${rows.map((item, index) => {
-                            const entries = new Map(scoreEntries(item).map(entry => [entry.coordinate_id, entry]));
-                            return `<tr>
-                                <td><button type="button" class="sb-candidate-cell" data-sb-select-candidate="${esc(item.id)}">${renderCandidatePreview(item)}<span>${index + 1}. ${esc(item.name)}</span></button></td>
-                                <td>${item.score
-                                    ? comparableScore(item, contract)
-                                        ? `<span class="sb-score-state is-done">Scored</span><small>${esc(scoreLedgerSha(item).slice(0, 10))}...</small>`
-                                        : '<span class="sb-score-state is-error">Rescore</span><small>Different or incomplete scorer contract</small>'
-                                    : item.scoreError
-                                        ? `<span class="sb-score-state is-error">Error</span><small title="${esc(item.scoreError)}">${esc(item.scoreError)}</small>`
-                                        : completeFrames(item)
-                                            ? '<span class="sb-score-state">Ready</span>'
-                                            : '<span class="sb-score-state">Draft</span>'}</td>
-                                ${visible.map(entry => `<td>${comparableScore(item, contract) ? entryValue(entries.get(entry.coordinate_id)) : 'Not comparable'}</td>`).join('')}
-                                <td><div class="sb-row-actions"><button type="button" data-sb-select-candidate="${esc(item.id)}">Edit</button>${item.score ? `<button type="button" data-sb-open-candidate-score="${esc(item.id)}">Embeddings</button>` : ''}<button type="button" data-sb-duplicate="${esc(item.id)}">Duplicate</button><button type="button" data-sb-delete-candidate="${esc(item.id)}" ${state.candidates.length === 1 ? 'disabled' : ''}>Remove</button></div></td>
-                            </tr>`;
-                        }).join('')}</tbody>
-                    </table>
+                <div class="sb-candidate-grid">${state.candidates.map((item, index) => {
+                    const selected = item.id === state.selectedCandidateId;
+                    const status = state.busyCandidateId === item.id
+                        ? 'Processing'
+                        : item.score
+                            ? 'Scored'
+                            : item.scoreError
+                                ? 'Error'
+                                : completeFrames(item)
+                                    ? 'Ready'
+                                    : `${item.panels.filter(entry => entry.image).length}/${PANEL_COUNT} frames`;
+                    return `<article class="sb-candidate-card${selected ? ' is-selected' : ''}">
+                        <button type="button" class="sb-candidate-select" data-sb-select-candidate="${esc(item.id)}" aria-current="${selected ? 'true' : 'false'}">
+                            ${renderCandidatePreview(item)}
+                            <span class="sb-candidate-copy"><strong>${index + 1}. ${esc(item.name)}</strong><small class="${item.scoreError ? 'is-error' : item.score ? 'is-done' : ''}" title="${esc(item.scoreError || '')}">${esc(status)}</small></span>
+                            ${renderCandidateMetrics(item)}
+                        </button>
+                        <div class="sb-row-actions">
+                            ${item.score ? `<button type="button" data-sb-open-candidate-score="${esc(item.id)}">Embeddings</button>` : ''}
+                            <button type="button" data-sb-duplicate="${esc(item.id)}">Duplicate</button>
+                            <button type="button" data-sb-delete-candidate="${esc(item.id)}" ${state.candidates.length === 1 ? 'disabled' : ''}>Remove</button>
+                        </div>
+                    </article>`;
+                }).join('')}</div>
+            </section>`;
+        }
+
+        function renderComposer(current) {
+            const frameCount = current.panels.filter(
+                entry => entry.image
+            ).length;
+            return `<div class="sb-compose">
+                ${renderCandidateQueue()}
+                ${renderScoreBar(current, 'top')}
+                <div class="sb-start-grid">
+                    <section class="sb-workflow-section sb-upload-route" data-sb-section="upload">
+                        ${renderWorkflowHeader('A', 'Upload a finished strip', 'Use an opening you already made', `${frameCount}/${PANEL_COUNT} frames`)}
+                        <div class="sb-workflow-section-body sb-upload-route-body">
+                            <button type="button" class="is-primary" data-sb-upload-strips ${state.busy ? 'disabled' : ''}>Choose finished strip(s)</button>
+                            <span>One or many five-frame images; each is split and scored independently.</span>
+                        </div>
+                    </section>
+                    <div class="sb-route-or" aria-hidden="true">or</div>
+                    <section class="sb-workflow-section sb-ai-route" data-sb-section="build">
+                        ${renderWorkflowHeader('B', 'Build with AI', 'One coherent sheet, split into five frames', current.brief.trim() || current.hookText.trim() ? 'Direction added' : 'Ready for a brief')}
+                        <div class="sb-workflow-section-body sb-ai-route-body">
+                            ${renderBuildProgress(current)}
+                            <div class="sb-brief-grid">
+                                <label>
+                                    <span>Visual brief</span>
+                                    <textarea rows="3" data-sb-brief data-sb-focus="brief" placeholder="What happens across the opening?">${esc(current.brief || '')}</textarea>
+                                </label>
+                                <label>
+                                    <span>Spoken opening</span>
+                                    <textarea rows="3" data-sb-hook-text data-sb-focus="hook-text" placeholder="What is said in the opening?">${esc(current.hookText || '')}</textarea>
+                                </label>
+                            </div>
+                            <div class="sb-generation-bar">
+                                <label class="sb-model-picker"><span>Image model</span><select data-sb-model>${MODEL_OPTIONS.map(([value, label]) => `<option value="${value}" ${current.model === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+                                <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate five frames</button>
+                            </div>
+                        </div>
+                    </section>
                 </div>
+                <section id="sb-workflow-refine" class="sb-workflow-section" data-sb-section="refine" tabindex="-1">
+                    ${renderWorkflowHeader(2, 'Preview and refine', 'Select a frame, edit it, or leave it as generated', `Frame ${current.selectedPanel + 1} of ${PANEL_COUNT}`)}
+                    <div class="sb-workflow-section-body">
+                        ${renderPanelRail(current)}
+                        ${renderSelectedPanel(current)}
+                    </div>
+                </section>
+                ${renderScoreBar(current, 'bottom')}
             </div>`;
         }
 
@@ -626,14 +602,12 @@
         function renderBody() {
             const current = candidate();
             if (!current) return '<div class="sb-error">Storyboard state unavailable.</div>';
-            const tab = (key, label) => `<button type="button" data-sb-view="${key}" class="${state.view === key ? 'is-active' : ''}">${label}</button>`;
             return `<div class="sb-shell">
                 <div class="sb-topbar">
                     <div class="sb-title">
                         <strong>Storyboard workbench</strong>
-                        <span>Five-frame opening</span>
+                        <span>Build or upload a five-frame opening</span>
                     </div>
-                    <div class="sb-tabs">${tab('compose', 'Compose')}${tab('compare', `Compare ${state.candidates.length}`)}</div>
                     ${renderSavedPicker()}
                     <button type="button" data-sb-new title="New storyboard" ${state.candidates.length >= MAX_CANDIDATES ? 'disabled' : ''}>New</button>
                 </div>
@@ -643,7 +617,7 @@
                 </div>
                 ${state.status ? `<div class="sb-status" role="status"><span></span>${esc(state.status)}</div>` : ''}
                 ${state.error ? `<div class="sb-error" role="alert">${esc(state.error)}<button type="button" data-sb-dismiss-error aria-label="Dismiss error">&times;</button></div>` : ''}
-                ${state.view === 'compare' ? renderCompare() : renderComposer(current)}
+                ${renderComposer(current)}
             </div>`;
         }
 
@@ -875,8 +849,7 @@
             return current.references
                 .filter(ref => ref.global || (ref.panels || []).includes(panelIndex))
                 .map(ref => ref.image)
-                .filter(Boolean)
-                .slice(0, MAX_REFERENCES);
+                .filter(Boolean);
         }
 
         function compositeReferences(current) {
@@ -900,27 +873,36 @@
                 }));
         }
 
-        function continuityReferences(current, panelIndex) {
-            return current.panels
-                .map((entry, index) => ({
-                    image: entry.image,
-                    distance: Math.abs(index - panelIndex),
-                    index,
-                }))
-                .filter(entry => (
-                    entry.image
-                    && entry.index !== panelIndex
+        function contextPanelIndexes(current, panelIndex) {
+            const selected = current.panels[panelIndex];
+            const configured = Array.isArray(selected.contextPanels)
+                ? selected.contextPanels
+                : Array.from(
+                    { length: PANEL_COUNT },
+                    (_, index) => index
+                ).filter(index => index !== panelIndex);
+            return [...new Set(configured.map(Number))]
+                .filter(index => (
+                    Number.isInteger(index)
+                    && index >= 0
+                    && index < PANEL_COUNT
+                    && index !== panelIndex
                 ))
                 .sort((left, right) => (
-                    left.distance - right.distance
-                    || left.index - right.index
-                ))
-                .map(entry => entry.image);
+                    Math.abs(left - panelIndex)
+                    - Math.abs(right - panelIndex)
+                    || left - right
+                ));
+        }
+
+        function continuityReferences(current, panelIndex) {
+            return contextPanelIndexes(current, panelIndex)
+                .map(index => current.panels[index].image)
+                .filter(Boolean);
         }
 
         function uniqueReferences(values) {
-            return [...new Set((values || []).filter(Boolean))]
-                .slice(0, MAX_REFERENCES);
+            return [...new Set((values || []).filter(Boolean))];
         }
 
         async function generateComposite(current) {
@@ -944,80 +926,6 @@
             current.composite = result.image;
         }
 
-        async function generateDirected(current) {
-            state.status = 'Directing frame relationships...';
-            paint();
-            const seed = String(
-                current.brief
-                || current.hookText
-                || current.panels.find(entry => entry.prompt.trim())
-                    && current.panels.find(entry => entry.prompt.trim()).prompt
-                || ''
-            ).trim();
-            current.panels.forEach((entry, index) => {
-                if (!entry.prompt.trim()) {
-                    entry.prompt = `${seed}; chronological shot ${
-                        index + 1
-                    } of ${PANEL_COUNT}`;
-                }
-            });
-            const plan = await requestJson('/api/frames/plan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    descriptions: current.panels.map(entry => entry.prompt),
-                    brief: current.brief,
-                }),
-            });
-            const indexes = [0, 1, 2, 3, 4];
-            const order = Array.isArray(plan && plan.order)
-                ? plan.order.filter(index => indexes.includes(index))
-                : indexes.slice();
-            indexes.forEach(index => {
-                if (!order.includes(index)) order.push(index);
-            });
-            const planned = new Map(((plan && plan.frames) || []).map(entry => [entry.i, entry]));
-            const done = new Set();
-            for (let at = 0; at < order.length; at++) {
-                const index = order[at];
-                const definition = planned.get(index) || {};
-                let relation = ['new', 'edit', 'compose'].includes(definition.relation)
-                    ? definition.relation
-                    : 'new';
-                let sources = relation === 'edit'
-                    ? [definition.edit_of]
-                    : (definition.compose_from || []);
-                sources = sources.filter(source => done.has(source) && current.panels[source].image);
-                if (relation !== 'new' && !sources.length) relation = 'new';
-                const refs = sources.map(source => current.panels[source].image)
-                    .concat(activeReferences(current, index))
-                    .slice(0, MAX_REFERENCES);
-                state.status = `${relation === 'edit' ? 'Editing' : relation === 'compose' ? 'Composing' : 'Generating'} frame ${index + 1} of 5...`;
-                paint();
-                const result = await runJob('/api/storyboards/panel', {
-                    async: true,
-                    model: current.model,
-                    prompt: String(definition.prompt || current.panels[index].prompt || current.brief).trim(),
-                    refs,
-                    relation,
-                });
-                if (!result || !result.image) throw new Error(`Frame ${index + 1} returned no image.`);
-                const normalized = await normalizeImage(result.image, FRAME_WIDTH, FRAME_HEIGHT, 'cover');
-                setPanelImage(current, index, normalized, {
-                    source: 'directed-panel',
-                    relation,
-                    sourcePanels: sources,
-                    prompt: definition.prompt || current.panels[index].prompt,
-                });
-                done.add(index);
-            }
-            if (!completeFrames(current)) {
-                throw new Error(
-                    'Directed generation did not return all five frames.'
-                );
-            }
-        }
-
         async function generateAll() {
             const current = candidate();
             if (!current || state.busy) return;
@@ -1032,15 +940,12 @@
                 );
                 return;
             }
-            state.activeStep = 'generate';
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
             try {
-                if (current.generationMode === 'directed') await generateDirected(current);
-                else await generateComposite(current);
+                await generateComposite(current);
                 state.status = 'Five frames are ready.';
-                state.activeStep = 'refine';
             } catch (error) {
                 fail(error);
                 return;
@@ -1096,7 +1001,6 @@
         async function generateSelected() {
             const current = candidate();
             if (!current || state.busy) return;
-            state.activeStep = 'refine';
             const index = current.selectedPanel;
             const selected = current.panels[index];
             const prompt = String(
@@ -1108,6 +1012,25 @@
                 fail('Add a frame prompt or edit instruction first.');
                 return;
             }
+            const contextIndexes = contextPanelIndexes(current, index)
+                .filter(panelIndex => current.panels[panelIndex].image);
+            const contextualImages = contextIndexes.map(
+                panelIndex => current.panels[panelIndex].image
+            );
+            const externalImages = activeReferences(current, index);
+            const selectedInputs = uniqueReferences([
+                selected.image,
+                ...contextualImages,
+                ...externalImages,
+            ]);
+            if (selectedInputs.length > MAX_REFERENCES) {
+                fail(
+                    `This edit has ${selectedInputs.length} selected image inputs, `
+                        + `but ${current.model} accepts ${MAX_REFERENCES}. `
+                        + 'Deselect another frame or change an uploaded reference scope.'
+                );
+                return;
+            }
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
@@ -1116,10 +1039,10 @@
                 : `Generating frame ${index + 1}...`;
             paint();
             try {
-                let refs = uniqueReferences(
-                    activeReferences(current, index)
-                        .concat(continuityReferences(current, index))
-                );
+                let refs = uniqueReferences([
+                    ...contextualImages,
+                    ...externalImages,
+                ]);
                 let relation = refs.length ? 'compose' : 'new';
                 if (selected.image) {
                     const base = selected.strokes.length
@@ -1142,7 +1065,10 @@
                 setPanelImage(current, index, normalized, {
                     source: selected.image ? 'panel-edit' : 'panel-generation',
                     relation,
-                    sourcePanels: selected.image ? [index] : [],
+                    sourcePanels: [
+                        ...(selected.image ? [index] : []),
+                        ...contextIndexes,
+                    ],
                     prompt: selected.prompt,
                 });
                 current.editPrompt = '';
@@ -1255,7 +1181,6 @@
         async function scoreCurrent() {
             const current = candidate();
             if (!current || state.busy) return;
-            state.activeStep = 'score';
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
@@ -1271,10 +1196,16 @@
             paint();
         }
 
-        async function scoreBatch() {
+        async function scoreBatch(candidateIds) {
             if (state.busy) return;
+            const selectedIds = Array.isArray(candidateIds)
+                ? new Set(candidateIds)
+                : null;
             const queue = state.candidates.filter(
-                needsComparisonScore
+                item => (
+                    needsScore(item)
+                    && (!selectedIds || selectedIds.has(item.id))
+                )
             );
             if (!queue.length) return;
             state.busy = true;
@@ -1293,7 +1224,9 @@
             }
             state.busy = false;
             state.busyCandidateId = null;
-            state.status = `Batch complete: ${queue.filter(item => item.score).length}/${queue.length} scored.`;
+            const scoredCount = queue.filter(item => item.score).length;
+            const failedCount = queue.length - scoredCount;
+            state.status = `Batch complete: ${scoredCount}/${queue.length} scored${failedCount ? ` · ${failedCount} failed` : ''}.`;
             paint();
         }
 
@@ -1420,9 +1353,20 @@
             )).filter(Boolean);
             current.panels = Array.from({ length: PANEL_COUNT }, (_, index) => {
                 const stored = record.panels && record.panels[index] || {};
+                const defaults = blankPanel(index);
                 return {
-                    ...blankPanel(index),
+                    ...defaults,
                     ...stored,
+                    contextPanels: Array.isArray(stored.contextPanels)
+                        ? stored.contextPanels
+                            .map(Number)
+                            .filter(panelIndex => (
+                                Number.isInteger(panelIndex)
+                                && panelIndex >= 0
+                                && panelIndex < PANEL_COUNT
+                                && panelIndex !== index
+                            ))
+                        : defaults.contextPanels,
                     strokes: Array.isArray(stored.strokes) ? stored.strokes : [],
                     revisions: Array.isArray(stored.revisions) ? stored.revisions : [],
                     futureRevisions: [],
@@ -1545,8 +1489,6 @@
                     );
                 }
                 state.selectedCandidateId = loaded.id;
-                state.view = 'compose';
-                state.activeStep = 'refine';
                 state.drawEnabled = false;
                 state.status = `${loaded.name} loaded.`;
                 if (loaded.hydrationWarnings.length) {
@@ -1628,7 +1570,7 @@
             );
             if (!available) {
                 fail(
-                    `The comparison workspace holds ${MAX_CANDIDATES} storyboards. Remove one before importing another.`
+                    `This batch holds ${MAX_CANDIDATES} storyboards. Remove one before importing another.`
                 );
                 return;
             }
@@ -1636,6 +1578,7 @@
             state.error = '';
             let importedCount = 0;
             let processedCount = 0;
+            const importedIds = [];
             const failures = [];
             for (
                 let index = 0;
@@ -1665,6 +1608,7 @@
                     ) state.candidates[0] = imported;
                     else state.candidates.push(imported);
                     state.selectedCandidateId = imported.id;
+                    importedIds.push(imported.id);
                     importedCount++;
                 } catch (error) {
                     failures.push(
@@ -1675,14 +1619,21 @@
             state.busy = false;
             state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported from ${incoming.length} selected.`;
             const overflow = incoming.length - processedCount;
-            state.error = [
+            const importError = [
                 ...failures,
                 overflow
                     ? `${overflow} file${overflow === 1 ? '' : 's'} did not fit; the ${MAX_CANDIDATES}-candidate limit never evicts existing work.`
                     : '',
             ].filter(Boolean).join(' | ');
-            state.view = importedCount > 1 ? 'compare' : 'compose';
+            state.error = importError;
             paint();
+            if (importedIds.length) {
+                await scoreBatch(importedIds);
+                if (importError) {
+                    state.error = importError;
+                    paint();
+                }
+            }
         }
 
         function cloneCandidate(source) {
@@ -1873,47 +1824,30 @@
                 const created = blankCandidate(`Opening ${state.candidates.length + 1}`);
                 state.candidates.push(created);
                 state.selectedCandidateId = created.id;
-                state.view = 'compose';
-                state.activeStep = 'brief';
                 state.drawEnabled = false;
                 paint();
                 return true;
             }
-            if (button.hasAttribute('data-sb-view')) {
-                state.view = button.getAttribute('data-sb-view');
-                paint();
-                return true;
-            }
-            if (button.hasAttribute('data-sb-step')) {
-                const step = button.getAttribute('data-sb-step');
-                if (!['brief', 'generate', 'refine', 'score'].includes(step)) {
-                    return true;
-                }
-                state.activeStep = step;
-                paint();
-                window.requestAnimationFrame(() => {
-                    const section = host && host.querySelector(
-                        `[data-sb-section="${step}"]`
-                    );
-                    if (section) {
-                        section.scrollIntoView({
-                            block: 'start',
-                            behavior: 'smooth',
-                        });
-                    }
-                });
-                return true;
-            }
-            if (button.hasAttribute('data-sb-generation-mode')) {
-                state.activeStep = 'generate';
-                candidate().generationMode = button.getAttribute('data-sb-generation-mode');
-                touchCandidate(candidate());
-                paint();
-                return true;
-            }
             if (button.hasAttribute('data-sb-panel')) {
-                state.activeStep = 'refine';
                 candidate().selectedPanel = Number(button.getAttribute('data-sb-panel')) || 0;
+                paint();
+                return true;
+            }
+            if (button.hasAttribute('data-sb-context-panel')) {
+                const current = candidate();
+                const currentPanel = current.panels[current.selectedPanel];
+                const contextIndex = Number(
+                    button.getAttribute('data-sb-context-panel')
+                );
+                const selected = new Set(
+                    contextPanelIndexes(current, current.selectedPanel)
+                );
+                if (selected.has(contextIndex)) selected.delete(contextIndex);
+                else selected.add(contextIndex);
+                currentPanel.contextPanels = [...selected].sort(
+                    (left, right) => left - right
+                );
+                touchCandidate(current);
                 paint();
                 return true;
             }
@@ -2026,6 +1960,10 @@
                 scoreCurrent();
                 return true;
             }
+            if (button.hasAttribute('data-sb-score-bottom')) {
+                scoreCurrent();
+                return true;
+            }
             if (button.hasAttribute('data-sb-batch-score')) {
                 scoreBatch();
                 return true;
@@ -2042,8 +1980,6 @@
             }
             if (button.hasAttribute('data-sb-select-candidate')) {
                 state.selectedCandidateId = button.getAttribute('data-sb-select-candidate');
-                state.view = 'compose';
-                state.activeStep = 'refine';
                 state.drawEnabled = false;
                 paint();
                 return true;
@@ -2067,7 +2003,6 @@
                     const copy = cloneCandidate(source);
                     state.candidates.push(copy);
                     state.selectedCandidateId = copy.id;
-                    state.view = 'compose';
                     paint();
                 }
                 return true;
@@ -2079,11 +2014,6 @@
                     if (state.selectedCandidateId === id) state.selectedCandidateId = state.candidates[0].id;
                     paint();
                 }
-                return true;
-            }
-            if (button.hasAttribute('data-sb-compare-expand')) {
-                state.compareExpanded = !state.compareExpanded;
-                paint();
                 return true;
             }
             return false;
@@ -2139,11 +2069,6 @@
             if (target.hasAttribute('data-sb-model')) {
                 candidate().model = target.value;
                 touchCandidate(candidate());
-                paint();
-                return true;
-            }
-            if (target.hasAttribute('data-sb-compare-coordinate')) {
-                state.compareCoordinate = target.value;
                 paint();
                 return true;
             }

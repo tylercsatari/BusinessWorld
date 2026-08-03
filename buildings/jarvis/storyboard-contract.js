@@ -117,7 +117,7 @@ function cleanRevision(value) {
 
 function cleanPanel(value, index) {
     const panel = value && typeof value === 'object' ? value : {};
-    return {
+    const cleaned = {
         id: cleanText(panel.id || `panel-${index + 1}`, 64),
         prompt: cleanText(panel.prompt, 1800),
         media: cleanMedia(panel.media || panel.image),
@@ -134,6 +134,12 @@ function cleanPanel(value, index) {
             .filter(Boolean),
         strokes: cleanStrokes(panel.strokes),
     };
+    if (Array.isArray(panel.contextPanels)) {
+        cleaned.contextPanels = cleanSourcePanels(
+            panel.contextPanels
+        ).filter(panelIndex => panelIndex !== index);
+    }
+    return cleaned;
 }
 
 function cleanReference(value) {

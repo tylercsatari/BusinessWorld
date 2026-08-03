@@ -82,7 +82,7 @@ async function main() {
         );
     }
     assert(
-        indexSource.indexOf('storyboard-workbench.js?v=2')
+        indexSource.indexOf('storyboard-workbench.js?v=3')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -435,24 +435,22 @@ async function main() {
     }, { scoreLedger: ledger });
 
     assert.strictEqual(
-        await page.locator('[data-sb-workflow]').count(),
+        await page.locator('[data-sb-manual-progress]').count(),
         1,
-        'compose must expose one navigable storyboard workflow'
+        'the AI route must expose one concise build progression'
     );
     assert.deepStrictEqual(
         await page.locator('[data-sb-section]').evaluateAll(nodes => (
             nodes.map(node => node.getAttribute('data-sb-section'))
         )),
-        ['brief', 'generate', 'refine', 'score'],
-        'the workbench must preserve the four explicit workflow stages'
+        ['upload', 'build', 'refine'],
+        'the workbench must expose upload and AI as alternate starts '
+            + 'before their shared refine stage'
     );
-    await page.click('[data-sb-step="generate"]');
     assert.strictEqual(
-        await page.locator('[data-sb-step="generate"]').getAttribute(
-            'aria-current'
-        ),
-        'step',
-        'workflow navigation must identify the selected stage'
+        await page.locator('[data-sb-view], [data-sb-generation-mode]').count(),
+        0,
+        'the workbench must not expose fake Compose/Compare or generation modes'
     );
 
     await page.fill(
@@ -554,6 +552,7 @@ async function main() {
         '[data-sb-edit-prompt]',
         'Make the liquid bright blue and preserve the same machine.'
     );
+    await page.click('[data-sb-context-panel="4"]');
     await page.click('[data-sb-generate-panel]');
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
@@ -566,14 +565,22 @@ async function main() {
             source: current.panels[0].source,
             revisions: current.panels[0].revisions.length,
             refs: window.__calls.panel[0].refs.length,
+            sourcePanels: current.panels[0].sourcePanels,
         };
     });
     assert.strictEqual(edit.relation, 'edit');
     assert.strictEqual(edit.source, 'panel-edit');
     assert(edit.revisions >= 2);
-    assert(
-        edit.refs > 1,
-        'panel edits must carry the base frame plus continuity references'
+    assert.strictEqual(
+        edit.refs,
+        5,
+        'the edit must receive exactly the base, three selected frames, '
+            + 'and one scoped upload'
+    );
+    assert.deepStrictEqual(
+        edit.sourcePanels,
+        [0, 1, 2, 3],
+        'frame lineage must identify the exact storyboard context sent'
     );
 
     await page.click('[data-sb-restore-panel="previous"]');
@@ -682,9 +689,16 @@ async function main() {
     const reopen = await page.evaluate(() => ({
         scoreCalls: window.__calls.score.length,
         hasMontage: window.__calls.open[1].hasMontage,
+        contextPanels: window.__workbench.getState().candidates[0]
+            .panels[0].contextPanels,
     }));
     assert.strictEqual(reopen.scoreCalls, 1, 'saved reopen must not rescore');
     assert.strictEqual(reopen.hasMontage, true);
+    assert.deepStrictEqual(
+        reopen.contextPanels,
+        [1, 2, 3],
+        'saved storyboards must restore explicit frame context choices'
+    );
     await page.fill(
         '[data-sb-brief]',
         'Unsaved local revision that must not be overwritten.'
@@ -707,46 +721,24 @@ async function main() {
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
         && window.__workbench.getState().candidates.length === 4
-    ));
-    await page.click('[data-sb-view="compare"]');
-    await page.click('[data-sb-batch-score]');
-    await page.waitForFunction(() => (
-        !window.__workbench.getState().busy
         && window.__calls.score.length === 3
     ));
     assert.strictEqual(
-        await page.locator('.sb-score-state.is-done').count(),
-        3
+        await page.locator('.sb-candidate-card').count(),
+        4,
+        'multiple imports must appear together without switching views'
     );
-    await page.click('[data-sb-compare-expand]');
     assert.strictEqual(
-        await page.locator('.sb-compare-table thead th').count(),
-        24,
-        'candidate + status + 21 ledger coordinates + actions'
+        await page.locator('.sb-candidate-copy small.is-done').count(),
+        3,
+        'each ready imported strip must be scored independently'
     );
-    await page.evaluate(() => {
-        const scored = window.__workbench.getState().candidates
-            .filter(candidate => candidate.score);
-        scored[scored.length - 1].score.input_manifest
-            .revision_fingerprint = 'f'.repeat(64);
-    });
-    await page.click('[data-sb-view="compose"]');
-    await page.click('[data-sb-view="compare"]');
     assert.strictEqual(
-        await page.locator('.sb-score-state.is-error', {
-            hasText: 'Rescore',
-        }).count(),
-        1,
-        'mixed scorer revisions must never be presented as comparable'
+        await page.locator('.sb-candidate-metrics > span').count(),
+        9,
+        'each scored candidate must expose the same keep, five-second, '
+            + 'and views summary for immediate comparison'
     );
-    await page.evaluate(() => {
-        const scored = window.__workbench.getState().candidates
-            .filter(candidate => candidate.score);
-        scored[scored.length - 1].score.input_manifest
-            .revision_fingerprint = 'e'.repeat(64);
-    });
-    await page.click('[data-sb-view="compose"]');
-    await page.click('[data-sb-view="compare"]');
 
     const beforeOverflow = await page.evaluate(() => (
         window.__workbench.getState().candidates.map(item => item.id)
@@ -768,7 +760,7 @@ async function main() {
     }), beforeOverflow);
     assert(overflow.retained, 'batch import must never evict existing work');
     assert.match(overflow.error, /did not fit/);
-    assert.match(overflow.status, /^8 storyboards imported from 12 selected/);
+    assert.match(overflow.status, /^Batch complete: 8\/8 scored/);
 
     await page.screenshot({
         path: path.join(CACHE, 'desktop.png'),
@@ -818,7 +810,7 @@ async function main() {
         ok: true,
         coherentGenerationCalls: coherent.generateCalls,
         canonicalScoreCalls: reopen.scoreCalls + 2,
-        comparedCoordinates: 21,
+        batchCandidates: 12,
         savedReopenRescored: false,
         mobile,
         screenshots: {

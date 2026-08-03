@@ -2,8 +2,8 @@
 const ExperimentLabUI = (() => {
     const VIEWS = Object.freeze({
         create: {
-            title: 'Create',
-            subtitle: 'Generate and refine new openings',
+            title: 'Auto',
+            subtitle: 'Generate new openings automatically',
         },
         score: {
             title: 'Score',

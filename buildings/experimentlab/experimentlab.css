@@ -506,28 +506,6 @@
     color: var(--lab-blue);
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs {
-    gap: 3px;
-    padding: 3px;
-    border-radius: 12px;
-    background: #f0f0f3;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button,
-.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button:first-child,
-.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button:last-child {
-    min-height: 32px;
-    border: 0;
-    border-radius: 9px;
-    padding: 5px 11px;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-tabs button.is-active {
-    background: var(--lab-paper);
-    color: var(--lab-ink);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
 .experiment-lab-panel #shorts-storyboard-workbench .sb-saved-picker label > span {
     color: var(--lab-tertiary);
     font-size: 8px;
@@ -576,8 +554,7 @@
     color: var(--lab-red);
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-compose,
-.experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
+.experiment-lab-panel #shorts-storyboard-workbench .sb-compose {
     padding: 14px 0 0;
 }
 
@@ -603,18 +580,6 @@
     background: transparent;
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step:hover {
-    border-color: transparent;
-    background: #f5f5f7;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step.is-current {
-    border-color: rgba(0, 110, 219, 0.16);
-    background: var(--lab-blue-soft);
-    color: var(--lab-blue);
-    box-shadow: inset 0 0 0 1px rgba(0, 110, 219, 0.03);
-}
-
 .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-number,
 .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-number {
     width: 25px;
@@ -625,7 +590,6 @@
     font-size: 10px;
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step.is-current .sb-workflow-number,
 .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-step.is-done .sb-workflow-number {
     border-color: var(--lab-blue);
     background: var(--lab-blue);
@@ -649,10 +613,6 @@
     background: var(--lab-paper);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 10px 30px rgba(0, 0, 0, 0.03);
     scroll-margin-top: 14px;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section.is-current {
-    border-color: rgba(0, 110, 219, 0.28);
 }
 
 .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow-section-head {
@@ -712,27 +672,6 @@
 
 .experiment-lab-panel #shorts-storyboard-workbench .sb-generation-bar {
     gap: 9px;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented {
-    gap: 3px;
-    padding: 3px;
-    border-radius: 11px;
-    background: #f0f0f3;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button,
-.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button:first-child,
-.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button:last-child {
-    min-height: 34px;
-    border: 0;
-    border-radius: 8px;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-segmented button.is-active {
-    background: var(--lab-paper);
-    color: var(--lab-ink);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.09);
 }
 
 .experiment-lab-panel #shorts-storyboard-workbench .sb-model-picker {
@@ -801,43 +740,58 @@
     background: #f8f8fa;
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-score-bar strong {
-    color: var(--lab-ink);
-    font-size: 12px;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-score-bar span {
-    color: var(--lab-tertiary);
-    font-size: 9px;
-}
-
-.experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
-    overflow: hidden;
-    border: 1px solid var(--lab-line);
-    border-radius: 18px;
+.experiment-lab-panel #shorts-storyboard-workbench .sb-score-dock,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-candidate-queue {
+    border-color: var(--lab-line);
+    border-radius: 16px;
     background: var(--lab-paper);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 10px 30px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 8px 24px rgba(0, 0, 0, 0.025);
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-contract-note {
-    border-left-color: var(--lab-blue);
-    background: var(--lab-blue-soft);
-    color: var(--lab-secondary);
+.experiment-lab-panel #shorts-storyboard-workbench .sb-score-summary strong,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-candidate-queue-head strong,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-candidate-copy strong {
+    color: var(--lab-ink);
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-compare-table-wrap {
+.experiment-lab-panel #shorts-storyboard-workbench .sb-score-summary span,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-candidate-queue-head span,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-candidate-copy small {
+    color: var(--lab-tertiary);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-candidate-card {
     border-color: var(--lab-line);
     border-radius: 12px;
+    background: #f8f8fa;
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-compare-table th {
-    background: #f7f7fa;
+.experiment-lab-panel #shorts-storyboard-workbench .sb-candidate-card.is-selected {
+    border-color: var(--lab-blue);
+    box-shadow: 0 0 0 2px rgba(0, 110, 219, 0.12);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-frame-context {
+    border-top-color: var(--lab-line);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-context-frame {
+    border-color: var(--lab-line);
+    background: #f8f8fa;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-context-frame.is-active {
+    border-color: var(--lab-blue);
+    background: var(--lab-blue-soft);
+    color: var(--lab-blue);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-route-or {
     color: var(--lab-tertiary);
 }
 
-.experiment-lab-panel #shorts-storyboard-workbench .sb-compare-table td {
-    border-top-color: var(--lab-line);
-    color: var(--lab-ink);
+.experiment-lab-panel #shorts-storyboard-workbench .sb-bottom-score button {
+    border-radius: 12px;
 }
 
 .experiment-lab-error {
@@ -1121,9 +1075,12 @@
         border-radius: 0 0 16px 16px;
     }
 
-    .experiment-lab-panel #shorts-storyboard-workbench .sb-compose,
-    .experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-compose {
         padding: 12px 0 0;
+    }
+
+    .experiment-lab-panel #shorts-storyboard-workbench .sb-start-grid {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .experiment-lab-panel #shorts-storyboard-workbench .sb-workflow {
@@ -1180,10 +1137,6 @@
         border-left: 0;
     }
 
-    .experiment-lab-panel #shorts-storyboard-workbench .sb-compare {
-        padding: 12px;
-        border-radius: 16px;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {

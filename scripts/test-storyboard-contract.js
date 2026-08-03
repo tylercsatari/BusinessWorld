@@ -113,6 +113,32 @@ assert.strictEqual(document.score.score_input.binding_sha256, scoreInput.binding
 assert.strictEqual(document.score.score_montage.sha256, sha('d'));
 assert.deepStrictEqual(document.score.indicators, { fixture: true });
 assert(validateDocument(document).valid, 'bound document must validate');
+assert.strictEqual(
+    Object.prototype.hasOwnProperty.call(
+        document.panels[0],
+        'contextPanels'
+    ),
+    false,
+    'legacy manifests must remain canonical without frame context'
+);
+
+const contextDocument = bindDocument({
+    ...document,
+    id: 'sbcontext0001',
+    panels: document.panels.map((panel, index) => ({
+        ...panel,
+        contextPanels: [0, 1, 2, 3, 4]
+            .filter(panelIndex => panelIndex !== index),
+    })),
+});
+assert.deepStrictEqual(
+    contextDocument.panels[0].contextPanels,
+    [1, 2, 3, 4]
+);
+assert(
+    validateDocument(contextDocument).valid,
+    'new manifests must canonically retain explicit frame context'
+);
 
 const rebound = bindDocument({
     ...document,
