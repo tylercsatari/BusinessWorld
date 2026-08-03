@@ -14,6 +14,7 @@ const COLLECTIONS = Object.freeze([
     'storyboards',
 ]);
 const MAX_ACTIVITY = 500;
+const MAX_ACTIVITY_HISTORY = 24;
 const ACCOUNT_ID_PATTERN =
     /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const ITEM_ID_PATTERN = /^[a-z0-9_-]{2,96}$/i;
@@ -315,6 +316,35 @@ function activityId(workspace, activity) {
         .slice(0, 20)}`;
 }
 
+function activityHistoryEntry(value, at) {
+    const source = value && typeof value === 'object' ? value : {};
+    return {
+        status: String(source.status || 'recorded').slice(0, 80),
+        detail: source.detail == null
+            ? null
+            : String(source.detail).slice(0, 500),
+        saved: source.saved === true,
+        artifactKind: source.artifactKind == null
+            ? null
+            : String(source.artifactKind).slice(0, 40),
+        artifactId: source.artifactId == null
+            ? null
+            : String(source.artifactId).slice(0, 160),
+        at,
+    };
+}
+
+function activityHistoryChanged(previous, next) {
+    if (!previous) return true;
+    return [
+        'status',
+        'detail',
+        'saved',
+        'artifactKind',
+        'artifactId',
+    ].some(key => previous[key] !== next[key]);
+}
+
 function addActivity(workspace, input) {
     const value = input && typeof input === 'object' ? input : {};
     const requestId = String(value.requestId || '').trim().slice(0, 160);
@@ -325,11 +355,43 @@ function addActivity(workspace, input) {
         : null;
     const now = Date.now();
     if (activity) {
-        Object.assign(activity, clone(value), {
+        const clonedValue = clone(value);
+        const next = {
+            ...activity,
+            ...clonedValue,
+            ...(activity.input || clonedValue.input
+                ? {
+                    input: {
+                        ...(activity.input || {}),
+                        ...(clonedValue.input || {}),
+                    },
+                }
+                : {}),
+            ...(activity.output || clonedValue.output
+                ? {
+                    output: {
+                        ...(activity.output || {}),
+                        ...(clonedValue.output || {}),
+                    },
+                }
+                : {}),
+        };
+        const history = Array.isArray(activity.history)
+            ? clone(activity.history)
+            : [activityHistoryEntry(
+                activity,
+                activity.updatedAt || activity.createdAt || now
+            )];
+        const historyEntry = activityHistoryEntry(next, now);
+        if (activityHistoryChanged(history[history.length - 1], historyEntry)) {
+            history.push(historyEntry);
+        }
+        Object.assign(activity, next, {
             id: activity.id,
             requestId,
             createdAt: activity.createdAt,
             updatedAt: now,
+            history: history.slice(-MAX_ACTIVITY_HISTORY),
         });
         workspace.activity = [
             activity,
@@ -345,6 +407,7 @@ function addActivity(workspace, input) {
             createdAt: now,
             updatedAt: now,
         };
+        activity.history = [activityHistoryEntry(activity, now)];
         workspace.activity.unshift(activity);
     }
     workspace.activity = workspace.activity.slice(0, MAX_ACTIVITY);
@@ -363,9 +426,18 @@ function markArtifactSaved(workspace, kind, artifactId, saved) {
             activity.artifactKind === kind
             && activity.artifactId === id
         ) {
+            const now = Date.now();
             activity.saved = !!saved;
             activity.status = saved ? 'saved' : 'removed';
-            activity.updatedAt = Date.now();
+            activity.updatedAt = now;
+            const history = Array.isArray(activity.history)
+                ? activity.history
+                : [];
+            const entry = activityHistoryEntry(activity, now);
+            if (activityHistoryChanged(history[history.length - 1], entry)) {
+                history.push(entry);
+            }
+            activity.history = history.slice(-MAX_ACTIVITY_HISTORY);
             changed += 1;
         }
     }
@@ -614,6 +686,7 @@ module.exports = {
     SCHEMA_VERSION,
     COLLECTIONS,
     MAX_ACTIVITY,
+    MAX_ACTIVITY_HISTORY,
     accountKey,
     workspaceKey,
     accountIdentity,

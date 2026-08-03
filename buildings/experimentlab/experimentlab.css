@@ -425,6 +425,445 @@
     border-collapse: collapse;
 }
 
+/* Owner inspection presents workspace activity as evidence, not an audit-log ID. */
+.experiment-lab-panel .lab-team-activity-section,
+.experiment-lab-panel .lab-team-operation-detail,
+.experiment-lab-panel .lab-team-collections > section {
+    margin: 12px 0;
+    border: 1px solid var(--lab-line);
+    border-radius: 18px;
+    background: var(--lab-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 10px 30px rgba(0, 0, 0, 0.03);
+}
+
+.experiment-lab-panel .lab-team-activity-section,
+.experiment-lab-panel .lab-team-operation-detail {
+    padding: 16px;
+}
+
+.experiment-lab-panel .lab-team-section-head,
+.experiment-lab-panel .lab-team-detail-head,
+.experiment-lab-panel .lab-team-collection-title {
+    color: var(--lab-ink);
+}
+
+.experiment-lab-panel .lab-team-section-head,
+.experiment-lab-panel .lab-team-detail-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.experiment-lab-panel .lab-team-section-head small,
+.experiment-lab-panel .lab-team-detail-head small,
+.experiment-lab-panel .lab-team-storyboard-frame small {
+    display: block;
+    color: var(--lab-blue);
+    font-size: 8px;
+    font-weight: 750;
+    text-transform: uppercase;
+}
+
+.experiment-lab-panel .lab-team-section-head h4,
+.experiment-lab-panel .lab-team-detail-head h4 {
+    margin: 3px 0;
+    color: var(--lab-ink);
+    font-size: 17px;
+    font-weight: 680;
+}
+
+.experiment-lab-panel .lab-team-section-head p,
+.experiment-lab-panel .lab-team-detail-head p {
+    max-width: 760px;
+    margin: 0;
+    color: var(--lab-tertiary);
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.experiment-lab-panel .lab-team-detail-head > button {
+    width: 32px;
+    min-height: 32px;
+    flex: 0 0 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50% !important;
+    background: #eeeef2;
+    color: var(--lab-secondary);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.experiment-lab-panel .lab-team-activity-overview {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    margin: 14px 0 10px;
+}
+
+.experiment-lab-panel .lab-team-activity-overview > span {
+    padding: 10px;
+    border: 1px solid var(--lab-line);
+    border-radius: 12px;
+    background: var(--lab-paper-soft);
+}
+
+.experiment-lab-panel .lab-team-activity-overview small,
+.experiment-lab-panel .lab-team-activity-overview b {
+    display: block;
+}
+
+.experiment-lab-panel .lab-team-activity-overview small {
+    color: var(--lab-tertiary);
+    font-size: 8px;
+}
+
+.experiment-lab-panel .lab-team-activity-overview b {
+    margin-top: 2px;
+    color: var(--lab-ink);
+    font-size: 18px;
+    font-weight: 680;
+}
+
+.experiment-lab-panel .lab-team-activity-list,
+.experiment-lab-panel .lab-team-collection-list {
+    display: grid;
+    gap: 8px;
+}
+
+.experiment-lab-panel .lab-team-activity-card,
+.experiment-lab-panel .lab-team-storyboard-card {
+    width: 100%;
+    border: 1px solid var(--lab-line) !important;
+    border-radius: 14px !important;
+    background: #fbfbfc !important;
+    color: var(--lab-ink) !important;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.experiment-lab-panel .lab-team-activity-card {
+    position: relative;
+    display: block;
+    padding: 12px;
+    overflow: hidden;
+}
+
+.experiment-lab-panel .lab-team-activity-card::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--lab-activity-accent, var(--lab-blue));
+    content: "";
+}
+
+.experiment-lab-panel .lab-team-activity-card:hover,
+.experiment-lab-panel .lab-team-storyboard-card:hover,
+.experiment-lab-panel .lab-team-activity-card[data-selected="true"] {
+    border-color: var(--lab-line-strong) !important;
+    box-shadow: 0 7px 20px rgba(0, 0, 0, 0.065);
+    transform: translateY(-1px);
+}
+
+.experiment-lab-panel .lab-team-activity-top,
+.experiment-lab-panel .lab-team-activity-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.experiment-lab-panel .lab-team-activity-top > b {
+    color: var(--lab-secondary);
+    font-size: 9px;
+}
+
+.experiment-lab-panel .lab-team-activity-top > i {
+    padding: 3px 7px;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: 8px;
+    font-style: normal;
+    font-weight: 700;
+}
+
+.experiment-lab-panel .lab-team-activity-card > strong {
+    display: block;
+    margin: 6px 0 10px;
+    font-size: 13px;
+    font-weight: 680;
+}
+
+.experiment-lab-panel .lab-team-flow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr) 12px minmax(0, 1fr) 12px minmax(0, 1fr);
+    gap: 5px;
+    align-items: stretch;
+}
+
+.experiment-lab-panel .lab-team-flow > span {
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid #e7e7eb;
+    border-radius: 9px;
+    background: #ffffff;
+}
+
+.experiment-lab-panel .lab-team-flow small,
+.experiment-lab-panel .lab-team-flow b {
+    display: block;
+}
+
+.experiment-lab-panel .lab-team-flow small {
+    margin-bottom: 3px;
+    color: var(--lab-tertiary);
+    font-size: 7px;
+    text-transform: uppercase;
+}
+
+.experiment-lab-panel .lab-team-flow b {
+    overflow-wrap: anywhere;
+    color: var(--lab-secondary);
+    font-size: 9px;
+    line-height: 1.35;
+}
+
+.experiment-lab-panel .lab-team-flow em {
+    align-self: center;
+    color: #b1b1ba;
+    font-size: 11px;
+    font-style: normal;
+    text-align: center;
+}
+
+.experiment-lab-panel .lab-team-activity-foot {
+    margin-top: 9px;
+    color: var(--lab-tertiary);
+    font-size: 8px;
+}
+
+.experiment-lab-panel .lab-team-activity-foot b {
+    color: var(--lab-blue);
+    font-size: 9px;
+}
+
+.experiment-lab-panel .lab-team-evidence-grid,
+.experiment-lab-panel .lab-team-id-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.experiment-lab-panel .lab-team-evidence {
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid var(--lab-line);
+    border-radius: 12px;
+    background: var(--lab-paper-soft);
+}
+
+.experiment-lab-panel .lab-team-evidence-title,
+.experiment-lab-panel .lab-team-detail-section h5 {
+    margin: 0 0 7px;
+    font-size: 9px;
+    font-weight: 750;
+}
+
+.experiment-lab-panel .lab-team-evidence dl,
+.experiment-lab-panel .lab-team-evidence p {
+    margin: 0;
+}
+
+.experiment-lab-panel .lab-team-evidence dl > div {
+    display: grid;
+    grid-template-columns: minmax(90px, .7fr) minmax(0, 1.3fr);
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 1px solid #e4e4e9;
+}
+
+.experiment-lab-panel .lab-team-evidence dt,
+.experiment-lab-panel .lab-team-evidence dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-size: 8px;
+    line-height: 1.4;
+}
+
+.experiment-lab-panel .lab-team-evidence dt {
+    color: var(--lab-tertiary);
+}
+
+.experiment-lab-panel .lab-team-evidence dd {
+    color: var(--lab-ink);
+    font-weight: 620;
+}
+
+.experiment-lab-panel .lab-team-detail-section {
+    margin-top: 14px;
+    padding-top: 13px;
+    border-top: 1px solid var(--lab-line);
+}
+
+.experiment-lab-panel .lab-team-lifecycle {
+    display: grid;
+    gap: 8px;
+}
+
+.experiment-lab-panel .lab-team-life-step {
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+}
+
+.experiment-lab-panel .lab-team-life-step > i {
+    width: 7px;
+    height: 7px;
+    margin-top: 3px;
+    border-radius: 50%;
+}
+
+.experiment-lab-panel .lab-team-life-step b,
+.experiment-lab-panel .lab-team-life-step span {
+    display: block;
+    font-size: 8px;
+}
+
+.experiment-lab-panel .lab-team-life-step span {
+    margin-top: 2px;
+    color: var(--lab-tertiary);
+}
+
+.experiment-lab-panel .lab-team-id-grid > span {
+    min-width: 0;
+    color: var(--lab-tertiary);
+    font-size: 8px;
+}
+
+.experiment-lab-panel .lab-team-id-grid b {
+    display: block;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+    color: var(--lab-ink);
+    font-size: 9px;
+}
+
+.experiment-lab-panel .lab-team-open-analysis {
+    min-height: 40px;
+    margin-top: 14px;
+    padding: 0 14px;
+    border: 1px solid var(--lab-blue) !important;
+    border-radius: 11px !important;
+    background: var(--lab-blue) !important;
+    color: #fff !important;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.experiment-lab-panel .lab-team-detail-loading,
+.experiment-lab-panel .lab-team-detail-error,
+.experiment-lab-panel .lab-team-empty {
+    padding: 14px;
+    color: var(--lab-tertiary);
+    font-size: 10px;
+}
+
+.experiment-lab-panel .lab-team-detail-error {
+    color: var(--lab-red);
+}
+
+.experiment-lab-panel .lab-team-output-media {
+    display: block;
+    width: min(100%, 780px);
+    margin: 14px auto 0;
+    border-radius: 12px;
+    object-fit: contain;
+}
+
+.experiment-lab-panel .lab-team-collections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.experiment-lab-panel .lab-team-collections > section {
+    min-width: 0;
+    padding: 13px;
+}
+
+.experiment-lab-panel .lab-team-collection-title {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.experiment-lab-panel .lab-team-storyboard-card {
+    display: grid;
+    gap: 4px;
+    padding: 10px;
+}
+
+.experiment-lab-panel .lab-team-storyboard-card b {
+    font-size: 10px;
+}
+
+.experiment-lab-panel .lab-team-storyboard-card span,
+.experiment-lab-panel .lab-team-storyboard-card small {
+    color: var(--lab-tertiary);
+    font-size: 8px;
+}
+
+.experiment-lab-panel .lab-team-storyboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 9px;
+    margin-top: 14px;
+}
+
+.experiment-lab-panel .lab-team-storyboard-frame {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--lab-line);
+    border-radius: 12px;
+    background: var(--lab-paper-soft);
+}
+
+.experiment-lab-panel .lab-team-storyboard-frame img,
+.experiment-lab-panel .lab-team-frame-empty {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+}
+
+.experiment-lab-panel .lab-team-frame-empty {
+    display: grid;
+    place-items: center;
+    background: #ebebef;
+    color: var(--lab-tertiary);
+    font-size: 9px;
+}
+
+.experiment-lab-panel .lab-team-storyboard-frame > div:last-child {
+    padding: 9px;
+}
+
+.experiment-lab-panel .lab-team-storyboard-frame p {
+    margin: 4px 0;
+    color: var(--lab-ink);
+    font-size: 9px;
+    line-height: 1.4;
+}
+
+.experiment-lab-panel .lab-team-storyboard-frame span {
+    color: var(--lab-tertiary);
+    font-size: 8px;
+}
+
 /* The storyboard engine is shared with Shorts Quant. Only its Lab presentation
    changes here, so scoring, generation, persistence, and comparisons stay canonical. */
 .experiment-lab-panel #shorts-storyboard-workbench {
@@ -1051,6 +1490,38 @@
     .experiment-lab-panel .shorts-experiment-surface [data-savedopen] {
         width: min(100%, 168px) !important;
         flex: 1 1 145px;
+    }
+
+    .experiment-lab-panel .lab-team-activity-section,
+    .experiment-lab-panel .lab-team-operation-detail {
+        padding: 12px;
+        border-radius: 16px;
+    }
+
+    .experiment-lab-panel .lab-team-activity-overview {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .experiment-lab-panel .lab-team-flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .experiment-lab-panel .lab-team-flow > em {
+        display: none;
+    }
+
+    .experiment-lab-panel .lab-team-evidence-grid,
+    .experiment-lab-panel .lab-team-id-grid,
+    .experiment-lab-panel .lab-team-collections {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .experiment-lab-panel .lab-team-evidence dl > div {
+        grid-template-columns: minmax(82px, .8fr) minmax(0, 1.2fr);
+    }
+
+    .experiment-lab-panel .lab-team-storyboard-grid {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .experiment-lab-panel #shorts-storyboard-workbench .sb-shell {

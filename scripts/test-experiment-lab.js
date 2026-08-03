@@ -1548,6 +1548,7 @@ async function main() {
         const teamAccountId =
             '22222222-2222-4222-8222-222222222222';
         const teamStoryboardId = 'sbcreatorlab01';
+        const teamScoreJobId = 'jteamactivityscore1';
         const accountSummaries = [
             {
                 account: {
@@ -1585,7 +1586,7 @@ async function main() {
                     channels: 1,
                     storyboards: 1,
                 },
-                activityCount: 2,
+                activityCount: 3,
             },
         ];
         const replies = {
@@ -1734,13 +1735,77 @@ async function main() {
                     },
                     activity: [
                         {
+                            id: 'elateamscore1',
+                            type: 'hook-scored-from-link',
+                            status: 'complete',
+                            title: 'Unsaved creator score',
+                            detail: 'Canonical opening score completed',
+                            requestId: teamScoreJobId,
+                            saved: false,
+                            input: {
+                                kind: 'youtube-link',
+                                url: 'https://youtube.com/shorts/team-score',
+                                creatorProfile: 'hafu',
+                            },
+                            inputEvidence: {
+                                durationSeconds: 7.4,
+                                transcriptPresent: true,
+                                scoreInputFingerprint:
+                                    fixtureSha256('team-score-input'),
+                            },
+                            output: {
+                                kind: 'canonical-shorts-score',
+                                coordinateCount: 21,
+                                availableCoordinateCount: 21,
+                                ledgerSha256:
+                                    historicalUpgradeScore.score_ledger
+                                        .ledger_sha256,
+                                derivedKeepForecasts: {
+                                    visual: {
+                                        coordinateId:
+                                            'shorts.visual-keep-forecast.v1',
+                                        value: 68.75,
+                                        valueUnit: 'percent',
+                                    },
+                                    creator: {
+                                        coordinateId:
+                                            'shorts.creator-adaptive-keep.v1',
+                                        value: 72.25,
+                                        valueUnit: 'percent',
+                                    },
+                                },
+                                predictorEligible: true,
+                            },
+                            history: [{
+                                status: 'started',
+                                detail: 'YouTube opening accepted',
+                                at: Date.now() - 2500,
+                            }, {
+                                status: 'complete',
+                                detail: 'Canonical ledger persisted',
+                                at: Date.now() - 2000,
+                            }],
+                            updatedAt: Date.now() - 2000,
+                        },
+                        {
+                            id: 'elateamgenerated1',
                             type: 'hook-generated',
                             status: 'complete',
                             title: 'Generated but not saved',
+                            input: {
+                                kind: 'automatic-hook-brief',
+                                premise: 'A machine that cannot spill',
+                                requestedCount: 5,
+                            },
+                            output: {
+                                kind: 'generated-hooks',
+                                candidateCount: 5,
+                            },
                             saved: false,
                             updatedAt: Date.now(),
                         },
                         {
+                            id: 'elateamsaved1',
                             type: 'score-hook',
                             status: 'saved',
                             title: 'Saved creator hook',
@@ -1793,6 +1858,35 @@ async function main() {
                     id: 'elfteamstoryboards',
                     name: 'Opening Boards',
                 }],
+            },
+            [`/api/shortsquant/jobs/${teamScoreJobId}`]: {
+                jid: teamScoreJobId,
+                kind: 'raw-embed-youtube',
+                namespace: 'shorts',
+                status: 'done',
+                result: {
+                    ...historicalUpgradeScore,
+                    title: 'Unsaved creator score',
+                    source: 'youtube',
+                },
+            },
+            [`/api/storyboards/${teamStoryboardId}`]: {
+                id: teamStoryboardId,
+                name: 'Creator Storyboard',
+                brief: 'Reveal a spill-proof machine in one continuous action.',
+                hookText: 'This machine makes it impossible to spill.',
+                model: 'flux-2-pro',
+                generationMode: 'coherent-sheet',
+                revision: 3,
+                complete: true,
+                scored: true,
+                score: historicalUpgradeScore,
+                savedHookId: historicalSavedHookId,
+                panels: Array.from({ length: 5 }, (_, index) => ({
+                    image: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+                    prompt: `Stored creator frame ${index + 1} prompt`,
+                    relation: index ? 'continues prior frame' : 'establishes subject',
+                })),
             },
         };
         videos.forEach(video => {
@@ -2129,9 +2223,171 @@ window.fetch=function(url,options){
             'owner inspection must scope hooks and storyboards to the selected '
                 + 'account without loading its saved-channel research library'
         );
+        const teamActivitySection = page.locator(
+            '.lab-team-activity-section'
+        );
+        await teamActivitySection.waitFor();
+        assert.strictEqual(
+            await teamActivitySection.locator('table').count(),
+            0,
+            'owner activity must be visualized as evidence cards rather than an opaque ID table'
+        );
+        const teamScoreActivity = page.locator(
+            '[data-labteamactivityscore="elateamscore1"]'
+        ).first();
+        const teamScoreActivityText = await teamScoreActivity.innerText();
+        for (const label of ['Input', 'Action', 'Output', 'Storage']) {
+            assert(
+                teamScoreActivityText.toLowerCase().includes(
+                    label.toLowerCase()
+                ),
+                `owner activity must expose its ${label.toLowerCase()} stage: `
+                    + JSON.stringify(teamScoreActivityText)
+            );
+        }
+        assert(
+            teamScoreActivityText.includes(
+                '21/21 ledger coordinates + 2 keep forecasts'
+            ),
+            'scored activity must summarize the complete persisted result before it is opened'
+        );
+        await page.locator(
+            '[data-labteamactivity="elateamgenerated1"]'
+        ).click();
+        const generatedActivityDetail = page.locator(
+            '[data-lab-team-activity-detail="elateamgenerated1"]'
+        );
+        await generatedActivityDetail.waitFor();
+        const generatedDetailText =
+            await generatedActivityDetail.innerText();
+        assert(
+            generatedDetailText.includes('A machine that cannot spill')
+                && generatedDetailText.includes('Candidate Count')
+                && generatedDetailText.includes('Action timeline'),
+            'non-score work must expose its complete inputs, outputs, and action lifecycle'
+        );
+        await generatedActivityDetail.locator(
+            '[data-labteamactivityclose]'
+        ).click();
+        if (process.env.EXPERIMENT_LAB_TEAM_DESKTOP_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_TEAM_DESKTOP_SCREENSHOT
+            ), { recursive: true });
+            await teamActivitySection.scrollIntoViewIfNeeded();
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_TEAM_DESKTOP_SCREENSHOT,
+                fullPage: false,
+            });
+        }
+        if (process.env.EXPERIMENT_LAB_TEAM_MOBILE_SCREENSHOT) {
+            const teamDesktopViewport = page.viewportSize();
+            await page.setViewportSize({ width: 390, height: 844 });
+            await teamActivitySection.scrollIntoViewIfNeeded();
+            assert.strictEqual(
+                await page.evaluate(() => document.documentElement.scrollWidth),
+                390,
+                'the owner activity evidence cards must not overflow a phone viewport'
+            );
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_TEAM_MOBILE_SCREENSHOT
+            ), { recursive: true });
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_TEAM_MOBILE_SCREENSHOT,
+                fullPage: false,
+            });
+            await page.setViewportSize(teamDesktopViewport);
+        }
+        await teamScoreActivity.click();
+        const teamActivityAnalysis = page.locator(
+            '[data-canonical-score-analysis]'
+        );
+        await teamActivityAnalysis.waitFor();
+        assert.deepStrictEqual(
+            await teamActivityAnalysis.evaluate(element => ({
+                ledgerCoordinates: Number(
+                    element.dataset.ledgerCoordinateCount
+                ),
+                availableCoordinates: Number(
+                    element.dataset.ledgerCoordinateAvailableCount
+                ),
+                derivedOutputs: Number(
+                    element.dataset.derivedOutputCount
+                ),
+                inspectionReadOnly:
+                    element.dataset.inspectionReadonly,
+            })),
+            {
+                ledgerCoordinates: 21,
+                availableCoordinates: 21,
+                derivedOutputs: 2,
+                inspectionReadOnly: 'true',
+            },
+            'an unsaved Team score must open the exact canonical 21 + 2 analysis in read-only mode'
+        );
+        assert(
+            (await teamActivityAnalysis.innerText()).includes(
+                'Owner inspection · exact persisted activity result'
+            ),
+            'owner score inspection must identify the durable activity result as its source'
+        );
+        assert.strictEqual(
+            await teamActivityAnalysis.locator(
+                '[data-savescored], [data-savedrescore], '
+                    + '[data-rawtitleedit], [data-rawtransedit], '
+                    + '[data-rawreembed]'
+            ).count(),
+            0,
+            'Team score inspection must not expose any write or recompute controls'
+        );
+        assert(
+            await page.evaluate(({ accountId, jobId }) => (
+                window.__labTargetRequests.some(request => (
+                    request.account === accountId
+                    && request.path === `/api/shortsquant/jobs/${jobId}`
+                ))
+            ), { accountId: teamAccountId, jobId: teamScoreJobId }),
+            'unsaved Team scores must load their account-scoped durable job result'
+        );
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="team"]'
+        ).click();
+        const scoredActivityDetail = page.locator(
+            '[data-lab-team-activity-detail="elateamscore1"]'
+        );
+        await scoredActivityDetail.waitFor();
+        const scoredActivityDetailText =
+            await scoredActivityDetail.innerText();
+        assert(
+            scoredActivityDetailText.includes('68.75%')
+                && scoredActivityDetailText.includes('72.25%')
+                && scoredActivityDetailText.includes('Action timeline'),
+            'the owner activity record must retain both forecast values and its complete lifecycle'
+        );
+        const teamStoryboardCard = page.locator(
+            `[data-labteamstoryboard="${teamStoryboardId}"]`
+        );
+        await teamStoryboardCard.waitFor();
+        await teamStoryboardCard.click();
+        const teamStoryboardDetail = page.locator(
+            `[data-lab-team-storyboard-detail="${teamStoryboardId}"]`
+        );
+        await teamStoryboardDetail.waitFor();
+        assert(
+            (await teamStoryboardDetail.innerText()).includes(
+                'Stored creator frame 5 prompt'
+            ),
+            'saved storyboard inspection must reveal all stored frame prompts'
+        );
+        assert.strictEqual(
+            await teamStoryboardDetail.locator(
+                '.lab-team-storyboard-frame'
+            ).count(),
+            5,
+            'saved storyboard inspection must visualize every stored frame'
+        );
         await page.locator(
             `[data-labteamhook="${historicalSavedHookId}"]`
-        ).click();
+        ).first().click();
         try {
             await page.locator(
                 '[data-saved-detail-state="team-read-only"]'

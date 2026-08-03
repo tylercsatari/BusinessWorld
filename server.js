@@ -3069,6 +3069,131 @@ async function attachExperimentLabItem(
     );
 }
 
+function compactExperimentLabForecast(forecast) {
+    if (!forecast || typeof forecast !== 'object') return null;
+    const rawValue = forecast.value != null
+        ? forecast.value
+        : forecast.predicted_keep_rate != null
+            ? forecast.predicted_keep_rate
+            : forecast.raw != null
+                ? forecast.raw
+                : forecast.est != null
+                    ? forecast.est
+                    : forecast.prediction;
+    return {
+        coordinateId: String(
+            forecast.coordinate_id || forecast.coordinateId || ''
+        ).slice(0, 180) || null,
+        value: Number.isFinite(Number(rawValue))
+            ? Number(rawValue)
+            : null,
+        valueUnit: String(
+            forecast.value_unit
+            || forecast.valueUnit
+            || forecast.unit
+            || 'percent'
+        ).slice(0, 60),
+    };
+}
+
+function experimentLabScoreActivityEvidence(result) {
+    if (!result || typeof result !== 'object') return {};
+    const validation = shortsScoreLedger.validateScoreLedger(
+        result.score_ledger
+    );
+    if (!validation.valid) return {};
+    const manifest = result.input_manifest || {};
+    const montage = manifest.canonical_montage || {};
+    return {
+        inputEvidence: {
+            kind: String(result.source || 'canonical-shorts-input')
+                .slice(0, 80),
+            durationSeconds: Number.isFinite(Number(
+                result.dur_s != null
+                    ? result.dur_s
+                    : result.duration
+            ))
+                ? Number(
+                    result.dur_s != null
+                        ? result.dur_s
+                        : result.duration
+                )
+                : null,
+            hasTranscript: !!String(
+                result.transcript || result.text || ''
+            ).trim(),
+            creatorProfile: String(
+                manifest.creator_profile || ''
+            ).slice(0, 120) || null,
+            scoreInputFingerprint: String(
+                manifest.score_input_fingerprint
+                || manifest.input_fingerprint
+                || ''
+            ).slice(0, 64) || null,
+            montageSha256: String(
+                montage.montage_sha256 || ''
+            ).slice(0, 64) || null,
+        },
+        output: {
+            kind: 'canonical-shorts-score',
+            ledgerSha256: result.score_ledger.ledger_sha256,
+            coordinateCount: validation.entries.length,
+            availableCoordinateCount: validation.entries.filter(
+                entry => entry && entry.available === true
+            ).length,
+            derivedKeepForecasts: {
+                visual: compactExperimentLabForecast(
+                    result.visual_keep_forecast
+                ),
+                creator: compactExperimentLabForecast(
+                    result.creator_adaptive_keep_forecast
+                ),
+            },
+            predictorEligible: result.predictor_eligible !== false,
+        },
+    };
+}
+
+function experimentLabJobActivityEvidence(record) {
+    if (!record || typeof record !== 'object') return {};
+    const scoreEvidence = experimentLabScoreActivityEvidence(record.result);
+    if (scoreEvidence.output) return scoreEvidence;
+    const result = record.result && typeof record.result === 'object'
+        ? record.result
+        : {};
+    const media = result.media && typeof result.media === 'object'
+        ? result.media
+        : {};
+    return {
+        inputEvidence: {
+            requestFingerprint: String(
+                record.requestFingerprint || result.requestFingerprint || ''
+            ).slice(0, 64) || null,
+        },
+        output: {
+            kind: String(record.kind || 'operation-result').slice(0, 80),
+            model: String(
+                result.model || result.effectiveModel || ''
+            ).slice(0, 120) || null,
+            requestedModel: String(
+                result.requestedModel || ''
+            ).slice(0, 120) || null,
+            relation: String(result.relation || '').slice(0, 40) || null,
+            panelCount: Number.isFinite(Number(result.panelCount))
+                ? Number(result.panelCount)
+                : null,
+            mediaUrl: String(
+                media.url
+                || (typeof result.image === 'string'
+                    && result.image.startsWith('/api/')
+                    ? result.image
+                    : '')
+            ).slice(0, 500) || null,
+            mediaSha256: String(media.sha256 || '').slice(0, 64) || null,
+        },
+    };
+}
+
 async function recordExperimentLabActivity(scope, activity) {
     if (!scope) return null;
     const requestId = String(
@@ -7728,6 +7853,12 @@ async function handleHttpRequest(req, res) {
                         requestId: jobId,
                         detail:
                             'Canonical Shorts score from YouTube link',
+                        input: {
+                            kind: 'youtube-link',
+                            url: yurl,
+                            title: yTitle || null,
+                            creatorProfile: creatorProfile || null,
+                        },
                         saved: false,
                     }
                 );
@@ -7749,6 +7880,13 @@ async function handleHttpRequest(req, res) {
                         || `youtube:${yurl}`,
                     detail:
                         'Canonical Shorts score from YouTube link',
+                    input: {
+                        kind: 'youtube-link',
+                        url: yurl,
+                        title: yTitle || null,
+                        creatorProfile: creatorProfile || null,
+                    },
+                    ...experimentLabScoreActivityEvidence(out),
                     saved: false,
                 }
             );
@@ -7968,6 +8106,20 @@ async function handleHttpRequest(req, res) {
                                     requestId: racedJobId,
                                     detail:
                                         'Reused canonical Shorts score job',
+                                    input: {
+                                        kind: 'video-upload',
+                                        filename: title,
+                                        durationSeconds:
+                                            durH > 0 && isFinite(durH)
+                                                ? Math.round(durH * 1000) / 1000
+                                                : null,
+                                        transferBytes: size,
+                                        logicalBytes:
+                                            sparse ? logicalSize : size,
+                                        uploadMode,
+                                        creatorProfile:
+                                            creatorProfile || null,
+                                    },
                                     saved: false,
                                 }
                             );
@@ -7996,6 +8148,20 @@ async function handleHttpRequest(req, res) {
                                 requestId: jobId,
                                 detail:
                                     'Uploaded video sent to canonical Shorts scorer',
+                                input: {
+                                    kind: 'video-upload',
+                                    filename: title,
+                                    durationSeconds:
+                                        durH > 0 && isFinite(durH)
+                                            ? Math.round(durH * 1000) / 1000
+                                            : null,
+                                    transferBytes: size,
+                                    logicalBytes:
+                                        sparse ? logicalSize : size,
+                                    uploadMode,
+                                    creatorProfile:
+                                        creatorProfile || null,
+                                },
                                 saved: false,
                             }
                         );
@@ -8039,6 +8205,21 @@ async function handleHttpRequest(req, res) {
                                 || `upload:${transferSha256}`,
                             detail:
                                 'Uploaded video scored by the canonical Shorts scorer',
+                            input: {
+                                kind: 'video-upload',
+                                filename: title,
+                                durationSeconds:
+                                    durH > 0 && isFinite(durH)
+                                        ? Math.round(durH * 1000) / 1000
+                                        : null,
+                                transferBytes: size,
+                                logicalBytes:
+                                    sparse ? logicalSize : size,
+                                uploadMode,
+                                creatorProfile:
+                                    creatorProfile || null,
+                            },
+                            ...experimentLabScoreActivityEvidence(result),
                             saved: false,
                         }
                     );
@@ -8193,6 +8374,19 @@ async function handleHttpRequest(req, res) {
                         requestId: jobId,
                         detail:
                             'Five-frame opening sent to canonical Shorts scorer',
+                        input: {
+                            kind: 'storyboard-montage',
+                            title: (j.title || 'Built hook')
+                                .toString().slice(0, 180),
+                            text: (j.text || '').toString().slice(0, 2000),
+                            durationSeconds:
+                                monDur > 0 && isFinite(monDur)
+                                    ? Math.round(monDur * 1000) / 1000
+                                    : null,
+                            creatorProfile: creatorProfile || null,
+                            montageSha256:
+                                quantJobIdentity.sha256Buffer(imageBuffer),
+                        },
                         saved: false,
                     }
                 );
@@ -8217,6 +8411,20 @@ async function handleHttpRequest(req, res) {
                             || `montage:${Date.now()}`,
                         detail:
                             'Five-frame opening scored by the canonical Shorts scorer',
+                        input: {
+                            kind: 'storyboard-montage',
+                            title: (j.title || 'Built hook')
+                                .toString().slice(0, 180),
+                            text: (j.text || '').toString().slice(0, 2000),
+                            durationSeconds:
+                                monDur > 0 && isFinite(monDur)
+                                    ? Math.round(monDur * 1000) / 1000
+                                    : null,
+                            creatorProfile: creatorProfile || null,
+                            montageSha256:
+                                quantJobIdentity.sha256Buffer(imageBuffer),
+                        },
+                        ...experimentLabScoreActivityEvidence(result),
                         saved: false,
                     }
                 );
@@ -11041,11 +11249,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 await cloud.deleteFromR2(recordKey).catch(() => {});
                 throw new Error(`saved-hook index update failed: ${e.message || e}`);
             }
+            const savedHookActivityEvidence =
+                experimentLabScoreActivityEvidence(rec);
             await attachExperimentLabItem(
                 labScope,
                 'hooks',
                 id,
                 {
+                    ...savedHookActivityEvidence,
                     type: 'hook-saved',
                     title: rec.title,
                     requestId:
@@ -11055,6 +11266,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         ) || null,
                     detail:
                         `${rec.kind} · ${rec.source || 'experiment'}`,
+                    input: {
+                        kind: rec.source || rec.kind,
+                        title: rec.title,
+                        hasTranscript: !!String(rec.text || '').trim(),
+                        montageSha256:
+                            rec.montage_ref
+                            && rec.montage_ref.sha256
+                            || null,
+                    },
+                    output: {
+                        ...(savedHookActivityEvidence.output || {}),
+                        kind: 'saved-hook',
+                        artifactId: id,
+                    },
                 }
             );
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -12640,6 +12865,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                 ? record.error || 'Canonical job failed'
                                 : 'Canonical job complete',
                         saved: false,
+                        ...(record.status === 'done'
+                            ? experimentLabJobActivityEvidence(record)
+                            : {}),
                     }
                 );
             }
@@ -13869,6 +14097,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                 requestId: rid,
                                 detail:
                                     `${count} candidate${count === 1 ? '' : 's'}`,
+                                input: {
+                                    kind: invent
+                                        ? 'automatic-invention'
+                                        : 'seeded-idea',
+                                    premise: premise || null,
+                                    candidateCount: count,
+                                },
                                 saved: false,
                             }
                         );
@@ -14325,6 +14560,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     detail:
                         `${record.complete ? 'complete' : 'draft'} `
                         + `· ${record.model}`,
+                    input: {
+                        kind: 'storyboard-workbench',
+                        brief: record.brief || null,
+                        hookText: record.hookText || null,
+                        model: record.model,
+                        generationMode: record.generationMode,
+                        panelCount: Array.isArray(record.panels)
+                            ? record.panels.length
+                            : 0,
+                    },
+                    output: {
+                        kind: 'saved-storyboard',
+                        artifactId: id,
+                        complete: record.complete,
+                        scored: !!record.score,
+                        savedHookId: record.savedHookId || null,
+                        revision: record.revision,
+                    },
                 }
             );
             res.writeHead(200, {
@@ -14458,6 +14711,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                 requestId: jobId,
                                 detail:
                                     `${model} · coherent five-panel sheet`,
+                                input: {
+                                    kind: 'storyboard-sheet',
+                                    brief: brief || null,
+                                    hookText: hookText || null,
+                                    panelPrompts: panels,
+                                    model,
+                                    referenceCount:
+                                        refs.identities.length,
+                                },
                                 saved: false,
                             }
                         );
@@ -14586,6 +14848,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                 requestId: jobId,
                                 detail:
                                     `${effectiveModel} · ${relation}`,
+                                input: {
+                                    kind: 'storyboard-panel',
+                                    prompt,
+                                    requestedModel: model,
+                                    effectiveModel,
+                                    relation,
+                                    referenceCount:
+                                        refs.identities.length,
+                                },
                                 saved: false,
                             }
                         );

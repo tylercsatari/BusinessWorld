@@ -4,6 +4,7 @@
 const assert = require('assert');
 const {
     MAX_ACTIVITY,
+    MAX_ACTIVITY_HISTORY,
     accountKey,
     workspaceKey,
     isReadOnlyInspectionMutation,
@@ -297,6 +298,10 @@ const activity = addActivity(ownerWorkspace, {
     artifactKind: 'hooks',
     artifactId: 'hook_owner_001',
     requestId: 'request-001',
+    input: {
+        kind: 'youtube-link',
+        url: 'https://youtube.com/shorts/example',
+    },
 });
 const activityId = activity.id;
 addActivity(ownerWorkspace, {
@@ -307,10 +312,36 @@ addActivity(ownerWorkspace, {
     artifactId: 'hook_owner_001',
     requestId: 'request-001',
     detail: 'Scoring complete',
+    input: {
+        creatorProfile: 'tyler',
+    },
+    inputEvidence: {
+        scoreInputFingerprint: 'a'.repeat(64),
+    },
+    output: {
+        kind: 'canonical-shorts-score',
+        coordinateCount: 21,
+        availableCoordinateCount: 21,
+    },
 });
 assert.strictEqual(ownerWorkspace.activity.length, 1);
 assert.strictEqual(ownerWorkspace.activity[0].id, activityId);
 assert.strictEqual(ownerWorkspace.activity[0].status, 'complete');
+assert.deepStrictEqual(ownerWorkspace.activity[0].input, {
+    kind: 'youtube-link',
+    url: 'https://youtube.com/shorts/example',
+    creatorProfile: 'tyler',
+});
+assert.strictEqual(ownerWorkspace.activity[0].output.coordinateCount, 21);
+assert.strictEqual(
+    ownerWorkspace.activity[0].inputEvidence.scoreInputFingerprint,
+    'a'.repeat(64)
+);
+assert.deepStrictEqual(
+    ownerWorkspace.activity[0].history.map(entry => entry.status),
+    ['started', 'complete'],
+    'an activity must retain its lifecycle rather than replacing the prior state'
+);
 
 markArtifactSaved(
     ownerWorkspace,
@@ -320,6 +351,10 @@ markArtifactSaved(
 );
 assert.strictEqual(ownerWorkspace.activity[0].saved, true);
 assert.strictEqual(ownerWorkspace.activity[0].status, 'saved');
+assert.deepStrictEqual(
+    ownerWorkspace.activity[0].history.map(entry => entry.status),
+    ['started', 'complete', 'saved']
+);
 markArtifactSaved(
     ownerWorkspace,
     'hooks',
@@ -328,6 +363,28 @@ markArtifactSaved(
 );
 assert.strictEqual(ownerWorkspace.activity[0].saved, false);
 assert.strictEqual(ownerWorkspace.activity[0].status, 'removed');
+assert.strictEqual(
+    ownerWorkspace.activity[0].history.at(-1).status,
+    'removed'
+);
+
+for (let index = 0; index < MAX_ACTIVITY_HISTORY + 5; index += 1) {
+    addActivity(ownerWorkspace, {
+        type: 'score-hook',
+        status: `phase-${index}`,
+        requestId: 'bounded-history-request',
+        detail: `phase ${index}`,
+    });
+}
+assert.strictEqual(
+    ownerWorkspace.activity[0].history.length,
+    MAX_ACTIVITY_HISTORY,
+    'one operation lifecycle must remain bounded'
+);
+assert.strictEqual(
+    ownerWorkspace.activity[0].history.at(-1).status,
+    `phase-${MAX_ACTIVITY_HISTORY + 4}`
+);
 
 // Activity history is newest-first and strictly bounded.
 for (let index = 0; index < MAX_ACTIVITY + 25; index += 1) {
