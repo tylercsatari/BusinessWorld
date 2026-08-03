@@ -32,6 +32,7 @@ const ExperimentLabUI = (() => {
     let panel = null;
     let workspace = null;
     let contextHandler = null;
+    let scoreReadyHandler = null;
     let mutationObserver = null;
     let activeView = 'create';
     let currentContext = null;
@@ -102,7 +103,12 @@ const ExperimentLabUI = (() => {
         }
 
         contextHandler = event => renderContext(event.detail);
+        scoreReadyHandler = event => revealScore(event.detail);
         workspace.addEventListener('experiment-lab-context', contextHandler);
+        workspace.addEventListener(
+            'experiment-lab-score-ready',
+            scoreReadyHandler
+        );
         mutationObserver = new MutationObserver(updateActivity);
         mutationObserver.observe(workspace, { childList: true, subtree: true });
         applyView(false);
@@ -139,6 +145,12 @@ const ExperimentLabUI = (() => {
             if (contextHandler) {
                 workspace.removeEventListener('experiment-lab-context', contextHandler);
             }
+            if (scoreReadyHandler) {
+                workspace.removeEventListener(
+                    'experiment-lab-score-ready',
+                    scoreReadyHandler
+                );
+            }
         }
         const modal = document.getElementById('modal');
         if (modal) modal.classList.remove('experiment-lab-modal');
@@ -147,6 +159,7 @@ const ExperimentLabUI = (() => {
         panel = null;
         workspace = null;
         contextHandler = null;
+        scoreReadyHandler = null;
         currentContext = null;
     }
 
@@ -250,6 +263,38 @@ const ExperimentLabUI = (() => {
     function onWorkspaceClick(event) {
         if (!event.target.closest(SCORE_DESTINATIONS)) return;
         window.setTimeout(() => setView('score'), 0);
+    }
+
+    function revealScore(detail) {
+        if (!panel || !workspace) return;
+        setView('score', false);
+        const title = detail && detail.title || 'Opening';
+        const count = Number(detail && detail.coordinateCount) || 0;
+        const saved = detail && detail.savedId;
+        const activity = panel.querySelector('[data-lab-activity]');
+        if (activity) {
+            activity.textContent = saved
+                ? `${count} coordinates saved`
+                : `${count} coordinates scored`;
+        }
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+                if (!workspace) return;
+                const analysis = workspace.querySelector(
+                    '[data-canonical-score-analysis]'
+                );
+                if (!analysis) return;
+                analysis.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                });
+                analysis.focus({ preventScroll: true });
+                analysis.setAttribute(
+                    'aria-label',
+                    `${title} complete score analysis`
+                );
+            });
+        });
     }
 
     function setView(nextView, restoreScroll) {

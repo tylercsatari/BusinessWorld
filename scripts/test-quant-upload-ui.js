@@ -112,7 +112,11 @@ async function main() {
         assert(longSource.includes("'/api/longquant/grind/start'"), 'Long Quant grind endpoint must remain wired');
         assert(!longSource.includes('id="lqx-file"'), 'Long Quant must not restore the redraw-prone nested file input');
         assert(longSource.includes('openLongRawVideoPicker') && longSource.includes('openLongRawFramePicker'), 'Long Quant raw upload controls must use the shared picker');
-        assert(shortSource.includes('openRawVideoPicker') && shortSource.includes('openRawFramePicker'), 'Shorts Quant upload controls must use the shared picker');
+        assert(
+            shortSource.includes('openRawVideoPicker')
+                && shortSource.includes("pickFiles({ accept: 'video/*', multiple: true"),
+            'Shorts Quant upload controls must use the shared multi-video picker'
+        );
         assert(!shortSource.includes('id="rawUpFile"') && !shortSource.includes('id="rawFrameFile"'), 'Shorts Quant must not restore redraw-prone nested file inputs');
 
         let live = null;

@@ -1149,3 +1149,8 @@
         transition-duration: 0.01ms !important;
     }
 }
+
+.experiment-lab-panel [data-canonical-score-analysis] {
+    scroll-margin-top: 16px;
+    outline: none;
+}

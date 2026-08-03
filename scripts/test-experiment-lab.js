@@ -1849,6 +1849,7 @@ window.__historicalTamperFixtures=${
 window.__fetchCounts={};
 window.__labSurfaceRequests=[];
 window.__labTargetRequests=[];
+window.__labAutoSavedScore=null;
 window.fetch=function(url,options){
     const p=new URL(url,location.href).pathname;
     window.__fetchCounts[p]=(window.__fetchCounts[p]||0)+1;
@@ -1885,6 +1886,38 @@ window.fetch=function(url,options){
                 headers:{'Content-Type':'application/json'}
             }
         ));
+    }
+    if(
+        p==='/api/raw/embed-youtube'
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        return Promise.resolve(new Response(
+            JSON.stringify({
+                ...historicalUpgradeScore,
+                title:'Automatically opened YouTube score',
+                source:'youtube'
+            }),
+            {
+                status:200,
+                headers:{'Content-Type':'application/json'}
+            }
+        ));
+    }
+    if(
+        p==='/api/raw/hook-save'
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        window.__labAutoSavedScore=JSON.parse(options.body||'{}');
+        return Promise.resolve(new Response(JSON.stringify({
+            ok:true,
+            id:'hk-auto-opened-score',
+            score_record_sha256:historicalUpgradeScore.score_record_sha256,
+            score_ledger_sha256:
+                historicalUpgradeScore.score_ledger.ledger_sha256
+        }),{
+            status:200,
+            headers:{'Content-Type':'application/json'}
+        }));
     }
     if(
         p==='/api/raw/hook-enrich'
@@ -2145,6 +2178,104 @@ window.fetch=function(url,options){
         await page.getByText('Owner workspace', { exact: true }).waitFor();
         await page.locator('.experiment-lab-tab[data-lab-view="score"]').click();
         await page.locator('[data-rawbuildmode="0"]').first().click();
+        await page.getByPlaceholder(
+            'or paste a YouTube link…'
+        ).fill('https://youtube.com/shorts/auto-open-score');
+        await page.locator('[data-rawytgo]').first().click();
+        const automaticScoreAnalysis = page.locator(
+            '[data-canonical-score-analysis]'
+        );
+        await automaticScoreAnalysis.waitFor();
+        await page.waitForFunction(() => (
+            window.__labAutoSavedScore
+            && document.querySelector(
+                '[data-canonical-score-analysis]'
+            )
+        ));
+        assert.strictEqual(
+            await page.locator(
+                '.experiment-lab-tab[data-lab-view="score"]'
+            ).getAttribute('aria-selected'),
+            'true',
+            'a completed score must automatically open the Score view'
+        );
+        assert.deepStrictEqual(
+            await automaticScoreAnalysis.evaluate(element => ({
+                ledgerCoordinates: Number(
+                    element.dataset.ledgerCoordinateCount
+                ),
+                availableCoordinates: Number(
+                    element.dataset.ledgerCoordinateAvailableCount
+                ),
+                derivedOutputs: Number(
+                    element.dataset.derivedOutputCount
+                ),
+            })),
+            {
+                ledgerCoordinates: 21,
+                availableCoordinates: 21,
+                derivedOutputs: 2,
+            },
+            'the automatically opened analysis must expose the complete '
+                + '21-coordinate ledger and both derived outputs'
+        );
+        assert(
+            (await automaticScoreAnalysis.innerText()).includes(
+                '21 ledger coordinates + 2 derived keep outputs'
+            ),
+            'the full result must label the complete analysis explicitly'
+        );
+        assert.strictEqual(
+            await page.evaluate(() => (
+                window.__labAutoSavedScore
+                && window.__labAutoSavedScore.score_ledger_sha256
+            )),
+            historicalUpgradeScore.score_ledger.ledger_sha256,
+            'the private saved record must bind the exact ledger being shown'
+        );
+        assert.strictEqual(
+            await page.evaluate(() => (
+                window.__labAutoSavedScore
+                && window.__labAutoSavedScore.score_ledger.entries.length
+            )),
+            21,
+            'the auto-save must persist all 21 coordinates rather than a '
+                + 'summary-only score'
+        );
+        await automaticScoreAnalysis.scrollIntoViewIfNeeded();
+        if (process.env.EXPERIMENT_LAB_SCORE_DESKTOP_SCREENSHOT) {
+            fs.mkdirSync(
+                path.dirname(
+                    process.env.EXPERIMENT_LAB_SCORE_DESKTOP_SCREENSHOT
+                ),
+                { recursive: true }
+            );
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_SCORE_DESKTOP_SCREENSHOT,
+                fullPage: false,
+            });
+        }
+        if (process.env.EXPERIMENT_LAB_SCORE_MOBILE_SCREENSHOT) {
+            const scoreDesktopViewport = page.viewportSize();
+            await page.setViewportSize({ width: 390, height: 844 });
+            await automaticScoreAnalysis.scrollIntoViewIfNeeded();
+            assert.strictEqual(
+                await page.evaluate(() => document.documentElement.scrollWidth),
+                390,
+                'the opened canonical score must not overflow the phone viewport'
+            );
+            fs.mkdirSync(
+                path.dirname(
+                    process.env.EXPERIMENT_LAB_SCORE_MOBILE_SCREENSHOT
+                ),
+                { recursive: true }
+            );
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_SCORE_MOBILE_SCREENSHOT,
+                fullPage: false,
+            });
+            await page.setViewportSize(scoreDesktopViewport);
+        }
         const batchVideoUpload = page.locator(
             '#rtg-exppanel [data-rawupload]'
         ).first();
@@ -2684,7 +2815,7 @@ window.fetch=function(url,options){
             await page.locator('#rtg-exppanel').innerText();
         assert(
             storedPanelText.includes(
-                'All 18 registered channel coordinates'
+                '18 modality × target coordinates'
             ),
             `stored score must open the complete graph read-out: ${
                 storedPanelText.slice(0, 500)

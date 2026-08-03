@@ -82,7 +82,7 @@ async function main() {
         );
     }
     assert(
-        indexSource.indexOf('storyboard-workbench.js?v=3')
+        indexSource.indexOf('storyboard-workbench.js?v=4')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -402,6 +402,7 @@ async function main() {
             composeFrames,
             scoreCandidate,
             openScore,
+            autoPersistScore: true,
             saveScore: async (score, overrides) => {
                 calls.saveScore.push({
                     ledgerSha256: score.score_ledger.ledger_sha256,
@@ -651,17 +652,38 @@ async function main() {
         [{ panelCount: 5 }],
         'each score must use one server-assembled five-panel montage'
     );
-    await page.click('[data-sb-open-score]');
     await page.waitForFunction(() => window.__calls.open.length === 1);
     assert.strictEqual(
         await page.evaluate(() => window.__calls.open[0].hasMontage),
+        true,
+        'a completed score must open its canonical analysis automatically'
+    );
+    assert.deepStrictEqual(
+        await page.evaluate(() => ({
+            savedHooks: window.__calls.saveScore.length,
+            savedStoryboards: window.__calls.saveStoryboard.length,
+            savedHookId: window.__workbench.getState().candidates[0]
+                .savedHookId,
+        })),
+        {
+            savedHooks: 1,
+            savedStoryboards: 1,
+            savedHookId: 'saved-hook-1',
+        },
+        'Experiment Lab scoring must persist the full hook score and its '
+            + 'storyboard before presenting the result'
+    );
+    await page.click('[data-sb-open-score]');
+    await page.waitForFunction(() => window.__calls.open.length === 2);
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.open[1].hasMontage),
         true
     );
 
     await page.click('[data-sb-save]');
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
-        && window.__calls.saveStoryboard.length === 1
+        && window.__calls.saveStoryboard.length === 2
     ));
     assert.strictEqual(
         await page.evaluate(() => window.__calls.saveScore.length),
@@ -685,10 +707,10 @@ async function main() {
             && !!current.score;
     }, savedId);
     await page.click('[data-sb-open-score]');
-    await page.waitForFunction(() => window.__calls.open.length === 2);
+    await page.waitForFunction(() => window.__calls.open.length === 3);
     const reopen = await page.evaluate(() => ({
         scoreCalls: window.__calls.score.length,
-        hasMontage: window.__calls.open[1].hasMontage,
+        hasMontage: window.__calls.open[2].hasMontage,
         contextPanels: window.__workbench.getState().candidates[0]
             .panels[0].contextPanels,
     }));

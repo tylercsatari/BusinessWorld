@@ -39,6 +39,7 @@
         const scoreCandidate = options.scoreCandidate;
         const openScore = options.openScore;
         const saveScore = options.saveScore;
+        const autoPersistScore = options.autoPersistScore === true;
         const reportError = typeof options.onError === 'function'
             ? options.onError
             : () => {};
@@ -1187,6 +1188,17 @@
             try {
                 await scoreOne(current);
                 state.status = `${current.name} scored on ${scoreEntries(current).length} ledger coordinates.`;
+                if (autoPersistScore) {
+                    state.status = `${current.name} scored. Saving its complete analysis...`;
+                    paint();
+                    try {
+                        await persistCandidate(current);
+                        state.status = `${current.name} scored and saved on ${scoreEntries(current).length} ledger coordinates.`;
+                    } catch (saveError) {
+                        state.error = `The score is complete and open below, but its saved copy failed: ${String((saveError && saveError.message) || saveError)}`.slice(0, 500);
+                        reportError(state.error);
+                    }
+                }
             } catch (error) {
                 fail(error);
                 return;
@@ -1194,6 +1206,13 @@
             state.busy = false;
             state.busyCandidateId = null;
             paint();
+            if (current.score && openScore) {
+                try {
+                    await openScore(current.score);
+                } catch (error) {
+                    fail(error);
+                }
+            }
         }
 
         async function scoreBatch(candidateIds) {
@@ -1210,6 +1229,7 @@
             if (!queue.length) return;
             state.busy = true;
             state.error = '';
+            let lastScored = null;
             for (let index = 0; index < queue.length; index++) {
                 const current = queue[index];
                 state.busyCandidateId = current.id;
@@ -1218,16 +1238,33 @@
                 try {
                     current.scoreError = '';
                     await scoreOne(current);
+                    lastScored = current;
+                    if (autoPersistScore) {
+                        state.status = `Batch ${index + 1}/${queue.length}: saving ${current.name}`;
+                        paint();
+                        await persistCandidate(current, {
+                            refreshSaved: false,
+                        });
+                    }
                 } catch (error) {
                     current.scoreError = String((error && error.message) || error);
                 }
             }
+            if (autoPersistScore) await loadSaved(true);
             state.busy = false;
             state.busyCandidateId = null;
             const scoredCount = queue.filter(item => item.score).length;
             const failedCount = queue.length - scoredCount;
             state.status = `Batch complete: ${scoredCount}/${queue.length} scored${failedCount ? ` · ${failedCount} failed` : ''}.`;
+            if (lastScored) state.selectedCandidateId = lastScored.id;
             paint();
+            if (lastScored && lastScored.score && openScore) {
+                try {
+                    await openScore(lastScored.score);
+                } catch (error) {
+                    fail(error);
+                }
+            }
         }
 
         function scoreSnapshot(current) {
@@ -1260,53 +1297,63 @@
             };
         }
 
+        async function persistCandidate(current, persistOptions) {
+            persistOptions = persistOptions || {};
+            const saveVersion = Number(current.mutationVersion) || 0;
+            if (current.score && !current.savedHookId && saveScore) {
+                const saved = await saveScore(current.score, {
+                    title: current.name,
+                    text: current.hookText,
+                    montage: current.score.montageDataUrl,
+                });
+                current.savedHookId = saved && saved.id || null;
+                current.score.savedId = current.savedHookId;
+                current.score._labAutoSaved = autoPersistScore;
+            }
+            const response = await requestJson('/api/storyboards/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: current.serverId,
+                    expectedRevision: current.serverRevision,
+                    name: current.name,
+                    brief: current.brief,
+                    hookText: current.hookText,
+                    model: current.model,
+                    generationMode: current.generationMode,
+                    selectedPanel: current.selectedPanel,
+                    composite: current.composite,
+                    references: current.references,
+                    panels: current.panels,
+                    score: scoreSnapshot(current),
+                    savedHookId: current.savedHookId,
+                }),
+            });
+            current.serverId = response.id;
+            current.serverRevision = response.revision;
+            current.dirty = (
+                Number(current.mutationVersion) || 0
+            ) !== saveVersion;
+            current.pristine = false;
+            if (persistOptions.refreshSaved !== false) {
+                await loadSaved(true);
+            }
+            return response;
+        }
+
         async function saveCurrent() {
             const current = candidate();
             if (!current || state.busy || !completeFrames(current)) return;
-            const saveVersion = Number(current.mutationVersion) || 0;
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
             state.status = `Saving ${current.name}...`;
             paint();
             try {
-                if (current.score && !current.savedHookId && saveScore) {
-                    const saved = await saveScore(current.score, {
-                        title: current.name,
-                        text: current.hookText,
-                        montage: current.score.montageDataUrl,
-                    });
-                    current.savedHookId = saved && saved.id || null;
-                }
-                const response = await requestJson('/api/storyboards/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: current.serverId,
-                        expectedRevision: current.serverRevision,
-                        name: current.name,
-                        brief: current.brief,
-                        hookText: current.hookText,
-                        model: current.model,
-                        generationMode: current.generationMode,
-                        selectedPanel: current.selectedPanel,
-                        composite: current.composite,
-                        references: current.references,
-                        panels: current.panels,
-                        score: scoreSnapshot(current),
-                        savedHookId: current.savedHookId,
-                    }),
-                });
-                current.serverId = response.id;
-                current.serverRevision = response.revision;
-                current.dirty = (
-                    Number(current.mutationVersion) || 0
-                ) !== saveVersion;
-                current.pristine = false;
+                const response = await persistCandidate(current);
                 state.status = response.indexPending
                     ? `${current.name} saved; the library index is repairing in the background.`
                     : `${current.name} saved.`;
-                await loadSaved(true);
             } catch (error) {
                 fail(error);
                 return;

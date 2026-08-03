@@ -4203,6 +4203,7 @@ const JarvisRetention = (function () {
         }
         st.grindErr = null;
         st.grindOpening = k; rtgUpdateExp();
+        let openedScore = null;
         try {
             const score = await rtFetchJson('/api/hooks/grind/score/' + rid + '_' + k, {}, 3);
             if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
@@ -4212,9 +4213,20 @@ const JarvisRetention = (function () {
             Object.assign(score, verifiedScore);
             score.genFrames = (a && a.frames) || [];
             st.rawUploads.push(score); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            openedScore = score;
         } catch (e) { st.grindErr = 'open: ' + e.message; }
-        st.grindOpening = null; rtgUpdateExp();
-        window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+        st.grindOpening = null;
+        if (!openedScore) {
+            rtgUpdateExp();
+            return;
+        }
+        presentCanonicalScore(openedScore, { closeBuilder: true });
+        try {
+            await persistExperimentLabScore(openedScore);
+        } catch (saveError) {
+            st.rawUpErr = `The grind score is open, but its private saved copy failed: ${fetchFail(saveError)}`;
+        }
+        refreshRawUploadPanel();
     }
     async function grindSave(k) {
         const rid = st.grindRid; if (!rid) return;
@@ -4418,6 +4430,26 @@ const JarvisRetention = (function () {
         }
         scoreContractEnsure();
         const upMontageSrc = up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : '');
+        const scoreLedgerEntries = up.score_ledger
+            && Array.isArray(up.score_ledger.entries)
+            ? up.score_ledger.entries
+            : [];
+        const availableLedgerCoordinates = scoreLedgerEntries.filter(
+            entry => entry && entry.available === true
+        ).length;
+        const scoreStorageLabel = up._labSaveState === 'saving'
+            ? 'Saving to your private hook library...'
+            : up._labSaveState === 'error'
+                ? `Score is open; saved copy failed: ${up._labSaveError || 'unknown error'}`
+                : up.savedId || up.source === 'saved'
+                    ? 'Stored in your private hook library'
+                    : 'Ready to save';
+        const scoreStorageColor = up._labSaveState === 'error'
+            ? C.red
+            : up.savedId || up.source === 'saved'
+                ? C.green
+                : C.amber;
+        const scoreAnalysisIntro = cardc(`<div data-canonical-score-summary style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap"><div><div style="font-size:9px;color:${C.cyan};font-weight:950;text-transform:uppercase">Complete canonical analysis</div><div style="font-size:18px;color:${C.text};font-weight:950;margin-top:3px">${scoreLedgerEntries.length} ledger coordinates + 2 derived keep outputs</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:5px">${availableLedgerCoordinates}/${scoreLedgerEntries.length} ledger coordinates are available from this exact input. Every coordinate, its raw value, percentile, model provenance, input channel, and geometry is shown below. Unavailable coordinates remain explicit rather than being inferred.</div></div><div style="border:1px solid ${scoreStorageColor};color:${scoreStorageColor};padding:5px 8px;font-size:8px;font-weight:900;max-width:280px">${esc(scoreStorageLabel)}</div></div>`, 12);
         const historicalReadOnly =
             up._historicalDisplayOnly === true;
         const inspectionReadOnly =
@@ -4460,7 +4492,7 @@ const JarvisRetention = (function () {
               ${titleRow}
               <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
                 ${displayReadOnly ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">${inspectionReadOnly ? 'Team workspace · read-only' : 'Persisted historical score'}</span>` : ''}
-                ${!displayReadOnly && up.source !== 'saved' ? `<span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span>` : ''}
+                ${!displayReadOnly && up.source !== 'saved' && !up.savedId && !up._labAutoSaved ? `<span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span>` : ''}
               </span></div>
             ${up._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(up._uploadWarning)}</div>` : ''}
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
@@ -4735,7 +4767,7 @@ const JarvisRetention = (function () {
             ${keepReadoutRow('Frozen visual-only forecast', frozenVisualKeep && frozenVisualKeep.coordinateId, frozenVisualKeep ? `${fmtv(frozenVisualKeep.value, 1)}%` : 'Not available', 'Full 1,536D visual vector converted directly to keep-rate percentage.', C.green)}
             ${keepReadoutRow('Known-creator forecast', creatorAdaptiveKeep && creatorAdaptiveKeep.coordinateId, creatorAdaptiveKeep ? `${fmtv(creatorAdaptiveKeep.value, 1)}%` : 'Not available', `Visual + together vectors + strictly prior ${savedVisualKeepAccountName(selectedCreatorProfile(), selectedCreatorProfile())} outcomes; retrospectively validated, research-only.`, C.amber)}
         </section>`, 12);
-        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">All 18 registered channel coordinates · ${availableChannelCoordinates} scored · ${18 - availableChannelCoordinates} explicitly unavailable</div>
+        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">18 modality × target coordinates · ${availableChannelCoordinates} scored · ${18 - availableChannelCoordinates} explicitly unavailable</div>
             <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Availability comes only from the persisted score ledger. The page never infers it from transcript text. Two optional keep forecasts reuse existing vectors: a pooled visual diagnostic and a known-creator prequential next-upload forecast. Neither mints another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
             <div style="font-size:10px;color:${C.green};font-weight:800;text-transform:uppercase;margin-bottom:5px">Full-vector keep forecasts — 2 derived outputs</div>
             <div style="${gcol};margin-bottom:12px">${visualForecastBox()}${creatorAdaptiveForecastBox()}</div>
@@ -4746,12 +4778,14 @@ const JarvisRetention = (function () {
             + experimentRegion(
                 'score',
                 controls
-                + '<div id="exp-scoreout"></div>'
+                + `<section id="exp-scoreout" data-canonical-score-analysis data-ledger-coordinate-count="${scoreLedgerEntries.length}" data-ledger-coordinate-available-count="${availableLedgerCoordinates}" data-derived-output-count="2" tabindex="-1">`
+                + scoreAnalysisIntro
                 + trace
                 + savedVisualKeepCoordinateTableHtml(up)
                 + rawScoreProvenanceHtml(up)
                 + keepDecisionReadout
                 + boxes
+                + '</section>'
             )
             + experimentRegion('library', savedBank());
     }
@@ -6483,6 +6517,7 @@ const JarvisRetention = (function () {
                 scoreCandidate: scoreStoryboardCandidate,
                 openScore: openStoryboardScore,
                 saveScore: saveStoryboardScore,
+                autoPersistScore: isExperimentLabSurface(),
                 getCreatorProfile: selectedCreatorProfile,
                 onError: rawUploadPickerError,
             });
@@ -6634,6 +6669,49 @@ const JarvisRetention = (function () {
         const selected = uploads[selectedIndex];
         return rawUploadIsDisplayable(selected) ? selected : null;
     }
+    function publishExperimentLabScoreReady(upload) {
+        if (
+            !isExperimentLabSurface()
+            || !root
+            || typeof window.CustomEvent !== 'function'
+        ) return;
+        const ledger = upload && upload.score_ledger || {};
+        const entries = Array.isArray(ledger.entries)
+            ? ledger.entries
+            : [];
+        root.dispatchEvent(new window.CustomEvent(
+            'experiment-lab-score-ready',
+            {
+                detail: {
+                    title: upload && upload.title || 'Scored opening',
+                    ledgerSha256: ledger.ledger_sha256 || null,
+                    coordinateCount: entries.length,
+                    availableCount: entries.filter(
+                        entry => entry && entry.available === true
+                    ).length,
+                    derivedCount: 2,
+                    savedId: upload && upload.savedId || null,
+                },
+            }
+        ));
+    }
+    function presentCanonicalScore(upload, options) {
+        if (!upload) return;
+        options = options || {};
+        if (options.closeBuilder === true) st.rawBuildMode = false;
+        st.rawUpShow = true;
+        refreshRawUploadPanel();
+        publishExperimentLabScoreReady(upload);
+        window.setTimeout(() => {
+            const element = window.document.querySelector(
+                '[data-canonical-score-analysis]'
+            );
+            if (element) element.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            });
+        }, 80);
+    }
     function scoredHookSavePayload(upload, overrides) {
         if (!rawUploadIsScored(upload)) return null;
         return {
@@ -6666,6 +6744,59 @@ const JarvisRetention = (function () {
                 upload.input_manifest || rawInputManifestData(upload),
             ...(overrides || {}),
         };
+    }
+    async function persistExperimentLabScore(upload, options) {
+        options = options || {};
+        if (
+            !isExperimentLabSurface()
+            || !upload
+            || upload.savedId
+            || upload._labAutoSaved
+            || LAB_CONTEXT && LAB_CONTEXT.readOnly
+        ) return upload && upload.savedId || null;
+        if (upload._labAutoSavePromise) {
+            return upload._labAutoSavePromise;
+        }
+        const payload = scoredHookSavePayload(upload, options.overrides);
+        if (!payload) {
+            throw new Error(
+                'The complete canonical score ledger could not be persisted.'
+            );
+        }
+        upload._labSaveState = 'saving';
+        upload._labAutoSavePromise = (async () => {
+            const response = await rtFetchJson('/api/raw/hook-save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }, 1);
+            if (!response || !response.ok || !response.id) {
+                throw new Error(
+                    response && response.error
+                    || 'The private saved-hook write failed.'
+                );
+            }
+            upload.savedId = response.id;
+            upload._labAutoSaved = true;
+            upload._labSaveState = 'saved';
+            upload._labSavedAt = Date.now();
+            SAVED = null;
+            if (options.refreshContext !== false) {
+                refreshExperimentLabContext();
+            }
+            return response.id;
+        })();
+        try {
+            return await upload._labAutoSavePromise;
+        } catch (error) {
+            upload._labSaveState = 'error';
+            upload._labSaveError = String(
+                error && error.message || error
+            ).slice(0, 500);
+            throw error;
+        } finally {
+            upload._labAutoSavePromise = null;
+        }
     }
     async function scoreStoryboardCandidate(input) {
         const result = await rtJob('/api/raw/embed-montage', {
@@ -6733,8 +6864,7 @@ const JarvisRetention = (function () {
         }
         st.rawUpSel = index;
         st.rawSel = null;
-        st.rawUpShow = true;
-        refreshRawUploadPanel();
+        presentCanonicalScore(result, { closeBuilder: true });
     }
     async function saveStoryboardScore(score, overrides) {
         const payload = scoredHookSavePayload(score, {
@@ -6756,6 +6886,9 @@ const JarvisRetention = (function () {
                 response && response.error || 'Saved hook write failed.'
             );
         }
+        score.savedId = response.id;
+        score._labAutoSaved = isExperimentLabSurface();
+        score._labSaveState = 'saved';
         SAVED = null;
         refreshExperimentLabContext();
         return response;
@@ -7046,16 +7179,28 @@ const JarvisRetention = (function () {
         const u = (st.rawUploads || [])[idx];
         if (!u || !u.montage || rawScoreBusy()) return;
         st.rawReembedBusy = true; st.rawUpErr = null; rtgUpdateRaw(); rtgUpdateExp();
+        let completedScore = null;
         try {
             const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage: u.montage, text: visualOnly ? '' : String(text || '').slice(0, 2000), title: u.title || 'Re-embedded hook', duration: u.dur_s || u.duration || null, creatorProfile: selectedCreatorProfile(), async: true }) });
             if (j && !j.error) {
-                st.rawUploads[idx] = { ...j, title: u.title || j.title, transcriptSource: visualOnly ? 'forced visual-only' : 'typed by you', _reembedded: true };
+                st.rawUploads[idx] = { ...j, title: u.title || j.title, source: u.source || 'reembedded', montageDataUrl: j.montage ? `data:image/jpeg;base64,${j.montage}` : u.montageDataUrl, transcriptSource: visualOnly ? 'forced visual-only' : 'typed by you', _reembedded: true };
+                completedScore = st.rawUploads[idx];
                 st.rawUpSel = idx;
                 st.rawTransEdit = null;
             } else st.rawUpErr = (j && j.error) || 're-embed failed';
         } catch (e) { st.rawUpErr = 're-embed: ' + (e.message || e); }
         st.rawReembedBusy = false;
-        rtgUpdateRaw(); rtgUpdateExp(); render();
+        if (!completedScore) {
+            rtgUpdateRaw(); rtgUpdateExp(); render();
+            return;
+        }
+        presentCanonicalScore(completedScore, { closeBuilder: true });
+        try {
+            await persistExperimentLabScore(completedScore);
+        } catch (saveError) {
+            st.rawUpErr = `The corrected score is open, but its private saved copy failed: ${fetchFail(saveError)}`;
+        }
+        refreshRawUploadPanel();
     }
     // EVERY channel × EVERY steered output, labelled — the long-quant-style full grid.
     // 5 outputs × visual always + text/together when a transcript exists = up to 15 (+ novelty set).
@@ -7093,13 +7238,31 @@ const JarvisRetention = (function () {
             return;
         }
         st.rawYtBusy = true; st.rawUpErr = null; render();
+        let completedScore = null;
         try {
             const j = await rtJob('/api/raw/embed-youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, creatorProfile: selectedCreatorProfile(), async: true }) });
             if (!j || j.error) st.rawUpErr = (j && j.error) || 'YouTube score failed';
-            else { st.rawUploads = st.rawUploads || []; st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; st.rawYtUrl = ''; }
+            else {
+                st.rawUploads = st.rawUploads || [];
+                st.rawUploads.push(j);
+                st.rawUpSel = st.rawUploads.length - 1;
+                st.rawSel = null;
+                st.rawYtUrl = '';
+                completedScore = j;
+            }
         } catch (e) { st.rawUpErr = 'YouTube: ' + (e.message || e); }
         st.rawYtBusy = false;
-        render();
+        if (!completedScore) {
+            render();
+            return;
+        }
+        presentCanonicalScore(completedScore, { closeBuilder: true });
+        try {
+            await persistExperimentLabScore(completedScore);
+        } catch (saveError) {
+            st.rawUpErr = `The YouTube score is complete, but its private saved copy failed: ${fetchFail(saveError)}`;
+        }
+        refreshRawUploadPanel();
     }
     async function openCoordinateLedger(coordinateId) {
         if (!coordinateId) return;
@@ -7636,6 +7799,7 @@ const JarvisRetention = (function () {
         }
         st.rawUploading = true; st.rawUpErr = null; st.rawUpShow = true; rtgUpdateRaw();
         const batchErrors = [];
+        const completedScores = [];
         for (let n = 0; n < list.length; n++) {
             const file = list[n];
             st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, preparing: true }; rtgUpdateRaw();
@@ -7713,6 +7877,18 @@ const JarvisRetention = (function () {
                     j._originalBytes = prepared.originalBytes || file.size;
                     j._transferBytes = prepared.transferBytes || blob.size;
                     st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+                    completedScores.push(j);
+                    if (isExperimentLabSurface()) {
+                        try {
+                            await persistExperimentLabScore(j, {
+                                refreshContext: false,
+                            });
+                        } catch (saveError) {
+                            batchErrors.push(
+                                `${file.name || 'Video'} scored, but its private saved copy failed: ${fetchFail(saveError)}`
+                            );
+                        }
+                    }
                 }
             } catch (e) {
                 rawTrace('js-error', { msg: String(e.message || e).slice(0, 120) });
@@ -7726,7 +7902,15 @@ const JarvisRetention = (function () {
             ? batchErrors.join(' | ').slice(0, 1000)
             : null;
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
-        rtgUpdateRaw();
+        if (completedScores.length && isExperimentLabSurface()) {
+            refreshExperimentLabContext();
+        }
+        const openedScore = completedScores[completedScores.length - 1];
+        if (openedScore) {
+            presentCanonicalScore(openedScore, { closeBuilder: true });
+        } else {
+            rtgUpdateRaw();
+        }
     }
     const FRAME_W = 320, FRAME_H = 569;
     async function composeFrames(frames) {
@@ -7771,6 +7955,7 @@ const JarvisRetention = (function () {
         if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before scoring this generated hook.'); return; }
         st.genScoringK = k; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
         const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1600);
+        let completedScore = null;
         try {
             const dataUrls = [];
             for (const f of (fids || [])) dataUrls.push(f ? await urlToDataUrl('/api/hooks/grpo/montage/demo/' + f) : null);
@@ -7781,8 +7966,20 @@ const JarvisRetention = (function () {
             j.generatedRunId = st.expGenRid;
             j.generatedAttemptIndex = k;
             st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            completedScore = j;
         } catch (e) { st.rawUpErr = e.message; }
-        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; st.genScoringK = null; rtgUpdateExp();
+        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; st.genScoringK = null;
+        if (!completedScore) {
+            rtgUpdateExp();
+            return;
+        }
+        presentCanonicalScore(completedScore, { closeBuilder: true });
+        try {
+            await persistExperimentLabScore(completedScore);
+        } catch (saveError) {
+            st.rawUpErr = `The generated hook score is complete, but its private saved copy failed: ${fetchFail(saveError)}`;
+        }
+        refreshRawUploadPanel();
     }
     async function saveHook(payload) {
         try {
