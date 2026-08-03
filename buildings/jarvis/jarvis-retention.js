@@ -1455,7 +1455,7 @@ const JarvisRetention = (function () {
     function renderExperiment() {
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
-        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = j; rtgUpdateExp(); }).catch(() => { SAVED = { hooks: [] }; rtgUpdateExp(); }); }
+        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = (j && !j.error) ? j : { hooks: [], error: (j && j.error) || 'server error' }; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
@@ -3413,8 +3413,51 @@ const JarvisRetention = (function () {
     }
     // async scoring job: POST returns {jobId} instantly (no Render 100s proxy ceiling),
     // poll until done; if a redeploy loses the job, resubmit up to twice.
+    // ── upload black box ── every upload stage is journaled to localStorage, which survives
+    // BOTH reloads and tab crashes. A normal navigation/reload fires pagehide (journaled);
+    // a killed tab journals nothing after its last stage — so when the page comes back, the
+    // journal itself says WHERE the attempt died and WHETHER it was a clean reload or a kill.
+    const RAWTRACE_KEY = 'bw_raw_upload_trace';
+    function rawTrace(step, extra, create) {
+        try {
+            let t = JSON.parse(window.localStorage.getItem(RAWTRACE_KEY) || 'null');
+            if (!t) { if (!create) return; t = { start: Date.now(), steps: [] }; }
+            t.steps.push(Object.assign({ step, at: Date.now() }, extra || {}));
+            if (t.steps.length > 400) t.steps.splice(0, t.steps.length - 400);
+            window.localStorage.setItem(RAWTRACE_KEY, JSON.stringify(t));
+        } catch (e) {}
+    }
+    function rawTraceEnd() { try { window.localStorage.removeItem(RAWTRACE_KEY); } catch (e) {} }
+    window.addEventListener('pagehide', () => rawTrace('pagehide-clean-unload'));
+    (function rawTraceReport() {
+        try {
+            const t = JSON.parse(window.localStorage.getItem(RAWTRACE_KEY) || 'null');
+            if (!t || !t.steps || !t.steps.length) return;
+            window.localStorage.removeItem(RAWTRACE_KEY);
+            const last = t.steps[t.steps.length - 1];
+            if (Date.now() - last.at > 60 * 60000) return;   // stale journal — ignore
+            const clean = last.step === 'pagehide-clean-unload';
+            const lastReal = clean && t.steps.length > 1 ? t.steps[t.steps.length - 2] : last;
+            const nav = (window.performance && performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || {};
+            const note = '⚠️ black box: the last upload died at "' + lastReal.step + '" (' + Math.round((Date.now() - lastReal.at) / 1000) + 's ago) — ' +
+                (clean ? 'the page then unloaded NORMALLY (something navigated/reloaded it, not a crash)' : 'the tab was KILLED with no unload event (browser crash or out-of-memory kill)') +
+                ' · nav-type=' + (nav.type || '?') + (window.document.wasDiscarded ? ' · tab DISCARDED by browser memory saver' : '') +
+                ' · trail: ' + t.steps.map(s => s.step + (s.mb != null ? '(' + s.mb + 'MB)' : '') + (s.status != null ? '(' + s.status + ')' : '')).join(' → ');
+            console.warn('[raw-upload black box]', note, t);
+            st.rawUpErr = note; st.rawUpShow = true;
+        } catch (e) {}
+    })();
+    // "Failed to fetch" is a network-level failure (server asleep, restarting, or mid-deploy)
+    // — translate it for humans instead of leaking the raw TypeError, and never hide it.
+    function fetchFail(e) {
+        const m = String((e && (e.message || e)) || 'unknown error');
+        return /Failed to fetch|NetworkError|Load failed/i.test(m)
+            ? 'could not reach the server (it may be waking up or mid-deploy) — wait ~30s and retry'
+            : m;
+    }
     async function rtJob(url, opts, resubmits) {
         const r = await fetch(url, opts);
+        rawTrace('rtjob-response', { status: r.status });
         const raw = await r.text();
         let j = null; try { j = JSON.parse(raw); } catch (e) { }
         if (!j) throw new Error('server returned ' + r.status + (raw.trim().startsWith('<') ? ' — redeploying; retry in ~30s' : ' (non-JSON)'));
@@ -3424,7 +3467,9 @@ const JarvisRetention = (function () {
             await new Promise(res2 => window.setTimeout(res2, i < 8 ? 2500 : 5000));
             const pr = await fetch('/api/longquant/jobs/' + j.jobId);
             const pj = await pr.json().catch(() => null);
+            rawTrace('rtjob-poll', { i, status: pr.status, job: pj && pj.status });
             if (pr.status === 404) {
+                rawTrace('rtjob-resubmit');
                 if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1);
                 throw new Error('scoring job lost across a redeploy — try again');
             }
@@ -3494,6 +3539,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savedchanneladd]')) { startSavedChannel(); return; }
         if (e.target.closest('[data-savedchannelsreload]')) { refreshSavedChannels(false); return; }
         const scopen = e.target.closest('[data-savedchannelopen]'); if (scopen) { openSavedChannel(scopen.getAttribute('data-savedchannelopen')); return; }
+        if (e.target.closest('[data-savedretry]')) { SAVED = null; rtgUpdateExp(); return; }
         const screfresh = e.target.closest('[data-savedchannelrefresh]'); if (screfresh) { loadSavedChannelDetail(screfresh.getAttribute('data-savedchannelrefresh'), true).then(() => rtgUpdateExp()); return; }
         const scstop = e.target.closest('[data-savedchannelstop]'); if (scstop) { savedChannelAction(scstop.getAttribute('data-savedchannelstop'), 'stop'); return; }
         const scresume = e.target.closest('[data-savedchannelresume]'); if (scresume) { savedChannelAction(scresume.getAttribute('data-savedchannelresume'), 'resume'); return; }
@@ -3743,6 +3789,7 @@ const JarvisRetention = (function () {
             const file = list[n];
             st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
             const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
+            rawTrace('picked', { name: (file.name || '').slice(0, 60), mb: Math.round(file.size / 1e6), type: file.type }, true);
             try {
                 let blob = file, ext = (file.name.split('.').pop() || 'mp4').slice(0, 5).toLowerCase(), realDur = 0;
                 // Bigger than ~25MB → trim to the first ~6s in the browser and upload that tiny clip
@@ -3750,7 +3797,9 @@ const JarvisRetention = (function () {
                 // uses duration) is computed on the true length, not the 6s clip. Small files upload whole.
                 if (file.size > 25 * 1024 * 1024) {
                     st.rawUpErr = null; st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, trimming: true }; rtgUpdateRaw();
+                    rawTrace('trim-start');
                     let clip = null; try { clip = await extractFirstSeconds(file, 6); } catch (e) { clip = null; }
+                    rawTrace('trim-done', { trimmed: !!(clip && clip.blob) });
                     if (clip && clip.blob && clip.blob.size > 2000) { blob = clip.blob; ext = 'webm'; realDur = clip.duration || 0; }
                     else if (file.size > 200 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': ' + Math.round(file.size / 1e6) + 'MB is too big to upload whole and your browser couldn\'t auto-trim it — please trim the clip to its first ~10 seconds and re-upload'; window.clearInterval(tick); continue; }
                 }
@@ -3759,12 +3808,15 @@ const JarvisRetention = (function () {
                 st.rawUpStage = 1; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
                 const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle };
                 if (realDur > 0) upHeaders['X-Raw-Duration'] = String(Math.round(realDur));   // true full length → correct realviews
+                rawTrace('post-start', { mb: Math.round(blob.size / 1e6) });
                 const j = await rtJob('/api/raw/embed-upload', { method: 'POST', headers: { ...upHeaders, 'x-raw-async': '1' }, body: blob });   // async job — immune to the 100s proxy ceiling
+                rawTrace('scored', { err: (j && j.error) ? String(j.error).slice(0, 80) : null });
                 if (!j || j.error) { st.rawUpErr = (file.name || '') + ': ' + ((j && j.error) || 'embed failed'); }
                 else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
-            } catch (e) { st.rawUpErr = (file.name || '') + ': ' + (String(e.message || e).includes('Failed to fetch') ? 'connection dropped (large upload or redeploy) — retry in a moment' : e.message); }
+            } catch (e) { rawTrace('js-error', { msg: String(e.message || e).slice(0, 120) }); st.rawUpErr = (file.name || '') + ': ' + (String(e.message || e).includes('Failed to fetch') ? 'connection dropped (large upload or redeploy) — retry in a moment' : e.message); }
             window.clearInterval(tick);
         }
+        rawTraceEnd();   // finished (with or without an error the panel already shows) — journal only unfinished runs
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         rtgUpdateRaw();
     }
@@ -3936,7 +3988,7 @@ const JarvisRetention = (function () {
             if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) delete SAVEDCHANNELANALYSIS[id];
             return j;
         } catch (e) {
-            SAVEDCHANNELDETAIL[id] = { id, error: e.message || String(e) };
+            SAVEDCHANNELDETAIL[id] = { id, error: fetchFail(e) };
             return SAVEDCHANNELDETAIL[id];
         }
     }
@@ -3948,7 +4000,7 @@ const JarvisRetention = (function () {
             SAVEDCHANNELS = j;
             if (st.savedChannelSel) await loadSavedChannelDetail(st.savedChannelSel, true);
         } catch (e) {
-            SAVEDCHANNELS = { channels: [], error: e.message || String(e) };
+            SAVEDCHANNELS = { channels: [], error: fetchFail(e) };
         }
         scheduleSavedChannelPoll();
         if (root && st.sec === 'experiment') rtgUpdateExp();
@@ -3967,7 +4019,7 @@ const JarvisRetention = (function () {
             st.savedChannelSel = j.channel && j.channel.id;
             st.savedChannelTab = 'library';
             await refreshSavedChannels(true);
-        } catch (e) { st.savedChannelErr = e.message || String(e); }
+        } catch (e) { st.savedChannelErr = fetchFail(e); }
         st.savedChannelBusy = false; rtgUpdateExp();
     }
     async function savedChannelAction(id, action) {
@@ -3983,7 +4035,7 @@ const JarvisRetention = (function () {
                 if (st.savedChannelSel === id) st.savedChannelSel = null;
             }
             await refreshSavedChannels(true);
-        } catch (e) { st.savedChannelErr = e.message || String(e); }
+        } catch (e) { st.savedChannelErr = fetchFail(e); }
         st.savedChannelActionBusy = null; rtgUpdateExp();
     }
     async function openSavedChannel(id) {
@@ -3999,7 +4051,7 @@ const JarvisRetention = (function () {
             const j = await r.json();
             if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
             SAVEDCHANNELANALYSIS[id] = j;
-        } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: e.message || String(e) }; }
+        } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: fetchFail(e) }; }
         rtgUpdateExp();
     }
     async function openSavedChannelVideo(channelId, videoId) {
@@ -5051,6 +5103,7 @@ const JarvisRetention = (function () {
     }
     function savedStrip() {
         if (!SAVED || SAVED.loading) return cardc(`<div style="padding:18px;text-align:center;color:${C.dim}">Loading saved hooks…</div>`, 10);
+        if (SAVED.error) return cardc(`<div style="padding:14px;font-size:11px;color:#f87171">⚠️ Saved hooks failed to load: ${SAVED.error} <button data-savedretry style="margin-left:8px;padding:3px 10px;border-radius:6px;border:1px solid #f87171;background:none;color:#f87171;cursor:pointer">Retry</button></div>`, 10);
         if (!(SAVED.hooks || []).length) return cardc(`<div style="padding:14px;color:${C.dim};font-size:10px">No hooks saved yet. Score or generate a hook, then use “Save this hook.”</div>`, 10);
         const all = SAVED.hooks;
         const F = st.savedFilt || (st.savedFilt = {});

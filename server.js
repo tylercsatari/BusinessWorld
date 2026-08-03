@@ -652,6 +652,39 @@ const RAW_PYTHON = (() => {
     return 'python3';
 })();
 console.log('[raw-upload] using python:', RAW_PYTHON);
+// Most recent raw_upload.py run (exit code, kill signal, stage markers) — surfaced in
+// /api/raw/upload-health so a scorer that the kernel OOM-kills is visible remotely.
+let lastRawScorer = null;
+function rawBoxStats() {
+    const os = require('os');
+    const mu = process.memoryUsage();
+    const st = { uptimeSec: Math.round(process.uptime()), node: { rssMB: Math.round(mu.rss / 1048576), heapMB: Math.round(mu.heapUsed / 1048576) } };
+    try {   // cgroup v2 — the REAL container limit (os.totalmem() reports the HOST inside containers)
+        const lim = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
+        st.cgroup = { limitMB: lim === 'max' ? null : Math.round(+lim / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory.current', 'utf8') / 1048576) };
+    } catch (e) {
+        try { st.cgroup = { limitMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8') / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf8') / 1048576) }; } catch (e2) { st.cgroup = null; }
+    }
+    try { const s = fs.statfsSync(os.tmpdir()); st.tmpDiskFreeMB = Math.round(s.bavail * s.bsize / 1048576); } catch (e) { st.tmpDiskFreeMB = null; }
+    try {
+        st.rawembCacheMB = fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('rawemb_')).map(f => { try { return { f, mb: Math.round(fs.statSync(path.join(os.tmpdir(), f)).size / 1048576) }; } catch (e) { return { f, mb: null }; } });
+    } catch (e) { st.rawembCacheMB = null; }
+    st.lastScorer = lastRawScorer;
+    return st;
+}
+// Pre-warm the scorer's neighbour-library disk cache in the background shortly after boot.
+// A deploy wipes /tmp, and a cold warm streams ~900MB from R2 (~4MB/s on the deploy box →
+// minutes) — pre-warming means the first upload after a deploy scores at normal speed
+// instead of eating that wait. Runs outside the heavy-score queue; cache writes are atomic.
+if (process.env.R2_ACCESS_KEY_ID) setTimeout(() => {
+    try {
+        const pw = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--prewarm'], { env: RAW_PY_ENV, stdio: ['ignore', 'ignore', 'pipe'] });
+        let perr = '';
+        pw.stderr.on('data', d => { perr += d; if (perr.length > 8192) perr = perr.slice(-4096); });
+        pw.on('close', code => console.log('[raw-prewarm] exit', code, '—', String(perr).trim().split('\n').slice(-3).join(' | ')));
+        pw.on('error', e => console.log('[raw-prewarm] spawn failed:', e.message));
+    } catch (e) { console.log('[raw-prewarm] failed:', e.message); }
+}, 15000);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
@@ -1688,6 +1721,61 @@ function aiVideoPromptMessages(count, context, runIndex, totalRuns) {
 }
 
 const _staticGz = new Map();   // filePath → {mt, gz}: gzipped big static files, keyed by Last-Modified
+const CASINO_CHAT_R2_KEY = 'data/casino-coach-chat.json';
+let casinoChatCache = null;
+let casinoChatWrite = Promise.resolve();
+const casinoTtsCache = new Map();
+
+function primeCasinoTts(entry) {
+    if (!entry || entry.sender !== 'operator' || !process.env.OPENAI_API_KEY) return;
+    const job = (async () => {
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
+                voice: process.env.OPENAI_TTS_VOICE || 'alloy',
+                input: entry.content,
+                speed: 1.3,
+                response_format: 'mp3'
+            })
+        });
+        if (!response.ok) throw new Error(`TTS prewarm failed (${response.status})`);
+        return {
+            contentType: response.headers.get('content-type') || 'audio/mpeg',
+            buffer: Buffer.from(await response.arrayBuffer())
+        };
+    })();
+    casinoTtsCache.set(entry.id, { createdAt: Date.now(), job });
+    job.catch(error => { console.warn('Casino TTS prewarm failed:', error.message); casinoTtsCache.delete(entry.id); });
+    while (casinoTtsCache.size > 50) casinoTtsCache.delete(casinoTtsCache.keys().next().value);
+}
+
+async function loadCasinoChat() {
+    if (casinoChatCache) return casinoChatCache;
+    let messages = [];
+    try {
+        const buf = await cloud.downloadFromR2(CASINO_CHAT_R2_KEY);
+        if (buf) messages = JSON.parse(buf.toString('utf8'));
+    } catch (error) {
+        console.warn('Casino chat load failed:', error.message);
+    }
+    casinoChatCache = Array.isArray(messages) ? messages : [];
+    return casinoChatCache;
+}
+
+function appendCasinoChat(entry) {
+    const write = casinoChatWrite.then(async () => {
+        const messages = (await loadCasinoChat()).slice();
+        messages.push(entry);
+        casinoChatCache = messages.slice(-5000);
+        await cloud.uploadToR2(CASINO_CHAT_R2_KEY, Buffer.from(JSON.stringify(casinoChatCache)), 'application/json');
+        return entry;
+    });
+    casinoChatWrite = write.catch(error => { console.warn('Casino chat write failed:', error.message); });
+    return write;
+}
+
 const STATIC_STREAM_THRESHOLD = Math.max(
     1024 * 1024,
     parseInt(process.env.STATIC_STREAM_THRESHOLD || String(16 * 1024 * 1024), 10)
@@ -1825,53 +1913,112 @@ const server = http.createServer(async (req, res) => {
 
     // Diagnostic (public): reports the interpreter the raw-upload uses and whether
     // its deps import — so the upload pipeline can be debugged without auth.
+    // The probes (python import test, live YouTube fetch, live Gemini embed) take seconds and
+    // used to run with BLOCKING execSync on every hit — anything polling this endpoint stalled
+    // the single-threaded server, so every other request on the site hung ("failed to fetch").
+    // Now the probes run asynchronously, one at a time, and are cached for 5 minutes; box stats
+    // (cheap, always fresh) ride along. ?fresh=1 forces a re-probe.
     if (pathname === '/api/raw/upload-health' && req.method === 'GET') {
-        const { execSync } = require('child_process');
-        let deps = 'unknown', detail = '';
-        try {
-            detail = execSync(`"${RAW_PYTHON}" -c "import sys,numpy,boto3,scipy,sklearn;print(sys.executable+' | py'+sys.version.split()[0]+' | numpy'+numpy.__version__+' | scipy'+scipy.__version__+' | sklearn'+sklearn.__version__+' | boto3'+boto3.__version__)"`, { env: RAW_PY_ENV, timeout: 20000 }).toString().trim();
-            deps = 'ok';
-        } catch (e) { deps = 'FAIL'; detail = String((e.stderr && e.stderr.toString()) || e.message || e).slice(-300); }
-        let ffmpeg = '', ytdlp = '';
-        try { ffmpeg = execSync('command -v ffmpeg', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ffmpeg = '(missing)'; }
-        try { ytdlp = execSync('command -v yt-dlp', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ytdlp = '(missing binary — module may still import)'; }
-        // LIVE YouTube reachability: import yt_dlp and fetch metadata for a known public video —
-        // reveals datacenter-IP bot-blocking directly on this box.
-        let youtube = '';
-        try {
-            youtube = execSync(`"${RAW_PYTHON}" -c "
-import yt_dlp
-opts = {'quiet': True, 'no_warnings': True, 'skip_download': True, 'socket_timeout': 15}
-with yt_dlp.YoutubeDL(opts) as y:
-    i = y.extract_info('https://www.youtube.com/watch?v=aE9jKLck_cI', download=False)
-print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 }).toString().trim().split('\n').pop();
-        } catch (e) { youtube = 'FAIL: ' + String((e.stderr && e.stderr.toString()) || e.message || e).slice(-260); }
-        // LIVE Gemini check — a key can be present but dead (e.g. billing suspended on the Google
-        // project → 403 on every embed, which silently breaks ALL hook scoring). Test it for real.
-        let gemini = 'no key';
-        if (process.env.GEMINI_API_KEY) {
-            try {
-                const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-                    body: JSON.stringify({ content: { parts: [{ text: 'ok' }] }, outputDimensionality: 8 }), signal: AbortSignal.timeout(15000) });
-                const gj = await gr.json().catch(() => null);
-                gemini = (gj && gj.embedding) ? 'ok' : `FAIL http ${gr.status}: ${String((gj && gj.error && gj.error.message) || '').slice(0, 140)}`;
-            } catch (e) { gemini = 'FAIL: ' + String(e.message || e).slice(0, 120); }
+        const probe = async () => {
+            const { execFile } = require('child_process');
+            const run = (cmd, args, timeout) => new Promise(resolve => execFile(cmd, args, { env: RAW_PY_ENV, timeout }, (e, so, se) => resolve({ e, so: String(so || '').trim(), se: String(se || '').trim() })));
+            const out = {};
+            const dp = await run(RAW_PYTHON, ['-c', "import sys,numpy,boto3,scipy,sklearn;print(sys.executable+' | py'+sys.version.split()[0]+' | numpy'+numpy.__version__+' | scipy'+scipy.__version__+' | sklearn'+sklearn.__version__+' | boto3'+boto3.__version__)"], 20000);
+            out.deps = dp.e ? 'FAIL' : 'ok'; out.detail = dp.e ? (dp.se || dp.e.message || '').slice(-300) : dp.so;
+            const ff = await run('/bin/sh', ['-c', 'command -v ffmpeg'], 8000);
+            out.ffmpeg = ff.e ? '(missing)' : ff.so;
+            const yd = await run('/bin/sh', ['-c', 'command -v yt-dlp'], 8000);
+            out.ytdlp = yd.e ? '(missing binary — module may still import)' : yd.so;
+            // LIVE YouTube reachability: import yt_dlp and fetch metadata for a known public
+            // video — reveals datacenter-IP bot-blocking directly on this box.
+            const yt = await run(RAW_PYTHON, ['-c', "import yt_dlp\nopts = {'quiet': True, 'no_warnings': True, 'skip_download': True, 'socket_timeout': 15}\nwith yt_dlp.YoutubeDL(opts) as y:\n    i = y.extract_info('https://www.youtube.com/watch?v=aE9jKLck_cI', download=False)\nprint('ok: ' + str(i.get('title'))[:40])"], 45000);
+            out.youtube = yt.e ? ('FAIL: ' + (yt.se || yt.e.message || '').slice(-260)) : yt.so.split('\n').pop();
+            // LIVE Gemini check — a key can be present but dead (e.g. billing suspended on the
+            // Google project → 403 on every embed, which silently breaks ALL hook scoring).
+            out.gemini = 'no key';
+            if (process.env.GEMINI_API_KEY) {
+                try {
+                    const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+                        body: JSON.stringify({ content: { parts: [{ text: 'ok' }] }, outputDimensionality: 8 }), signal: AbortSignal.timeout(15000) });
+                    const gj = await gr.json().catch(() => null);
+                    out.gemini = (gj && gj.embedding) ? 'ok' : `FAIL http ${gr.status}: ${String((gj && gj.error && gj.error.message) || '').slice(0, 140)}`;
+                } catch (e) { out.gemini = 'FAIL: ' + String(e.message || e).slice(0, 120); }
+            }
+            return out;
+        };
+        const now = Date.now();
+        if ((!global._rawHealthCache || now - global._rawHealthCache.at > 300000 || url.searchParams.get('fresh') === '1') && !global._rawHealthProbing) {
+            global._rawHealthProbing = probe().then(out => { global._rawHealthCache = { at: Date.now(), data: out }; })
+                .catch(() => {}).finally(() => { global._rawHealthProbing = null; });
         }
+        if (!global._rawHealthCache && global._rawHealthProbing) { try { await global._rawHealthProbing; } catch (e) {} }   // first hit: wait for the initial probe
+        const cached = (global._rawHealthCache && global._rawHealthCache.data) || {};
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             rawPython: RAW_PYTHON,
-            deps,
-            detail,
-            ffmpeg,
-            ytdlp,
-            youtube,
+            deps: cached.deps || 'probing',
+            detail: cached.detail || '',
+            ffmpeg: cached.ffmpeg || '',
+            ytdlp: cached.ytdlp || '',
+            youtube: cached.youtube || '',
             hasGeminiKey: !!process.env.GEMINI_API_KEY,
-            gemini,
+            gemini: cached.gemini || 'probing',
             hasR2: !!process.env.R2_ACCESS_KEY_ID,
             gitCommit: process.env.RENDER_GIT_COMMIT || null,
+            probedAgoSec: global._rawHealthCache ? Math.round((Date.now() - global._rawHealthCache.at) / 1000) : null,
+            box: rawBoxStats(),
             promiseScorerServingContract: 'numpy-variable-horizon-four-cluster-v3',
         }));
+        return;
+    }
+
+    // Diagnostic (API_READ_KEY-gated): run the REAL upload scorer end-to-end on THIS box with a
+    // tiny generated image — exercises the Gemini embeds + the full neighbour-library warm (the
+    // heavy stage that OOM-restarted the deploy) without needing a signed-in browser, and reports
+    // exit code / kill signal / stderr stage markers / box memory so crashes are debuggable remotely.
+    if (pathname === '/api/raw/upload-selftest' && req.method === 'GET') {
+        const want = process.env.API_READ_KEY;
+        const got = url.searchParams.get('key') || String(req.headers['x-api-key'] || '');
+        if (!want || got !== want) {
+            res.writeHead(want ? 403 : 503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: want ? 'bad key' : 'API_READ_KEY not configured on this deploy' }));
+            return;
+        }
+        const os = require('os');
+        const { execSync } = require('child_process');
+        const tmpImg = path.join(os.tmpdir(), `rawselftest_${Date.now()}.jpg`);
+        try { execSync(`ffmpeg -y -f lavfi -i color=c=gray:s=64x64 -frames:v 1 "${tmpImg}"`, { env: RAW_PY_ENV, timeout: 20000, stdio: 'ignore' }); }
+        catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'ffmpeg could not build the test image: ' + e.message })); return; }
+        const t0 = Date.now();
+        try {
+            const r = await runHeavyScoreInteractive(() => new Promise(ok => {
+                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmpImg, '--text', 'selftest hook do not save', '--title', 'selftest'], { env: RAW_PY_ENV });
+                let out = '', err = '';
+                py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} ok({ code: null, signal: 'TIMEOUT-420s', out, err }); }, 420000);
+                py.on('close', (code, signal) => { clearTimeout(timer); ok({ code, signal, out, err }); });
+                py.on('error', e => { clearTimeout(timer); ok({ code: -1, signal: null, out, err: err + '\nspawn: ' + e.message }); });
+            }));
+            const ms = Date.now() - t0;
+            let parsed = null;
+            try { parsed = JSON.parse(r.out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop()); } catch (e) {}
+            const ch = (parsed && parsed.channels) || {};
+            const nb = c => !!(ch[c] && ch[c].neighbors && ch[c].neighbors.length);
+            const stderrTail = r.err.trim().split('\n').slice(-10);
+            lastRawScorer = { kind: 'selftest', ts: Date.now(), ms, code: r.code, signal: r.signal, stderrTail: stderrTail.slice(-4) };
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: r.code === 0 && !!parsed && !parsed.error && nb('visual') && nb('together'),
+                ms, exitCode: r.code, signal: r.signal,
+                pyError: (parsed && parsed.error) || null,
+                neighbors: { visual: nb('visual'), text: nb('text'), together: nb('together') },
+                indicators: parsed && parsed.indicators ? Object.keys(parsed.indicators).length : 0,
+                steer: parsed && parsed.steer ? Object.keys(parsed.steer).length : 0,
+                stderrTail,
+                box: rawBoxStats(),
+            }));
+        } finally { try { fs.unlinkSync(tmpImg); } catch (e) {} }
         return;
     }
 
@@ -1905,6 +2052,72 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
     }
 
     // =========================================
+    // CASINO: shared human poker-coach channel
+    // =========================================
+    if (pathname === '/api/casino/messages' && req.method === 'GET') {
+        try {
+            await casinoChatWrite.catch(() => {});
+            const limit = Math.max(1, Math.min(5000, parseInt(url.searchParams.get('limit') || '100', 10)));
+            const messages = (await loadCasinoChat()).slice(-limit);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ messages }));
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
+    const casinoTtsMatch = pathname.match(/^\/api\/casino\/tts\/([0-9a-f-]+)$/i);
+    if (casinoTtsMatch && req.method === 'GET') {
+        const cached = casinoTtsCache.get(casinoTtsMatch[1]);
+        if (!cached || Date.now() - cached.createdAt > 120000) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Prewarmed audio unavailable' }));
+            return;
+        }
+        try {
+            const audio = await cached.job;
+            res.writeHead(200, { 'Content-Type': audio.contentType, 'Cache-Control': 'no-store' });
+            res.end(audio.buffer);
+        } catch (error) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/casino/messages' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const content = String(body.content || '').trim().slice(0, 2000);
+            const sender = body.sender === 'operator' ? 'operator' : body.sender === 'tyler' ? 'tyler' : '';
+            if (!sender || !content) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'sender and content are required' }));
+                return;
+            }
+            const account = req._account || {};
+            const entry = {
+                id: require('crypto').randomUUID(),
+                sender,
+                content,
+                kind: body.kind === 'hand' ? 'hand' : 'message',
+                author: String(account.displayName || account.name || account.email || sender).slice(0, 80),
+                timestamp: new Date().toISOString()
+            };
+            primeCasinoTts(entry);
+            await appendCasinoChat(entry);
+            res.writeHead(201, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ message: entry }));
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // RAW upload — embed an uploaded video's first-5s hook (visual/text/together) and
     // locate it in the existing map by nearest neighbours. Raw binary body; ext in X-Raw-Ext.
     // ⬇ score a hook straight from a YouTube link: server downloads the short, extracts the
@@ -1921,7 +2134,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 const py = spawn(RAW_PYTHON, ytArgs, { env: RAW_PY_ENV });
                 let out = '', err = '';
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('YouTube score timeout (download + embed took >6 min)')); }, 360000);
+                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('YouTube score timeout (download + embed took >8 min)')); }, 480000);
                 py.on('close', () => {
                     clearTimeout(timer);
                     const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
@@ -1984,15 +2197,17 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 const script = path.join(__dirname, 'raw_upload.py');
                 const pyArgs = [script, '--file', tmp, '--title', title];
                 if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
+                const upT0 = Date.now();
                 const upRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
                         const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
                         let out = '', err = '';
                         py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                        const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 240000);
-                        py.on('close', () => {
+                        const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>7 min — even a cold cache warm fits this; check /api/raw/upload-health)')); }, 420000);
+                        py.on('close', (code, signal) => {
                             clearTimeout(timer);
+                            lastRawScorer = { kind: 'embed-upload', ts: Date.now(), ms: Date.now() - upT0, code, signal, stderrTail: err.trim().split('\n').slice(-4) };
                             const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                            if (!line) return no(new Error('embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
+                            if (!line) return no(new Error('embedding produced no result — ' + (signal ? `scorer killed (${signal}${signal === 'SIGKILL' ? ', likely out of memory' : ''}) — ` : '') + (err.trim().split('\n').pop() || 'no output').slice(-160)));
                             ok(line);
                         });
                         py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
@@ -2045,7 +2260,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                     const py = spawn(RAW_PYTHON, monArgs, { env: RAW_PY_ENV });
                     let out = '', err = '';
                     py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                    const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 120000);
+                    const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>5 min)')); }, 300000);
                     py.on('close', () => {
                         clearTimeout(timer);
                         const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
@@ -2279,7 +2494,8 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
         const payload = {
             model: body.model || process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
             voice: body.voice || process.env.OPENAI_TTS_VOICE || 'alloy',
-            input: body.input
+            input: body.input,
+            speed: Math.max(0.25, Math.min(4, Number(body.speed) || 1))
         };
 
         await proxyFetch(res, 'https://api.openai.com/v1/audio/speech', {
@@ -8057,10 +8273,11 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
                 // Latest write always wins — no stale-writer rejection. The
                 // merge below still preserves a position when a client sends
                 // 0,0 (building not yet created on that client).
-                const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Experiment Lab','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Video Lab'];
+                const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Experiment Lab','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Casino','Video Lab'];
                 const MISSING_DEFAULTS = {
                     'Chocolate Bar': { x: 42, z: 12 },
                     'Gym': { x: 15, z: 30 },
+                    'Casino': { x: 30, z: -18 },
                 };
 
                 // Merge buildings: keep R2 position when incoming is 0,0.

@@ -267,24 +267,109 @@ import gc, tempfile
 # after a deploy warms the cache; every one after skips the download entirely. Result cached per request.
 _CDIR = tempfile.gettempdir()
 _NBR = {}
+def _zip_central_dir(key, size):
+    """Member table of a remote zip (npz) from ONE small ranged read of its central directory."""
+    import struct
+    tl = min(size, 65536)
+    tail = s3.get_object(Bucket=BUCKET, Key=key, Range=f'bytes={size - tl}-')['Body'].read()
+    out = {}
+    for m in re.finditer(rb'PK\x01\x02', tail):
+        e = tail[m.start():m.start() + 46]
+        if len(e) < 46: continue
+        nlen = struct.unpack('<H', e[28:30])[0]
+        rec = {'method': struct.unpack('<H', e[10:12])[0],
+               'csize': struct.unpack('<I', e[20:24])[0],
+               'usize': struct.unpack('<I', e[24:28])[0],
+               'off': struct.unpack('<I', e[42:46])[0]}
+        if rec['csize'] == 0xFFFFFFFF or rec['off'] == 0xFFFFFFFF: raise RuntimeError('zip64 npz not supported')
+        out[tail[m.start() + 46:m.start() + 46 + nlen].decode('utf-8', 'replace')] = rec
+    return out
+
+def _zip_member_stream(key, info, etag=None):
+    """Yield one member's DECOMPRESSED bytes via ranged reads — the archive is never on disk
+    and the array never fully in RAM. IfMatch pins the object so a concurrent rewrite by the
+    embed batch fails loudly (→ stale-cache fallback) instead of corrupting the stream."""
+    import struct, zlib
+    cond = {'IfMatch': etag} if etag else {}
+    hdr = s3.get_object(Bucket=BUCKET, Key=key, Range=f"bytes={info['off']}-{info['off'] + 29}", **cond)['Body'].read()
+    n2, x2 = struct.unpack('<HH', hdr[26:30])
+    start = info['off'] + 30 + n2 + x2
+    body = s3.get_object(Bucket=BUCKET, Key=key, Range=f"bytes={start}-{start + info['csize'] - 1}", **cond)['Body']
+    d = None if info['method'] == 0 else zlib.decompressobj(-15)
+    while True:
+        chunk = body.read(1 << 20)
+        if not chunk: break
+        piece = chunk if d is None else d.decompress(chunk)
+        if piece: yield piece
+    if d is not None:
+        piece = d.flush()
+        if piece: yield piece
+
 def _norm_emb(c):
     npy = os.path.join(_CDIR, f'rawemb_{c}.npy'); meta = os.path.join(_CDIR, f'rawemb_{c}.meta.json')
-    etag = None
-    try: etag = s3.head_object(Bucket=BUCKET, Key=f'raw/{c}/embeddings.npz').get('ETag')
+    key = f'raw/{c}/embeddings.npz'
+    etag, size = None, None
+    try:
+        h = s3.head_object(Bucket=BUCKET, Key=key); etag, size = h.get('ETag'), h['ContentLength']
     except Exception: pass
-    if etag and os.path.exists(npy) and os.path.exists(meta):
+    def _cached(require_etag=True):
         try:
             m = json.load(open(meta))
-            if m.get('etag') == etag: return np.load(npy, mmap_mode='r'), m['ids']
+            if (not require_etag) or m.get('etag') == etag: return np.load(npy, mmap_mode='r'), m['ids']
         except Exception: pass
-    buf = r2_get(f'raw/{c}/embeddings.npz')
-    if buf is None: return None, None
-    z = np.load(io.BytesIO(buf), allow_pickle=True)
-    V = np.array(z['vecs'], np.float32); ids = [str(x) for x in z['ids']]; del z, buf
-    if len(V): V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
-    try: np.save(npy, V); json.dump({'etag': etag, 'ids': ids}, open(meta, 'w'))
+        return None
+    if etag and os.path.exists(npy) and os.path.exists(meta):
+        hit = _cached()
+        if hit: return hit
+    # The library grew ~5x (66k videos → visual/together embeddings.npz are ~380MB EACH), so the
+    # old read-whole-npz-into-RAM warm held ~3 copies (~1.2GB) and OOM-restarted the 2GB deploy
+    # box — which lost the in-memory scoring job, and the UI's auto-resubmit looped the OOM.
+    # Now the vecs.npy member is range-streamed from R2 and decompressed STRAIGHT to disk (the
+    # archive never exists here and the matrix is never fully in RAM), then normalized in place
+    # through a writable mmap in 4096-row chunks. If anything fails (R2 mid-rewrite by the embed
+    # batch, network), fall back to the stale disk cache — old neighbours beat a dead upload.
+    if not etag or not size:
+        stale = _cached(require_etag=False)
+        return stale if stale else (None, None)
+    tmp = npy + f'.dl{os.getpid()}'
+    try:   # sweep partial downloads orphaned by killed runs (SIGKILL skips finally blocks)
+        import glob
+        for g in glob.glob(npy + '.dl*'):
+            if g != tmp and time.time() - os.path.getmtime(g) > 900: os.remove(g)
     except Exception: pass
-    return V, ids
+    try:
+        print(f'[warm] {c}: streaming {round(size / 1e6)}MB library from R2', file=sys.stderr, flush=True)
+        members = _zip_central_dir(key, size)
+        vi, ii = members.get('vecs.npy'), members.get('ids.npy')
+        if not vi or not ii: raise RuntimeError('npz missing vecs/ids members')
+        with open(tmp, 'wb') as f:
+            for piece in _zip_member_stream(key, vi, etag): f.write(piece)
+        ids = [str(x) for x in np.load(io.BytesIO(b''.join(_zip_member_stream(key, ii, etag))), allow_pickle=True)]
+        V = np.load(tmp, mmap_mode='r+')
+        if V.ndim != 2 or len(V) != len(ids): raise RuntimeError(f'bad matrix {V.shape} vs {len(ids)} ids')
+        for i in range(0, len(V), 4096):
+            V[i:i + 4096] /= (np.linalg.norm(V[i:i + 4096], axis=1, keepdims=True) + 1e-9)
+        V.flush(); del V; gc.collect()
+        os.replace(tmp, npy); json.dump({'etag': etag, 'ids': ids}, open(meta, 'w'))
+        print(f'[warm] {c}: cached + normalized → mmap', file=sys.stderr, flush=True)
+        return np.load(npy, mmap_mode='r'), ids
+    except Exception as e:
+        print(f'[warm] {c}: FAILED ({type(e).__name__}: {str(e)[:120]}) — trying stale cache', file=sys.stderr, flush=True)
+        try: os.remove(tmp)
+        except Exception: pass
+        stale = _cached(require_etag=False)
+        return stale if stale else (None, None)
+def warm_all():
+    """Warm the three neighbour caches in PARALLEL threads — each stream is network-bound
+    and independent, so overlapping them cuts a cold warm (fresh deploy, ~900MB at the
+    deploy's ~4MB/s from R2) from sequential minutes to the slowest single file. Safe to
+    run concurrently with anything: caches land via atomic os.replace."""
+    from concurrent.futures import ThreadPoolExecutor
+    chans = ('visual', 'text', 'together')
+    with ThreadPoolExecutor(3) as ex:
+        for c, (V, ids) in zip(chans, ex.map(_norm_emb, chans)):
+            print(f'[warm] {c}: {("ready n=" + str(len(ids))) if ids else "UNAVAILABLE"}', file=sys.stderr, flush=True)
+
 def neighbors(c, vec, k=12):
     if c not in _NBR:
         V, ids = _norm_emb(c)
@@ -371,6 +456,8 @@ def _run():
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))
+    try: warm_all()   # cold caches warm in parallel here; the lookups below then hit disk instantly
+    except Exception: pass
     # score the hook on every validated indicator (project its embedding onto the
     # registry's probe weights; + per-modality global novelty from the neighbours).
     indicators = {}
@@ -502,6 +589,10 @@ def _run():
     print(json.dumps(out))
 
 def main():
+    if '--prewarm' in sys.argv:   # server boot: fill the neighbour caches before anyone uploads
+        try: warm_all()
+        except Exception as e: print(f'[prewarm] failed: {e}', file=sys.stderr, flush=True)
+        return
     try:
         _run()
     except Exception as e:
