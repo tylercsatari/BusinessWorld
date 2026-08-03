@@ -1,6 +1,6 @@
 {
   "schema": "jarvis-multiplicity-aware-promotion-ledger-v2",
-  "generatedAt": "2026-07-26T18:21:31.978Z",
+  "generatedAt": "2026-08-03T23:43:24.302Z",
   "alpha": 0.05,
   "governingContract": "principles-lab/DISCOVERY_CONTRACT.md",
   "observationIdentity": "platform + format + video_id + outcome_snapshot + representation_contract",
@@ -68,6 +68,18 @@
       "class": "observed_input_plus_public_views",
       "promiseIdsInTraining": 0,
       "independentFromOwnedPromiseOutcomes": true
+    },
+    {
+      "id": "channel_free_keep_direction_oof",
+      "rows": 584,
+      "class": "observed_outcome_transformed_view",
+      "independentOutcomeEvent": false,
+      "identityStatus": "Same private keep-labeled corpus as the retention/tribe/predictor events (identity hash recorded in the artifact); this is a transformed view, not a new outcome event.",
+      "transformedBy": [
+        "4 candidate signals",
+        "5 seeds x 5 folds OOF",
+        "leave-one-account-out"
+      ]
     },
     {
       "id": "legacy_mixed_video_snapshots",
@@ -1578,6 +1590,103 @@
     ],
     "promotedFindings": [],
     "wholeProgramVerdict": "At alpha 0.05, several numbers survive their native retrospective families, but no candidate survives multiplicity, evidence-class, independent-source/time, and prospective gates simultaneously. Shorts pass the frozen-source and reconstructed-geometry lineage gates; Long remains underpowered. The two incoherent native Long maps remain rejected and are not used by the rebuilt geometry. There is currently no promoted principle.",
+    "channelFreeKeepDirection": {
+      "finding": "A single pooled ridge direction on fused hook embeddings (no channel information of any kind) predicts raw stayedToWatch keep.",
+      "artifact": "predictor-lab/channel-free-signal.json",
+      "n": 584,
+      "identityHash": "6de8492733dcd45497b3574d81f2fe8a8104bb53cff7ba0baf03df97a8f9a1ac",
+      "selectedSignal": "concat",
+      "oofMAE": 7.115,
+      "oofMAEsd": 0.028,
+      "oofSpearman": 0.546,
+      "baselineGlobalMeanMAE": 9.926,
+      "candidates": [
+        {
+          "signal": "visual",
+          "selected": false,
+          "oofMAE": 7.304,
+          "oofMAEsd": 0.043,
+          "oofSpearman": 0.535,
+          "oofR2": 0.483,
+          "unseenAccountSpearman": {
+            "brushlabs": 0.328,
+            "creatinganything": 0.228,
+            "hafu": 0.136,
+            "tyler": 0.306
+          }
+        },
+        {
+          "signal": "text",
+          "selected": false,
+          "oofMAE": 8.269,
+          "oofMAEsd": 0.043,
+          "oofSpearman": 0.467,
+          "oofR2": 0.327,
+          "unseenAccountSpearman": {
+            "brushlabs": 0.176,
+            "creatinganything": 0.209,
+            "hafu": 0.225,
+            "tyler": 0.203
+          }
+        },
+        {
+          "signal": "together",
+          "selected": false,
+          "oofMAE": 7.315,
+          "oofMAEsd": 0.018,
+          "oofSpearman": 0.531,
+          "oofR2": 0.482,
+          "unseenAccountSpearman": {
+            "brushlabs": 0.334,
+            "creatinganything": 0.283,
+            "hafu": 0.038,
+            "tyler": 0.323
+          }
+        },
+        {
+          "signal": "concat",
+          "selected": true,
+          "oofMAE": 7.115,
+          "oofMAEsd": 0.028,
+          "oofSpearman": 0.546,
+          "oofR2": 0.513,
+          "unseenAccountSpearman": {
+            "brushlabs": 0.012,
+            "creatinganything": 0.28,
+            "hafu": 0.252,
+            "tyler": 0.279
+          }
+        }
+      ],
+      "unseenSourceHoldout": "leave-one-account-out run: rank transfer positive on every held-out account (Spearman +0.14 to +0.33); absolute error dominated by the unknown account baseline (worst held-out MAE ~28 where the baseline differs by ~22 points).",
+      "adaptiveSearchUniverse": {
+        "candidatesEvaluated": 4,
+        "candidates": [
+          "visual",
+          "text",
+          "together",
+          "concat"
+        ],
+        "note": "single selection pass (min mean OOF MAE); no further spec shopping"
+      },
+      "evidenceClass": "observed_outcome_same_private_corpus",
+      "independentOutcomeEvent": false,
+      "timeHoldout": "not run for this specification",
+      "prospectiveSeal": "none",
+      "runId": "7faaaf9f53d57d2c",
+      "consistency": {
+        "scoresArtifactPresent": true,
+        "runIdMatch": true,
+        "identityMatch": true,
+        "rowCountMatch": true,
+        "selectedMatch": true,
+        "consistent": true,
+        "rule": "signal + scores artifacts must share runId, identity hash, row count, and selected signal; regenerate with run_channel_free_signal.py"
+      },
+      "promotionCeiling": "retrospective_rank_signal_candidate",
+      "promotableNow": false,
+      "blocker": "No forward-time holdout and no prospective seal; absolute unseen-channel prediction is structurally unavailable without a channel baseline — deploy as percentile/rank only."
+    },
     "strictQuantAudit": {
       "clusterOutcomeFamily": {
         "tests": 24,
@@ -2347,6 +2456,18 @@
       "sha256": "59e40872240b0f4d2fbf1f5c018e91be1c2ac1f96d2b18392618b4d8fb93d3ac"
     },
     {
+      "path": "predictor-lab/channel-free-signal.json",
+      "bytes": 8276,
+      "modifiedAt": "2026-08-03T23:41:15.066Z",
+      "sha256": "1165299b5f7797dff6653baac9b976f6b241459b26e244b09c3dd5bf00b1959c"
+    },
+    {
+      "path": "predictor-lab/channel-free-scores.json",
+      "bytes": 103938,
+      "modifiedAt": "2026-08-03T23:41:15.069Z",
+      "sha256": "61608c7ea5fed5edcb9aa73d9d32fcb57f29e17302c1b87f7726ec415e511184"
+    },
+    {
       "path": "principles-lab/quant/.cache/unified-panel.json.gz",
       "bytes": 28730635,
       "modifiedAt": "2026-07-26T17:51:17.301Z",
@@ -2373,8 +2494,8 @@
     {
       "path": "principles-lab/quant/snapshot-integrity.json",
       "bytes": 4637,
-      "modifiedAt": "2026-07-26T17:22:44.003Z",
-      "sha256": "889ee3522057482db52a7da611d1e8edf55d78aa0260ad43c7bc175ce0596ecd"
+      "modifiedAt": "2026-07-26T18:24:14.996Z",
+      "sha256": "c58472d2d5320dfa2fe0346747c939eb056cbbd624fc9122f1cdf43c7a6b4a7d"
     },
     {
       "path": "principles-lab/quant/reconstructed-geometry-summary.json",

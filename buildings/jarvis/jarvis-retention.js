@@ -16,7 +16,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, cfsSignal: 'concat', cfsAcct: 'all', cfsSel: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -309,7 +309,24 @@ const JarvisRetention = (function () {
         const [a, b, u] = t < 0.5 ? [cool, mid, t * 2] : [mid, warm, (t - 0.5) * 2];
         return `rgb(${a.map((c, k) => Math.round(c + (b[k] - c) * u)).join(',')})`;
     }
-    function rawEnsure(ch) { if (RAW[ch]) return; RAW[ch] = { loading: 1 }; fetch('/api/raw/map?channel=' + ch).then(r => r.json()).then(j => { RAW[ch] = j; rtgUpdateRaw(); }).catch(() => { RAW[ch] = { n: 0 }; rtgUpdateRaw(); }); }
+    function rawEnsure(ch, force) {
+        const current = RAW[ch];
+        if (!force && current && (current.loading || !current.error)) return;
+        RAW[ch] = { loading: 1 };
+        rtFetchJson('/api/raw/map?channel=' + ch, { cache: 'no-store' }, 4)
+            .then(j => {
+                if (!j || j.error) throw new Error((j && j.error) || 'empty embedding map');
+                RAW[ch] = j;
+                rtgUpdateRaw(); rtgUpdateExp();
+            })
+            .catch(e => {
+                RAW[ch] = { n: 0, error: fetchFail(e), at: Date.now() };
+                rtgUpdateRaw(); rtgUpdateExp();
+                window.setTimeout(() => {
+                    if (RAW[ch] && RAW[ch].error) { delete RAW[ch]; rawEnsure(ch, true); }
+                }, 5000);
+            });
+    }
     // ── ONE global hook-scoring source: an upload's number on the map IS out.steer (computed
     //    server-side, identical to how the map scores every video). The graph marker AND the
     //    Experiment grid both read it through these — change the maths once, both follow. ──
@@ -820,10 +837,10 @@ const JarvisRetention = (function () {
         const fr = st.rawFrames || [null, null, null, null, null];
         const nFrames = fr.filter(Boolean).length;
         const builder = st.rawBuildMode ? `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-bottom:8px;background:${C.card2}">
-              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Build a hook from photos — drop in up to 5 frames (any image type, auto-fit to 9:16) and set the spoken text. It's embedded the same way and added as a marker to compare.</div>
+              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Build a hook from photos — drop in up to 5 frames (any image type, auto-fit to 9:16), or upload ONE strip photo that already holds all 5, and set the spoken text. It's embedded the same way and added as a marker to compare.</div>
               <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">${[0, 1, 2, 3, 4].map(i => fr[i]
             ? `<div style="position:relative"><img src="${fr[i]}" style="width:48px;height:85px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:10px;cursor:pointer">✕</span><div style="text-align:center;font-size:8px;color:${C.mute}">${i + 1}</div></div>`
-            : `<div data-rawframe="${i}" style="width:48px;height:85px;border:1px dashed ${C.border};border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋<span>frame ${i + 1}</span></div>`).join('')}</div>
+            : `<div data-rawframe="${i}" style="width:48px;height:85px;border:1px dashed ${C.border};border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋<span>frame ${i + 1}</span></div>`).join('')}<span data-rawstrip="1" title="upload ONE photo that already holds all 5 frames side by side (or stacked) — it's sliced into the 5 slots" style="cursor:pointer;border:1px dashed ${C.border};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;white-space:nowrap;align-self:center">⬆ 1-photo strip</span></div>
               <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="optional — type the hook's spoken text (drives Text + Together)…" style="width:100%;box-sizing:border-box;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;margin-bottom:8px"/>
               <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CYAN : C.border};background:${nFrames ? CYAN + '22' : 'transparent'};color:${nFrames ? CYAN : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Place this hook${nFrames ? ` (${nFrames}/5 frames)` : ''}</span>
             </div>` : '';
@@ -1454,8 +1471,8 @@ const JarvisRetention = (function () {
     }
     function renderExperiment() {
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
-        if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
-        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = (j && !j.error) ? j : { hooks: [], error: (j && j.error) || 'server error' }; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
+        if (EXPREG === null) { EXPREG = { loading: 1 }; rtFetchJson('/api/indicators/registry', { cache: 'no-store' }, 4).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(e => { EXPREG = { error: fetchFail(e) }; rtgUpdateExp(); }); }
+        if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
@@ -1466,6 +1483,7 @@ const JarvisRetention = (function () {
         const builder = st.rawBuildMode ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">${[0, 1, 2, 3, 4].map(i => fr[i]
             ? `<div style="position:relative"><img src="${fr[i]}" style="width:42px;height:75px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:15px;height:15px;line-height:13px;text-align:center;font-size:9px;cursor:pointer">✕</span></div>`
             : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
+            <span data-rawstrip="1" title="upload ONE photo that already holds all 5 frames side by side (or stacked) — it's sliced into the 5 slots" style="cursor:pointer;border:1px dashed ${C.border};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;white-space:nowrap">⬆ 1-photo strip</span>
             <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
             <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
         const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
@@ -1479,7 +1497,7 @@ const JarvisRetention = (function () {
         const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
         if (!up) {
             const byT = {}; val.forEach(d => { (byT[d.target] = byT[d.target] || []).push(d); });
-            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12) + savedBank();
+            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12) + cfsCard() + savedBank();
         }
         const upMontageSrc = up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : '');
         // ── 1. trace: raw input → embedding ──
@@ -1520,7 +1538,7 @@ const JarvisRetention = (function () {
         // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
         //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
         const chMap = { visual: 'visual', text: 'text', together: 'together', vis: 'visual', txt: 'text', tog: 'together' };
-        ['visual', 'text', 'together'].forEach(c => { if (!RAW[c]) { RAW[c] = { loading: 1 }; fetch('/api/raw/map?channel=' + c).then(r => r.json()).then(j => { RAW[c] = j; rtgUpdateExp(); }).catch(() => { RAW[c] = { n: 0 }; rtgUpdateExp(); }); } });
+        ['visual', 'text', 'together'].forEach(c => rawEnsure(c));
         const Nmod = { visual: 'visual', text: 'text', together: 'whole' };
         const idNovCache = {};
         const idNov = ch => { if (idNovCache[ch]) return idNovCache[ch]; const m = {}; try { const g = N && N.hook && N.hook.global && N.hook.global[Nmod[ch]]; if (g) N.videos.forEach((v, i) => { m[v.id] = g.nov[i]; }); } catch (e) {} return (idNovCache[ch] = m); };
@@ -1611,7 +1629,7 @@ const JarvisRetention = (function () {
             ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
-        return head + controls + '<div id="exp-scoreout"></div>' + trace + boxes + savedBank();
+        return head + controls + '<div id="exp-scoreout"></div>' + trace + boxes + cfsCard() + savedBank();
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
@@ -3411,6 +3429,14 @@ const JarvisRetention = (function () {
         st.rawFrameSlot = slot;
         upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgFrameFile(files[0], slot) : null, onError: rawUploadPickerError });
     }
+    function openRawStripPicker() {
+        const upload = window.JarvisUpload;
+        if (!upload || typeof upload.pickFiles !== 'function') {
+            rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
+            return;
+        }
+        upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgStripFile(files[0]) : null, onError: rawUploadPickerError });
+    }
     // async scoring job: POST returns {jobId} instantly (no Render 100s proxy ceiling),
     // poll until done; if a redeploy loses the job, resubmit up to twice.
     // ── upload black box ── every upload stage is journaled to localStorage, which survives
@@ -3455,25 +3481,69 @@ const JarvisRetention = (function () {
             ? 'could not reach the server (it may be waking up or mid-deploy) — wait ~30s and retry'
             : m;
     }
-    async function rtJob(url, opts, resubmits) {
-        const r = await fetch(url, opts);
-        rawTrace('rtjob-response', { status: r.status });
-        const raw = await r.text();
-        let j = null; try { j = JSON.parse(raw); } catch (e) { }
-        if (!j) throw new Error('server returned ' + r.status + (raw.trim().startsWith('<') ? ' — redeploying; retry in ~30s' : ' (non-JSON)'));
-        if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    async function rtFetchJson(url, opts, attempts) {
+        let last = null;
+        const method = String((opts && opts.method) || 'GET').toUpperCase();
+        const headers = (opts && opts.headers) || {};
+        const idempotent = method === 'GET' || method === 'HEAD'
+            || Object.keys(headers).some(k => k.toLowerCase() === 'x-quant-request-id');
+        const total = idempotent ? Math.max(1, attempts || 1) : 1;
+        for (let attempt = 0; attempt < total; attempt++) {
+            if (attempt) await new Promise(resolve => window.setTimeout(resolve, [1200, 3000, 6000][attempt - 1] || 6000));
+            let r, raw;
+            try {
+                r = await fetch(url, opts || {});
+                raw = await r.text();
+            } catch (e) {
+                last = new Error(fetchFail(e));
+                continue;
+            }
+            let j = null;
+            try { j = raw ? JSON.parse(raw) : null; } catch (e) {}
+            const transient = [502, 503, 504].includes(r.status) || /^\s*</.test(raw || '');
+            if (transient) {
+                last = new Error('server temporarily unavailable (HTTP ' + r.status + ')');
+                continue;
+            }
+            if (!j) throw new Error('server returned ' + r.status + ' (non-JSON)');
+            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            return j;
+        }
+        throw last || new Error('server unavailable');
+    }
+    function rtRequestId() {
+        try { if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID(); } catch (e) {}
+        return 'qr' + Date.now().toString(36) + Math.floor(Math.random() * 1e9).toString(36);
+    }
+    async function rtJob(url, opts, resubmits, requestId) {
+        requestId = requestId || rtRequestId();
+        const jobOpts = { ...(opts || {}), headers: { ...((opts && opts.headers) || {}), 'X-Quant-Request-Id': requestId } };
+        const j = await rtFetchJson(url, jobOpts, 2);
+        rawTrace('rtjob-response', { status: 200 });
         if (!j.jobId) return j;   // sync result
         for (let i = 0; i < 240; i++) {
             await new Promise(res2 => window.setTimeout(res2, i < 8 ? 2500 : 5000));
-            const pr = await fetch('/api/longquant/jobs/' + j.jobId);
-            const pj = await pr.json().catch(() => null);
-            rawTrace('rtjob-poll', { i, status: pr.status, job: pj && pj.status });
-            if (pr.status === 404) {
+            let pj;
+            try {
+                pj = await rtFetchJson('/api/shortsquant/jobs/' + j.jobId, { cache: 'no-store' }, 4);
+            } catch (e) {
+                if (/job lost|404/i.test(String(e.message || e))) {
+                    rawTrace('rtjob-resubmit');
+                    if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1, requestId);
+                    throw new Error('scoring job lost across a redeploy — try again');
+                }
+                throw e;
+            }
+            rawTrace('rtjob-poll', { i, status: 200, job: pj && pj.status });
+            if (!pj) {
                 rawTrace('rtjob-resubmit');
-                if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1);
+                if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1, requestId);
                 throw new Error('scoring job lost across a redeploy — try again');
             }
-            if (pj && pj.status === 'done') return pj.result;
+            if (pj && pj.status === 'done') {
+                if (pj.result && pj.result.error) throw new Error(pj.result.error);
+                return pj.result;
+            }
             if (pj && pj.status === 'error') throw new Error(pj.error || 'scoring job failed');
         }
         throw new Error('scoring job still running after 15 minutes');
@@ -3536,6 +3606,8 @@ const JarvisRetention = (function () {
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
         if (e.target.closest('[data-rawytgo]')) { rtgScoreYoutube(); return; }
         const sbank = e.target.closest('[data-savedbank]'); if (sbank) { st.savedBank = sbank.getAttribute('data-savedbank'); rtgUpdateExp(); return; }
+        const cfsa = e.target.closest('[data-cfsacct]'); if (cfsa) { st.cfsAcct = cfsa.getAttribute('data-cfsacct'); st.cfsSel = null; rtgUpdateExp(); return; }
+        const cfsp = e.target.closest('[data-cfspt]'); if (cfsp) { const id = cfsp.getAttribute('data-cfspt'); st.cfsSel = st.cfsSel === id ? null : id; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchanneladd]')) { startSavedChannel(); return; }
         if (e.target.closest('[data-savedchannelsreload]')) { refreshSavedChannels(false); return; }
         const scopen = e.target.closest('[data-savedchannelopen]'); if (scopen) { openSavedChannel(scopen.getAttribute('data-savedchannelopen')); return; }
@@ -3691,6 +3763,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
         const bm = e.target.closest('[data-rawbuildmode]'); if (bm) { st.rawBuildMode = bm.getAttribute('data-rawbuildmode') === '1'; st.rawUpErr = null; rtgUpdateRaw(); return; }
         const rfr = e.target.closest('[data-rawframe]'); if (rfr) { openRawFramePicker(+rfr.getAttribute('data-rawframe')); return; }
+        if (e.target.closest('[data-rawstrip]')) { openRawStripPicker(); return; }
         const rfd = e.target.closest('[data-rawframedel]'); if (rfd) { st.rawFrames[+rfd.getAttribute('data-rawframedel')] = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawplace]')) { rtgPlaceHook(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
@@ -3736,6 +3809,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleChange(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleChange(e)) return;
         if (e.target.getAttribute && e.target.getAttribute('data-savedmove') != null) { moveHook(e.target.getAttribute('data-savedmove'), e.target.value); return; }
+        if (e.target.closest('[data-cfssignal]')) { st.cfsSignal = e.target.value; rtgUpdateExp(); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
     function onKeyDown(e) {
@@ -3840,6 +3914,30 @@ const JarvisRetention = (function () {
         fr.onerror = () => { st.rawUpErr = 'could not read file'; rtgUpdateRaw(); };
         fr.readAsDataURL(file);
     }
+    // one photo that already holds all 5 frames (a strip/montage) → slice into 5 equal cells
+    // and fill every slot; wider-than-tall = side-by-side columns, taller = stacked rows
+    function rtgStripFile(file) {
+        const fr = new window.FileReader();
+        fr.onload = () => {
+            const im = new window.Image();
+            im.onload = () => {
+                const horiz = im.width >= im.height;
+                const cw = horiz ? im.width / 5 : im.width, ch = horiz ? im.height : im.height / 5;
+                for (let i = 0; i < 5; i++) {
+                    const c = window.document.createElement('canvas'); c.width = FRAME_W; c.height = FRAME_H;
+                    const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W, FRAME_H);
+                    const s = Math.max(FRAME_W / cw, FRAME_H / ch), w = cw * s, hh = ch * s;  // cover-fit each cell
+                    x.drawImage(im, horiz ? i * cw : 0, horiz ? 0 : i * ch, cw, ch, (FRAME_W - w) / 2, (FRAME_H - hh) / 2, w, hh);
+                    st.rawFrames[i] = c.toDataURL('image/jpeg', 0.9);
+                }
+                st.rawUpErr = null; rtgUpdateRaw();
+            };
+            im.onerror = () => { st.rawUpErr = 'could not read that image (HEIC may be unsupported — try JPG/PNG)'; rtgUpdateRaw(); };
+            im.src = fr.result;
+        };
+        fr.onerror = () => { st.rawUpErr = 'could not read file'; rtgUpdateRaw(); };
+        fr.readAsDataURL(file);
+    }
     async function composeFrames(frames) {
         const c = window.document.createElement('canvas'); c.width = FRAME_W * 5; c.height = FRAME_H;
         const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W * 5, FRAME_H);
@@ -3856,10 +3954,8 @@ const JarvisRetention = (function () {
         try {
             const montage = await composeFrames(st.rawFrames);
             const title = (st.rawText && st.rawText.trim() ? st.rawText.trim().slice(0, 40) : 'Built hook ' + (st.rawUploads.length + 1));
-            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title }) });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title, async: true }) });
+            st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
         rtgUpdateRaw();
@@ -3869,6 +3965,13 @@ const JarvisRetention = (function () {
         const r = await fetch(u); if (!r.ok) throw new Error('frame ' + r.status);
         const b = await r.blob();
         return await new Promise((res, rej) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); });
+    }
+    async function montageFromFrameIds(frameIds) {
+        const ids = (frameIds || []).filter(Boolean).slice(0, 5);
+        if (!ids.length) throw new Error('this saved hook has no stored montage or generated frames');
+        const frames = [];
+        for (const id of ids) frames.push(await urlToDataUrl('/api/hooks/grpo/montage/demo/' + encodeURIComponent(id)));
+        return composeFrames(frames);
     }
     function savedChannelMontageKey(channelId, videoId) { return `${channelId}:${videoId}`; }
     function wireSavedChannelImages() {
@@ -3893,39 +3996,37 @@ const JarvisRetention = (function () {
             const dataUrls = [];
             for (const f of (fids || [])) dataUrls.push(f ? await urlToDataUrl('/api/hooks/grpo/montage/demo/' + f) : null);
             const montage = await composeFrames(dataUrls);
-            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40) }) });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else {
-                const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
-                j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
-                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            }
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), async: true }) });
+            const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
+            j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
+            st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; st.genScoringK = null; rtgUpdateExp();
     }
     async function saveHook(payload) {
         try {
             const cf = st.savedFolder; if (cf && cf !== 'all' && cf !== 'none') payload = Object.assign({}, payload, { folder: cf });
-            const r = await fetch('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const j = await r.json();
+            if (!payload.montage && payload.frame_imgs && payload.frame_imgs.length) {
+                payload = Object.assign({}, payload, { montage: await montageFromFrameIds(payload.frame_imgs) });
+            }
+            const j = await rtFetchJson('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 1);
             if (j.ok) { st.savedFlash = j.id; SAVED = null; rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 3500); }
             else { st.rawUpErr = j.error || 'save failed'; rtgUpdateExp(); }
-        } catch (e) { st.rawUpErr = e.message; rtgUpdateExp(); }
+        } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function deleteSaved(id) {
-        try { await fetch('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { await rtFetchJson('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }, 1); SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function createFolder() {
         const name = window.prompt('New folder name:'); if (!name || !name.trim()) return;
-        try { const r = await fetch('/api/raw/folder-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) }); const j = await r.json(); if (j && j.id) st.savedFolder = j.id; SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { const j = await rtFetchJson('/api/raw/folder-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) }, 1); if (j && j.id) st.savedFolder = j.id; SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function moveHook(id, folder) {
-        try { await fetch('/api/raw/hook-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, folder: folder || null }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { await rtFetchJson('/api/raw/hook-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, folder: folder || null }) }, 1); SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function deleteFolder(fid) {
         if (!window.confirm('Delete this folder? Hooks inside become Unfiled.')) return;
-        try { await fetch('/api/raw/folder-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fid }) }); if (st.savedFolder === fid) st.savedFolder = 'all'; SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { await rtFetchJson('/api/raw/folder-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fid }) }, 1); if (st.savedFolder === fid) st.savedFolder = 'all'; SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     // Saved hooks open from their durable score artifact. A legacy hook without a complete artifact is
     // scored once, enriched in place, and then uses this same instant path on every later open.
@@ -3934,9 +4035,23 @@ const JarvisRetention = (function () {
         try {
             let stored = SAVEDDETAIL[id];
             if (!stored) {
-                const rec = await fetch('/api/raw/saved-hook/' + id).then(r => r.json()).catch(() => ({}));
-                const montage = await urlToDataUrl('/api/raw/saved-montage/' + id);
-                stored = SAVEDDETAIL[id] = { rec, montage };
+                const rec = await rtFetchJson('/api/raw/saved-hook/' + id, { cache: 'no-store' }, 4);
+                let montage = null, reconstructed = false;
+                if (rec.hasMontage) {
+                    try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
+                }
+                if (!montage) {
+                    montage = await montageFromFrameIds(rec.frame_imgs || []);
+                    reconstructed = true;
+                }
+                stored = SAVEDDETAIL[id] = { rec, montage, reconstructed };
+                if (reconstructed) {
+                    fetch('/api/raw/hook-enrich', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id, montage }),
+                    }).catch(() => {});
+                }
             }
             const rec = stored.rec || {}, montage = stored.montage;
             if (rec && rec.emb_preview && rec.channels) {
@@ -3946,18 +4061,19 @@ const JarvisRetention = (function () {
             } else {
                 // fallback while the storage pass is still running: re-score once
                 const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
-                const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40) }) });
-                const j = await r.json(); window.clearInterval(tick);
-                if (!r.ok || j.error) st.rawUpErr = j.error || ('HTTP ' + r.status);
-                else {
-                    j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
-                    st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-                    Object.assign(rec, { indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
-                    SAVEDDETAIL[id] = { rec, montage };
-                    fetch('/api/raw/hook-enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }) }).catch(() => {});
+                let j;
+                try {
+                    j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), async: true }) });
+                } finally {
+                    window.clearInterval(tick);
                 }
+                j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
+                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+                Object.assign(rec, { indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
+                SAVEDDETAIL[id] = { rec, montage };
+                fetch('/api/raw/hook-enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, montage, indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }) }).catch(() => {});
             }
-        } catch (e) { st.rawUpErr = e.message; }
+        } catch (e) { st.rawUpErr = fetchFail(e); }
         st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
         window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
     }
@@ -3970,7 +4086,8 @@ const JarvisRetention = (function () {
     function scheduleSavedChannelPoll() {
         window.clearTimeout(st._savedChannelPoll);
         const active = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).some(channel => ['queued', 'running', 'stopping'].includes(channel.status));
-        if (active && st.sec === 'experiment') st._savedChannelPoll = window.setTimeout(() => refreshSavedChannels(true), 5000);
+        const retrying = !!(SAVEDCHANNELS && SAVEDCHANNELS.error);
+        if ((active || retrying) && st.sec === 'experiment') st._savedChannelPoll = window.setTimeout(() => refreshSavedChannels(true), 5000);
     }
     async function loadSavedChannelDetail(id, force) {
         if (!id) return null;
@@ -3978,9 +4095,7 @@ const JarvisRetention = (function () {
         const previous = SAVEDCHANNELDETAIL[id];
         SAVEDCHANNELDETAIL[id] = { loading: 1, id };
         try {
-            const r = await fetch('/api/raw/saved-channel/' + id);
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson('/api/raw/saved-channel/' + id, { cache: 'no-store' }, 4);
             SAVEDCHANNELDETAIL[id] = j;
             const oldFingerprint = previous && [previous.completed, previous.failed, previous.discovered].join(':');
             const nextFingerprint = [j.completed, j.failed, j.discovered].join(':');
@@ -3988,19 +4103,23 @@ const JarvisRetention = (function () {
             if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) delete SAVEDCHANNELANALYSIS[id];
             return j;
         } catch (e) {
-            SAVEDCHANNELDETAIL[id] = { id, error: fetchFail(e) };
+            SAVEDCHANNELDETAIL[id] = { ...(previous || {}), id, loading: false, error: fetchFail(e) };
             return SAVEDCHANNELDETAIL[id];
         }
     }
     async function refreshSavedChannels(quiet) {
+        const previous = SAVEDCHANNELS;
         try {
-            const r = await fetch('/api/raw/saved-channels', { cache: 'no-store' });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson('/api/raw/saved-channels', { cache: 'no-store' }, 4);
             SAVEDCHANNELS = j;
             if (st.savedChannelSel) await loadSavedChannelDetail(st.savedChannelSel, true);
         } catch (e) {
-            SAVEDCHANNELS = { channels: [], error: fetchFail(e) };
+            SAVEDCHANNELS = {
+                ...(previous && typeof previous === 'object' ? previous : {}),
+                channels: (previous && previous.channels) || [],
+                loading: false,
+                error: fetchFail(e),
+            };
         }
         scheduleSavedChannelPoll();
         if (root && st.sec === 'experiment') rtgUpdateExp();
@@ -4012,9 +4131,7 @@ const JarvisRetention = (function () {
         if (!url || st.savedChannelBusy) return;
         st.savedChannelBusy = true; st.savedChannelErr = null; rtgUpdateExp();
         try {
-            const r = await fetch('/api/raw/saved-channel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson('/api/raw/saved-channel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }, 1);
             st.savedChannelUrl = '';
             st.savedChannelSel = j.channel && j.channel.id;
             st.savedChannelTab = 'library';
@@ -4027,9 +4144,7 @@ const JarvisRetention = (function () {
         if (action === 'delete' && !window.confirm('Delete this saved channel and all of its scored Shorts?')) return;
         st.savedChannelActionBusy = action; st.savedChannelErr = null; rtgUpdateExp();
         try {
-            const r = await fetch(`/api/raw/saved-channel/${id}/${action}`, { method: 'POST' });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson(`/api/raw/saved-channel/${id}/${action}`, { method: 'POST' }, 1);
             if (action === 'delete') {
                 delete SAVEDCHANNELDETAIL[id]; delete SAVEDCHANNELANALYSIS[id];
                 if (st.savedChannelSel === id) st.savedChannelSel = null;
@@ -4047,9 +4162,7 @@ const JarvisRetention = (function () {
         if (!id || (SAVEDCHANNELANALYSIS[id] && !force)) return;
         SAVEDCHANNELANALYSIS[id] = { loading: 1 }; rtgUpdateExp();
         try {
-            const r = await fetch(`/api/raw/saved-channel/${id}/analysis`, { cache: force ? 'reload' : 'default' });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson(`/api/raw/saved-channel/${id}/analysis`, { cache: force ? 'reload' : 'default' }, 4);
             SAVEDCHANNELANALYSIS[id] = j;
         } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: fetchFail(e) }; }
         rtgUpdateExp();
@@ -4067,9 +4180,7 @@ const JarvisRetention = (function () {
             const cacheKey = savedChannelMontageKey(channelId, videoId);
             let record = SAVEDCHANNELVIDEOCACHE[cacheKey];
             if (!record) {
-                const recordResponse = await fetch(`/api/raw/saved-channel/${channelId}/video/${videoId}`);
-                record = await recordResponse.json();
-                if (!recordResponse.ok || record.error) throw new Error(record.error || ('HTTP ' + recordResponse.status));
+                record = await rtFetchJson(`/api/raw/saved-channel/${channelId}/video/${videoId}`, { cache: 'no-store' }, 4);
                 record.montageDataUrl = `/api/raw/saved-channel/${channelId}/montage/${videoId}`;
                 record.source = 'saved-channel'; record.savedChannelId = channelId; record.savedChannelVideoId = videoId;
                 SAVEDCHANNELVIDEOCACHE[cacheKey] = record;
@@ -5096,6 +5207,80 @@ const JarvisRetention = (function () {
         const selected = st.savedChannelSel && SAVEDCHANNELDETAIL[st.savedChannelSel];
         return input + cardc(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:900;color:${C.text}">Saved channels <span style="font-size:9px;color:${C.mute};font-weight:600">${channels.length} total</span></div><span data-savedchannelsreload style="cursor:pointer;font-size:9px;color:${C.accent}">refresh all</span></div>${channels.length ? `<div style="display:flex;gap:7px;flex-wrap:wrap">${pills}</div>` : `<div style="font-size:10px;color:${C.mute}">No channels saved yet.</div>`}`, 10) + (selected ? renderSavedChannelDetail(selected) : (channels.length ? cardc(`<div style="padding:12px;color:${C.dim};font-size:10px">Choose a saved channel to browse every scored Short or open its prediction analysis.</div>`, 10) : ''));
     }
+    // ── Channel-free signal (ledger: channelFreeKeepDirection) — per-video OOF scores,
+    //    account filter + signal dropdown + correlation scatter. Scores are held-out
+    //    (mean of 5 seeds × 5-fold; the model never saw the plotted video). ──
+    let CFS = null;
+    // Signal labels + metrics come from channel-free-scores.json (summary block), which is
+    // generated by run_channel_free_signal.py in the same run as the ledger's signal
+    // artifact — nothing is hardcoded here, so a data refresh updates this card too.
+    const cfsMeta = () => (CFS && CFS.summary) || {};
+    const CFS_ACCTS = { tyler: 'Main', brushlabs: 'Account 1', creatinganything: 'Account 2', hafu: 'Account 3' };
+    function cfsEnsure() {
+        if (CFS) return;
+        CFS = { loading: 1 };
+        fetch('./buildings/jarvis/predictor-lab/channel-free-scores.json', { cache: 'no-cache' })
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(j => { CFS = j; rtgUpdateExp(); })
+            .catch(e => { CFS = { error: e.message || 'scores unavailable' }; rtgUpdateExp(); });
+    }
+    function cfsStats(rows, sig) {
+        const xs = rows.map(r => r[sig]), ys = rows.map(r => r.keep), n = rows.length;
+        if (n < 3) return { n, rho: null, r: null, mae: null };
+        const mae = xs.reduce((a, x, i) => a + Math.abs(x - ys[i]), 0) / n;
+        const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+        let num = 0, dx = 0, dy = 0;
+        for (let i = 0; i < n; i++) { num += (xs[i] - mx) * (ys[i] - my); dx += (xs[i] - mx) ** 2; dy += (ys[i] - my) ** 2; }
+        const r = (dx && dy) ? num / Math.sqrt(dx * dy) : 0;
+        const rank = a => { const idx = a.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0]); const out = new Array(a.length); idx.forEach(([, i], k) => { out[i] = k; }); return out; };
+        const rx = rank(xs), ry = rank(ys);
+        let n2 = 0, d2x = 0, d2y = 0; const m2 = (n - 1) / 2;
+        for (let i = 0; i < n; i++) { n2 += (rx[i] - m2) * (ry[i] - m2); d2x += (rx[i] - m2) ** 2; d2y += (ry[i] - m2) ** 2; }
+        const rho = (d2x && d2y) ? n2 / Math.sqrt(d2x * d2y) : 0;
+        return { n, rho, r, mae };
+    }
+    function cfsCard() {
+        cfsEnsure();
+        if (!CFS || CFS.loading) return cardc(`<div style="font-size:11px;color:${C.dim};padding:8px">Loading channel-free signal scores…</div>`, 12);
+        if (CFS.error) return cardc(`<div style="font-size:11px;color:${C.red};padding:8px">Channel-free scores: ${esc(CFS.error)}</div>`, 12);
+        const META = cfsMeta(); const sig = META[st.cfsSignal] ? st.cfsSignal : (CFS.selected || 'concat');
+        const acct = st.cfsAcct || 'all';
+        const rows = (CFS.rows || []).filter(r => acct === 'all' || r.account === acct);
+        const stats = cfsStats(rows, sig);
+        const acctPill = (id, label) => `<span data-cfsacct="${id}" style="cursor:pointer;border:1px solid ${acct === id ? C.cyan : C.border};background:${acct === id ? C.cyan + '22' : 'transparent'};color:${acct === id ? C.cyan : C.dim};border-radius:7px;padding:3px 10px;font-size:10px;font-weight:800">${label}</span>`;
+        const dropdown = `<select data-cfssignal style="background:${C.card};color:${C.text};border:1px solid ${C.border};border-radius:6px;padding:5px 8px;font-size:11px;font-weight:700;cursor:pointer">${Object.entries(META).map(([k, m]) => `<option value="${k}"${k === sig ? ' selected' : ''}>${m.label || k}${m.selected ? ' ✓ selected' : ''} — ledger MAE ${m.mae} · ρ ${m.rho}</option>`).join('')}</select>`;
+        // scatter: x = held-out signal score, y = actual keep
+        const W = 560, H = 300, pad = 34;
+        const xs = rows.map(r => r[sig]), ys = rows.map(r => r.keep);
+        const lo = Math.min(...xs, ...ys, 100), hi = Math.max(...xs, ...ys, 0);
+        const X = v => pad + (v - lo) / ((hi - lo) || 1) * (W - 2 * pad);
+        const Y = v => H - pad - (v - lo) / ((hi - lo) || 1) * (H - 2 * pad);
+        const ACC_COLORS = { tyler: '#fbbf24', brushlabs: '#34d399', creatinganything: '#f87171', hafu: '#818cf8' };
+        let dots = '';
+        rows.forEach((r, i) => {
+            const selPt = st.cfsSel === r.id;
+            dots += `<circle data-cfspt="${esc(r.id)}" cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="${selPt ? 5 : 2.6}" fill="${ACC_COLORS[r.account] || C.cyan}" opacity="${selPt ? 1 : 0.55}" stroke="${selPt ? '#fff' : 'none'}" style="cursor:pointer"><title>${esc(r.title)} · ${esc(CFS_ACCTS[r.account] || r.account)} · score ${xs[i].toFixed(1)} · actual keep ${ys[i].toFixed(1)}</title></circle>`;
+        });
+        const diag = `<line x1="${X(lo)}" y1="${Y(lo)}" x2="${X(hi)}" y2="${Y(hi)}" stroke="${C.border}" stroke-dasharray="4 4"/>`;
+        const axes = `<text x="${W / 2}" y="${H - 6}" fill="${C.mute}" font-size="9" text-anchor="middle">held-out signal score (OOF, never saw this video)</text><text x="12" y="${H / 2}" fill="${C.mute}" font-size="9" text-anchor="middle" transform="rotate(-90 12 ${H / 2})">actual keep % (stayed to watch)</text>`;
+        const selRow = st.cfsSel ? rows.find(r => r.id === st.cfsSel) : null;
+        const selBox = selRow ? `<div style="font-size:10px;color:${C.text};margin-top:6px;background:${C.card2};border-radius:6px;padding:7px 9px"><b>${esc(selRow.title)}</b> · ${esc(CFS_ACCTS[selRow.account] || selRow.account)} · score <b style="color:${C.cyan}">${selRow[sig].toFixed(1)}</b> vs actual <b style="color:${C.green}">${selRow.keep.toFixed(1)}</b> · <a href="https://www.youtube.com/watch?v=${esc(selRow.id)}" target="_blank" style="color:${C.accent}">open →</a></div>` : '';
+        const legend = acct === 'all' ? `<div style="display:flex;gap:10px;font-size:9px;color:${C.dim};margin-top:4px">${Object.entries(CFS_ACCTS).map(([id, nm]) => `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ACC_COLORS[id]};margin-right:3px"></span>${nm}</span>`).join('')}</div>` : '';
+        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+              <div><div style="font-size:12px;font-weight:900;color:${C.text}">🧭 Channel-free hook signal <span style="font-size:9px;color:${C.mute};font-weight:600">ledger: channelFreeKeepDirection · one identical direction for every channel</span></div>
+              <div style="font-size:9px;color:${C.mute};margin-top:2px">No creator information: no offsets, no per-account refits. Dots are held-out predictions.</div></div>
+              ${dropdown}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px">${acctPill('all', 'All accounts')}${Object.entries(CFS_ACCTS).map(([id, nm]) => acctPill(id, nm)).join('')}</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:${C.dim};margin-bottom:6px">
+              <span>n <b style="color:${C.text}">${stats.n}</b></span>
+              <span>Spearman ρ <b style="color:${C.cyan}">${stats.rho == null ? '—' : stats.rho.toFixed(3)}</b></span>
+              <span>Pearson r <b style="color:${C.text}">${stats.r == null ? '—' : stats.r.toFixed(3)}</b></span>
+              <span>MAE <b style="color:${C.yellow}">${stats.mae == null ? '—' : stats.mae.toFixed(2)} pts</b></span>
+            </div>
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;background:${C.card2};border-radius:8px">${diag}${dots}${axes}</svg>
+            ${legend}${selBox}
+            <div style="font-size:8.5px;color:${C.faint};margin-top:6px">Single-account views show pure within-channel signal (no baseline advantage). Promotion status: retrospective rank-signal candidate — deploy as percentile/rank, not absolute keep.</div>`, 12);
+    }
     function savedBank() {
         const tab = st.savedBank || 'hooks', hookCount = (SAVED && SAVED.hooks || []).length, channelCount = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).length;
         const button = (key, label, count) => `<span data-savedbank="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:6px 12px;font-size:12px;font-weight:900">${label} <span style="font-size:9px;color:${tab === key ? C.accent : C.mute}">${count}</span></span>`;
@@ -5213,7 +5398,10 @@ const JarvisRetention = (function () {
                         loadJSON(base + 'principles/rtg_field.json').then(x => RTGF = x).catch(() => RTGF = null),
                         loadJSON(base + 'principles/rtg_embedmap.json').then(x => RTGE = x).catch(() => RTGE = null),
                         loadJSON(base + 'principles/rtg_hazard.json').then(x => RTGH = x).catch(() => RTGH = null),
-                        fetch('/api/raw/map?channel=visual').then(r => r.json()).then(x => RAW.visual = x).catch(() => {}),
+                        rtFetchJson('/api/raw/map?channel=visual', { cache: 'no-store' }, 4).then(x => RAW.visual = x).catch(e => {
+                            RAW.visual = { n: 0, error: fetchFail(e), at: Date.now() };
+                            window.setTimeout(() => rawEnsure('visual', true), 5000);
+                        }),
                         fetch('/api/rtg/labels').then(r => r.json()).then(x => RTGLABELS = x || {}).catch(() => RTGLABELS = {}),
                     ];
                     BGPEND = bg.length;

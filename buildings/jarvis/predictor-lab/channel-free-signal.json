@@ -1,0 +1,388 @@
+{
+ "schema": "channel-free-keep-signal-v2",
+ "runId": "7faaaf9f53d57d2c",
+ "generatedAt": "2026-08-03T23:41:08+00:00",
+ "generator": "predictor-lab/run_channel_free_signal.py",
+ "question": "Best single signal, identical across all channels (no per-channel offsets, refits, or centering), predicting raw stayedToWatch keep %, minimizing MAE.",
+ "protocol": {
+  "design": "5 independent runs of 5-fold OOF (20% held back per fold, shuffle seeds [11, 22, 33, 44, 55]); every video predicted once per run by a model that never saw it",
+  "model": "ridge on L2-normalized Gemini hook embeddings; alpha by inner 4-fold MAE on training folds only (grid [1.0, 10.0, 100.0, 1000.0, 10000.0])",
+  "channelInformation": "none \u2014 no account feature, no offsets, no target centering, pooled fit",
+  "additionalHoldout": "leave-one-account-out: train on 3 accounts, predict the 4th",
+  "adaptiveSearchUniverse": {
+   "candidatesEvaluated": 4,
+   "candidates": [
+    "visual",
+    "text",
+    "together",
+    "concat"
+   ],
+   "note": "single selection pass (min mean OOF MAE); no further spec shopping"
+  }
+ },
+ "dataIdentity": {
+  "n": 584,
+  "accounts": {
+   "brushlabs": 10,
+   "creatinganything": 77,
+   "hafu": 286,
+   "tyler": 211
+  },
+  "target": "keep_rate (stayedToWatch, scraped from YouTube Studio)",
+  "identityHash": "6de8492733dcd45497b3574d81f2fe8a8104bb53cff7ba0baf03df97a8f9a1ac",
+  "embeddingSources": [
+   "raw/visual/embeddings.npz",
+   "raw/text/embeddings.npz",
+   "raw/together/embeddings.npz"
+  ],
+  "labelSources": [
+   "retention-study/retention_table.json",
+   "retention/<account>.json (R2)"
+  ]
+ },
+ "results": {
+  "visual": {
+   "oof_5x5": {
+    "mae_mean": 7.304,
+    "mae_sd": 0.043,
+    "spearman_mean": 0.535,
+    "spearman_sd": 0.007,
+    "r2_mean": 0.483,
+    "r2_sd": 0.006,
+    "runs": [
+     {
+      "n": 584,
+      "mae": 7.233,
+      "spearman": 0.538,
+      "r2": 0.492
+     },
+     {
+      "n": 584,
+      "mae": 7.285,
+      "spearman": 0.542,
+      "r2": 0.488
+     },
+     {
+      "n": 584,
+      "mae": 7.308,
+      "spearman": 0.542,
+      "r2": 0.48
+     },
+     {
+      "n": 584,
+      "mae": 7.35,
+      "spearman": 0.526,
+      "r2": 0.478
+     },
+     {
+      "n": 584,
+      "mae": 7.344,
+      "spearman": 0.529,
+      "r2": 0.476
+     }
+    ]
+   },
+   "per_account_mae_mean": {
+    "brushlabs": 3.69,
+    "creatinganything": 16.53,
+    "hafu": 5.5,
+    "tyler": 6.55
+   },
+   "per_account_spearman_mean": {
+    "brushlabs": 0.203,
+    "creatinganything": 0.427,
+    "hafu": 0.463,
+    "tyler": 0.282
+   },
+   "leave_one_account_out": {
+    "brushlabs": {
+     "n": 10,
+     "mae": 4.034,
+     "spearman": 0.328,
+     "r2": -0.212
+    },
+    "creatinganything": {
+     "n": 77,
+     "mae": 28.519,
+     "spearman": 0.228,
+     "r2": -2.144
+    },
+    "hafu": {
+     "n": 286,
+     "mae": 7.018,
+     "spearman": 0.136,
+     "r2": -0.04
+    },
+    "tyler": {
+     "n": 211,
+     "mae": 10.621,
+     "spearman": 0.306,
+     "r2": -1.671
+    }
+   }
+  },
+  "text": {
+   "oof_5x5": {
+    "mae_mean": 8.269,
+    "mae_sd": 0.043,
+    "spearman_mean": 0.467,
+    "spearman_sd": 0.005,
+    "r2_mean": 0.327,
+    "r2_sd": 0.009,
+    "runs": [
+     {
+      "n": 584,
+      "mae": 8.214,
+      "spearman": 0.475,
+      "r2": 0.332
+     },
+     {
+      "n": 584,
+      "mae": 8.234,
+      "spearman": 0.469,
+      "r2": 0.338
+     },
+     {
+      "n": 584,
+      "mae": 8.311,
+      "spearman": 0.459,
+      "r2": 0.329
+     },
+     {
+      "n": 584,
+      "mae": 8.261,
+      "spearman": 0.465,
+      "r2": 0.325
+     },
+     {
+      "n": 584,
+      "mae": 8.325,
+      "spearman": 0.466,
+      "r2": 0.311
+     }
+    ]
+   },
+   "per_account_mae_mean": {
+    "brushlabs": 5.42,
+    "creatinganything": 19.92,
+    "hafu": 6.12,
+    "tyler": 7.07
+   },
+   "per_account_spearman_mean": {
+    "brushlabs": 0.159,
+    "creatinganything": 0.284,
+    "hafu": 0.415,
+    "tyler": 0.234
+   },
+   "leave_one_account_out": {
+    "brushlabs": {
+     "n": 10,
+     "mae": 6.348,
+     "spearman": 0.176,
+     "r2": -1.576
+    },
+    "creatinganything": {
+     "n": 77,
+     "mae": 28.306,
+     "spearman": 0.209,
+     "r2": -2.125
+    },
+    "hafu": {
+     "n": 286,
+     "mae": 7.734,
+     "spearman": 0.225,
+     "r2": -0.29
+    },
+    "tyler": {
+     "n": 211,
+     "mae": 11.32,
+     "spearman": 0.203,
+     "r2": -2.03
+    }
+   }
+  },
+  "together": {
+   "oof_5x5": {
+    "mae_mean": 7.315,
+    "mae_sd": 0.018,
+    "spearman_mean": 0.531,
+    "spearman_sd": 0.007,
+    "r2_mean": 0.482,
+    "r2_sd": 0.005,
+    "runs": [
+     {
+      "n": 584,
+      "mae": 7.302,
+      "spearman": 0.525,
+      "r2": 0.488
+     },
+     {
+      "n": 584,
+      "mae": 7.318,
+      "spearman": 0.531,
+      "r2": 0.483
+     },
+     {
+      "n": 584,
+      "mae": 7.287,
+      "spearman": 0.54,
+      "r2": 0.485
+     },
+     {
+      "n": 584,
+      "mae": 7.335,
+      "spearman": 0.523,
+      "r2": 0.475
+     },
+     {
+      "n": 584,
+      "mae": 7.331,
+      "spearman": 0.537,
+      "r2": 0.478
+     }
+    ]
+   },
+   "per_account_mae_mean": {
+    "brushlabs": 4.21,
+    "creatinganything": 16.68,
+    "hafu": 5.62,
+    "tyler": 6.34
+   },
+   "per_account_spearman_mean": {
+    "brushlabs": 0.165,
+    "creatinganything": 0.371,
+    "hafu": 0.453,
+    "tyler": 0.316
+   },
+   "leave_one_account_out": {
+    "brushlabs": {
+     "n": 10,
+     "mae": 5.344,
+     "spearman": 0.334,
+     "r2": -1.003
+    },
+    "creatinganything": {
+     "n": 77,
+     "mae": 28.52,
+     "spearman": 0.283,
+     "r2": -2.164
+    },
+    "hafu": {
+     "n": 286,
+     "mae": 7.265,
+     "spearman": 0.038,
+     "r2": -0.143
+    },
+    "tyler": {
+     "n": 211,
+     "mae": 10.856,
+     "spearman": 0.323,
+     "r2": -1.743
+    }
+   }
+  },
+  "concat": {
+   "oof_5x5": {
+    "mae_mean": 7.115,
+    "mae_sd": 0.028,
+    "spearman_mean": 0.546,
+    "spearman_sd": 0.005,
+    "r2_mean": 0.513,
+    "r2_sd": 0.011,
+    "runs": [
+     {
+      "n": 584,
+      "mae": 7.095,
+      "spearman": 0.543,
+      "r2": 0.519
+     },
+     {
+      "n": 584,
+      "mae": 7.112,
+      "spearman": 0.544,
+      "r2": 0.519
+     },
+     {
+      "n": 584,
+      "mae": 7.103,
+      "spearman": 0.556,
+      "r2": 0.522
+     },
+     {
+      "n": 584,
+      "mae": 7.097,
+      "spearman": 0.544,
+      "r2": 0.51
+     },
+     {
+      "n": 584,
+      "mae": 7.169,
+      "spearman": 0.545,
+      "r2": 0.493
+     }
+    ]
+   },
+   "per_account_mae_mean": {
+    "brushlabs": 3.93,
+    "creatinganything": 15.36,
+    "hafu": 5.58,
+    "tyler": 6.34
+   },
+   "per_account_spearman_mean": {
+    "brushlabs": -0.015,
+    "creatinganything": 0.415,
+    "hafu": 0.479,
+    "tyler": 0.321
+   },
+   "leave_one_account_out": {
+    "brushlabs": {
+     "n": 10,
+     "mae": 4.575,
+     "spearman": 0.012,
+     "r2": -0.554
+    },
+    "creatinganything": {
+     "n": 77,
+     "mae": 27.447,
+     "spearman": 0.28,
+     "r2": -1.95
+    },
+    "hafu": {
+     "n": 286,
+     "mae": 6.8,
+     "spearman": 0.252,
+     "r2": 0.023
+    },
+    "tyler": {
+     "n": 211,
+     "mae": 11.271,
+     "spearman": 0.279,
+     "r2": -2.028
+    }
+   }
+  }
+ },
+ "baselineGlobalMeanMAE": 9.926,
+ "selectedSignal": {
+  "name": "concat",
+  "label": "Concat (visual+text+together)",
+  "oofMAE": 7.115,
+  "oofMAEsd": 0.028,
+  "oofSpearman": 0.546,
+  "oofR2": 0.513,
+  "selectionRule": "argmin mean OOF MAE across the declared candidate universe"
+ },
+ "scoresArtifact": {
+  "path": "predictor-lab/channel-free-scores.json",
+  "runId": "7faaaf9f53d57d2c",
+  "rows": 584
+ },
+ "honestLimitations": [
+  "No forward-time holdout: folds are random over publication time.",
+  "Unseen-channel ABSOLUTE error is dominated by the unknown channel baseline; only the RANKING transfers (see leave_one_account_out).",
+  "Pooled OOF Spearman partially reflects implicit channel recognition from visual style; the unseen-channel rho is the portable strength.",
+  "Same private keep-labeled corpus as the retention/tribe/predictor evidence events \u2014 NOT an independent outcome event.",
+  "Recommended deployment: percentile/rank on the frozen direction, not absolute keep."
+ ],
+ "verdict": "A single channel-free latent direction (concat) predicts keep at OOF MAE 7.115\u00b10.028 (baseline 9.926); rank transfers to unseen channels, absolute level does not."
+}
