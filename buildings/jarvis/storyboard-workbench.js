@@ -8,13 +8,16 @@
     const SHEET_HEIGHT = 512;
     const MAX_CANDIDATES = 12;
     const MAX_REFERENCES = 8;
+    const DEFAULT_MODEL = 'gpt-image-2';
     const MODEL_REFERENCE_LIMITS = {
+        'gpt-image-2': 8,
         'flux-2-pro': 8,
         'seedream-4': 8,
         'nano-banana': 6,
         'nano-banana-pro': 8,
     };
     const MODEL_OPTIONS = [
+        ['gpt-image-2', 'GPT Image 2 (OpenAI)'],
         ['flux-2-pro', 'FLUX.2 Pro'],
         ['seedream-4', 'Seedream 4'],
         ['nano-banana', 'Nano Banana'],
@@ -81,7 +84,7 @@
                 brief: '',
                 hookText: '',
                 editPrompt: '',
-                model: 'flux-2-pro',
+                model: DEFAULT_MODEL,
                 generationMode: 'composite',
                 selectedPanel: 0,
                 panels: Array.from({ length: PANEL_COUNT }, (_, index) => blankPanel(index)),
@@ -1727,7 +1730,9 @@
             current.name = record.name || current.name;
             current.brief = record.brief || '';
             current.hookText = record.hookText || '';
-            current.model = record.model || 'flux-2-pro';
+            current.model = MODEL_OPTIONS.some(
+                ([value]) => value === record.model
+            ) ? record.model : DEFAULT_MODEL;
             current.generationMode = record.generationMode || 'composite';
             current.selectedPanel = Math.max(0, Math.min(4, Number(record.selectedPanel) || 0));
             current.composite = record.composite || null;

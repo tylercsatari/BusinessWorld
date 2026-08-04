@@ -82,10 +82,21 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=7')
-            && indexSource.indexOf('storyboard-workbench.js?v=7')
+        indexSource.includes('storyboard-workbench.js?v=8')
+            && indexSource.indexOf('storyboard-workbench.js?v=8')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
+    );
+    assert(
+        serverSource.includes("'gpt-image-2':")
+            && serverSource.includes("provider: 'openai'")
+            && serverSource.includes('openAIImageProvider.generateImage'),
+        'GPT Image 2 must run through the shared server-side provider boundary'
+    );
+    assert(
+        serverSource.includes("size: size.value,")
+            && serverSource.includes("openAIImageProvider.outputSize('storyboard-sheet')"),
+        'GPT Image 2 coherent sheets must bind their exact 45:16 output size'
     );
     assert(
         serverSource.includes("width: 1440,\n            height: 512,"),
@@ -517,6 +528,24 @@ async function main() {
         0,
         'spoken text must come after the visual panel exists'
     );
+    assert.strictEqual(
+        await page.locator('[data-sb-model]').inputValue(),
+        'gpt-image-2',
+        'new storyboards must default to the newest OpenAI image model'
+    );
+    assert.deepStrictEqual(
+        await page.locator('[data-sb-model] option').evaluateAll(options => (
+            options.map(option => [option.value, option.textContent.trim()])
+        )),
+        [
+            ['gpt-image-2', 'GPT Image 2 (OpenAI)'],
+            ['flux-2-pro', 'FLUX.2 Pro'],
+            ['seedream-4', 'Seedream 4'],
+            ['nano-banana', 'Nano Banana'],
+            ['nano-banana-pro', 'Nano Banana Pro'],
+        ],
+        'the model picker must expose GPT Image 2 without removing existing providers'
+    );
 
     await page.click('[data-sb-folder-new]');
     await page.fill('[data-sb-folder-name]', 'Launch concepts');
@@ -584,6 +613,7 @@ async function main() {
     assert.strictEqual(coherent.panelCount, 5);
     assert(coherent.sources.every(source => source === 'coherent-sheet'));
     assert.strictEqual(coherent.payload.async, true);
+    assert.strictEqual(coherent.payload.model, 'gpt-image-2');
     assert.strictEqual(coherent.payload.panels.length, 5);
     assert.strictEqual(
         coherent.payload.brief,
@@ -718,7 +748,7 @@ async function main() {
     assert.strictEqual(
         edit.refs,
         8,
-        'FLUX edits must deterministically fill the context budget with the '
+        'frame edits must deterministically fill the context budget with the '
             + 'base, live sheet, neighbors, uploads, and remaining frames'
     );
     assert.deepStrictEqual(edit.context, {

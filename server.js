@@ -94,6 +94,9 @@ const channelFreeKeepForecastContract = require(
 const storyboardContract = require(
     './buildings/jarvis/storyboard-contract'
 );
+const openAIImageProvider = require(
+    './buildings/jarvis/openai-image-provider'
+);
 const experimentLabWorkspace = require(
     './buildings/experimentlab/experimentlab-workspace'
 );
@@ -4304,6 +4307,18 @@ async function canonicalStoryboardScore(
 }
 
 function storyboardSheetGeometry(modelKey) {
+    if (modelKey === openAIImageProvider.OPENAI_IMAGE_MODEL) {
+        const size = openAIImageProvider.outputSize('storyboard-sheet');
+        return {
+            size: size.value,
+            width: size.width,
+            height: size.height,
+            sheet_aspect_ratio: '45:16',
+            panel_count: storyboardContract.PANEL_COUNT,
+            panel_aspect_ratio: '9:16',
+            postprocess: 'normalize-to-1440x512-then-five-equal-columns',
+        };
+    }
     if (modelKey === 'flux-2-pro') {
         return {
             aspect_ratio: 'custom',
@@ -4336,19 +4351,32 @@ function storyboardSheetGeometry(modelKey) {
 }
 
 function storyboardGenerationIdentity(modelKey, mode) {
-    const model = STORY_MODELS[modelKey] || STORY_MODELS['flux-2-pro'];
+    const resolvedKey = STORY_MODELS[modelKey]
+        ? modelKey
+        : STORYBOARD_DEFAULT_MODEL;
+    const model = STORY_MODELS[resolvedKey];
+    const panelSize = model.provider === 'openai'
+        ? openAIImageProvider.outputSize('9:16')
+        : null;
     const payload = {
         schema: 'shorts-storyboard-generation-contract-v1',
-        provider: 'replicate',
-        model_key: modelKey,
+        provider: model.provider || 'replicate',
+        model_key: resolvedKey,
         model_slug: model.slug,
         mode,
         prompt_template: mode === 'coherent-sheet'
             ? 'five-panel-coherent-sheet-v2'
             : 'single-panel-generation-v1',
         geometry: mode === 'coherent-sheet'
-            ? storyboardSheetGeometry(modelKey)
-            : { aspect_ratio: '9:16' },
+            ? storyboardSheetGeometry(resolvedKey)
+            : panelSize
+                ? {
+                    aspect_ratio: '9:16',
+                    size: panelSize.value,
+                    width: panelSize.width,
+                    height: panelSize.height,
+                }
+                : { aspect_ratio: '9:16' },
     };
     return {
         ...payload,
@@ -14798,7 +14826,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 hookText: body.hookText,
                 model: STORY_MODELS[body.model]
                     ? body.model
-                    : 'flux-2-pro',
+                    : STORYBOARD_DEFAULT_MODEL,
                 generationMode: body.generationMode,
                 selectedPanel: body.selectedPanel,
                 composite: await optionalStoryboardMedia(
@@ -14971,7 +14999,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = await readBody(req, 32 * 1024 * 1024);
             const model = STORY_MODELS[body.model]
                 ? body.model
-                : 'flux-2-pro';
+                : STORYBOARD_DEFAULT_MODEL;
+            const provider = STORY_MODELS[model].provider || 'replicate';
             const brief = String(body.brief || '').trim().slice(0, 8000);
             const hookText =
                 String(body.hookText || '').trim().slice(0, 2000);
@@ -15037,6 +15066,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         image: media.url,
                         media,
                         model,
+                        modelSlug: STORY_MODELS[model].slug,
+                        provider,
                         mode: 'coherent-sheet',
                         panelCount: storyboardContract.PANEL_COUNT,
                         geometry: storyboardSheetGeometry(model),
@@ -15058,13 +15089,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         || 'Generated storyboard',
                     requestId: jobId,
                     detail:
-                        `${model} · coherent five-panel sheet`,
+                        `${provider} · ${model} · coherent five-panel sheet`,
                     input: {
                         kind: 'storyboard-sheet',
                         brief: brief || null,
                         hookText: hookText || null,
                         panelPrompts: panels,
                         model,
+                        provider,
                         referenceCount:
                             refs.identities.length,
                     },
@@ -15110,7 +15142,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
             const model = STORY_MODELS[body.model]
                 ? body.model
-                : 'flux-2-pro';
+                : STORYBOARD_DEFAULT_MODEL;
             const relation = ['new', 'edit', 'compose'].includes(
                 body.relation
             )
@@ -15124,6 +15156,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 relation,
                 refs.materialized.length
             );
+            const provider = STORY_MODELS[effectiveModel].provider
+                || 'replicate';
             if (relation === 'edit' && !refs.materialized.length) {
                 throw new HttpRequestError(
                     422,
@@ -15170,6 +15204,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         image: media.url,
                         media,
                         model: effectiveModel,
+                        modelSlug: STORY_MODELS[effectiveModel].slug,
+                        provider,
                         requestedModel: model,
                         relation,
                         requestFingerprint,
@@ -15187,12 +15223,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     title: prompt,
                     requestId: jobId,
                     detail:
-                        `${effectiveModel} · ${relation}`,
+                        `${provider} · ${effectiveModel} · ${relation}`,
                     input: {
                         kind: 'storyboard-panel',
                         prompt,
                         requestedModel: model,
                         effectiveModel,
+                        provider,
                         relation,
                         referenceCount:
                             refs.identities.length,
@@ -15272,7 +15309,9 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             const body = (await readBody(req)) || {};
             const prompt = String(body.prompt || '').trim().slice(0, 1800);
             if (!prompt) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'prompt required' })); return; }
-            const model = STORY_MODELS[body.model] ? body.model : 'flux-2-pro';
+            const model = STORY_MODELS[body.model]
+                ? body.model
+                : STORYBOARD_DEFAULT_MODEL;
             const refs = Array.isArray(body.refs) ? body.refs.filter(x => typeof x === 'string' && x.startsWith('data:image')).slice(0, 8) : [];
             const relation = ['new', 'edit', 'compose'].includes(body.relation) ? body.relation : (refs.length ? 'compose' : 'new');
             const effectiveModel = storyboardEffectiveModel(
@@ -15285,6 +15324,9 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             res.end(JSON.stringify({
                 image,
                 model: effectiveModel,
+                modelSlug: STORY_MODELS[effectiveModel].slug,
+                provider: STORY_MODELS[effectiveModel].provider
+                    || 'replicate',
                 requestedModel: model,
                 relation,
             }));
@@ -21402,23 +21444,27 @@ async function genMemSave(items) {
 // closer variations, so its bar is lower than free invention.
 const NOV_MIN_INVENT = 0.18, NOV_MIN_PREMISE = 0.12;
 // ── Storyboard frame generation (Experiment tab) — photorealistic, reference-conditioned ──
-// One model call per frame; prior frames are passed as REFERENCE images so a character/scene can
-// stay consistent across the 5 frames (or not). Models verified on Replicate as of 2026-06-30.
-// Field names are NOT uniform across models — verified from Replicate schema dumps:
-//   flux-2-pro → input_images (PLURAL array) · seedream/nano → image_input (array) · kontext → input_image (SINGULAR)
+// One shared provider boundary powers Jarvis and Experiment Lab. Prior frames are passed as
+// reference images so a character, object, and scene can remain consistent across all five frames.
+const STORYBOARD_DEFAULT_MODEL = openAIImageProvider.OPENAI_IMAGE_MODEL;
 const STORY_MODELS = {
-    'flux-2-pro':       { slug: 'black-forest-labs/flux-2-pro',       field: 'input_images', arr: true,  max: 8 },   // ~$0.04 · photoreal leader
-    'seedream-4':       { slug: 'bytedance/seedream-4',               field: 'image_input',  arr: true,  max: 10 },  // $0.03 · native 4K
-    'nano-banana':      { slug: 'google/nano-banana',                field: 'image_input',  arr: true,  max: 6 },   // ~$0.04 · consistency
-    'nano-banana-pro':  { slug: 'google/nano-banana-pro',            field: 'image_input',  arr: true,  max: 14 },  // ~$0.15 · best-in-class
-    'flux-kontext-pro': { slug: 'black-forest-labs/flux-kontext-pro', field: 'input_image',  arr: false, max: 1 },   // $0.04 · instruction EDIT of ONE image (preserves the rest)
+    'gpt-image-2':      { provider: 'openai',    slug: 'gpt-image-2',                           max: 8 },
+    'flux-2-pro':       { provider: 'replicate', slug: 'black-forest-labs/flux-2-pro',       field: 'input_images', arr: true,  max: 8 },
+    'seedream-4':       { provider: 'replicate', slug: 'bytedance/seedream-4',               field: 'image_input',  arr: true,  max: 10 },
+    'nano-banana':      { provider: 'replicate', slug: 'google/nano-banana',                 field: 'image_input',  arr: true,  max: 6 },
+    'nano-banana-pro':  { provider: 'replicate', slug: 'google/nano-banana-pro',             field: 'image_input',  arr: true,  max: 14 },
+    'flux-kontext-pro': { provider: 'replicate', slug: 'black-forest-labs/flux-kontext-pro', field: 'input_image',  arr: false, max: 1 },
 };
 const STORY_EDITOR = 'flux-kontext-pro';   // EDIT beats always use the edit specialist — it transforms the ACTUAL prior frame
 function storyboardEffectiveModel(modelKey, relation, referenceCount) {
     const requested = STORY_MODELS[modelKey]
         ? modelKey
-        : 'flux-2-pro';
-    if (relation === 'edit' && referenceCount <= 1) {
+        : STORYBOARD_DEFAULT_MODEL;
+    if (
+        STORY_MODELS[requested].provider === 'replicate'
+        && relation === 'edit'
+        && referenceCount <= 1
+    ) {
         return STORY_EDITOR;
     }
     return requested;
@@ -21451,18 +21497,28 @@ async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
         refs.length
     );
     const M = STORY_MODELS[key];
-    const input = {
-        prompt: (
-            relation === 'edit'
-            && refs.length > 1
-        ) ? [
+    const effectivePrompt = (
+        relation === 'edit'
+        && refs.length > 1
+    ) ? [
             'Edit REFERENCE IMAGE 1 as the base frame.',
             'Preserve its composition and unchanged pixels as closely as possible.',
             'Use REFERENCE IMAGES 2 onward only for identity, object, wardrobe, '
                 + 'and continuity details.',
             prompt,
-        ].join('\n') : prompt,
-    };
+        ].join('\n') : prompt;
+    if (M.provider === 'openai') {
+        const generated = await openAIImageProvider.generateImage({
+            apiKey: process.env.OPENAI_API_KEY,
+            model: M.slug,
+            prompt: effectivePrompt,
+            refs: refs.slice(0, M.max),
+            aspectRatio: options.aspectRatio || '9:16',
+            fetchWithTimeout: fetchT,
+        });
+        return generated.dataUrl;
+    }
+    const input = { prompt: effectivePrompt };
     const isKontext = M.slug.includes('kontext');
     if (!isKontext) {
         if (options.aspectRatio === 'storyboard-sheet') {
