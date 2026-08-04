@@ -82,7 +82,8 @@ async function main() {
         );
     }
     assert(
-        indexSource.indexOf('storyboard-workbench.js?v=5')
+        indexSource.includes('storyboard-workbench.js?v=6')
+            && indexSource.indexOf('storyboard-workbench.js?v=6')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -144,8 +145,12 @@ async function main() {
             open: [],
             saveScore: [],
             saveStoryboard: [],
+            createFolder: [],
+            moveItem: [],
+            deleteFolder: [],
         };
         const stored = new Map();
+        const folders = [];
         let revision = 0;
         let candidateSequence = 0;
         let generationGate = null;
@@ -227,6 +232,8 @@ async function main() {
                     generationMode: record.generationMode,
                     complete: record.panels.every(panel => !!panel.image),
                     scored: !!record.score,
+                    folder: record.folderId || null,
+                    folderId: record.folderId || null,
                     updatedAt: record.updatedAt,
                     createdAt: record.createdAt,
                 }));
@@ -235,6 +242,7 @@ async function main() {
                     total: rows.length,
                     offset,
                     limit,
+                    folders: clone(folders),
                 };
             }
             if (url === '/api/storyboards/montage') {
@@ -251,6 +259,9 @@ async function main() {
                         byte_length: image.length,
                         media_type: 'image/jpeg',
                     },
+                    panelMediaSha256s: [0, 1, 2, 3, 4].map(
+                        index => String(index + 1).repeat(64)
+                    ),
                 };
             }
             if (url === '/api/storyboards/save') {
@@ -266,6 +277,37 @@ async function main() {
                 stored.set(id, record);
                 calls.saveStoryboard.push(clone(payload));
                 return { id, revision: record.revision };
+            }
+            if (url === '/api/experimentlab/folder') {
+                const payload = JSON.parse(options.body || '{}');
+                const folder = {
+                    id: `elfixture${folders.length + 1}`,
+                    name: payload.name,
+                };
+                folders.push(folder);
+                calls.createFolder.push(clone(payload));
+                return { ok: true, folder };
+            }
+            if (url === '/api/experimentlab/item/move') {
+                const payload = JSON.parse(options.body || '{}');
+                const record = stored.get(payload.id);
+                if (record) record.folderId = payload.folderId || null;
+                calls.moveItem.push(clone(payload));
+                return { ok: true };
+            }
+            if (url === '/api/experimentlab/folder/delete') {
+                const payload = JSON.parse(options.body || '{}');
+                const index = folders.findIndex(
+                    folder => folder.id === payload.id
+                );
+                if (index >= 0) folders.splice(index, 1);
+                stored.forEach(record => {
+                    if (record.folderId === payload.id) {
+                        record.folderId = null;
+                    }
+                });
+                calls.deleteFolder.push(clone(payload));
+                return { ok: true };
             }
             if (url.startsWith('/api/storyboards/')) {
                 const id = decodeURIComponent(url.split('/').pop());
@@ -326,6 +368,9 @@ async function main() {
                     revision_fingerprint: 'e'.repeat(64),
                     embedding_model: 'fixture-multimodal',
                     embedding_dimensions: 1536,
+                    canonical_montage: {
+                        montage_sha256: 'a'.repeat(64),
+                    },
                 },
             };
         }
@@ -403,6 +448,8 @@ async function main() {
             scoreCandidate,
             openScore,
             autoPersistScore: true,
+            autoPersistDrafts: true,
+            enableFolders: true,
             saveScore: async (score, overrides) => {
                 calls.saveScore.push({
                     ledgerSha256: score.score_ledger.ledger_sha256,
@@ -454,6 +501,19 @@ async function main() {
         'the workbench must not expose fake Compose/Compare or generation modes'
     );
 
+    await page.click('[data-sb-folder-new]');
+    await page.fill('[data-sb-folder-name]', 'Launch concepts');
+    await page.click('[data-sb-folder-create]');
+    await page.waitForFunction(() => (
+        window.__workbench.getState().candidates[0].folderId
+            === 'elfixture1'
+    ));
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.createFolder.length),
+        1,
+        'account folders must be created through workspace metadata only'
+    );
+
     await page.fill(
         '[data-sb-hook-text]',
         'This machine makes it impossible to spill.'
@@ -488,6 +548,10 @@ async function main() {
         return !state.busy
             && state.candidates[0].panels.every(panel => !!panel.image);
     });
+    await page.waitForFunction(() => {
+        const current = window.__workbench.getState().candidates[0];
+        return current.saveState === 'saved' && !!current.serverId;
+    });
     assert.strictEqual(
         await page.locator('[data-sb-transcript-review]').count(),
         1,
@@ -515,6 +579,18 @@ async function main() {
     assert.strictEqual(
         coherent.payload.hookText,
         'This machine makes it impossible to spill.'
+    );
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.score.length),
+        0,
+        'generation persistence must never invoke the embed scorer'
+    );
+    assert.strictEqual(
+        await page.evaluate(() => (
+            window.__calls.saveStoryboard[0].folderId
+        )),
+        'elfixture1',
+        'the generated draft must persist immediately in its account folder'
     );
     assert.strictEqual(
         coherent.payload.refs.length,
@@ -643,6 +719,9 @@ async function main() {
         'text inputs must retain their native undo behavior'
     );
 
+    const storyboardSavesBeforeScore = await page.evaluate(() => (
+        window.__calls.saveStoryboard.length
+    ));
     await page.click('[data-sb-score-current]');
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
@@ -664,19 +743,20 @@ async function main() {
         'a completed score must open its canonical analysis automatically'
     );
     assert.deepStrictEqual(
-        await page.evaluate(() => ({
+        await page.evaluate(before => ({
             savedHooks: window.__calls.saveScore.length,
-            savedStoryboards: window.__calls.saveStoryboard.length,
+            scorePersistenceRevisions:
+                window.__calls.saveStoryboard.length - before,
             savedHookId: window.__workbench.getState().candidates[0]
                 .savedHookId,
-        })),
+        }), storyboardSavesBeforeScore),
         {
             savedHooks: 1,
-            savedStoryboards: 1,
+            scorePersistenceRevisions: 2,
             savedHookId: 'saved-hook-1',
         },
-        'Experiment Lab scoring must persist the full hook score and its '
-            + 'storyboard before presenting the result'
+        'Experiment Lab scoring must first persist the complete score, then '
+            + 'persist its Saved Hooks cross-link without rescoring'
     );
     await page.click('[data-sb-open-score]');
     await page.waitForFunction(() => window.__calls.open.length === 2);
@@ -685,11 +765,18 @@ async function main() {
         true
     );
 
+    const savesBeforeNoop = await page.evaluate(() => (
+        window.__calls.saveStoryboard.length
+    ));
     await page.click('[data-sb-save]');
     await page.waitForFunction(() => (
-        !window.__workbench.getState().busy
-        && window.__calls.saveStoryboard.length === 2
+        /already saved/i.test(window.__workbench.getState().status)
     ));
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.saveStoryboard.length),
+        savesBeforeNoop,
+        'Save must be instant when the durable revision is already current'
+    );
     assert.strictEqual(
         await page.evaluate(() => window.__calls.saveScore.length),
         1
@@ -725,6 +812,18 @@ async function main() {
         reopen.contextPanels,
         [1, 2, 3],
         'saved storyboards must restore explicit frame context choices'
+    );
+    const scoreCallsBeforeMove = await page.evaluate(() => (
+        window.__calls.score.length
+    ));
+    await page.selectOption('[data-sb-current-folder]', '');
+    await page.waitForFunction(() => (
+        window.__calls.moveItem.length === 1
+    ));
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.score.length),
+        scoreCallsBeforeMove,
+        'folder organization must never invoke the embed scorer'
     );
     await page.fill(
         '[data-sb-brief]',
@@ -834,6 +933,27 @@ async function main() {
     assert.match(
         await page.evaluate(() => window.__workbench.getState().status),
         /^Batch complete: 9\/9 scored/
+    );
+    const autosaveBefore = await page.evaluate(() => ({
+        saves: window.__calls.saveStoryboard.length,
+        scores: window.__calls.score.length,
+    }));
+    await page.fill(
+        '[data-sb-name]',
+        'Typed changes persist without a save click'
+    );
+    await page.waitForFunction(before => (
+        window.__calls.saveStoryboard.length > before
+        && window.__workbench.getState()
+            .candidates.find(candidate => (
+                candidate.id
+                    === window.__workbench.getState().selectedCandidateId
+            )).saveState === 'saved'
+    ), autosaveBefore.saves);
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.score.length),
+        autosaveBefore.scores,
+        'debounced text persistence must never invoke the embed scorer'
     );
 
     await page.screenshot({

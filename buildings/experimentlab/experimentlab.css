@@ -583,6 +583,44 @@
     gap: 8px;
 }
 
+.experiment-lab-panel .lab-team-folder-list,
+.experiment-lab-panel .lab-team-folder-items {
+    display: grid;
+    gap: 8px;
+}
+
+.experiment-lab-panel .lab-team-folder-group {
+    padding: 10px;
+    border: 1px solid var(--lab-line);
+    border-radius: 14px;
+    background: var(--lab-paper-soft);
+}
+
+.experiment-lab-panel .lab-team-folder-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.experiment-lab-panel .lab-team-folder-head b {
+    color: var(--lab-ink);
+    font-size: 11px;
+    font-weight: 680;
+}
+
+.experiment-lab-panel .lab-team-folder-head span {
+    min-width: 24px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #e8e8ed;
+    color: var(--lab-secondary);
+    font-size: 8px;
+    font-weight: 750;
+    text-align: center;
+}
+
 .experiment-lab-panel .lab-team-activity-card,
 .experiment-lab-panel .lab-team-storyboard-card {
     width: 100%;
@@ -1024,6 +1062,85 @@
 .experiment-lab-panel #shorts-storyboard-workbench .sb-name-row input:focus {
     border-color: var(--lab-blue) !important;
     background: #ffffff !important;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-folder-organizer {
+    padding: 11px 16px;
+    border: 1px solid var(--lab-line);
+    border-top: 0;
+    border-radius: 0 0 18px 18px;
+    background: var(--lab-paper);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-folder-organizer + .sb-status,
+.experiment-lab-panel #shorts-storyboard-workbench .sb-folder-organizer + .sb-error {
+    margin-top: 10px;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-name-row:has(+ .sb-folder-organizer) {
+    border-radius: 0;
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-save-state {
+    color: var(--lab-green);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-save-state.is-error {
+    color: var(--lab-red);
+}
+
+.experiment-lab-panel .saved-hook-folder-bar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.experiment-lab-panel .saved-hook-folder-label {
+    color: var(--lab-tertiary);
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+}
+
+.experiment-lab-panel .saved-hook-folder-bar > button,
+.experiment-lab-panel .saved-hook-folder-create button {
+    background: var(--lab-paper);
+    border: 1px solid var(--lab-line);
+    border-radius: 999px;
+    color: var(--lab-secondary);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    min-height: 30px;
+    padding: 5px 11px;
+}
+
+.experiment-lab-panel .saved-hook-folder-bar > button[data-savedfoldernew] {
+    border-style: dashed;
+    color: var(--lab-blue);
+}
+
+.experiment-lab-panel .saved-hook-folder-create {
+    align-items: center;
+    display: flex;
+    flex: 1 1 280px;
+    gap: 6px;
+    min-width: min(280px, 100%);
+}
+
+.experiment-lab-panel .saved-hook-folder-create input {
+    background: var(--lab-paper);
+    border: 1px solid #c7c7cc;
+    border-radius: 10px;
+    color: var(--lab-ink);
+    flex: 1 1 auto;
+    font: inherit;
+    font-size: 12px;
+    min-height: 34px;
+    min-width: 0;
+    padding: 6px 10px;
 }
 
 .experiment-lab-panel #shorts-storyboard-workbench .sb-status,

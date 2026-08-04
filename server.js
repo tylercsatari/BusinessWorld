@@ -2661,6 +2661,12 @@ const STORYBOARD_REVISION_ROOT =
     `${STORYBOARD_ROOT}revisions/`;
 const STORYBOARD_INDEX_REPAIR_ROOT =
     `${STORYBOARD_ROOT}index-repair/`;
+const EXPERIMENT_LAB_ACTIVITY_ROOT =
+    'experiment-lab/activity/v1/';
+const EXPERIMENT_LAB_ACTIVITY_SCHEMA =
+    'experiment-lab-activity-record-v1';
+const EXPERIMENT_LAB_ACTIVITY_SNAPSHOT_SCHEMA =
+    'experiment-lab-activity-snapshot-v1';
 const STORYBOARD_MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 const STORYBOARD_MAX_REFERENCE_BYTES = 6 * 1024 * 1024;
 const STORYBOARD_MAX_REFERENCE_TOTAL_BYTES = 24 * 1024 * 1024;
@@ -2874,6 +2880,133 @@ async function mutateExperimentLabWorkspace(account, mutator) {
     );
 }
 
+function experimentLabActivityPrefix(account) {
+    return `${EXPERIMENT_LAB_ACTIVITY_ROOT}${
+        experimentLabWorkspace.accountKey(account.id)
+    }/`;
+}
+
+function experimentLabActivityArchiveKey(account, activity) {
+    const createdAt = String(
+        Math.max(0, Number(activity && activity.createdAt) || 0)
+    ).padStart(13, '0');
+    const id = String(activity && activity.id || '');
+    if (!/^ela[a-f0-9]{20}$/i.test(id)) {
+        throw new TypeError('Experiment Lab activity id is invalid');
+    }
+    return `${experimentLabActivityPrefix(account)}${createdAt}-${id}.json`;
+}
+
+function bindExperimentLabActivityArchive(account, activity) {
+    const payload = {
+        schema: EXPERIMENT_LAB_ACTIVITY_SCHEMA,
+        account: experimentLabWorkspace.accountIdentity(account),
+        activity: JSON.parse(JSON.stringify(activity)),
+    };
+    return {
+        ...payload,
+        archive_sha256: sha256Bytes(canonicalJsonBytes(payload)),
+    };
+}
+
+function validateExperimentLabActivityArchive(record, account) {
+    if (!record || typeof record !== 'object') return false;
+    const expectedAccount = experimentLabWorkspace.accountIdentity(account);
+    const payload = {
+        schema: record.schema,
+        account: record.account,
+        activity: record.activity,
+    };
+    return !!(
+        record.schema === EXPERIMENT_LAB_ACTIVITY_SCHEMA
+        && record.account
+        && record.account.id === expectedAccount.id
+        && record.activity
+        && /^ela[a-f0-9]{20}$/i.test(String(record.activity.id || ''))
+        && /^[a-f0-9]{64}$/i.test(String(record.archive_sha256 || ''))
+        && record.archive_sha256
+            === sha256Bytes(canonicalJsonBytes(payload))
+    );
+}
+
+function bindExperimentLabActivitySnapshot(account, activities) {
+    const payload = {
+        schema: EXPERIMENT_LAB_ACTIVITY_SNAPSHOT_SCHEMA,
+        account: experimentLabWorkspace.accountIdentity(account),
+        activities: JSON.parse(JSON.stringify(
+            Array.isArray(activities) ? activities : []
+        )),
+    };
+    return {
+        ...payload,
+        snapshot_sha256: sha256Bytes(canonicalJsonBytes(payload)),
+    };
+}
+
+function validateExperimentLabActivitySnapshot(record, account) {
+    if (!record || typeof record !== 'object') return false;
+    const expectedAccount = experimentLabWorkspace.accountIdentity(account);
+    const payload = {
+        schema: record.schema,
+        account: record.account,
+        activities: record.activities,
+    };
+    return !!(
+        record.schema === EXPERIMENT_LAB_ACTIVITY_SNAPSHOT_SCHEMA
+        && record.account
+        && record.account.id === expectedAccount.id
+        && Array.isArray(record.activities)
+        && record.activities.every(activity => (
+            activity
+            && /^ela[a-f0-9]{20}$/i.test(String(activity.id || ''))
+        ))
+        && /^[a-f0-9]{64}$/i.test(String(record.snapshot_sha256 || ''))
+        && record.snapshot_sha256
+            === sha256Bytes(canonicalJsonBytes(payload))
+    );
+}
+
+async function archiveExperimentLabActivity(account, activity) {
+    if (!activity) return null;
+    const record = bindExperimentLabActivityArchive(account, activity);
+    await cloud.uploadToR2(
+        experimentLabActivityArchiveKey(account, activity),
+        canonicalJsonBytes(record),
+        'application/json'
+    );
+    return record;
+}
+
+async function ensureExperimentLabActivityArchive(account, workspace) {
+    const prefix = experimentLabActivityPrefix(account);
+    const snapshotKey = `${prefix}_workspace-snapshot-v1.json`;
+    const existing = await cloud.downloadFromR2(snapshotKey);
+    if (existing) {
+        const record = JSON.parse(existing.toString('utf8'));
+        if (!validateExperimentLabActivitySnapshot(record, account)) {
+            throw new HttpRequestError(
+                409,
+                'Experiment Lab activity snapshot failed integrity validation.',
+                'experiment_lab_activity_snapshot_invalid'
+            );
+        }
+        return record;
+    }
+    const activity = Array.isArray(workspace && workspace.activity)
+        ? workspace.activity
+        : [];
+    const snapshot = bindExperimentLabActivitySnapshot(
+        account,
+        activity
+    );
+    await cloud.uploadToR2(
+        snapshotKey,
+        canonicalJsonBytes(snapshot),
+        'application/json'
+    );
+    return snapshot;
+}
+
 function experimentLabHasItem(workspace, kind, id) {
     return !!(
         workspace
@@ -2996,18 +3129,23 @@ async function attachExperimentLabItem(
     scope,
     kind,
     id,
-    activity
+    activity,
+    item
 ) {
     if (!scope) return null;
-    return mutateExperimentLabWorkspace(
+    let recordedActivity = null;
+    const workspace = await mutateExperimentLabWorkspace(
         scope.account,
         workspace => {
             experimentLabWorkspace.upsertItem(
                 workspace,
                 kind,
-                { id }
+                {
+                    ...(item && typeof item === 'object' ? item : {}),
+                    id,
+                }
             );
-            experimentLabWorkspace.addActivity(
+            recordedActivity = experimentLabWorkspace.addActivity(
                 workspace,
                 {
                     ...activity,
@@ -3019,6 +3157,11 @@ async function attachExperimentLabItem(
             );
         }
     );
+    await archiveExperimentLabActivity(
+        scope.account,
+        recordedActivity
+    );
+    return workspace;
 }
 
 function compactExperimentLabForecast(forecast) {
@@ -3168,7 +3311,13 @@ async function recordExperimentLabActivity(scope, activity) {
                 || JSON.stringify(existing[key])
                     === JSON.stringify(value)
             ))
-        ) return existing;
+        ) {
+            await archiveExperimentLabActivity(
+                scope.account,
+                existing
+            );
+            return existing;
+        }
     }
     let recorded;
     await mutateExperimentLabWorkspace(
@@ -3179,6 +3328,10 @@ async function recordExperimentLabActivity(scope, activity) {
                 activity
             );
         }
+    );
+    await archiveExperimentLabActivity(
+        scope.account,
+        recorded
     );
     return recorded;
 }
@@ -4035,11 +4188,40 @@ async function canonicalStoryboardScore(
             'storyboard_score_record_mismatch'
         );
     }
-    const montage = await canonicalStoryboardMontage(panels);
     const submittedMontage = await readStoryboardMediaReference(
         value.score_montage || value.scoreMontage,
         'scored storyboard montage'
     );
+    const panelMediaSha256s = panels.map(
+        panel => panel.media.sha256
+    );
+    const submittedPanelMediaSha256s = Array.isArray(
+        value.score_panel_media_sha256s
+    )
+        ? value.score_panel_media_sha256s
+        : value.score_input
+            && Array.isArray(value.score_input.panel_media_sha256s)
+            ? value.score_input.panel_media_sha256s
+            : null;
+    const manifest = value.input_manifest;
+    const submittedPanelBindingValid = !!(
+        submittedPanelMediaSha256s
+        && JSON.stringify(submittedPanelMediaSha256s)
+            === JSON.stringify(panelMediaSha256s)
+        && manifest.canonical_montage
+        && manifest.canonical_montage.montage_sha256
+            === submittedMontage.sha256
+    );
+    const montage = submittedPanelBindingValid
+        ? {
+            bytes: await storyboardMediaBytes(
+                submittedMontage,
+                'scored storyboard montage'
+            ),
+            media: submittedMontage,
+            panelMediaSha256s,
+        }
+        : await canonicalStoryboardMontage(panels);
     if (submittedMontage.sha256 !== montage.media.sha256) {
         throw new HttpRequestError(
             422,
@@ -4047,7 +4229,6 @@ async function canonicalStoryboardScore(
             'storyboard_score_panel_mismatch'
         );
     }
-    const manifest = value.input_manifest;
     const inputValidation =
         shortsScoreLedger.validateShortsInputManifest(
             value,
@@ -7365,6 +7546,143 @@ async function handleHttpRequest(req, res) {
                 code:
                     error.code
                     || 'experiment_lab_context_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/experimentlab/activity'
+        && req.method === 'GET'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const workspace = await experimentLabWorkspaceForScope(
+                scope
+            );
+            const snapshot = await ensureExperimentLabActivityArchive(
+                scope.account,
+                workspace
+            );
+            const limit = Math.max(
+                1,
+                Math.min(100, Number(url.searchParams.get('limit')) || 100)
+            );
+            const offset = Math.max(
+                0,
+                Math.floor(Number(url.searchParams.get('offset')) || 0)
+            );
+            const prefix = experimentLabActivityPrefix(scope.account);
+            const archivedById = new Map(
+                snapshot.activities.map(activity => [activity.id, {
+                    id: activity.id,
+                    createdAt: Number(activity.createdAt) || 0,
+                    activity,
+                    key: null,
+                }])
+            );
+            for (const key of (
+                await cloud.listR2Keys(prefix)
+            ) || []) {
+                const match = key.match(
+                    /\/(\d{13})-(ela[a-f0-9]{20})\.json$/i
+                );
+                if (!match) continue;
+                archivedById.set(match[2], {
+                    id: match[2],
+                    createdAt: Number(match[1]) || 0,
+                    activity: null,
+                    key,
+                });
+            }
+            for (const activity of (
+                Array.isArray(workspace.activity)
+                    ? workspace.activity
+                    : []
+            )) {
+                archivedById.set(activity.id, {
+                    id: activity.id,
+                    createdAt: Number(activity.createdAt) || 0,
+                    activity,
+                    key: null,
+                });
+            }
+            const descriptors = [...archivedById.values()].sort(
+                (left, right) => (
+                    right.createdAt - left.createdAt
+                    || right.id.localeCompare(left.id)
+                )
+            );
+            const selected = descriptors.slice(
+                offset,
+                offset + limit
+            );
+            const activities = [];
+            for (
+                let pageOffset = 0;
+                pageOffset < selected.length;
+                pageOffset += 20
+            ) {
+                const page = await Promise.all(
+                    selected.slice(pageOffset, pageOffset + 20).map(
+                        async descriptor => {
+                            if (descriptor.activity) {
+                                return descriptor.activity;
+                            }
+                            const bytes = await cloud.downloadFromR2(
+                                descriptor.key
+                            );
+                            if (!bytes) {
+                                throw new Error(
+                                    'Experiment Lab activity archive is missing.'
+                                );
+                            }
+                            const record = JSON.parse(bytes.toString('utf8'));
+                            if (!validateExperimentLabActivityArchive(
+                                record,
+                                scope.account
+                            )) {
+                                throw new HttpRequestError(
+                                    409,
+                                    'Experiment Lab activity archive failed integrity validation.',
+                                    'experiment_lab_activity_invalid'
+                                );
+                            }
+                            return record.activity;
+                        }
+                    )
+                );
+                activities.push(...page);
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'private, no-store',
+            });
+            res.end(JSON.stringify({
+                schema: 'experiment-lab-activity-page-v1',
+                activities,
+                total: descriptors.length,
+                offset,
+                limit,
+                account: experimentLabWorkspace.accountIdentity(
+                    scope.account
+                ),
+                readOnly: scope.readOnly,
+            }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_activity_failed',
             }));
         }
         return;
@@ -11294,7 +11612,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         kind: 'saved-hook',
                         artifactId: id,
                     },
-                }
+                },
+                labScope && body.folder
+                    ? { folderId: body.folder }
+                    : undefined
             );
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -11518,6 +11839,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     .map(row => ({
                         ...row,
                         folder:
+                            references.get(row.id).folderId,
+                        folderId:
                             references.get(row.id).folderId,
                         workspace_saved_at:
                             references.get(row.id).savedAt,
@@ -14088,32 +14411,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
             await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, invent, ts: Date.now() })), 'application/json');
             if (labScope) {
-                await mutateExperimentLabWorkspace(
-                    labScope.account,
-                    workspace => {
-                        experimentLabWorkspace.addActivity(
-                            workspace,
-                            {
-                                type: 'hook-generated',
-                                status: 'started',
-                                title:
-                                    premise
-                                    || 'Invented Shorts hook',
-                                requestId: rid,
-                                detail:
-                                    `${count} candidate${count === 1 ? '' : 's'}`,
-                                input: {
-                                    kind: invent
-                                        ? 'automatic-invention'
-                                        : 'seeded-idea',
-                                    premise: premise || null,
-                                    candidateCount: count,
-                                },
-                                saved: false,
-                            }
-                        );
-                    }
-                );
+                await recordExperimentLabActivity(labScope, {
+                    type: 'hook-generated',
+                    status: 'started',
+                    title:
+                        premise
+                        || 'Invented Shorts hook',
+                    requestId: rid,
+                    detail:
+                        `${count} candidate${count === 1 ? '' : 's'}`,
+                    input: {
+                        kind: invent
+                            ? 'automatic-invention'
+                            : 'seeded-idea',
+                        premise: premise || null,
+                        candidateCount: count,
+                    },
+                    saved: false,
+                });
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ rid, premise, count }));   // poll status + group/demo/<rid> for the result
@@ -14220,6 +14535,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         ...row,
                         folder:
                             references.get(row.id).folderId,
+                        folderId:
+                            references.get(row.id).folderId,
                         workspace_saved_at:
                             references.get(row.id).savedAt,
                     }));
@@ -14265,7 +14582,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     );
     if (storyboardRecordMatch && req.method === 'GET') {
         try {
-            await requireExperimentLabItem(
+            const itemScope = await requireExperimentLabItem(
                 req,
                 url,
                 'storyboards',
@@ -14289,7 +14606,17 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-store',
             });
-            res.end(JSON.stringify(storyboardClientRecord(record)));
+            const workspaceItem = itemScope
+                && itemScope.workspace
+                && itemScope.workspace.collections.storyboards.items.find(
+                    item => item.id === record.id
+                );
+            res.end(JSON.stringify({
+                ...storyboardClientRecord(record),
+                folderId: workspaceItem
+                    ? workspaceItem.folderId || null
+                    : null,
+            }));
         } catch (error) {
             const status = error.statusCode || 500;
             res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -14583,7 +14910,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         savedHookId: record.savedHookId || null,
                         revision: record.revision,
                     },
-                }
+                },
+                Object.prototype.hasOwnProperty.call(body, 'folderId')
+                    ? { folderId: body.folderId || null }
+                    : undefined
             );
             res.writeHead(200, {
                 'Content-Type': 'application/json',
@@ -14599,6 +14929,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     record.score
                     && record.score.score_ledger.ledger_sha256
                     || null,
+                folderId: Object.prototype.hasOwnProperty.call(
+                    body,
+                    'folderId'
+                )
+                    ? body.folderId || null
+                    : null,
             }));
         } catch (error) {
             const status = error.statusCode || 500;
@@ -14701,35 +15037,27 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             );
             await quantJobReady(jobId, 'shorts');
             if (labScope) {
-                await mutateExperimentLabWorkspace(
-                    labScope.account,
-                    workspace => {
-                        experimentLabWorkspace.addActivity(
-                            workspace,
-                            {
-                                type: 'storyboard-generated',
-                                status: 'started',
-                                title:
-                                    hookText
-                                    || brief
-                                    || 'Generated storyboard',
-                                requestId: jobId,
-                                detail:
-                                    `${model} · coherent five-panel sheet`,
-                                input: {
-                                    kind: 'storyboard-sheet',
-                                    brief: brief || null,
-                                    hookText: hookText || null,
-                                    panelPrompts: panels,
-                                    model,
-                                    referenceCount:
-                                        refs.identities.length,
-                                },
-                                saved: false,
-                            }
-                        );
-                    }
-                );
+                await recordExperimentLabActivity(labScope, {
+                    type: 'storyboard-generated',
+                    status: 'started',
+                    title:
+                        hookText
+                        || brief
+                        || 'Generated storyboard',
+                    requestId: jobId,
+                    detail:
+                        `${model} · coherent five-panel sheet`,
+                    input: {
+                        kind: 'storyboard-sheet',
+                        brief: brief || null,
+                        hookText: hookText || null,
+                        panelPrompts: panels,
+                        model,
+                        referenceCount:
+                            refs.identities.length,
+                    },
+                    saved: false,
+                });
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -14841,32 +15169,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             );
             await quantJobReady(jobId, 'shorts');
             if (labScope) {
-                await mutateExperimentLabWorkspace(
-                    labScope.account,
-                    workspace => {
-                        experimentLabWorkspace.addActivity(
-                            workspace,
-                            {
-                                type: 'storyboard-panel-generated',
-                                status: 'started',
-                                title: prompt,
-                                requestId: jobId,
-                                detail:
-                                    `${effectiveModel} · ${relation}`,
-                                input: {
-                                    kind: 'storyboard-panel',
-                                    prompt,
-                                    requestedModel: model,
-                                    effectiveModel,
-                                    relation,
-                                    referenceCount:
-                                        refs.identities.length,
-                                },
-                                saved: false,
-                            }
-                        );
-                    }
-                );
+                await recordExperimentLabActivity(labScope, {
+                    type: 'storyboard-panel-generated',
+                    status: 'started',
+                    title: prompt,
+                    requestId: jobId,
+                    detail:
+                        `${effectiveModel} · ${relation}`,
+                    input: {
+                        kind: 'storyboard-panel',
+                        prompt,
+                        requestedModel: model,
+                        effectiveModel,
+                        relation,
+                        referenceCount:
+                            refs.identities.length,
+                    },
+                    saved: false,
+                });
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({

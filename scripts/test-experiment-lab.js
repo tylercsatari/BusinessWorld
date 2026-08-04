@@ -1727,6 +1727,7 @@ async function main() {
             '/api/indicators/registry': { indicators: [], meta: { targets: [] } },
             '/api/raw/saved-hooks': {
                 hooks: [historicalSavedHookRow, queuedSavedHookRow],
+                folders: [],
             },
             [`/api/raw/saved-hook/${historicalSavedHookId}`]: {
                 ...historicalSavedHookRecord,
@@ -1769,6 +1770,20 @@ async function main() {
                 channel_free_selected_signal:
                     channelFreeKeepContract.MODEL.selectedSignal,
                 creator_profiles: [],
+            },
+            '/api/experimentlab/activity': {
+                schema: 'experiment-lab-activity-page-v1',
+                activities: [],
+                total: 0,
+                offset: 0,
+                limit: 100,
+                account: {
+                    id: ownerAccountId,
+                    email: 'owner@example.com',
+                    name: 'Owner',
+                    role: 'owner',
+                },
+                readOnly: false,
             },
             '/api/raw/map': rawVisualMap,
             [`/api/raw/saved-channel/${channelId}/resume`]: { ok: true },
@@ -1984,6 +1999,21 @@ async function main() {
                 })),
             },
         };
+        teamReplies['/api/experimentlab/activity'] = {
+            schema: 'experiment-lab-activity-page-v1',
+            activities:
+                teamReplies['/api/experimentlab/context']
+                    .workspace.activity,
+            total:
+                teamReplies['/api/experimentlab/context']
+                    .workspace.activity.length,
+            offset: 0,
+            limit: 100,
+            account:
+                teamReplies['/api/experimentlab/context']
+                    .activeAccount,
+            readOnly: true,
+        };
         videos.forEach(video => {
             replies[`/api/raw/saved-channel/${channelId}/video/${video.id}`] = {
                 ...video.__record,
@@ -2040,6 +2070,8 @@ window.__fetchCounts={};
 window.__labSurfaceRequests=[];
 window.__labTargetRequests=[];
 window.__labAutoSavedScore=null;
+window.__autoSavedHookId=null;
+window.__labFolderRequests=[];
 window.fetch=function(url,options){
     const p=new URL(url,location.href).pathname;
     window.__fetchCounts[p]=(window.__fetchCounts[p]||0)+1;
@@ -2097,14 +2129,102 @@ window.fetch=function(url,options){
         p==='/api/raw/hook-save'
         && String(options&&options.method||'GET').toUpperCase()==='POST'
     ){
-        window.__labAutoSavedScore=JSON.parse(options.body||'{}');
+        const savedPayload=JSON.parse(options.body||'{}');
+        const savedId='hk-auto-opened-score';
+        window.__labAutoSavedScore=savedPayload;
+        window.__autoSavedHookId=savedId;
+        replies['/api/raw/saved-hooks'].hooks=[
+            {
+                id:savedId,
+                kind:'scored',
+                score_domain:'shorts',
+                source:savedPayload.source||'youtube',
+                title:savedPayload.title||'Saved score',
+                text:savedPayload.text||'',
+                savedAt:Date.now(),
+                hasMontage:true,
+                evidence_state:'canonical_bound',
+                predictor_eligible:true,
+                score_record_sha256:
+                    historicalUpgradeScore.score_record_sha256,
+                score_ledger_sha256:
+                    historicalUpgradeScore.score_ledger.ledger_sha256
+            },
+            ...replies['/api/raw/saved-hooks'].hooks.filter(
+                row=>row.id!==savedId
+            )
+        ];
+        replies['/api/raw/saved-hook/'+savedId]={
+            ...historicalUpgradeScore,
+            ...savedPayload,
+            id:savedId,
+            kind:'scored',
+            source:savedPayload.source||'youtube',
+            title:savedPayload.title||'Saved score',
+            text:savedPayload.text||'',
+            hasMontage:true,
+            evidence_state:'canonical_bound',
+            canonical:true,
+            predictor_eligible:true,
+            score_display_eligible:true,
+            score_record_validation:{
+                state:'verified',
+                valid:true,
+                recorded_sha256:
+                    historicalUpgradeScore.score_record_sha256,
+                calculated_sha256:
+                    historicalUpgradeScore.score_record_sha256
+            },
+            input_binding_validation:{
+                state:'canonical-valid',
+                valid:true,
+                errors:[]
+            },
+            compact_source_validation:{
+                state:'canonical-valid',
+                valid:true,
+                errors:[]
+            }
+        };
         return Promise.resolve(new Response(JSON.stringify({
             ok:true,
-            id:'hk-auto-opened-score',
+            id:savedId,
             score_record_sha256:historicalUpgradeScore.score_record_sha256,
             score_ledger_sha256:
                 historicalUpgradeScore.score_ledger.ledger_sha256
         }),{
+            status:200,
+            headers:{'Content-Type':'application/json'}
+        }));
+    }
+    if(
+        p==='/api/raw/folder-create'
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        const payload=JSON.parse(options.body||'{}');
+        const folder={id:'elf-owner-hooks-1',name:payload.name};
+        replies['/api/raw/saved-hooks'].folders=[folder];
+        window.__labFolderRequests.push({path:p,payload});
+        return Promise.resolve(new Response(JSON.stringify({
+            ok:true,
+            id:folder.id,
+            name:folder.name
+        }),{
+            status:200,
+            headers:{'Content-Type':'application/json'}
+        }));
+    }
+    if(
+        p==='/api/raw/hook-move'
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        const payload=JSON.parse(options.body||'{}');
+        const hook=replies['/api/raw/saved-hooks'].hooks.find(
+            row=>row.id===payload.id
+        );
+        if(hook) hook.folder=payload.folder||null;
+        window.__labFolderRequests.push({path:p,payload});
+        return Promise.resolve(new Response(JSON.stringify({ok:true}),{
             status:200,
             headers:{'Content-Type':'application/json'}
         }));
@@ -2312,13 +2432,18 @@ window.fetch=function(url,options){
                     request.account === accountId
                     && request.path === '/api/storyboards'
                 ))
+                && window.__labTargetRequests.some(request => (
+                    request.account === accountId
+                    && request.path === '/api/experimentlab/activity'
+                ))
                 && !window.__labTargetRequests.some(request => (
                     request.account === accountId
                     && request.path === '/api/raw/saved-channels'
                 ))
             ), teamAccountId),
-            'owner inspection must scope hooks and storyboards to the selected '
-                + 'account without loading its saved-channel research library'
+            'owner inspection must scope hooks, storyboards, and the complete '
+                + 'activity archive to the selected account without loading '
+                + 'its saved-channel research library'
         );
         const teamActivitySection = page.locator(
             '.lab-team-activity-section'
@@ -2699,6 +2824,79 @@ window.fetch=function(url,options){
             'the auto-save must persist all 21 coordinates rather than a '
                 + 'summary-only score'
         );
+        const embedCountBeforeReopen = await page.evaluate(() => (
+            window.__fetchCounts['/api/raw/embed-montage'] || 0
+        ));
+        await page.evaluate(() => {
+            BuildingRegistry.get('Experiment Lab').close();
+            const host = document.getElementById('root');
+            host.innerHTML = '';
+            BuildingRegistry.get('Experiment Lab').open(host);
+        });
+        await page.getByText('Owner workspace', { exact: true }).waitFor();
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
+        const persistedAutomaticScore = page.locator(
+            '[data-savedopen="hk-auto-opened-score"]'
+        );
+        await persistedAutomaticScore.waitFor();
+        assert(
+            (await persistedAutomaticScore.innerText()).includes(
+                'Automatically opened YouTube score'
+            ),
+            'a completed score must return from the account workspace after '
+                + 'the building is fully closed and reopened'
+        );
+        await page.locator('[data-savedfoldernew]:visible').click();
+        await page.locator('[data-savedfoldername]:visible').fill(
+            'Launch concepts'
+        );
+        await page.locator('[data-savedfoldercreate]:visible').click();
+        await page.locator(
+            '[data-savedfolder="elf-owner-hooks-1"]:visible'
+        ).waitFor();
+        await page.locator('[data-savedfolder="all"]:visible').click();
+        await page.locator(
+            '[data-savedmove="hk-auto-opened-score"]:visible'
+        ).selectOption('elf-owner-hooks-1');
+        await page.waitForFunction(() => (
+            window.__labFolderRequests.some(request => (
+                request.path === '/api/raw/hook-move'
+                && request.payload.id === 'hk-auto-opened-score'
+                && request.payload.folder === 'elf-owner-hooks-1'
+            ))
+        ));
+        await page.locator(
+            '[data-savedfolder="elf-owner-hooks-1"]:visible'
+        ).click();
+        await page.locator(
+            '[data-savedopen="hk-auto-opened-score"]:visible'
+        ).waitFor();
+        assert.strictEqual(
+            await page.evaluate(() => (
+                window.__fetchCounts['/api/raw/embed-montage'] || 0
+            )),
+            embedCountBeforeReopen,
+            'creating a folder and organizing an existing score must be '
+                + 'metadata-only and never re-embed the video'
+        );
+        await page.locator('[data-savedfolder="all"]:visible').click();
+        await persistedAutomaticScore.click();
+        await page.locator(
+            '[data-saved-detail-state="canonical"]'
+        ).waitFor({ state: 'attached' });
+        assert.strictEqual(
+            await page.evaluate(() => (
+                window.__fetchCounts['/api/raw/embed-montage'] || 0
+            )),
+            embedCountBeforeReopen,
+            'reopening a saved score must load its persisted ledger and never '
+                + 'invoke the embedding endpoint'
+        );
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="score"]'
+        ).click();
         await automaticScoreAnalysis.scrollIntoViewIfNeeded();
         if (process.env.EXPERIMENT_LAB_SCORE_DESKTOP_SCREENSHOT) {
             fs.mkdirSync(

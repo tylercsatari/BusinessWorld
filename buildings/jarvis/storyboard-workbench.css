@@ -125,7 +125,7 @@
     border-bottom: 1px solid var(--sb-line);
     display: grid;
     gap: 10px;
-    grid-template-columns: minmax(150px, 1fr) minmax(150px, 280px) auto;
+    grid-template-columns: minmax(150px, 1fr) minmax(220px, 430px) auto;
     padding: 10px 12px;
 }
 
@@ -156,7 +156,7 @@
     align-items: end;
     display: grid;
     gap: 5px;
-    grid-template-columns: minmax(90px, 1fr) minmax(120px, 1.2fr);
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
     min-width: 0;
 }
 
@@ -197,6 +197,42 @@
 .sb-name-row > span {
     color: var(--sb-muted);
     font-size: 10px;
+}
+
+.sb-folder-organizer {
+    align-items: end;
+    background: var(--sb-panel);
+    border-bottom: 1px solid var(--sb-line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 8px 12px;
+}
+
+.sb-folder-organizer > label {
+    flex: 0 1 220px;
+}
+
+.sb-folder-create {
+    display: flex;
+    flex: 1 1 260px;
+    gap: 6px;
+}
+
+.sb-folder-create input {
+    flex: 1 1 auto;
+}
+
+.sb-save-state {
+    align-self: center;
+    color: var(--sb-green);
+    flex: 1 1 190px;
+    font-size: 9px;
+    text-align: right;
+}
+
+.sb-save-state.is-error {
+    color: var(--sb-red);
 }
 
 .sb-status,
@@ -1025,6 +1061,24 @@
 
     .sb-name-row > span {
         display: none;
+    }
+
+    .sb-folder-organizer {
+        align-items: stretch;
+    }
+
+    .sb-folder-organizer > label,
+    .sb-folder-create,
+    .sb-save-state {
+        flex-basis: 100%;
+    }
+
+    .sb-folder-organizer > button {
+        flex: 1;
+    }
+
+    .sb-save-state {
+        text-align: left;
     }
 
     .sb-compose {

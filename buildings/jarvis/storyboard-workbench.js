@@ -40,6 +40,9 @@
         const openScore = options.openScore;
         const saveScore = options.saveScore;
         const autoPersistScore = options.autoPersistScore === true;
+        const autoPersistDrafts = options.autoPersistDrafts === true;
+        const enableFolders = options.enableFolders === true;
+        const resumeLatestSaved = options.resumeLatestSaved === true;
         const reportError = typeof options.onError === 'function'
             ? options.onError
             : () => {};
@@ -84,6 +87,9 @@
                 scoreError: '',
                 scoreInputSha256: null,
                 savedHookId: null,
+                folderId: null,
+                saveState: 'idle',
+                saveError: '',
                 dirty: true,
                 pristine: true,
                 mutationVersion: 0,
@@ -109,11 +115,18 @@
             savedLoaded: false,
             savedLoading: false,
             savedFilter: '',
+            savedFolder: 'all',
+            savedFolders: [],
+            folderEditorOpen: false,
+            folderName: '',
+            resumeAttempted: false,
             railScroll: 0,
         };
         let host = null;
         let activeStroke = null;
         let activePointerId = null;
+        const saveQueues = new Map();
+        const saveTimers = new Map();
 
         const candidate = () => (
             state.candidates.find(item => item.id === state.selectedCandidateId)
@@ -125,6 +138,18 @@
         };
         const completeFrames = item => (
             item && item.panels.every(entry => !!entry.image)
+        );
+        const hasPersistableContent = item => !!(
+            item
+            && (
+                item.serverId
+                || item.name !== 'Untitled opening'
+                || item.brief.trim()
+                || item.hookText.trim()
+                || item.references.length
+                || item.composite
+                || item.panels.some(entry => entry.image || entry.prompt)
+            )
         );
         const replaceableBlank = item => !!(
             item
@@ -200,10 +225,12 @@
             if (!item) return;
             item.dirty = true;
             item.pristine = false;
+            if (item.saveState === 'saved') item.saveState = 'idle';
             item.mutationVersion = (
                 Number(item.mutationVersion) || 0
             ) + 1;
             item.updatedAt = Date.now();
+            scheduleAutoPersist(item);
         };
         const invalidateScore = item => {
             item.score = null;
@@ -471,7 +498,7 @@
                 <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
                 ${state.candidates.length > 1 ? `<button type="button" data-sb-batch-score ${state.busy || !state.candidates.some(needsScore) ? 'disabled' : ''}>Score all ready</button>` : ''}
                 ${current.score ? '<button type="button" data-sb-open-score>Open embeddings</button>' : ''}
-                <button type="button" data-sb-save ${complete && !state.busy ? '' : 'disabled'}>${current.serverId ? 'Save revision' : 'Save'}</button>
+                <button type="button" data-sb-save ${hasPersistableContent(current) && !state.busy && current.saveState !== 'saving' ? '' : 'disabled'}>${current.saveState === 'saving' ? 'Saving...' : current.saveState === 'saved' && !current.dirty ? 'Saved' : current.serverId ? 'Save revision' : 'Save'}</button>
             </div>`;
         }
 
@@ -619,19 +646,64 @@
             </div>`;
         }
 
+        function folderName(id) {
+            if (!id) return 'Unfiled';
+            const folder = state.savedFolders.find(
+                item => item.id === id
+            );
+            return folder ? folder.name : 'Unfiled';
+        }
+
+        function folderOptions(selectedId, includeAll) {
+            const options = [];
+            if (includeAll) options.push(
+                `<option value="all" ${selectedId === 'all' ? 'selected' : ''}>All folders</option>`
+            );
+            options.push(
+                `<option value="" ${!selectedId ? 'selected' : ''}>Unfiled</option>`
+            );
+            state.savedFolders.forEach(folder => {
+                options.push(
+                    `<option value="${esc(folder.id)}" ${selectedId === folder.id ? 'selected' : ''}>${esc(folder.name)}</option>`
+                );
+            });
+            return options.join('');
+        }
+
         function renderSavedPicker() {
             const query = state.savedFilter.trim().toLowerCase();
-            const visible = query
-                ? state.saved.filter(item => String(
+            const visible = state.saved.filter(item => (
+                (state.savedFolder === 'all'
+                    || (item.folderId || '') === state.savedFolder)
+                && (!query || String(
                     item.name || ''
                 ).toLowerCase().includes(query))
-                : state.saved;
+            ));
             return `<div class="sb-saved-picker">
                 <label><span>Saved</span><input type="search" data-sb-saved-filter data-sb-focus="saved-filter" value="${esc(state.savedFilter)}" placeholder="Find ${state.saved.length}"></label>
+                ${enableFolders ? `<label><span>Folder</span><select data-sb-saved-folder>${folderOptions(state.savedFolder, true)}</select></label>` : ''}
                 <label><span class="sb-visually-hidden">Open saved storyboard</span><select data-sb-load-saved ${state.savedLoading ? 'disabled' : ''}>
                     <option value="">${state.savedLoading ? 'Loading...' : `${visible.length} storyboard${visible.length === 1 ? '' : 's'}`}</option>
-                    ${visible.map(item => `<option value="${esc(item.id)}">${esc(item.name || 'Untitled')} | ${new Date(item.updatedAt || item.createdAt || 0).toLocaleDateString()}</option>`).join('')}
+                    ${visible.map(item => `<option value="${esc(item.id)}">${enableFolders ? `${esc(folderName(item.folderId))} | ` : ''}${esc(item.name || 'Untitled')} | ${new Date(item.updatedAt || item.createdAt || 0).toLocaleDateString()}</option>`).join('')}
                 </select></label>
+            </div>`;
+        }
+
+        function renderFolderOrganizer(current) {
+            if (!enableFolders) return '';
+            const selectedFolder = current.folderId || '';
+            return `<div class="sb-folder-organizer">
+                <label><span>Save to folder</span><select data-sb-current-folder>${folderOptions(selectedFolder, false)}</select></label>
+                <button type="button" data-sb-folder-new>${state.folderEditorOpen ? 'Cancel' : 'New folder'}</button>
+                ${selectedFolder ? `<button type="button" data-sb-folder-delete title="Delete ${esc(folderName(selectedFolder))}">Delete folder</button>` : ''}
+                ${state.folderEditorOpen ? `<div class="sb-folder-create"><input type="text" data-sb-folder-name data-sb-focus="folder-name" value="${esc(state.folderName)}" maxlength="120" placeholder="Folder name" aria-label="New folder name"><button type="button" class="is-primary" data-sb-folder-create>Create</button></div>` : ''}
+                <span class="sb-save-state ${current.saveState === 'error' ? 'is-error' : ''}">${current.saveState === 'saving'
+                    ? 'Saving to your private workspace...'
+                    : current.saveState === 'error'
+                        ? esc(current.saveError || 'Save failed')
+                        : current.serverId
+                            ? `Saved in ${esc(folderName(current.folderId))}`
+                            : 'Generated work saves automatically'}</span>
             </div>`;
         }
 
@@ -651,6 +723,7 @@
                     <input type="text" data-sb-name data-sb-focus="name" value="${esc(current.name)}" aria-label="Storyboard name">
                     <span>${creatorProfile() ? `Profile: ${esc(creatorProfile())}` : 'Global scorer'}</span>
                 </div>
+                ${renderFolderOrganizer(current)}
                 ${state.status ? `<div class="sb-status" role="status"><span></span>${esc(state.status)}</div>` : ''}
                 ${state.error ? `<div class="sb-error" role="alert">${esc(state.error)}<button type="button" data-sb-dismiss-error aria-label="Dismiss error">&times;</button></div>` : ''}
                 ${renderComposer(current)}
@@ -989,6 +1062,10 @@
             state.busy = false;
             state.busyCandidateId = null;
             paint();
+            await autoPersistCandidate(
+                current,
+                'Five generated frames saved to your workspace.'
+            );
         }
 
         function drawStrokes(context, strokes) {
@@ -1116,6 +1193,10 @@
             state.busy = false;
             state.busyCandidateId = null;
             paint();
+            await autoPersistCandidate(
+                current,
+                `Frame ${index + 1} and its revision history were saved.`
+            );
         }
 
         async function applySketch() {
@@ -1136,6 +1217,10 @@
                 });
                 state.status = `Sketch applied to frame ${current.selectedPanel + 1}.`;
                 paint();
+                await autoPersistCandidate(
+                    current,
+                    `Frame ${current.selectedPanel + 1} and its sketch were saved.`
+                );
             } catch (error) {
                 fail(error);
             }
@@ -1194,6 +1279,8 @@
                 storyboardCandidateId: current.id,
                 storyboardFrames: scoringFrames,
                 storyboardScoreMontage: assembled.media,
+                storyboardPanelMediaSha256s:
+                    assembled.panelMediaSha256s || null,
                 montageDataUrl: montage,
                 storyboardScoredAt: Date.now(),
             };
@@ -1227,7 +1314,15 @@
                     state.status = `${current.name} scored. Saving its complete analysis...`;
                     paint();
                     try {
-                        await persistCandidate(current);
+                        await persistCandidate(current, {
+                            refreshSaved: false,
+                        });
+                        try {
+                            await persistScoreArtifact(current);
+                        } catch (linkError) {
+                            state.error = `The scored storyboard is saved, but its Saved Hooks link failed: ${String((linkError && linkError.message) || linkError)}`.slice(0, 500);
+                            reportError(state.error);
+                        }
                         state.status = `${current.name} scored and saved on ${scoreEntries(current).length} ledger coordinates.`;
                     } catch (saveError) {
                         state.error = `The score is complete and open below, but its saved copy failed: ${String((saveError && saveError.message) || saveError)}`.slice(0, 500);
@@ -1280,6 +1375,11 @@
                         await persistCandidate(current, {
                             refreshSaved: false,
                         });
+                        try {
+                            await persistScoreArtifact(current);
+                        } catch (linkError) {
+                            current.scoreError = `Score saved; Saved Hooks link failed: ${String(linkError && linkError.message || linkError)}`;
+                        }
                     }
                 } catch (error) {
                     current.scoreError = String((error && error.message) || error);
@@ -1320,6 +1420,12 @@
                 input_manifest: current.score.input_manifest || null,
                 score_montage:
                     current.score.storyboardScoreMontage || null,
+                score_panel_media_sha256s:
+                    current.score.storyboardPanelMediaSha256s
+                    || current.score.score_input
+                        && current.score.score_input.panel_media_sha256s
+                    || null,
+                score_input: current.score.score_input || null,
                 indicators: current.score.indicators || null,
                 novelty_provenance:
                     current.score.novelty_provenance || null,
@@ -1332,37 +1438,57 @@
             };
         }
 
-        async function persistCandidate(current, persistOptions) {
+        function updateSavedSummary(current, response, savedSnapshot) {
+            const snapshot = savedSnapshot || current;
+            const summary = {
+                id: response.id,
+                revision: response.revision,
+                name: snapshot.name,
+                model: snapshot.model,
+                generationMode: snapshot.generationMode,
+                complete: Array.isArray(snapshot.panels)
+                    && snapshot.panels.every(panel => !!panel.image),
+                scored: !!snapshot.score,
+                folderId: snapshot.folderId || null,
+                folder: snapshot.folderId || null,
+                createdAt: current.createdAt,
+                updatedAt: Date.now(),
+            };
+            state.saved = [
+                summary,
+                ...state.saved.filter(item => item.id !== summary.id),
+            ];
+            state.savedTotal = Math.max(
+                state.savedTotal,
+                state.saved.length
+            );
+        }
+
+        async function persistCandidateOnce(current, persistOptions) {
             persistOptions = persistOptions || {};
             const saveVersion = Number(current.mutationVersion) || 0;
-            if (current.score && !current.savedHookId && saveScore) {
-                const saved = await saveScore(current.score, {
-                    title: current.name,
-                    text: current.hookText,
-                    montage: current.score.montageDataUrl,
-                });
-                current.savedHookId = saved && saved.id || null;
-                current.score.savedId = current.savedHookId;
-                current.score._labAutoSaved = autoPersistScore;
-            }
+            const savedSnapshot = {
+                id: current.serverId,
+                expectedRevision: current.serverRevision,
+                name: current.name,
+                brief: current.brief,
+                hookText: current.hookText,
+                model: current.model,
+                generationMode: current.generationMode,
+                selectedPanel: current.selectedPanel,
+                composite: current.composite,
+                references: current.references,
+                panels: current.panels,
+                score: scoreSnapshot(current),
+                savedHookId: current.savedHookId,
+                folderId: current.folderId,
+            };
+            current.saveState = 'saving';
+            current.saveError = '';
             const response = await requestJson('/api/storyboards/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: current.serverId,
-                    expectedRevision: current.serverRevision,
-                    name: current.name,
-                    brief: current.brief,
-                    hookText: current.hookText,
-                    model: current.model,
-                    generationMode: current.generationMode,
-                    selectedPanel: current.selectedPanel,
-                    composite: current.composite,
-                    references: current.references,
-                    panels: current.panels,
-                    score: scoreSnapshot(current),
-                    savedHookId: current.savedHookId,
-                }),
+                body: JSON.stringify(savedSnapshot),
             });
             current.serverId = response.id;
             current.serverRevision = response.revision;
@@ -1370,32 +1496,139 @@
                 Number(current.mutationVersion) || 0
             ) !== saveVersion;
             current.pristine = false;
+            current.saveState = current.dirty ? 'idle' : 'saved';
+            current.saveError = '';
+            updateSavedSummary(current, response, savedSnapshot);
             if (persistOptions.refreshSaved !== false) {
-                await loadSaved(true);
+                Promise.resolve().then(() => loadSaved(true));
             }
             return response;
         }
 
+        function cancelScheduledSave(current) {
+            if (!current) return;
+            const timer = saveTimers.get(current.id);
+            if (timer) window.clearTimeout(timer);
+            saveTimers.delete(current.id);
+        }
+
+        function persistCandidate(current, persistOptions) {
+            cancelScheduledSave(current);
+            const previous = saveQueues.get(current.id)
+                || Promise.resolve();
+            const queued = previous.catch(() => {}).then(() => (
+                persistCandidateOnce(current, persistOptions)
+            ));
+            saveQueues.set(current.id, queued);
+            queued.finally(() => {
+                if (saveQueues.get(current.id) === queued) {
+                    saveQueues.delete(current.id);
+                }
+            }).catch(() => {});
+            return queued.catch(error => {
+                current.saveState = 'error';
+                current.saveError = String(
+                    error && error.message || error
+                ).slice(0, 300);
+                throw error;
+            });
+        }
+
+        function scheduleAutoPersist(current) {
+            if (!autoPersistDrafts || !current) return;
+            cancelScheduledSave(current);
+            const timer = window.setTimeout(() => {
+                saveTimers.delete(current.id);
+                autoPersistCandidate(
+                    current,
+                    `${current.name} changes saved automatically.`
+                );
+            }, 650);
+            saveTimers.set(current.id, timer);
+        }
+
+        async function persistScoreArtifact(current) {
+            if (
+                !current
+                || !current.score
+                || current.savedHookId
+                || !saveScore
+            ) return current && current.savedHookId || null;
+            const saved = await saveScore(current.score, {
+                title: current.name,
+                text: current.hookText,
+                montage: current.score.montageDataUrl,
+                folder: current.folderId,
+            });
+            current.savedHookId = saved && saved.id || null;
+            current.score.savedId = current.savedHookId;
+            current.score._labAutoSaved = autoPersistScore;
+            if (current.savedHookId) {
+                await persistCandidate(current, {
+                    refreshSaved: false,
+                });
+            }
+            return current.savedHookId;
+        }
+
+        async function autoPersistCandidate(current, message) {
+            if (!autoPersistDrafts || !hasPersistableContent(current)) {
+                return null;
+            }
+            try {
+                const response = await persistCandidate(current, {
+                    refreshSaved: false,
+                });
+                if (candidate() === current) {
+                    state.status = message || `${current.name} saved automatically.`;
+                    paint();
+                }
+                return response;
+            } catch (error) {
+                if (candidate() === current) {
+                    state.error = `Automatic save failed: ${String(error && error.message || error)}`.slice(0, 500);
+                    paint();
+                }
+                reportError(error);
+                return null;
+            }
+        }
+
         async function saveCurrent() {
             const current = candidate();
-            if (!current || state.busy || !completeFrames(current)) return;
-            state.busy = true;
-            state.busyCandidateId = current.id;
+            if (
+                !current
+                || state.busy
+                || current.saveState === 'saving'
+                || !hasPersistableContent(current)
+            ) return;
+            if (current.serverId && !current.dirty) {
+                state.status = `${current.name} is already saved.`;
+                paint();
+                return;
+            }
             state.error = '';
             state.status = `Saving ${current.name}...`;
             paint();
             try {
                 const response = await persistCandidate(current);
-                state.status = response.indexPending
-                    ? `${current.name} saved; the library index is repairing in the background.`
-                    : `${current.name} saved.`;
+                state.status = current.dirty
+                    ? `${current.name} saved; newer edits still need saving.`
+                    : response.indexPending
+                        ? `${current.name} saved; the library index is repairing in the background.`
+                        : `${current.name} saved.`;
             } catch (error) {
                 fail(error);
                 return;
             }
-            state.busy = false;
-            state.busyCandidateId = null;
             paint();
+            if (current.score && !current.savedHookId) {
+                persistScoreArtifact(current).catch(error => {
+                    state.error = `The storyboard is saved, but its Saved Hooks link failed: ${String(error && error.message || error)}`.slice(0, 500);
+                    reportError(state.error);
+                    paint();
+                });
+            }
         }
 
         async function hydrateStoredCandidate(record) {
@@ -1500,6 +1733,12 @@
                 };
             }
             current.savedHookId = record.savedHookId || null;
+            current.folderId = record.folderId
+                || record.folder
+                || (state.saved.find(item => item.id === record.id) || {}).folderId
+                || null;
+            current.saveState = 'saved';
+            current.saveError = '';
             current.dirty = false;
             current.pristine = false;
             current.mutationVersion = 0;
@@ -1510,8 +1749,10 @@
         async function loadSaved(force) {
             if (state.savedLoading || (state.savedLoaded && !force)) return;
             state.savedLoading = true;
+            let resumeId = null;
             try {
                 const rows = [];
+                let folders = [];
                 let offset = 0;
                 let total = 0;
                 do {
@@ -1522,6 +1763,9 @@
                     const page = Array.isArray(response.storyboards)
                         ? response.storyboards
                         : [];
+                    if (Array.isArray(response.folders)) {
+                        folders = response.folders;
+                    }
                     total = Math.max(
                         total,
                         Number(response.total) || 0
@@ -1530,16 +1774,150 @@
                     offset += page.length;
                     if (!page.length) break;
                 } while (offset < total);
-                state.saved = [...new Map(
-                    rows.map(row => [row.id, row])
-                ).values()];
+                state.saved = [...new Map(rows.map(row => [
+                    row.id,
+                    {
+                        ...row,
+                        folderId: row.folderId || row.folder || null,
+                    },
+                ])).values()].sort((left, right) => (
+                    Number(right.updatedAt || right.createdAt || 0)
+                    - Number(left.updatedAt || left.createdAt || 0)
+                ));
+                state.savedFolders = folders;
                 state.savedTotal = total || state.saved.length;
                 state.savedLoaded = true;
+                if (
+                    resumeLatestSaved
+                    && !state.resumeAttempted
+                    && state.saved.length
+                    && state.candidates.length === 1
+                    && replaceableBlank(state.candidates[0])
+                ) {
+                    state.resumeAttempted = true;
+                    resumeId = state.saved[0].id;
+                }
             } catch (error) {
                 state.error = String((error && error.message) || error);
                 state.savedLoaded = true;
             }
             state.savedLoading = false;
+            paint();
+            if (resumeId) {
+                window.setTimeout(() => loadStoryboard(resumeId), 0);
+            }
+        }
+
+        async function moveCurrentFolder(folderId) {
+            const current = candidate();
+            if (!current || !enableFolders) return;
+            const nextFolder = folderId || null;
+            const previousFolder = current.folderId || null;
+            current.folderId = nextFolder;
+            if (!current.serverId) {
+                touchCandidate(current);
+                state.status = `This storyboard will save in ${folderName(nextFolder)}.`;
+                paint();
+                return;
+            }
+            current.saveState = 'saving';
+            paint();
+            try {
+                await requestJson('/api/experimentlab/item/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        kind: 'storyboards',
+                        id: current.serverId,
+                        folderId: nextFolder,
+                    }),
+                });
+                current.saveState = 'saved';
+                const summary = state.saved.find(
+                    item => item.id === current.serverId
+                );
+                if (summary) {
+                    summary.folderId = nextFolder;
+                    summary.folder = nextFolder;
+                }
+                state.status = `${current.name} moved to ${folderName(nextFolder)}.`;
+            } catch (error) {
+                current.folderId = previousFolder;
+                current.saveState = 'error';
+                current.saveError = String(error && error.message || error);
+                state.error = current.saveError;
+            }
+            paint();
+        }
+
+        async function createStoryboardFolder() {
+            const name = state.folderName.trim();
+            if (!name || !enableFolders) return;
+            try {
+                const response = await requestJson(
+                    '/api/experimentlab/folder',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            kind: 'storyboards',
+                            name,
+                        }),
+                    }
+                );
+                if (!response || !response.folder) {
+                    throw new Error('Folder creation returned no folder.');
+                }
+                state.savedFolders = [
+                    ...state.savedFolders.filter(
+                        item => item.id !== response.folder.id
+                    ),
+                    response.folder,
+                ];
+                state.folderEditorOpen = false;
+                state.folderName = '';
+                await moveCurrentFolder(response.folder.id);
+            } catch (error) {
+                state.error = String(error && error.message || error);
+                paint();
+            }
+        }
+
+        async function deleteCurrentFolder() {
+            const current = candidate();
+            const folderId = current && current.folderId;
+            if (!folderId || !enableFolders) return;
+            if (!window.confirm(
+                `Delete ${folderName(folderId)}? Its storyboards will become Unfiled.`
+            )) return;
+            try {
+                await requestJson('/api/experimentlab/folder/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        kind: 'storyboards',
+                        id: folderId,
+                    }),
+                });
+                state.savedFolders = state.savedFolders.filter(
+                    item => item.id !== folderId
+                );
+                state.saved.forEach(item => {
+                    if (item.folderId === folderId) {
+                        item.folderId = null;
+                        item.folder = null;
+                    }
+                });
+                state.candidates.forEach(item => {
+                    if (item.folderId === folderId) item.folderId = null;
+                });
+                if (state.savedFolder === folderId) {
+                    state.savedFolder = 'all';
+                }
+                state.status = 'Folder deleted. Its storyboards are now Unfiled.';
+            } catch (error) {
+                state.error = String(error && error.message || error);
+            }
             paint();
         }
 
@@ -1601,6 +1979,10 @@
                 });
                 state.status = `Frame ${current.selectedPanel + 1} uploaded.`;
                 paint();
+                await autoPersistCandidate(
+                    current,
+                    `Uploaded frame ${current.selectedPanel + 1} saved.`
+                );
             } catch (error) {
                 fail(error);
             }
@@ -1661,6 +2043,7 @@
             let importedCount = 0;
             let processedCount = 0;
             const failures = [];
+            const importedCandidates = [];
             for (
                 let index = 0;
                 index < incoming.length && importedCount < available;
@@ -1689,6 +2072,7 @@
                     ) state.candidates[0] = imported;
                     else state.candidates.push(imported);
                     state.selectedCandidateId = imported.id;
+                    importedCandidates.push(imported);
                     importedCount++;
                 } catch (error) {
                     failures.push(
@@ -1696,8 +2080,7 @@
                     );
                 }
             }
-            state.busy = false;
-            state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported. Review the optional transcript, then score.`;
+            state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported. Saving to your workspace...`;
             const overflow = incoming.length - processedCount;
             const importError = [
                 ...failures,
@@ -1706,6 +2089,15 @@
                     : '',
             ].filter(Boolean).join(' | ');
             state.error = importError;
+            paint();
+            for (const imported of importedCandidates) {
+                await autoPersistCandidate(
+                    imported,
+                    `${imported.name} imported and saved.`
+                );
+            }
+            state.busy = false;
+            state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported. Saved to your workspace; review the optional transcript, then score.`;
             paint();
         }
 
@@ -1719,6 +2111,8 @@
             copy.scoreError = '';
             copy.scoreInputSha256 = null;
             copy.savedHookId = null;
+            copy.saveState = 'idle';
+            copy.saveError = '';
             copy.dirty = true;
             copy.createdAt = Date.now();
             copy.updatedAt = Date.now();
@@ -1899,6 +2293,20 @@
                 state.selectedCandidateId = created.id;
                 state.drawEnabled = false;
                 paint();
+                return true;
+            }
+            if (button.hasAttribute('data-sb-folder-new')) {
+                state.folderEditorOpen = !state.folderEditorOpen;
+                state.folderName = '';
+                paint();
+                return true;
+            }
+            if (button.hasAttribute('data-sb-folder-create')) {
+                createStoryboardFolder();
+                return true;
+            }
+            if (button.hasAttribute('data-sb-folder-delete')) {
+                deleteCurrentFolder();
                 return true;
             }
             if (button.hasAttribute('data-sb-panel')) {
@@ -2108,6 +2516,10 @@
                 paint();
                 return true;
             }
+            if (target.hasAttribute('data-sb-folder-name')) {
+                state.folderName = String(target.value || '').slice(0, 120);
+                return true;
+            }
             if (target.hasAttribute('data-sb-brief')) {
                 current.brief = String(target.value || '').slice(0, 3000);
                 touchCandidate(current);
@@ -2149,11 +2561,28 @@
                 loadStoryboard(target.value);
                 return true;
             }
+            if (target.hasAttribute('data-sb-saved-folder')) {
+                state.savedFolder = target.value || '';
+                paint();
+                return true;
+            }
+            if (target.hasAttribute('data-sb-current-folder')) {
+                moveCurrentFolder(target.value || null);
+                return true;
+            }
             return false;
         }
 
         function handleKeyDown(event) {
             if (!event.target.closest || !event.target.closest('[data-storyboard-workbench]')) return false;
+            if (
+                event.target.hasAttribute('data-sb-folder-name')
+                && event.key === 'Enter'
+            ) {
+                event.preventDefault();
+                createStoryboardFolder();
+                return true;
+            }
             const tag = String(event.target.tagName || '').toLowerCase();
             const nativeUndoTarget = (
                 ['input', 'textarea', 'select'].includes(tag)

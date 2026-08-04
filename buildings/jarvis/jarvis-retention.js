@@ -6639,6 +6639,9 @@ const JarvisRetention = (function () {
                 openScore: openStoryboardScore,
                 saveScore: saveStoryboardScore,
                 autoPersistScore: isExperimentLabSurface(),
+                autoPersistDrafts: isExperimentLabSurface(),
+                enableFolders: isExperimentLabSurface(),
+                resumeLatestSaved: isExperimentLabSurface(),
                 getCreatorProfile: selectedCreatorProfile,
                 onError: rawUploadPickerError,
             });
@@ -6949,7 +6952,14 @@ const JarvisRetention = (function () {
         if (upload._labAutoSavePromise) {
             return upload._labAutoSavePromise;
         }
-        const payload = scoredHookSavePayload(upload, options.overrides);
+        const selectedFolder = st.savedFolder
+            && !['all', 'none'].includes(st.savedFolder)
+            ? st.savedFolder
+            : null;
+        const payload = scoredHookSavePayload(upload, {
+            ...(options.overrides || {}),
+            ...(selectedFolder ? { folder: selectedFolder } : {}),
+        });
         if (!payload) {
             throw new Error(
                 'The complete canonical score ledger could not be persisted.'
@@ -7882,7 +7892,15 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savescored]')) {
             const up = selectedRawScoreUpload();
             const payload = scoredHookSavePayload(up);
-            if (payload) saveHook(payload);
+            if (payload && isExperimentLabSurface()) {
+                persistExperimentLabScore(up).then(id => {
+                    st.savedFlash = id;
+                    rtgUpdateExp();
+                }).catch(error => {
+                    st.rawUpErr = fetchFail(error);
+                    rtgUpdateExp();
+                });
+            } else if (payload) saveHook(payload);
             else rawUploadPickerError(
                 'The selected card has no valid canonical score ledger to save.'
             );
@@ -7896,7 +7914,22 @@ const JarvisRetention = (function () {
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
         const sfdel = e.target.closest('[data-savedfolderdel]'); if (sfdel) { deleteFolder(sfdel.getAttribute('data-savedfolderdel')); return; }
         const sfol = e.target.closest('[data-savedfolder]'); if (sfol) { st.savedFolder = sfol.getAttribute('data-savedfolder'); st.savedShow = window.innerWidth < 700 ? 20 : 60; rtgUpdateExp(); return; }
-        if (e.target.closest('[data-savedfoldernew]')) { createFolder(); return; }
+        if (e.target.closest('[data-savedfoldernew]')) {
+            st.savedFolderEditor = !st.savedFolderEditor;
+            st.savedFolderName = '';
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.closest('[data-savedfoldercancel]')) {
+            st.savedFolderEditor = false;
+            st.savedFolderName = '';
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.closest('[data-savedfoldercreate]')) {
+            createFolder(st.savedFolderName);
+            return;
+        }
         if (e.target.closest('[data-savedmore]')) { const page = window.innerWidth < 700 ? 20 : 60; st.savedShow = (st.savedShow || page) + page; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedfiltclear]')) { st.savedFilt = {}; rtgUpdateExp(); return; }
         const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
@@ -8009,6 +8042,7 @@ const JarvisRetention = (function () {
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
         if (e.target.id === 'exp-gen-input') { st.expGenPrem = e.target.value; return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-savedfoldername')) { st.savedFolderName = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindthr')) { st.grindThr = +e.target.value; window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.id === 'grind-input') { st.grindPrem = e.target.value; return; }
@@ -8075,6 +8109,14 @@ const JarvisRetention = (function () {
             && operationsUI().handleKeyDown
             && operationsUI().handleKeyDown(e)
         ) return;
+        if (
+            e.target.hasAttribute
+            && e.target.hasAttribute('data-savedfoldername')
+            && e.key === 'Enter'
+        ) {
+            e.preventDefault();
+            createFolder(st.savedFolderName);
+        }
     }
     async function rtgRawUpload(files) {
         const list = Array.from(files || []).slice(0, 12);   // cap a batch at 12
@@ -8281,9 +8323,25 @@ const JarvisRetention = (function () {
     async function deleteSaved(id) {
         try { await rtFetchJson('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }, 1); SAVED = null; refreshExperimentLabContext(); rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
-    async function createFolder() {
-        const name = window.prompt('New folder name:'); if (!name || !name.trim()) return;
-        try { const j = await rtFetchJson('/api/raw/folder-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) }, 1); if (j && j.id) st.savedFolder = j.id; SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
+    async function createFolder(name) {
+        const normalized = String(name || '').trim();
+        if (!normalized) return;
+        try {
+            const j = await rtFetchJson('/api/raw/folder-create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: normalized }),
+            }, 1);
+            if (j && j.id) st.savedFolder = j.id;
+            st.savedFolderEditor = false;
+            st.savedFolderName = '';
+            SAVED = null;
+            refreshExperimentLabContext();
+            rtgUpdateExp();
+        } catch (e) {
+            st.rawUpErr = fetchFail(e);
+            rtgUpdateExp();
+        }
     }
     async function moveHook(id, folder) {
         try { await rtFetchJson('/api/raw/hook-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, folder: folder || null }) }, 1); SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
@@ -12975,6 +13033,72 @@ const JarvisRetention = (function () {
         </div>`;
     }
 
+    async function loadAllLabStoryboards(accountId) {
+        const storyboards = [];
+        let folders = [];
+        let workspace = null;
+        let total = 0;
+        let offset = 0;
+        do {
+            const page = await rtFetchJson(
+                `/api/storyboards?limit=100&offset=${offset}`,
+                {
+                    cache: 'no-store',
+                    _labAccount: accountId,
+                },
+                4
+            );
+            const rows = Array.isArray(page.storyboards)
+                ? page.storyboards
+                : [];
+            storyboards.push(...rows);
+            folders = Array.isArray(page.folders)
+                ? page.folders
+                : folders;
+            workspace = page.workspace || workspace;
+            total = Math.max(total, Number(page.total) || 0);
+            offset += rows.length;
+            if (!rows.length) break;
+        } while (offset < total);
+        return {
+            storyboards: [...new Map(
+                storyboards.map(row => [row.id, row])
+            ).values()],
+            folders,
+            workspace,
+            total: total || storyboards.length,
+        };
+    }
+
+    async function loadAllLabActivities(accountId) {
+        const activities = [];
+        let total = 0;
+        let offset = 0;
+        do {
+            const page = await rtFetchJson(
+                `/api/experimentlab/activity?limit=100&offset=${offset}`,
+                {
+                    cache: 'no-store',
+                    _labAccount: accountId,
+                },
+                4
+            );
+            const rows = Array.isArray(page.activities)
+                ? page.activities
+                : [];
+            activities.push(...rows);
+            total = Math.max(total, Number(page.total) || 0);
+            offset += rows.length;
+            if (!rows.length) break;
+        } while (offset < total);
+        return {
+            activities: [...new Map(
+                activities.map(row => [row.id, row])
+            ).values()],
+            total: total || activities.length,
+        };
+    }
+
     async function loadLabTeamAccount(accountId) {
         if (!accountId || !isExperimentLabSurface()) return;
         st.labTeamAccount = accountId;
@@ -12986,7 +13110,7 @@ const JarvisRetention = (function () {
         st.labTeamError = null;
         rtgUpdateExp();
         try {
-            const [context, hooks, storyboards] =
+            const [context, hooks, storyboards, activities] =
                 await Promise.all([
                     loadExperimentLabContext(accountId),
                     rtFetchJson(
@@ -12997,19 +13121,14 @@ const JarvisRetention = (function () {
                         },
                         4
                     ),
-                    rtFetchJson(
-                        '/api/storyboards?limit=100&offset=0',
-                        {
-                            cache: 'no-store',
-                            _labAccount: accountId,
-                        },
-                        4
-                    ),
+                    loadAllLabStoryboards(accountId),
+                    loadAllLabActivities(accountId),
                 ]);
             LAB_TEAM_DATA[accountId] = {
                 context,
                 hooks,
                 storyboards,
+                activities,
                 activityDetails: {},
                 storyboardDetails: {},
                 loadedAt: Date.now(),
@@ -13417,19 +13536,51 @@ const JarvisRetention = (function () {
                 folders.find(row => row.id === id);
             return folder ? folder.name : 'Unfiled';
         };
-        const hookCards = hookRows.map(hook => {
+        const hookCard = hook => {
             const thumb = hook.hasMontage
                 ? authenticatedMediaUrl(
                     `/api/raw/saved-montage/${hook.id}`,
                     selectedId
                 )
                 : '';
-            return `<button type="button" data-labteamhook="${esc(hook.id)}" style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:9px;text-align:left;border:1px solid ${C.border};background:${C.card};padding:7px;color:${C.text};cursor:pointer;min-width:0">${thumb ? `<img src="${thumb}" alt="" loading="lazy" style="width:96px;aspect-ratio:16/9;object-fit:cover;background:${C.card2}">` : `<span style="width:96px;aspect-ratio:16/9;background:${C.card2};display:block"></span>`}<span><b style="display:block;font-size:10px;line-height:1.35">${esc(hook.title || 'Saved hook')}</b><small style="display:block;color:${C.mute};font-size:8px;margin-top:5px">${esc(folderName(hookFolders, hook.folder))} · open exact ledger</small></span></button>`;
-        }).join('');
-        const storyboardCards = storyboardRows.map(storyboard =>
+            return `<button type="button" data-labteamhook="${esc(hook.id)}" style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:9px;text-align:left;border:1px solid ${C.border};background:${C.card};padding:7px;color:${C.text};cursor:pointer;min-width:0">${thumb ? `<img src="${thumb}" alt="" loading="lazy" style="width:96px;aspect-ratio:16/9;object-fit:cover;background:${C.card2}">` : `<span style="width:96px;aspect-ratio:16/9;background:${C.card2};display:block"></span>`}<span><b style="display:block;font-size:10px;line-height:1.35">${esc(hook.title || 'Saved hook')}</b><small style="display:block;color:${C.mute};font-size:8px;margin-top:5px">open exact ledger</small></span></button>`;
+        };
+        const storyboardCard = storyboard =>
             `<button type="button" data-labteamstoryboard="${esc(storyboard.id)}" class="lab-team-storyboard-card" aria-pressed="${st.labTeamStoryboard === storyboard.id}"><b>${esc(storyboard.name || 'Untitled opening')}</b><span>${esc(folderName(storyboardFolders, storyboard.folder))} · ${storyboard.complete ? 'complete' : 'draft'} · ${storyboard.scored ? 'scored' : 'not scored'}</span><small>${esc(storyboard.model || 'model unavailable')} · inspect prompts, frames, inputs, and score</small></button>`
-        ).join('');
-        const activityRows = (workspace.activity || []).slice(0, 100);
+        ;
+        const folderCollection = (rows, folders, renderCard) => {
+            const groups = [
+                ...folders.map(folder => ({
+                    id: folder.id,
+                    name: folder.name,
+                })),
+                { id: null, name: 'Unfiled' },
+            ];
+            return groups.map(group => {
+                const members = rows.filter(row => (
+                    (row.folderId || row.folder || null) === group.id
+                ));
+                if (!members.length && !group.id) return '';
+                return `<section class="lab-team-folder-group" data-lab-team-folder="${esc(group.id || 'unfiled')}"><div class="lab-team-folder-head"><b>${esc(group.name)}</b><span>${members.length}</span></div><div class="lab-team-folder-items">${members.map(renderCard).join('') || '<div class="lab-team-empty">Empty folder</div>'}</div></section>`;
+            }).join('');
+        };
+        const hookCards = folderCollection(
+            hookRows,
+            hookFolders,
+            hookCard
+        );
+        const storyboardCards = folderCollection(
+            storyboardRows,
+            storyboardFolders,
+            storyboardCard
+        );
+        const activityRows = selected.activities
+            && Array.isArray(selected.activities.activities)
+            ? selected.activities.activities
+            : workspace.activity || [];
+        const activityTotal = selected.activities
+            ? Number(selected.activities.total) || activityRows.length
+            : activityRows.length;
         const activityCounts = {
             scored: activityRows.filter(row => LAB_SCORE_ACTIVITY_TYPES.has(row.type)).length,
             generated: activityRows.filter(row => /generated/.test(String(row.type || ''))).length,
@@ -13447,7 +13598,7 @@ const JarvisRetention = (function () {
         const activityOverview = `<div class="lab-team-activity-overview"><span><small>Scored</small><b>${activityCounts.scored}</b></span><span><small>Generated</small><b>${activityCounts.generated}</b></span><span><small>Saved</small><b>${activityCounts.saved}</b></span><span><small>Errors</small><b>${activityCounts.failed}</b></span></div>`;
         return accountRail
             + (st.savedSel ? savedDetail() : '')
-            + `<section class="lab-team-activity-section"><div class="lab-team-section-head"><div><small>Everything this workspace did</small><h4>Work activity</h4><p>Every card shows the input, operation, output, and storage state. Open a score to inspect its exact 21-coordinate ledger and both derived forecasts.</p></div></div>${activityOverview}<div class="lab-team-activity-list">${activityCards || '<div class="lab-team-empty">No recorded activity.</div>'}</div></section>`
+            + `<section class="lab-team-activity-section"><div class="lab-team-section-head"><div><small>Everything this workspace did · ${activityTotal} archived actions</small><h4>Work activity</h4><p>Every card shows the input, operation, output, and storage state. Open a score to inspect its exact canonical ledger and four channel-free keep outputs.</p></div></div>${activityOverview}<div class="lab-team-activity-list">${activityCards || '<div class="lab-team-empty">No recorded activity.</div>'}</div></section>`
             + renderLabTeamActivityDetail()
             + `<div data-lab-team-collections class="lab-team-collections"><section><div class="lab-team-collection-title" style="color:${C.accent}">Saved hooks · ${hookRows.length}</div><div class="lab-team-collection-list">${hookCards || '<div class="lab-team-empty">No saved hooks.</div>'}</div></section><section><div class="lab-team-collection-title" style="color:${C.amber}">Saved storyboards · ${storyboardRows.length}</div><div class="lab-team-collection-list">${storyboardCards || '<div class="lab-team-empty">No saved storyboards.</div>'}</div></section></div>`
             + renderLabTeamStoryboardDetail();
@@ -13574,7 +13725,10 @@ const JarvisRetention = (function () {
         const sortSel = SORTS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${lab}</span>`).join('');
         const fcount = id => all.filter(h => id === 'none' ? !h.folder : h.folder === id).length;
         const folderPills = [['all', 'All (' + all.length + ')'], ['none', 'Unfiled (' + fcount('none') + ')']].concat(folders.map(f => [f.id, esc(f.name) + ' (' + fcount(f.id) + ')']));
-        const folderBar = `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:9px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">folder</span>${folderPills.map(([id, lab]) => `<span data-savedfolder="${id}" style="cursor:pointer;font-size:10px;border:1px solid ${curF === id ? C.accent : C.border};background:${curF === id ? C.accent + '22' : 'transparent'};color:${curF === id ? C.accent : C.dim};border-radius:6px;padding:2px 8px">${lab}${(id !== 'all' && id !== 'none') ? ` <span data-savedfolderdel="${id}" title="delete folder" style="color:${C.mute};margin-left:3px">✕</span>` : ''}</span>`).join('')}<span data-savedfoldernew style="cursor:pointer;font-size:10px;border:1px dashed ${C.accent};color:${C.accent};border-radius:6px;padding:2px 8px">+ New folder</span></div>`;
+        const folderCreator = st.savedFolderEditor
+            ? `<div class="saved-hook-folder-create"><input type="text" data-savedfoldername value="${esc(st.savedFolderName || '')}" maxlength="120" placeholder="Folder name" aria-label="New saved-hook folder name"><button type="button" data-savedfoldercreate>Create</button><button type="button" data-savedfoldercancel>Cancel</button></div>`
+            : '';
+        const folderBar = `<div class="saved-hook-folder-bar"><span class="saved-hook-folder-label">Folder</span>${folderPills.map(([id, lab]) => `<button type="button" data-savedfolder="${id}" aria-pressed="${curF === id}" style="border-color:${curF === id ? C.accent : C.border};background:${curF === id ? C.accent + '22' : 'transparent'};color:${curF === id ? C.accent : C.dim}">${lab}${(id !== 'all' && id !== 'none') ? ` <span data-savedfolderdel="${id}" title="Delete folder" aria-label="Delete folder">×</span>` : ''}</button>`).join('')}<button type="button" data-savedfoldernew aria-expanded="${!!st.savedFolderEditor}">${st.savedFolderEditor ? 'Close' : 'New folder'}</button>${folderCreator}</div>`;
         const folderOpts = h => `<option value="">📁 —</option>` + folders.map(f => `<option value="${f.id}" ${h.folder === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
         const card = h => {
             const thumb = h.hasMontage
@@ -13649,6 +13803,7 @@ const JarvisRetention = (function () {
             surface === 'experiment-lab'
                 ? 'experiment-lab'
                 : 'jarvis';
+        const surfaceChanged = mountSurface !== next;
         mountSurface = next;
         Object.assign(
             C,
@@ -13656,6 +13811,7 @@ const JarvisRetention = (function () {
                 ? EXPERIMENT_LAB_COLORS
                 : BASE_COLORS
         );
+        if (!surfaceChanged) return;
         SAVED = null;
         SAVEDDETAIL = {};
         SAVEDCHANNELS = null;
@@ -13670,6 +13826,8 @@ const JarvisRetention = (function () {
         LAB_CONTEXT = null;
         st.savedBank = 'hooks';
         st.savedFolder = 'all';
+        st.savedFolderEditor = false;
+        st.savedFolderName = '';
         st.savedSel = null;
         st.savedChannelSel = null;
         st.labTeamAccount = null;
