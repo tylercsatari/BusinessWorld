@@ -5,6 +5,7 @@ const assert = require('assert');
 const {
     MAX_ACTIVITY,
     MAX_ACTIVITY_HISTORY,
+    GENERATION_ACTIVITY_TYPES,
     accountKey,
     workspaceKey,
     isReadOnlyInspectionMutation,
@@ -23,6 +24,7 @@ const {
     deleteFolder,
     addActivity,
     markArtifactSaved,
+    isGenerationActivity,
     summary,
 } = require('../buildings/experimentlab/experimentlab-workspace');
 const {
@@ -122,6 +124,18 @@ assert.strictEqual(
         'POST'
     ),
     true
+);
+assert(
+    GENERATION_ACTIVITY_TYPES.includes('hook-generated')
+        && GENERATION_ACTIVITY_TYPES.includes('shorts-grind')
+);
+assert.strictEqual(
+    isGenerationActivity({ type: 'storyboard-panel-generated' }),
+    true
+);
+assert.strictEqual(
+    isGenerationActivity({ type: 'hook-upload-scored' }),
+    false
 );
 assert.strictEqual(
     isReadOnlyInspectionMutation(
@@ -602,6 +616,7 @@ assert.deepStrictEqual(ownerSummary.folderCounts, {
     storyboards: 1,
 });
 assert.strictEqual(ownerSummary.activityCount, MAX_ACTIVITY);
+assert.strictEqual(ownerSummary.generationCount, MAX_ACTIVITY);
 assert.strictEqual(
     ownerSummary.workspace_sha256,
     ownerWorkspace.workspace_sha256

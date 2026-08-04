@@ -476,10 +476,11 @@
     margin-top: 8px !important;
 }
 
-/* Owner inspection presents workspace activity as evidence, not an audit-log ID. */
+/* Owner inspection separates generated work from the member's saved space. */
 .experiment-lab-panel .lab-team-activity-section,
 .experiment-lab-panel .lab-team-operation-detail,
-.experiment-lab-panel .lab-team-collections > section {
+.experiment-lab-panel .lab-team-collections > section,
+.experiment-lab-panel .lab-team-saved-space > section {
     margin: 12px 0;
     border: 1px solid var(--lab-line);
     border-radius: 18px;
@@ -490,6 +491,52 @@
 .experiment-lab-panel .lab-team-activity-section,
 .experiment-lab-panel .lab-team-operation-detail {
     padding: 16px;
+}
+
+.experiment-lab-panel .lab-team-view-tabs {
+    display: inline-grid;
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+    gap: 4px;
+    margin: 2px 0 4px;
+    padding: 4px;
+    border: 1px solid var(--lab-line);
+    border-radius: 14px;
+    background: #ececf0;
+}
+
+.experiment-lab-panel .lab-team-view-tabs button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 13px;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    color: var(--lab-secondary) !important;
+    cursor: pointer;
+}
+
+.experiment-lab-panel .lab-team-view-tabs button[aria-selected="true"] {
+    background: var(--lab-paper) !important;
+    color: var(--lab-ink) !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.09);
+}
+
+.experiment-lab-panel .lab-team-view-tabs b {
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.experiment-lab-panel .lab-team-view-tabs span {
+    min-width: 22px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #dfdfe5;
+    color: var(--lab-tertiary);
+    font-size: 8px;
+    font-weight: 750;
 }
 
 .experiment-lab-panel .lab-team-section-head,
@@ -727,6 +774,39 @@
     text-align: center;
 }
 
+.experiment-lab-panel .lab-team-generation-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.experiment-lab-panel .lab-team-generation-summary > span {
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid #e7e7eb;
+    border-radius: 9px;
+    background: #ffffff;
+}
+
+.experiment-lab-panel .lab-team-generation-summary small,
+.experiment-lab-panel .lab-team-generation-summary b {
+    display: block;
+}
+
+.experiment-lab-panel .lab-team-generation-summary small {
+    margin-bottom: 3px;
+    color: var(--lab-tertiary);
+    font-size: 7px;
+    text-transform: uppercase;
+}
+
+.experiment-lab-panel .lab-team-generation-summary b {
+    overflow-wrap: anywhere;
+    color: var(--lab-secondary);
+    font-size: 9px;
+    line-height: 1.35;
+}
+
 .experiment-lab-panel .lab-team-activity-foot {
     margin-top: 9px;
     color: var(--lab-tertiary);
@@ -874,10 +954,167 @@
     object-fit: contain;
 }
 
+.experiment-lab-panel .lab-team-generation-note {
+    margin-top: 13px;
+    padding: 10px 12px;
+    border: 1px solid #ead5b0;
+    border-radius: 11px;
+    background: #fff9ef;
+    color: var(--lab-secondary);
+    font-size: 9px;
+    line-height: 1.45;
+}
+
+.experiment-lab-panel .lab-team-generation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 9px;
+}
+
+.experiment-lab-panel .lab-team-generation-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--lab-line);
+    border-radius: 12px;
+    background: var(--lab-paper-soft);
+}
+
+.experiment-lab-panel .lab-team-generation-media {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 2px;
+    overflow: hidden;
+    background: #e9e9ee;
+}
+
+.experiment-lab-panel .lab-team-generation-media img {
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 9 / 16;
+    object-fit: cover;
+}
+
+.experiment-lab-panel .lab-team-generation-card > div:last-child {
+    display: grid;
+    gap: 4px;
+    padding: 9px;
+}
+
+.experiment-lab-panel .lab-team-generation-card small,
+.experiment-lab-panel .lab-team-generation-card span {
+    color: var(--lab-tertiary);
+    font-size: 8px;
+}
+
+.experiment-lab-panel .lab-team-generation-card b {
+    color: var(--lab-ink);
+    font-size: 10px;
+    line-height: 1.4;
+}
+
 .experiment-lab-panel .lab-team-collections {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+}
+
+.experiment-lab-panel .lab-team-saved-space {
+    display: grid;
+    gap: 12px;
+}
+
+.experiment-lab-panel .lab-team-saved-space > section {
+    min-width: 0;
+    padding: 15px;
+}
+
+.experiment-lab-panel .lab-team-saved-folder-bar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    overflow-x: auto;
+    margin: 14px 0 11px;
+    padding-bottom: 3px;
+}
+
+.experiment-lab-panel .lab-team-saved-folder-bar > span {
+    flex: 0 0 auto;
+    color: var(--lab-tertiary);
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.experiment-lab-panel .lab-team-saved-folder-bar button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    flex: 0 0 auto;
+    padding: 0 10px;
+    border: 1px solid var(--lab-line) !important;
+    border-radius: 999px !important;
+    background: var(--lab-paper-soft) !important;
+    color: var(--lab-secondary) !important;
+    font-size: 9px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.experiment-lab-panel .lab-team-saved-folder-bar button[aria-pressed="true"] {
+    border-color: var(--lab-blue) !important;
+    background: #eef6ff !important;
+    color: var(--lab-blue) !important;
+}
+
+.experiment-lab-panel .lab-team-saved-folder-bar i {
+    font-size: 8px;
+    font-style: normal;
+}
+
+.experiment-lab-panel .lab-team-hook-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 9px;
+}
+
+.experiment-lab-panel .lab-team-hook-card {
+    min-width: 0;
+    overflow: hidden;
+    padding: 0 !important;
+    border: 1px solid var(--lab-line) !important;
+    border-radius: 13px !important;
+    background: var(--lab-paper-soft) !important;
+    color: var(--lab-ink) !important;
+    text-align: left;
+    cursor: pointer;
+}
+
+.experiment-lab-panel .lab-team-hook-card > img,
+.experiment-lab-panel .lab-team-hook-placeholder {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background: #e9e9ee;
+}
+
+.experiment-lab-panel .lab-team-hook-card > span:last-child {
+    display: grid;
+    gap: 5px;
+    padding: 9px;
+}
+
+.experiment-lab-panel .lab-team-hook-card b {
+    color: var(--lab-ink);
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.experiment-lab-panel .lab-team-hook-card small {
+    color: var(--lab-tertiary);
+    font-size: 8px;
 }
 
 .experiment-lab-panel .lab-team-collections > section {
@@ -1666,12 +1903,23 @@
         border-radius: 16px;
     }
 
+    .experiment-lab-panel .lab-team-view-tabs {
+        width: 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .experiment-lab-panel .lab-team-activity-overview {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .experiment-lab-panel .lab-team-flow {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .experiment-lab-panel .lab-team-generation-summary,
+    .experiment-lab-panel .lab-team-generation-grid,
+    .experiment-lab-panel .lab-team-hook-grid {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .experiment-lab-panel .lab-team-flow > em {

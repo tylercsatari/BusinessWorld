@@ -45,6 +45,7 @@ const owner = { all: true, role: 'owner' };
 
 const labOnlyRoutes = [
     '/api/experimentlab/context',
+    '/api/experimentlab/activity',
     '/api/experimentlab/workspaces/current',
 ];
 

@@ -13,6 +13,16 @@ const COLLECTIONS = Object.freeze([
     'channels',
     'storyboards',
 ]);
+const GENERATION_ACTIVITY_TYPES = Object.freeze([
+    'hook-generated',
+    'generate-hook',
+    'storyboard-generated',
+    'storyboard-panel-generated',
+    'shorts-grind',
+]);
+const GENERATION_ACTIVITY_TYPE_SET = new Set(
+    GENERATION_ACTIVITY_TYPES
+);
 const MAX_ACTIVITY = 500;
 const MAX_ACTIVITY_HISTORY = 24;
 const ACCOUNT_ID_PATTERN =
@@ -445,6 +455,15 @@ function markArtifactSaved(workspace, kind, artifactId, saved) {
     return changed;
 }
 
+function isGenerationActivity(activity) {
+    return !!(
+        activity
+        && GENERATION_ACTIVITY_TYPE_SET.has(
+            String(activity.type || '')
+        )
+    );
+}
+
 function validateWorkspace(workspace) {
     const errors = [];
     if (!workspace || typeof workspace !== 'object') {
@@ -676,6 +695,9 @@ function summary(workspace) {
         counts,
         folderCounts,
         activityCount: workspace.activity.length,
+        generationCount: workspace.activity.filter(
+            isGenerationActivity
+        ).length,
         updatedAt: workspace.updatedAt,
         workspace_sha256: workspace.workspace_sha256,
     };
@@ -685,6 +707,7 @@ module.exports = {
     SCHEMA,
     SCHEMA_VERSION,
     COLLECTIONS,
+    GENERATION_ACTIVITY_TYPES,
     MAX_ACTIVITY,
     MAX_ACTIVITY_HISTORY,
     accountKey,
@@ -706,5 +729,6 @@ module.exports = {
     deleteFolder,
     addActivity,
     markArtifactSaved,
+    isGenerationActivity,
     summary,
 };

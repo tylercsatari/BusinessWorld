@@ -34,7 +34,7 @@ const JarvisRetention = (function () {
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     let SAVED_OPEN_DRAIN = null;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -7529,6 +7529,32 @@ const JarvisRetention = (function () {
             );
             return;
         }
+        const labTeamView =
+            e.target.closest('[data-labteamview]');
+        if (labTeamView) {
+            st.labTeamView =
+                labTeamView.getAttribute('data-labteamview')
+                    === 'saved'
+                    ? 'saved'
+                    : 'generations';
+            st.labTeamActivity = null;
+            st.labTeamActivityLoading = false;
+            st.labTeamActivityError = null;
+            st.labTeamStoryboard = null;
+            st.labTeamStoryboardLoading = false;
+            st.labTeamStoryboardError = null;
+            rtgUpdateExp();
+            return;
+        }
+        const labTeamFolder =
+            e.target.closest('[data-labteamfolder]');
+        if (labTeamFolder) {
+            st.labTeamHookFolder =
+                labTeamFolder.getAttribute('data-labteamfolder')
+                || 'all';
+            rtgUpdateExp();
+            return;
+        }
         if (e.target.closest('[data-labteamactivityclose]')) {
             st.labTeamActivity = null;
             st.labTeamActivityLoading = false;
@@ -13069,7 +13095,7 @@ const JarvisRetention = (function () {
         let offset = 0;
         do {
             const page = await rtFetchJson(
-                `/api/experimentlab/activity?limit=100&offset=${offset}`,
+                `/api/experimentlab/activity?kind=generation&limit=100&offset=${offset}`,
                 {
                     cache: 'no-store',
                     _labAccount: accountId,
@@ -13094,7 +13120,9 @@ const JarvisRetention = (function () {
 
     async function loadLabTeamAccount(accountId) {
         if (!accountId || !isExperimentLabSurface()) return;
+        const accountChanged = st.labTeamAccount !== accountId;
         st.labTeamAccount = accountId;
+        if (accountChanged) st.labTeamHookFolder = 'all';
         st.labTeamActivity = null;
         st.labTeamActivityError = null;
         st.labTeamStoryboard = null;
@@ -13123,6 +13151,7 @@ const JarvisRetention = (function () {
                 storyboards,
                 activities,
                 activityDetails: {},
+                generationDetails: {},
                 storyboardDetails: {},
                 loadedAt: Date.now(),
             };
@@ -13139,6 +13168,13 @@ const JarvisRetention = (function () {
         'built-hook-scored',
         'score-hook',
         'hook-saved',
+    ]);
+    const LAB_GENERATION_ACTIVITY_TYPES = new Set([
+        'hook-generated',
+        'generate-hook',
+        'storyboard-generated',
+        'storyboard-panel-generated',
+        'shorts-grind',
     ]);
     const LAB_ACTIVITY_META = Object.freeze({
         'hook-scored-from-link': {
@@ -13164,6 +13200,14 @@ const JarvisRetention = (function () {
         'hook-generated': {
             label: 'Automatic hooks generated',
             accent: C.cyan,
+        },
+        'generate-hook': {
+            label: 'Automatic hooks generated',
+            accent: C.cyan,
+        },
+        'shorts-grind': {
+            label: 'Threshold grind generated',
+            accent: C.green,
         },
         'storyboard-generated': {
             label: 'Storyboard sheet generated',
@@ -13233,6 +13277,9 @@ const JarvisRetention = (function () {
         const parts = [
             output.kind,
             output.model,
+            Number.isFinite(Number(output.candidateCount))
+                ? `${Number(output.candidateCount)} candidates`
+                : null,
             Number.isFinite(Number(output.panelCount))
                 ? `${Number(output.panelCount)} frames`
                 : null,
@@ -13293,13 +13340,81 @@ const JarvisRetention = (function () {
         return `<div class="lab-team-lifecycle">${history.map((entry, index) => `<div class="lab-team-life-step"><i style="background:${index === history.length - 1 ? labActivityStatusColor(entry) : C.border2}"></i><div><b>${esc(labEvidenceLabel(entry.status || 'recorded'))}</b><span>${entry.detail ? esc(entry.detail) : 'State recorded'}${entry.at ? ` · ${esc(new Date(entry.at).toLocaleString())}` : ''}</span></div></div>`).join('')}</div>`;
     }
 
+    function labTeamGenerationDetail(row) {
+        const selected = st.labTeamAccount
+            && LAB_TEAM_DATA[st.labTeamAccount];
+        return selected
+            && selected.generationDetails
+            && selected.generationDetails[
+                labActivityKey(row, 0)
+            ] || null;
+    }
+
+    function renderLabTeamGenerationArtifacts(row) {
+        const detail = labTeamGenerationDetail(row);
+        if (!detail) return '';
+        if (detail.error) {
+            return `<div class="lab-team-generation-note">The generation record is available, but its output artifact could not be loaded: ${esc(detail.error)}</div>`;
+        }
+        const attempts = Array.isArray(detail.attempts)
+            ? detail.attempts
+            : [];
+        if (!attempts.length) return '';
+        const isGrind = row.type === 'shorts-grind';
+        const cards = attempts.map((attempt, index) => {
+            const frameIds = Array.isArray(attempt.frame_imgs)
+                ? attempt.frame_imgs.filter(Boolean)
+                : [];
+            let images = frameIds.map(frameId => {
+                const source = String(frameId || '');
+                if (/^(data:|blob:)/i.test(source)) return source;
+                return authenticatedMediaUrl(
+                    source.startsWith('/api/')
+                        ? source
+                        : isGrind
+                            ? `/api/hooks/grind/montage/${source}`
+                            : `/api/hooks/grpo/montage/demo/${source}`,
+                    st.labTeamAccount
+                );
+            });
+            if (!images.length && row.requestId != null) {
+                const attemptIndex = Number.isFinite(Number(attempt.k))
+                    ? Number(attempt.k)
+                    : index;
+                images = [authenticatedMediaUrl(
+                    isGrind
+                        ? `/api/hooks/grind/montage/${row.requestId}_${attemptIndex}`
+                        : `/api/hooks/grpo/montage/demo/${row.requestId}_${attemptIndex}`,
+                    st.labTeamAccount
+                )];
+            }
+            const title = attempt.premise
+                || attempt.caption
+                || attempt.title
+                || `Candidate ${index + 1}`;
+            const score = attempt.score_percentile_0_100
+                ?? attempt.pct
+                ?? attempt.keep_pctile;
+            return `<article class="lab-team-generation-card"><div class="lab-team-generation-media">${images.map((source, imageIndex) => `<img src="${esc(source)}" alt="${esc(title)} frame ${imageIndex + 1}" loading="lazy">`).join('')}</div><div><small>Candidate ${index + 1}${attempt.status ? ` · ${esc(attempt.status)}` : ''}</small><b>${esc(title)}</b>${score == null ? '' : `<span>Recorded score ${esc(labEvidenceValue(score))}</span>`}</div></article>`;
+        }).join('');
+        return `<div class="lab-team-detail-section"><h5>Generated outputs</h5><div class="lab-team-generation-grid">${cards}</div></div>`;
+    }
+
     function selectedLabTeamActivity() {
         const selected = st.labTeamAccount
             && LAB_TEAM_DATA[st.labTeamAccount];
-        const rows = selected
+        const archived = selected
+            && selected.activities
+            && Array.isArray(selected.activities.activities)
+            ? selected.activities.activities
+            : [];
+        const recent = selected
             && selected.context
             && selected.context.workspace
             && selected.context.workspace.activity || [];
+        const rows = archived.concat(recent.filter(row => (
+            !archived.some(candidate => candidate.id === row.id)
+        )));
         return rows.find((row, index) => (
             labActivityKey(row, index) === st.labTeamActivity
         )) || null;
@@ -13310,10 +13425,10 @@ const JarvisRetention = (function () {
         if (!row && !st.labTeamActivityLoading && !st.labTeamActivityError) return '';
         const meta = labActivityMeta(row || {});
         if (st.labTeamActivityLoading) {
-            return `<section class="lab-team-operation-detail"><div class="lab-team-detail-head"><div><small>Opening exact work record</small><h4>${esc(meta.label)}</h4></div></div><div class="lab-team-detail-loading">Loading the durable result and its canonical ledger…</div></section>`;
+            return `<section class="lab-team-operation-detail"><div class="lab-team-detail-head"><div><small>Opening generation</small><h4>${esc(meta.label)}</h4></div></div><div class="lab-team-detail-loading">Loading the durable generation output…</div></section>`;
         }
         if (st.labTeamActivityError) {
-            return `<section class="lab-team-operation-detail"><div class="lab-team-detail-head"><div><small>Operation could not be opened</small><h4>${esc(meta.label)}</h4></div><button type="button" data-labteamactivityclose aria-label="Close operation detail">×</button></div><div class="lab-team-detail-error">${esc(st.labTeamActivityError)}</div></section>`;
+            return `<section class="lab-team-operation-detail"><div class="lab-team-detail-head"><div><small>Generation could not be opened</small><h4>${esc(meta.label)}</h4></div><button type="button" data-labteamactivityclose aria-label="Close generation detail">×</button></div><div class="lab-team-detail-error">${esc(st.labTeamActivityError)}</div></section>`;
         }
         if (!row) return '';
         const output = row.output || {};
@@ -13329,7 +13444,7 @@ const JarvisRetention = (function () {
         const media = output.mediaUrl
             ? authenticatedMediaUrl(output.mediaUrl, st.labTeamAccount)
             : '';
-        return `<section class="lab-team-operation-detail" data-lab-team-activity-detail="${esc(st.labTeamActivity)}"><div class="lab-team-detail-head"><div><small>Complete operation record</small><h4>${esc(meta.label)}</h4><p>${esc(row.title || row.detail || 'Untitled work')}</p></div><button type="button" data-labteamactivityclose aria-label="Close operation detail">×</button></div>${media ? `<img class="lab-team-output-media" src="${esc(media)}" alt="Generated operation output">` : ''}<div class="lab-team-evidence-grid">${labEvidencePanel('Input', row.input, C.cyan)}${labEvidencePanel('Input identity', row.inputEvidence, C.dim)}${labEvidencePanel('Output', output, C.green)}${forecastPanel}${labEvidencePanel('Storage', { saved: row.saved === true, artifactKind: row.artifactKind, artifactId: row.artifactId }, C.amber)}</div><div class="lab-team-detail-section"><h5>Action timeline</h5>${renderLabActivityLifecycle(row)}</div><div class="lab-team-detail-section"><h5>Traceability</h5><div class="lab-team-id-grid"><span>Activity ID<b>${esc(row.id || 'Legacy record')}</b></span><span>Job / request ID<b>${esc(row.requestId || 'Not linked')}</b></span><span>Operation type<b>${esc(row.type || 'Unknown')}</b></span><span>Last update<b>${row.updatedAt ? esc(new Date(row.updatedAt).toLocaleString()) : 'Not recorded'}</b></span></div></div>${labActivityCanOpenScore(row) ? `<button type="button" class="lab-team-open-analysis" data-labteamactivityscore="${esc(st.labTeamActivity)}">Open all 21 coordinates + 4 channel-free outputs</button>` : ''}</section>`;
+        return `<section class="lab-team-operation-detail" data-lab-team-activity-detail="${esc(st.labTeamActivity)}"><div class="lab-team-detail-head"><div><small>Raw generation record</small><h4>${esc(meta.label)}</h4><p>${esc(row.title || row.detail || 'Untitled generation')}</p></div><button type="button" data-labteamactivityclose aria-label="Close generation detail">×</button></div>${media ? `<img class="lab-team-output-media" src="${esc(media)}" alt="Generated output">` : ''}<div class="lab-team-evidence-grid">${labEvidencePanel('Generation input', row.input, C.cyan)}${labEvidencePanel('Input identity', row.inputEvidence, C.dim)}${labEvidencePanel('Generation output', output, C.green)}${forecastPanel}</div>${renderLabTeamGenerationArtifacts(row)}<div class="lab-team-detail-section"><h5>Generation status</h5>${renderLabActivityLifecycle(row)}</div><div class="lab-team-detail-section"><h5>Traceability</h5><div class="lab-team-id-grid"><span>Generation ID<b>${esc(row.id || 'Legacy record')}</b></span><span>Job / request ID<b>${esc(row.requestId || 'Not linked')}</b></span><span>Generation type<b>${esc(row.type || 'Unknown')}</b></span><span>Last update<b>${row.updatedAt ? esc(new Date(row.updatedAt).toLocaleString()) : 'Not recorded'}</b></span></div></div></section>`;
     }
 
     async function openLabTeamActivity(key) {
@@ -13338,6 +13453,41 @@ const JarvisRetention = (function () {
         const row = selectedLabTeamActivity();
         if (!row) {
             st.labTeamActivityError = 'This activity record is no longer available.';
+            rtgUpdateExp();
+            return;
+        }
+        if (LAB_GENERATION_ACTIVITY_TYPES.has(row.type)) {
+            const selected = LAB_TEAM_DATA[st.labTeamAccount];
+            const key = labActivityKey(row, 0);
+            const endpoint = row.type === 'shorts-grind'
+                ? `/api/hooks/grind/run/${encodeURIComponent(row.requestId || '')}`
+                : ['hook-generated', 'generate-hook'].includes(row.type)
+                    ? `/api/hooks/grpo/group/demo/${encodeURIComponent(row.requestId || '')}`
+                    : null;
+            if (
+                endpoint
+                && row.requestId
+                && selected
+                && !selected.generationDetails[key]
+            ) {
+                st.labTeamActivityLoading = true;
+                rtgUpdateExp();
+                try {
+                    selected.generationDetails[key] = await rtFetchJson(
+                        endpoint,
+                        {
+                            cache: 'no-store',
+                            _labAccount: st.labTeamAccount,
+                        },
+                        2
+                    );
+                } catch (error) {
+                    selected.generationDetails[key] = {
+                        error: fetchFail(error),
+                    };
+                }
+                st.labTeamActivityLoading = false;
+            }
             rtgUpdateExp();
             return;
         }
@@ -13492,7 +13642,7 @@ const JarvisRetention = (function () {
             const active = account.id === selectedId;
             const counts = summary.counts || {};
             const unavailable = summary.unavailable === true;
-            return `<button type="button" ${unavailable ? 'disabled' : `data-labteamaccount="${esc(account.id)}"`} title="${unavailable ? esc(summary.error || 'Workspace unavailable') : ''}" style="text-align:left;border:1px solid ${active ? C.accent : unavailable ? C.red : C.border};background:${active ? C.card2 : C.card};color:${C.text};padding:9px 10px;cursor:${unavailable ? 'not-allowed' : 'pointer'};opacity:${unavailable ? '0.62' : '1'};min-width:180px"><b style="display:block;font-size:13px;font-weight:750;line-height:1.25">${esc(account.name || account.email || account.id)}</b><span style="display:block;font-size:8px;color:${unavailable ? C.red : C.mute};margin-top:3px">${unavailable ? 'workspace unavailable · active workspace remains usable' : `${counts.hooks || 0} hooks · ${counts.storyboards || 0} storyboards · ${summary.activityCount || 0} actions`}</span></button>`;
+            return `<button type="button" ${unavailable ? 'disabled' : `data-labteamaccount="${esc(account.id)}"`} title="${unavailable ? esc(summary.error || 'Workspace unavailable') : ''}" style="text-align:left;border:1px solid ${active ? C.accent : unavailable ? C.red : C.border};background:${active ? C.card2 : C.card};color:${C.text};padding:9px 10px;cursor:${unavailable ? 'not-allowed' : 'pointer'};opacity:${unavailable ? '0.62' : '1'};min-width:180px"><b style="display:block;font-size:13px;font-weight:750;line-height:1.25">${esc(account.name || account.email || account.id)}</b><span style="display:block;font-size:8px;color:${unavailable ? C.red : C.mute};margin-top:3px">${unavailable ? 'workspace unavailable · active workspace remains usable' : `${counts.hooks || 0} saved hooks · ${counts.storyboards || 0} saved storyboards`}</span></button>`;
         };
         const accountRail = `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:7px;margin-bottom:10px">${accounts.map(accountButton).join('')}</div>`;
         if (st.labTeamLoading) {
@@ -13509,7 +13659,7 @@ const JarvisRetention = (function () {
         }
         if (!selected) {
             return accountRail + cardc(
-                '<div style="padding:18px;color:inherit">Select an account to inspect its private folders, saved work, and generation history. Inspection is read-only.</div>',
+                '<div style="padding:18px;color:inherit">Select an account to inspect its generations or open its saved workspace. Inspection is read-only.</div>',
                 10
             );
         }
@@ -13523,6 +13673,21 @@ const JarvisRetention = (function () {
             selected.hooks.folders || [];
         const storyboardFolders =
             selected.storyboards.folders || [];
+        const collectionItem = (kind, id) => {
+            const collection = workspace.collections
+                && workspace.collections[kind];
+            return collection
+                && Array.isArray(collection.items)
+                && collection.items.find(row => row.id === id)
+                || null;
+        };
+        const itemFolder = (row, kind) => {
+            const reference = collectionItem(kind, row.id);
+            return row.folderId
+                || row.folder
+                || reference && reference.folderId
+                || null;
+        };
         const folderName = (folders, id) => {
             if (!id) return 'Unfiled';
             const folder =
@@ -13536,12 +13701,16 @@ const JarvisRetention = (function () {
                     selectedId
                 )
                 : '';
-            return `<button type="button" data-labteamhook="${esc(hook.id)}" style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:9px;text-align:left;border:1px solid ${C.border};background:${C.card};padding:7px;color:${C.text};cursor:pointer;min-width:0">${thumb ? `<img src="${thumb}" alt="" loading="lazy" style="width:96px;aspect-ratio:16/9;object-fit:cover;background:${C.card2}">` : `<span style="width:96px;aspect-ratio:16/9;background:${C.card2};display:block"></span>`}<span><b style="display:block;font-size:10px;line-height:1.35">${esc(hook.title || 'Saved hook')}</b><small style="display:block;color:${C.mute};font-size:8px;margin-top:5px">open exact ledger</small></span></button>`;
+            const folder = folderName(
+                hookFolders,
+                itemFolder(hook, 'hooks')
+            );
+            return `<button type="button" data-labteamhook="${esc(hook.id)}" class="lab-team-hook-card">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy">` : '<span class="lab-team-hook-placeholder"></span>'}<span><b>${esc(hook.title || 'Saved hook')}</b><small>${esc(folder)} · open exact saved analysis</small></span></button>`;
         };
         const storyboardCard = storyboard =>
-            `<button type="button" data-labteamstoryboard="${esc(storyboard.id)}" class="lab-team-storyboard-card" aria-pressed="${st.labTeamStoryboard === storyboard.id}"><b>${esc(storyboard.name || 'Untitled opening')}</b><span>${esc(folderName(storyboardFolders, storyboard.folder))} · ${storyboard.complete ? 'complete' : 'draft'} · ${storyboard.scored ? 'scored' : 'not scored'}</span><small>${esc(storyboard.model || 'model unavailable')} · inspect prompts, frames, inputs, and score</small></button>`
+            `<button type="button" data-labteamstoryboard="${esc(storyboard.id)}" class="lab-team-storyboard-card" aria-pressed="${st.labTeamStoryboard === storyboard.id}"><b>${esc(storyboard.name || 'Untitled opening')}</b><span>${esc(folderName(storyboardFolders, itemFolder(storyboard, 'storyboards')))} · ${storyboard.complete ? 'complete' : 'draft'} · ${storyboard.scored ? 'scored' : 'not scored'}</span><small>${esc(storyboard.model || 'model unavailable')} · inspect prompts, frames, inputs, and score</small></button>`
         ;
-        const folderCollection = (rows, folders, renderCard) => {
+        const folderCollection = (rows, folders, kind, renderCard) => {
             const groups = [
                 ...folders.map(folder => ({
                     id: folder.id,
@@ -13551,50 +13720,77 @@ const JarvisRetention = (function () {
             ];
             return groups.map(group => {
                 const members = rows.filter(row => (
-                    (row.folderId || row.folder || null) === group.id
+                    itemFolder(row, kind) === group.id
                 ));
-                if (!members.length && !group.id) return '';
+                if (!members.length) return '';
                 return `<section class="lab-team-folder-group" data-lab-team-folder="${esc(group.id || 'unfiled')}"><div class="lab-team-folder-head"><b>${esc(group.name)}</b><span>${members.length}</span></div><div class="lab-team-folder-items">${members.map(renderCard).join('') || '<div class="lab-team-empty">Empty folder</div>'}</div></section>`;
             }).join('');
         };
-        const hookCards = folderCollection(
-            hookRows,
-            hookFolders,
-            hookCard
-        );
         const storyboardCards = folderCollection(
             storyboardRows,
             storyboardFolders,
+            'storyboards',
             storyboardCard
         );
-        const activityRows = selected.activities
+        const generationRows = (selected.activities
             && Array.isArray(selected.activities.activities)
             ? selected.activities.activities
-            : workspace.activity || [];
-        const activityTotal = selected.activities
-            ? Number(selected.activities.total) || activityRows.length
-            : activityRows.length;
-        const activityCounts = {
-            scored: activityRows.filter(row => LAB_SCORE_ACTIVITY_TYPES.has(row.type)).length,
-            generated: activityRows.filter(row => /generated/.test(String(row.type || ''))).length,
-            saved: activityRows.filter(row => row.saved === true || row.status === 'saved').length,
-            failed: activityRows.filter(row => /fail|error/.test(String(row.status || ''))).length,
-        };
-        const activityCards = activityRows.map((row, index) => {
+            : workspace.activity || []).filter(row => (
+                LAB_GENERATION_ACTIVITY_TYPES.has(row.type)
+            ));
+        const generationTotal = selected.activities
+            ? Number(selected.activities.total) || generationRows.length
+            : generationRows.length;
+        const generationCards = generationRows.map((row, index) => {
             const key = labActivityKey(row, index);
             const meta = labActivityMeta(row);
             const statusColor = labActivityStatusColor(row);
-            const score = labActivityCanOpenScore(row);
             const selectedActivity = key === st.labTeamActivity;
-            return `<button type="button" ${score ? 'data-labteamactivityscore' : 'data-labteamactivity'}="${esc(key)}" class="lab-team-activity-card" data-selected="${selectedActivity}" style="--lab-activity-accent:${meta.accent}"><span class="lab-team-activity-top"><b>${esc(meta.label)}</b><i style="color:${statusColor};border-color:${statusColor}">${esc(row.saved ? 'saved' : row.status || 'recorded')}</i></span><strong>${esc(row.title || 'Untitled work')}</strong><span class="lab-team-flow"><span><small>Input</small><b>${esc(labActivityInputSummary(row))}</b></span><em>→</em><span><small>Action</small><b>${esc(meta.label)}</b></span><em>→</em><span><small>Output</small><b>${esc(labActivityOutputSummary(row))}</b></span><em>→</em><span><small>Storage</small><b>${row.saved ? 'Saved artifact' : 'Activity history'}</b></span></span><span class="lab-team-activity-foot"><small>${row.updatedAt ? esc(new Date(row.updatedAt).toLocaleString()) : 'Time not recorded'}</small><b>${score ? 'Open complete analysis' : 'Inspect inputs and actions'} →</b></span></button>`;
+            return `<button type="button" data-labteamactivity="${esc(key)}" class="lab-team-activity-card" data-selected="${selectedActivity}" style="--lab-activity-accent:${meta.accent}"><span class="lab-team-activity-top"><b>${esc(meta.label)}</b><i style="color:${statusColor};border-color:${statusColor}">${esc(row.status || 'recorded')}</i></span><strong>${esc(row.title || 'Untitled generation')}</strong><span class="lab-team-generation-summary"><span><small>Input</small><b>${esc(labActivityInputSummary(row))}</b></span><span><small>Generated result</small><b>${esc(labActivityOutputSummary(row))}</b></span></span><span class="lab-team-activity-foot"><small>${row.updatedAt ? esc(new Date(row.updatedAt).toLocaleString()) : 'Time not recorded'}</small><b>Open generation →</b></span></button>`;
         }).join('');
-        const activityOverview = `<div class="lab-team-activity-overview"><span><small>Scored</small><b>${activityCounts.scored}</b></span><span><small>Generated</small><b>${activityCounts.generated}</b></span><span><small>Saved</small><b>${activityCounts.saved}</b></span><span><small>Errors</small><b>${activityCounts.failed}</b></span></div>`;
+        const view = st.labTeamView === 'saved'
+            ? 'saved'
+            : 'generations';
+        const viewTabs = `<div class="lab-team-view-tabs" role="tablist" aria-label="Team workspace view"><button type="button" role="tab" data-labteamview="generations" aria-selected="${view === 'generations'}"><b>Raw generations</b><span>${generationTotal}</span></button><button type="button" role="tab" data-labteamview="saved" aria-selected="${view === 'saved'}"><b>Saved space</b><span>${hookRows.length + storyboardRows.length}</span></button></div>`;
+        const generationsPanel = `<section class="lab-team-activity-section"><div class="lab-team-section-head"><div><small>${generationTotal} generation${generationTotal === 1 ? '' : 's'} · newest first</small><h4>Raw generations</h4><p>Only generative work appears here: automatic hooks, storyboard sheets, individual frame generations, and threshold grinds. Scoring, saving, and workspace administration are excluded.</p></div></div><div class="lab-team-activity-list">${generationCards || '<div class="lab-team-empty">No generations have been recorded for this workspace.</div>'}</div></section>${renderLabTeamActivityDetail()}`;
+        const validHookFolderIds = new Set(
+            hookFolders.map(folder => folder.id)
+        );
+        if (
+            !['all', 'none'].includes(st.labTeamHookFolder)
+            && !validHookFolderIds.has(st.labTeamHookFolder)
+        ) st.labTeamHookFolder = 'all';
+        const hookFolderCount = folderId => hookRows.filter(hook => (
+            folderId === 'all'
+                ? true
+                : folderId === 'none'
+                    ? !itemFolder(hook, 'hooks')
+                    : itemFolder(hook, 'hooks') === folderId
+        )).length;
+        const hookFolderOptions = [
+            { id: 'all', name: 'All' },
+            { id: 'none', name: 'Unfiled' },
+            ...hookFolders,
+        ];
+        const hookFolderBar = `<div class="lab-team-saved-folder-bar"><span>Folder</span>${hookFolderOptions.map(folder => `<button type="button" data-labteamfolder="${esc(folder.id)}" aria-pressed="${st.labTeamHookFolder === folder.id}">${esc(folder.name)} <i>${hookFolderCount(folder.id)}</i></button>`).join('')}</div>`;
+        const visibleHooks = hookRows
+            .filter(hook => hookFolderCount('all') && (
+                st.labTeamHookFolder === 'all'
+                || (
+                    st.labTeamHookFolder === 'none'
+                        ? !itemFolder(hook, 'hooks')
+                        : itemFolder(hook, 'hooks')
+                            === st.labTeamHookFolder
+                )
+            ))
+            .sort((left, right) => (
+                Number(right.savedAt || 0)
+                - Number(left.savedAt || 0)
+            ));
+        const savedPanel = `<div data-lab-team-collections class="lab-team-saved-space"><section><div class="lab-team-section-head"><div><small>Read-only mirror · ${hookRows.length} total</small><h4>Saved hooks</h4><p>The folders and saved hooks below come from this account's own private workspace.</p></div></div>${hookFolderBar}<div class="lab-team-hook-grid">${visibleHooks.map(hookCard).join('') || '<div class="lab-team-empty">No saved hooks in this folder.</div>'}</div></section><section><div class="lab-team-section-head"><div><small>Read-only mirror · ${storyboardRows.length} total</small><h4>Saved storyboards</h4><p>Saved storyboard folders, prompts, frames, and score links are preserved exactly as this account organized them.</p></div></div><div class="lab-team-collection-list">${storyboardCards || '<div class="lab-team-empty">No saved storyboards.</div>'}</div></section></div>${renderLabTeamStoryboardDetail()}`;
         return accountRail
-            + (st.savedSel ? savedDetail() : '')
-            + `<section class="lab-team-activity-section"><div class="lab-team-section-head"><div><small>Everything this workspace did · ${activityTotal} archived actions</small><h4>Work activity</h4><p>Every card shows the input, operation, output, and storage state. Open a score to inspect its exact canonical ledger and four channel-free keep outputs.</p></div></div>${activityOverview}<div class="lab-team-activity-list">${activityCards || '<div class="lab-team-empty">No recorded activity.</div>'}</div></section>`
-            + renderLabTeamActivityDetail()
-            + `<div data-lab-team-collections class="lab-team-collections"><section><div class="lab-team-collection-title" style="color:${C.accent}">Saved hooks · ${hookRows.length}</div><div class="lab-team-collection-list">${hookCards || '<div class="lab-team-empty">No saved hooks.</div>'}</div></section><section><div class="lab-team-collection-title" style="color:${C.amber}">Saved storyboards · ${storyboardRows.length}</div><div class="lab-team-collection-list">${storyboardCards || '<div class="lab-team-empty">No saved storyboards.</div>'}</div></section></div>`
-            + renderLabTeamStoryboardDetail();
+            + viewTabs
+            + (view === 'saved' ? savedPanel : generationsPanel);
     }
 
     function savedBank() {
@@ -13824,6 +14020,8 @@ const JarvisRetention = (function () {
         st.savedSel = null;
         st.savedChannelSel = null;
         st.labTeamAccount = null;
+        st.labTeamView = 'generations';
+        st.labTeamHookFolder = 'all';
         st.labTeamError = null;
         st.labTeamActivity = null;
         st.labTeamActivityLoading = false;

@@ -1658,6 +1658,7 @@ async function main() {
                     storyboards: 0,
                 },
                 activityCount: 0,
+                generationCount: 0,
             },
             {
                 account: {
@@ -1677,6 +1678,7 @@ async function main() {
                     storyboards: 1,
                 },
                 activityCount: 3,
+                generationCount: 1,
             },
         ];
         const replies = {
@@ -1711,6 +1713,7 @@ async function main() {
                         storyboards: 0,
                     },
                     activityCount: 0,
+                    generationCount: 0,
                 },
                 workspace: {
                     schema: 'experiment-lab-workspace-v1',
@@ -1902,6 +1905,7 @@ async function main() {
                             type: 'hook-generated',
                             status: 'complete',
                             title: 'Generated but not saved',
+                            requestId: 'reqteamgenerated1',
                             input: {
                                 kind: 'automatic-hook-brief',
                                 premise: 'A machine that cannot spill',
@@ -2003,16 +2007,34 @@ async function main() {
             schema: 'experiment-lab-activity-page-v1',
             activities:
                 teamReplies['/api/experimentlab/context']
-                    .workspace.activity,
-            total:
-                teamReplies['/api/experimentlab/context']
-                    .workspace.activity.length,
+                    .workspace.activity.filter(row => (
+                        row.type === 'hook-generated'
+                    )),
+            total: 1,
             offset: 0,
             limit: 100,
+            kind: 'generation',
             account:
                 teamReplies['/api/experimentlab/context']
                     .activeAccount,
             readOnly: true,
+        };
+        teamReplies[
+            '/api/hooks/grpo/group/demo/reqteamgenerated1'
+        ] = {
+            input_id: 'reqteamgenerated1',
+            premise: 'A machine that cannot spill',
+            done: true,
+            attempts: [{
+                k: 0,
+                status: 'done',
+                premise:
+                    'This machine makes spills impossible',
+                frame_imgs: Array.from({ length: 5 }, () => (
+                    'data:image/gif;base64,'
+                    + 'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+                )),
+            }],
         };
         videos.forEach(video => {
             replies[`/api/raw/saved-channel/${channelId}/video/${video.id}`] = {
@@ -2074,7 +2096,8 @@ window.__autoSavedHookId=null;
 window.__labFolderRequests=[];
 window.__labStoryboardSaves=[];
 window.fetch=function(url,options){
-    const p=new URL(url,location.href).pathname;
+    const requestUrl=new URL(url,location.href);
+    const p=requestUrl.pathname;
     window.__fetchCounts[p]=(window.__fetchCounts[p]||0)+1;
     const requestHeaders=new Headers(options&&options.headers||{});
     if(requestHeaders.get('X-Business-World-Surface')==='experiment-lab'){
@@ -2083,6 +2106,7 @@ window.fetch=function(url,options){
     if(requestHeaders.get('X-Experiment-Lab-Account')){
         window.__labTargetRequests.push({
             path:p,
+            search:requestUrl.search,
             account:requestHeaders.get(
                 'X-Experiment-Lab-Account'
             )
@@ -2292,6 +2316,8 @@ window.fetch=function(url,options){
     if(
         (p.includes('/api/raw/saved-channel/')&&p.includes('/montage/'))
         || p.startsWith('/api/raw/montage/')
+        || p.startsWith('/api/hooks/grpo/montage/')
+        || p.startsWith('/api/hooks/grind/montage/')
     ){
         const b=Uint8Array.from(
             atob('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='),
@@ -2421,27 +2447,11 @@ window.fetch=function(url,options){
         );
         assert.strictEqual(
             await page.getByText(
-                'Creator Review',
-                { exact: false }
-            ).count() > 0,
-            true,
-            'owner inspection must display another account hook folder'
-        );
-        assert.strictEqual(
-            await page.getByText(
                 'Reference Channels',
                 { exact: false }
             ).count(),
             0,
             'Experiment Lab owner inspection must not expose saved channels'
-        );
-        assert.strictEqual(
-            await page.getByText(
-                'Opening Boards',
-                { exact: false }
-            ).count() > 0,
-            true,
-            'owner inspection must display another account storyboard folder'
         );
         assert(
             await page.evaluate(accountId => (
@@ -2456,14 +2466,15 @@ window.fetch=function(url,options){
                 && window.__labTargetRequests.some(request => (
                     request.account === accountId
                     && request.path === '/api/experimentlab/activity'
+                    && request.search.includes('kind=generation')
                 ))
                 && !window.__labTargetRequests.some(request => (
                     request.account === accountId
                     && request.path === '/api/raw/saved-channels'
                 ))
             ), teamAccountId),
-            'owner inspection must scope hooks, storyboards, and the complete '
-                + 'activity archive to the selected account without loading '
+            'owner inspection must scope hooks, storyboards, and only the '
+                + 'generation archive to the selected account without loading '
                 + 'its saved-channel research library'
         );
         const teamActivitySection = page.locator(
@@ -2473,27 +2484,23 @@ window.fetch=function(url,options){
         assert.strictEqual(
             await teamActivitySection.locator('table').count(),
             0,
-            'owner activity must be visualized as evidence cards rather than an opaque ID table'
+            'owner generations must be visualized as cards rather than an opaque ID table'
         );
-        const teamScoreActivity = page.locator(
-            '[data-labteamactivityscore="elateamscore1"]'
-        ).first();
-        const teamScoreActivityText = await teamScoreActivity.innerText();
-        for (const label of ['Input', 'Action', 'Output', 'Storage']) {
-            assert(
-                teamScoreActivityText.toLowerCase().includes(
-                    label.toLowerCase()
-                ),
-                `owner activity must expose its ${label.toLowerCase()} stage: `
-                    + JSON.stringify(teamScoreActivityText)
-            );
-        }
-        assert(
-            teamScoreActivityText.includes(
-                '21/21 ledger coordinates + 4 channel-free keep outputs'
-            ),
-            'scored activity must summarize the complete persisted result '
-                + `before it is opened: ${JSON.stringify(teamScoreActivityText)}`
+        assert.strictEqual(
+            await page.locator(
+                '[data-labteamactivityscore="elateamscore1"], '
+                    + '[data-labteamactivity="elateamscore1"], '
+                    + '[data-labteamactivity="elateamsaved1"]'
+            ).count(),
+            0,
+            'score and save actions must never appear in the owner generation feed'
+        );
+        assert.strictEqual(
+            await page.locator(
+                '[data-labteamactivity="elateamgenerated1"]'
+            ).count(),
+            1,
+            'the raw generation feed must contain each generation once'
         );
         await page.locator(
             '[data-labteamactivity="elateamgenerated1"]'
@@ -2507,8 +2514,29 @@ window.fetch=function(url,options){
         assert(
             generatedDetailText.includes('A machine that cannot spill')
                 && generatedDetailText.includes('Candidate Count')
-                && generatedDetailText.includes('Action timeline'),
-            'non-score work must expose its complete inputs, outputs, and action lifecycle'
+                && generatedDetailText.includes('Generation status')
+                && generatedDetailText.includes(
+                    'This machine makes spills impossible'
+                ),
+            'a raw generation must expose its input, output candidates, and lifecycle'
+        );
+        assert.strictEqual(
+            await generatedActivityDetail.locator(
+                '.lab-team-generation-media img'
+            ).count(),
+            5,
+            'the raw generation detail must visualize every generated frame'
+        );
+        assert(
+            await page.evaluate(accountId => (
+                window.__labTargetRequests.some(request => (
+                    request.account === accountId
+                    && request.path
+                        === '/api/hooks/grpo/group/demo/reqteamgenerated1'
+                ))
+            ), teamAccountId),
+            'opening a raw generation must load its durable output in the '
+                + 'selected account scope'
         );
         await generatedActivityDetail.locator(
             '[data-labteamactivityclose]'
@@ -2530,7 +2558,7 @@ window.fetch=function(url,options){
             assert.strictEqual(
                 await page.evaluate(() => document.documentElement.scrollWidth),
                 390,
-                'the owner activity evidence cards must not overflow a phone viewport'
+                'the owner generation cards must not overflow a phone viewport'
             );
             fs.mkdirSync(path.dirname(
                 process.env.EXPERIMENT_LAB_TEAM_MOBILE_SCREENSHOT
@@ -2541,79 +2569,52 @@ window.fetch=function(url,options){
             });
             await page.setViewportSize(teamDesktopViewport);
         }
-        await teamScoreActivity.click();
-        const teamActivityAnalysis = page.locator(
-            '[data-canonical-score-analysis]'
-        );
-        await teamActivityAnalysis.waitFor();
-        assert.deepStrictEqual(
-            await teamActivityAnalysis.evaluate(element => ({
-                ledgerCoordinates: Number(
-                    element.dataset.ledgerCoordinateCount
-                ),
-                availableCoordinates: Number(
-                    element.dataset.ledgerCoordinateAvailableCount
-                ),
-                derivedOutputs: Number(
-                    element.dataset.derivedOutputCount
-                ),
-                inspectionReadOnly:
-                    element.dataset.inspectionReadonly,
-            })),
-            {
-                ledgerCoordinates: 21,
-                availableCoordinates: 21,
-                derivedOutputs: 4,
-                inspectionReadOnly: 'true',
-            },
-            'an unsaved Team score must open the exact canonical 21 + 4 analysis in read-only mode'
-        );
-        assert(
-            (await teamActivityAnalysis.innerText()).includes(
-                'Owner inspection · exact persisted activity result'
-            ),
-            'owner score inspection must identify the durable activity result as its source'
+        await page.locator(
+            '[data-labteamview="saved"]'
+        ).click();
+        assert.strictEqual(
+            await page.getByText(
+                'Creator Review',
+                { exact: false }
+            ).count() > 0,
+            true,
+            'the Saved space tab must display another account hook folders'
         );
         assert.strictEqual(
-            await teamActivityAnalysis.locator(
-                '[data-savescored], [data-savedrescore], '
-                    + '[data-rawtitleedit], [data-rawtransedit], '
-                    + '[data-rawreembed]'
-            ).count(),
-            0,
-            'Team score inspection must not expose any write or recompute controls'
-        );
-        assert(
-            await page.evaluate(({ accountId, jobId }) => (
-                window.__labTargetRequests.some(request => (
-                    request.account === accountId
-                    && request.path === `/api/shortsquant/jobs/${jobId}`
-                ))
-            ), { accountId: teamAccountId, jobId: teamScoreJobId }),
-            'unsaved Team scores must load their account-scoped durable job result'
+            await page.getByText(
+                'Opening Boards',
+                { exact: false }
+            ).count() > 0,
+            true,
+            'the Saved space tab must display another account storyboard folders'
         );
         await page.locator(
-            '.experiment-lab-tab[data-lab-view="team"]'
+            '[data-labteamfolder="elfteamhooks"]'
         ).click();
-        const scoredActivityDetail = page.locator(
-            '[data-lab-team-activity-detail="elateamscore1"]'
+        assert.strictEqual(
+            await page.locator(
+                `[data-labteamhook="${historicalSavedHookId}"]`
+            ).count(),
+            1,
+            'owner folder selection must show the member saved hooks in their persisted folder'
         );
-        await scoredActivityDetail.waitFor();
-        const scoredActivityDetailText =
-            await scoredActivityDetail.innerText();
-        assert(
-            ['concat', 'visual', 'together', 'text'].every(signal => (
-                scoredActivityDetailText.includes(
-                    `${historicalUpgradeScore.channel_free_keep_forecasts.outputs[signal].raw.toFixed(2)}%`
-                )
-            ))
-                && scoredActivityDetailText.includes(
-                    'Channel-free keep outputs'
-                )
-                && scoredActivityDetailText.includes('Action timeline'),
-            'the owner activity record must retain all four channel-free '
-                + 'values and its complete lifecycle'
+        const savedSpaceDesktopViewport = page.viewportSize();
+        await page.setViewportSize({ width: 390, height: 844 });
+        assert.strictEqual(
+            await page.evaluate(() => document.documentElement.scrollWidth),
+            390,
+            'the owner Saved space folder browser must not overflow a phone viewport'
         );
+        await page.setViewportSize(savedSpaceDesktopViewport);
+        if (process.env.EXPERIMENT_LAB_TEAM_SAVED_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_TEAM_SAVED_SCREENSHOT
+            ), { recursive: true });
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_TEAM_SAVED_SCREENSHOT,
+                fullPage: false,
+            });
+        }
         const teamStoryboardCard = page.locator(
             `[data-labteamstoryboard="${teamStoryboardId}"]`
         );

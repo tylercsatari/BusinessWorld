@@ -3010,6 +3010,130 @@ async function ensureExperimentLabActivityArchive(account, workspace) {
     return snapshot;
 }
 
+async function readExperimentLabActivityDescriptor(
+    descriptor,
+    account
+) {
+    if (descriptor.activity) return descriptor.activity;
+    const bytes = await cloud.downloadFromR2(descriptor.key);
+    if (!bytes) {
+        throw new Error(
+            'Experiment Lab activity archive is missing.'
+        );
+    }
+    const record = JSON.parse(bytes.toString('utf8'));
+    if (!validateExperimentLabActivityArchive(record, account)) {
+        throw new HttpRequestError(
+            409,
+            'Experiment Lab activity archive failed integrity validation.',
+            'experiment_lab_activity_invalid'
+        );
+    }
+    return record.activity;
+}
+
+async function hydrateExperimentLabActivityDescriptors(
+    descriptors,
+    account
+) {
+    const activities = [];
+    for (
+        let pageOffset = 0;
+        pageOffset < descriptors.length;
+        pageOffset += 20
+    ) {
+        activities.push(...await Promise.all(
+            descriptors.slice(pageOffset, pageOffset + 20).map(
+                descriptor => readExperimentLabActivityDescriptor(
+                    descriptor,
+                    account
+                )
+            )
+        ));
+    }
+    return activities;
+}
+
+async function experimentLabActivityDescriptors(account, workspace) {
+    const snapshot = await ensureExperimentLabActivityArchive(
+        account,
+        workspace
+    );
+    const prefix = experimentLabActivityPrefix(account);
+    const archivedById = new Map(
+        snapshot.activities.map(activity => [activity.id, {
+            id: activity.id,
+            createdAt: Number(activity.createdAt) || 0,
+            activity,
+            key: null,
+        }])
+    );
+    for (const key of (await cloud.listR2Keys(prefix)) || []) {
+        const match = key.match(
+            /\/(\d{13})-(ela[a-f0-9]{20})\.json$/i
+        );
+        if (!match) continue;
+        archivedById.set(match[2], {
+            id: match[2],
+            createdAt: Number(match[1]) || 0,
+            activity: null,
+            key,
+        });
+    }
+    for (const activity of (
+        Array.isArray(workspace && workspace.activity)
+            ? workspace.activity
+            : []
+    )) {
+        archivedById.set(activity.id, {
+            id: activity.id,
+            createdAt: Number(activity.createdAt) || 0,
+            activity,
+            key: null,
+        });
+    }
+    return [...archivedById.values()].sort(
+        (left, right) => (
+            right.createdAt - left.createdAt
+            || right.id.localeCompare(left.id)
+        )
+    );
+}
+
+async function experimentLabHasArchivedActivityRequest(
+    account,
+    workspace,
+    requestId,
+    types
+) {
+    const expectedTypes = Array.isArray(types)
+        ? new Set(types)
+        : null;
+    const descriptors = await experimentLabActivityDescriptors(
+        account,
+        workspace
+    );
+    for (
+        let offset = 0;
+        offset < descriptors.length;
+        offset += 20
+    ) {
+        const activities =
+            await hydrateExperimentLabActivityDescriptors(
+                descriptors.slice(offset, offset + 20),
+                account
+            );
+        if (activities.some(activity => (
+            activity.requestId === requestId
+            && (
+                !expectedTypes
+                || expectedTypes.has(activity.type)
+            )
+        ))) return true;
+    }
+    return false;
+}
+
 function experimentLabHasItem(workspace, kind, id) {
     return !!(
         workspace
@@ -3069,13 +3193,20 @@ async function requireExperimentLabActivity(
     if (!scope) return null;
     const workspace =
         await experimentLabWorkspaceForScope(scope);
-    if (
-        !experimentLabHasActivityRequest(
+    const hasRecentActivity = experimentLabHasActivityRequest(
+        workspace,
+        requestId,
+        types
+    );
+    const hasArchivedActivity = hasRecentActivity
+        ? true
+        : await experimentLabHasArchivedActivityRequest(
+            scope.account,
             workspace,
             requestId,
             types
-        )
-    ) {
+        );
+    if (!hasArchivedActivity) {
         throw new HttpRequestError(
             404,
             'This run is not part of the selected Experiment Lab workspace.',
@@ -3446,6 +3577,7 @@ async function experimentLabAccountSummaries() {
                     storyboards: 0,
                 },
                 activityCount: 0,
+                generationCount: 0,
                 updatedAt: 0,
                 workspace_sha256: null,
                 unavailable: true,
@@ -7603,10 +7735,6 @@ async function handleHttpRequest(req, res) {
             const workspace = await experimentLabWorkspaceForScope(
                 scope
             );
-            const snapshot = await ensureExperimentLabActivityArchive(
-                scope.account,
-                workspace
-            );
             const limit = Math.max(
                 1,
                 Math.min(100, Number(url.searchParams.get('limit')) || 100)
@@ -7615,87 +7743,43 @@ async function handleHttpRequest(req, res) {
                 0,
                 Math.floor(Number(url.searchParams.get('offset')) || 0)
             );
-            const prefix = experimentLabActivityPrefix(scope.account);
-            const archivedById = new Map(
-                snapshot.activities.map(activity => [activity.id, {
-                    id: activity.id,
-                    createdAt: Number(activity.createdAt) || 0,
-                    activity,
-                    key: null,
-                }])
-            );
-            for (const key of (
-                await cloud.listR2Keys(prefix)
-            ) || []) {
-                const match = key.match(
-                    /\/(\d{13})-(ela[a-f0-9]{20})\.json$/i
+            const activityKind = String(
+                url.searchParams.get('kind') || 'all'
+            ).trim().toLowerCase();
+            if (!['all', 'generation'].includes(activityKind)) {
+                throw new HttpRequestError(
+                    400,
+                    'Experiment Lab activity kind is invalid.',
+                    'experiment_lab_activity_kind_invalid'
                 );
-                if (!match) continue;
-                archivedById.set(match[2], {
-                    id: match[2],
-                    createdAt: Number(match[1]) || 0,
-                    activity: null,
-                    key,
-                });
             }
-            for (const activity of (
-                Array.isArray(workspace.activity)
-                    ? workspace.activity
-                    : []
-            )) {
-                archivedById.set(activity.id, {
-                    id: activity.id,
-                    createdAt: Number(activity.createdAt) || 0,
-                    activity,
-                    key: null,
-                });
-            }
-            const descriptors = [...archivedById.values()].sort(
-                (left, right) => (
-                    right.createdAt - left.createdAt
-                    || right.id.localeCompare(left.id)
-                )
-            );
-            const selected = descriptors.slice(
-                offset,
-                offset + limit
-            );
-            const activities = [];
-            for (
-                let pageOffset = 0;
-                pageOffset < selected.length;
-                pageOffset += 20
-            ) {
-                const page = await Promise.all(
-                    selected.slice(pageOffset, pageOffset + 20).map(
-                        async descriptor => {
-                            if (descriptor.activity) {
-                                return descriptor.activity;
-                            }
-                            const bytes = await cloud.downloadFromR2(
-                                descriptor.key
-                            );
-                            if (!bytes) {
-                                throw new Error(
-                                    'Experiment Lab activity archive is missing.'
-                                );
-                            }
-                            const record = JSON.parse(bytes.toString('utf8'));
-                            if (!validateExperimentLabActivityArchive(
-                                record,
-                                scope.account
-                            )) {
-                                throw new HttpRequestError(
-                                    409,
-                                    'Experiment Lab activity archive failed integrity validation.',
-                                    'experiment_lab_activity_invalid'
-                                );
-                            }
-                            return record.activity;
-                        }
+            const descriptors =
+                await experimentLabActivityDescriptors(
+                    scope.account,
+                    workspace
+                );
+            let activities;
+            let total;
+            if (activityKind === 'generation') {
+                const generated = (
+                    await hydrateExperimentLabActivityDescriptors(
+                        descriptors,
+                        scope.account
                     )
+                ).filter(
+                    experimentLabWorkspace.isGenerationActivity
                 );
-                activities.push(...page);
+                total = generated.length;
+                activities = generated.slice(
+                    offset,
+                    offset + limit
+                );
+            } else {
+                total = descriptors.length;
+                activities = await hydrateExperimentLabActivityDescriptors(
+                    descriptors.slice(offset, offset + limit),
+                    scope.account
+                );
             }
             res.writeHead(200, {
                 'Content-Type': 'application/json',
@@ -7704,9 +7788,10 @@ async function handleHttpRequest(req, res) {
             res.end(JSON.stringify({
                 schema: 'experiment-lab-activity-page-v1',
                 activities,
-                total: descriptors.length,
+                total,
                 offset,
                 limit,
+                kind: activityKind,
                 account: experimentLabWorkspace.accountIdentity(
                     scope.account
                 ),
