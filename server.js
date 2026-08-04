@@ -6439,6 +6439,33 @@ async function buildFreshSavedChannelValidationBuffer(
             )
         );
     } catch (error) { /* optional artifact; absent = not fingerprinted */ }
+    sourceBuffers.set(
+        'local:predictor-lab/together-concat-keep-interaction.json',
+        fs.readFileSync(
+            path.join(
+                __dirname,
+                'buildings/jarvis/predictor-lab/together-concat-keep-interaction.json'
+            )
+        )
+    );
+    sourceBuffers.set(
+        'local:together-concat-keep-interaction-contract.js',
+        fs.readFileSync(
+            path.join(
+                __dirname,
+                'buildings/jarvis/together-concat-keep-interaction-contract.js'
+            )
+        )
+    );
+    sourceBuffers.set(
+        'local:predictor-lab/run_together_concat_keep_interaction.py',
+        fs.readFileSync(
+            path.join(
+                __dirname,
+                'buildings/jarvis/predictor-lab/run_together_concat_keep_interaction.py'
+            )
+        )
+    );
     const fingerprintHash = require('crypto').createHash('sha256');
     for (const [name, buffer] of [...sourceBuffers.entries()].sort(([left], [right]) => left.localeCompare(right))) {
         fingerprintHash.update(name);

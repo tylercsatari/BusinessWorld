@@ -115,7 +115,7 @@ check((uiFinding.candidates || []).length === (finding.candidates || []).length,
 // 6) Saved-accounts coordinate registry (Experiment tab -> Saved accounts -> ledger/dropdown)
 const validation = require(path.join(ROOT, 'buildings/jarvis/saved-channel-validation.js'));
 const registry = validation.buildCoordinateRegistry();
-check(registry.columns.length === 93, 'coordinate registry totals 93 (89 + 4 channel-free)',
+check(registry.columns.length === 94, 'coordinate registry totals 94 (89 base + 4 channel-free + 1 interaction study)',
     `${registry.columns.length} columns`);
 const cfColumns = registry.columns.filter(column => column.family === 'channelFree');
 check(cfColumns.length === 4, 'all 4 channelFree coordinates registered',

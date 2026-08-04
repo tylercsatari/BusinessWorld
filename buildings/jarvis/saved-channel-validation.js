@@ -17,8 +17,14 @@ const {
 const {
     validateManifestRowBinding,
 } = require('./saved-channel-manifest-binding');
+const {
+    ARTIFACT: TOGETHER_CONCAT_KEEP_INTERACTION,
+    ARTIFACT_SHA256: TOGETHER_CONCAT_KEEP_INTERACTION_SHA256,
+    BY_ID: TOGETHER_CONCAT_KEEP_INTERACTION_BY_ID,
+    COORDINATE_ID: TOGETHER_CONCAT_KEEP_INTERACTION_COORDINATE_ID,
+} = require('./together-concat-keep-interaction-contract');
 
-const VERSION = 16;
+const VERSION = 17;
 const LEDGER_VERSION = coordinateGovernance.ledgerVersion;
 
 // ── Channel-free keep signals (ledger finding: channelFreeKeepDirection) ──
@@ -2448,6 +2454,63 @@ function buildCanonicalLineageCatalog(runtime) {
         runtimeRevisionRequired: false,
         repoCommitted: true,
     };
+    inputSets['input.runtime.shorts.together-channel-free-concat.v1'] = {
+        domain: 'shorts',
+        kind: 'registered-coordinate-vector',
+        members: [
+            'shorts.stored.together.keep',
+            'shorts.channel-free.concat.keep',
+        ],
+        construction: 'Join the exact persisted Together keep scalar and exact channel-free concat OOF scalar by video ID. Missing values remain missing; neither source is recomputed or substituted.',
+    };
+    representations['representation.runtime.shorts.together-channel-free-concat.v1'] = {
+        domain: 'shorts',
+        kind: 'combined registered-coordinate representation',
+        dimensions: 2,
+        rawInputSetIds: ['input.runtime.shorts.together-channel-free-concat.v1'],
+        construction: 'Two registered scalar coordinates in percentage-point units. Fold-local standardization is performed only by the registered nested selector.',
+        artifactId: 'artifact.repo.shorts.together-concat-interaction.v1',
+    };
+    datasets['dataset.shorts.tyler-together-concat-interaction.v1'] = {
+        domain: 'shorts',
+        role: 'Tyler-only nested interaction research fit',
+        representationPopulation: `${TOGETHER_CONCAT_KEEP_INTERACTION.source.rows} exact Tyler rows with both source coordinates and observed keep.`,
+        labelInputSetId: 'input.shorts.private-outcomes.v1',
+        targets: ['keep'],
+        selectionRule: 'Five deterministic content-family outer folds. Formula and Ridge strength are selected in four content-family inner folds using only each outer training partition; every displayed prediction is produced while its outer fold is excluded.',
+        runtimeSnapshot: {
+            rowCount: TOGETHER_CONCAT_KEEP_INTERACTION.source.rows,
+            dataIdentitySha256: TOGETHER_CONCAT_KEEP_INTERACTION.source.dataIdentitySha256,
+            sourceValidationArtifactSha256: TOGETHER_CONCAT_KEEP_INTERACTION.source.validationArtifactSha256,
+            sourceValidationFingerprint: TOGETHER_CONCAT_KEEP_INTERACTION.source.validationSourceFingerprint,
+        },
+    };
+    algorithms['algorithm.shorts.together-concat-nested-selector.v1'] = {
+        domain: 'shorts',
+        kind: 'nested_combination_forecast',
+        estimator: 'fixed combinations plus sklearn.linear_model.Ridge',
+        parameters: {
+            candidateCount: TOGETHER_CONCAT_KEEP_INTERACTION.protocol.candidateCount,
+            candidateRegistrySha256: TOGETHER_CONCAT_KEEP_INTERACTION.protocol.candidateRegistrySha256,
+            outerFolds: 5,
+            innerFolds: 4,
+            selectionMetric: TOGETHER_CONCAT_KEEP_INTERACTION.protocol.selectionMetric,
+        },
+        fit: 'Within each outer training partition, compare arithmetic mean, geometric mean, nine convex weights, six linear Ridge strengths, and six interaction Ridge strengths over product, ratio, log-ratio, difference, minimum, and maximum terms. Select by inner-fold MAE, refit on outer training rows, and predict the untouched outer fold.',
+        scalarFormula: 'nested_oof_keep = selected_fold_formula(stored_together_keep, channel_free_concat_keep), clipped to [0, 100]',
+        sourceCode: ['buildings/jarvis/predictor-lab/run_together_concat_keep_interaction.py'],
+    };
+    artifacts['artifact.repo.shorts.together-concat-interaction.v1'] = {
+        domain: 'shorts',
+        path: 'buildings/jarvis/predictor-lab/together-concat-keep-interaction.json',
+        contains: ['exact source coordinate IDs', 'candidate registry', 'outer and inner fold selections', 'per-video nested OOF predictions', 'calibrated Together-only baseline', 'bootstrap incremental-value interval', 'upstream-leakage sensitivity'],
+        runtimeRevisionRequired: false,
+        runtimeRevision: {
+            artifactSha256: TOGETHER_CONCAT_KEEP_INTERACTION_SHA256,
+            runId: TOGETHER_CONCAT_KEEP_INTERACTION.runId,
+        },
+        repoCommitted: true,
+    };
     const runtimeManifest = name => runtime.runtimeManifests
         && runtime.runtimeManifests[name] || null;
     const runtimeManifestValue = name => {
@@ -2523,6 +2586,16 @@ function buildCanonicalLineageCatalog(runtime) {
         label: 'Channel-free pooled keep signal',
         fitDatasetId: 'dataset.shorts.channel-free-private-keep.v1',
         selectionRule: 'Four candidate signals (visual, text, together, concat) evaluated in one declared selection pass by minimum mean OOF MAE; the pooled fit uses no account feature, offset, or centering, and every displayed value is a held-out OOF prediction. Rank-first: absolute keep does not transfer to unseen creators.',
+    };
+    families['family.shorts.together-concat-interaction.v1'] = {
+        id: 'family.shorts.together-concat-interaction.v1',
+        label: 'Together + channel-free concat interaction study',
+        fitDatasetId: 'dataset.shorts.tyler-together-concat-interaction.v1',
+        algorithmId: 'algorithm.shorts.together-concat-nested-selector.v1',
+        artifactId: 'artifact.repo.shorts.together-concat-interaction.v1',
+        representationId: 'representation.runtime.shorts.together-channel-free-concat.v1',
+        visualizationMapId: 'map.runtime.none.v1',
+        selectionRule: 'The two-input combiner is selected and evaluated in nested five-fold OOF partitions. This controls combiner selection leakage, but it cannot remove the upstream Tyler-label exposure in shorts.stored.together.keep; the coordinate is therefore a research diagnostic only.',
     };
     families['family.long.outlier-neighbor.v1'] = {
         id: 'family.long.outlier-neighbor.v1',
@@ -5150,6 +5223,63 @@ function buildCoordinateRegistry(options = {}) {
             + 'OOF prediction — the model never saw this video. Rank transfers to unseen '
             + 'creators; absolute keep does not (deploy as percentile/rank).',
     }));
+    const keepInteraction = [{
+        id: TOGETHER_CONCAT_KEEP_INTERACTION_COORDINATE_ID,
+        family: 'keepInteraction',
+        protocol: 'nested_video_heldout_tyler_research',
+        group: 'combined',
+        key: 'togetherChannelFreeConcatKeepInteraction',
+        target: 'keep',
+        label: 'Together + channel-free concat · Tyler nested OOF keep',
+        unit: 'percent',
+        storageUnit: 'nested_oof_forecast',
+        sourceKey: 'interaction.togetherChannelFreeConcat.keep',
+        percentileAvailable: false,
+        status: 'research_diagnostic',
+        predictorEligible: false,
+        validationStatus: 'research_only_nested_video_holdout_with_leaky_upstream',
+        valueClass: 'combined_forecast',
+        lineageId: 'lineage.shorts.together-concat-interaction.v1',
+        lineage: {
+            rawInputIds: ['input.runtime.shorts.together-channel-free-concat.v1'],
+            representationId: 'representation.runtime.shorts.together-channel-free-concat.v1',
+            fitDatasetId: 'dataset.shorts.tyler-together-concat-interaction.v1',
+            fitDataset: [{
+                id: 'dataset.shorts.tyler-together-concat-interaction.v1',
+                role: 'Tyler-only nested five-fold fit and evaluation population.',
+            }],
+            targetField: 'keep',
+            algorithmId: 'algorithm.shorts.together-concat-nested-selector.v1',
+            scalarProjection: 'A formula selected in four training-only inner folds combines shorts.stored.together.keep and shorts.channel-free.concat.keep, then predicts the untouched outer fold in raw keep percentage points.',
+            calibrationId: 'calibration.identity-target-units.v1',
+            artifactId: 'artifact.repo.shorts.together-concat-interaction.v1',
+            sourceCode: [
+                'buildings/jarvis/predictor-lab/run_together_concat_keep_interaction.py',
+                'buildings/jarvis/together-concat-keep-interaction-contract.js',
+            ],
+            usesEmbedding: true,
+            validationProtocolId: 'family.shorts.together-concat-interaction.v1',
+            visualizationId: 'map.runtime.none.v1',
+            runId: TOGETHER_CONCAT_KEEP_INTERACTION.runId,
+            exactSourceCoordinateIds: TOGETHER_CONCAT_KEEP_INTERACTION.source.inputCoordinateIds,
+            reproducibility: {
+                status: 'repo-committed-nested-oof-artifact',
+                artifactSha256: TOGETHER_CONCAT_KEEP_INTERACTION_SHA256,
+                candidateRegistrySha256: TOGETHER_CONCAT_KEEP_INTERACTION.protocol.candidateRegistrySha256,
+            },
+        },
+        interactionStudy: {
+            runId: TOGETHER_CONCAT_KEEP_INTERACTION.runId,
+            source: TOGETHER_CONCAT_KEEP_INTERACTION.source,
+            protocol: TOGETHER_CONCAT_KEEP_INTERACTION.protocol,
+            results: TOGETHER_CONCAT_KEEP_INTERACTION.results,
+            outerSelections: TOGETHER_CONCAT_KEEP_INTERACTION.outerSelections,
+            prospectiveCandidate: TOGETHER_CONCAT_KEEP_INTERACTION.prospectiveCandidate,
+            claimBoundary: TOGETHER_CONCAT_KEEP_INTERACTION.claimBoundary,
+            artifactSha256: TOGETHER_CONCAT_KEEP_INTERACTION_SHA256,
+        },
+        description: 'One Tyler-only nested five-fold OOF combination of the exact Together keep and channel-free concat ledger coordinates. The combiner is held out, but the stored Together source was originally fitted with Tyler labels; this coordinate is an inspectable diagnostic, not portable proof or a promoted predictor.',
+    }];
     const columns = [
         ...observed,
         ...stored,
@@ -5160,6 +5290,7 @@ function buildCoordinateRegistry(options = {}) {
         ...direct,
         ...forecasts,
         ...channelFree,
+        ...keepInteraction,
     ];
     const familyMeta = [
         ['observed', 'Observed outcomes', 'Measured truth; never an embedding.'],
@@ -5173,6 +5304,7 @@ function buildCoordinateRegistry(options = {}) {
         ['videoForecast', 'Video-held-out combined forecasts', 'Twelve stored outcomes forecast from nine creator-excluded public axes; swipe is a display transform of keep.'],
         ['accountForecast', 'Account-held-out combined forecasts', 'Twelve stored account-transfer outcomes; swipe is a display transform of keep.'],
         ['channelFree', 'Channel-free keep signals', 'Four pooled directions (visual, text, together, concat) fitted with zero creator information; values are per-video held-out OOF predictions. Rank-first research diagnostics — ledger finding channelFreeKeepDirection.'],
+        ['keepInteraction', 'Together + concat interaction', 'One Tyler-only nested five-fold research forecast over the exact Together keep and channel-free concat coordinates. Combiner selection is held out; the upstream stored Together input is not, so this remains diagnostic.'],
     ].map(([key, label, description]) => ({
         key,
         label,
@@ -5661,6 +5793,10 @@ function ledgerValue(row, column) {
         const signalKey = String(column.key || '').replace(/^cfs\./, '');
         return scored ? number(scored[signalKey]) : null;
     }
+    if (column.family === 'keepInteraction') {
+        const scored = TOGETHER_CONCAT_KEEP_INTERACTION_BY_ID.get(String(row.id));
+        return scored ? number(scored.prediction) : null;
+    }
     if (column.family === 'videoForecast' || column.family === 'accountForecast') {
         const protocol = column.family === 'videoForecast' ? 'video' : 'account';
         return number(row.predictions && row.predictions.score21 && row.predictions.score21[protocol]
@@ -5687,6 +5823,10 @@ function ledgerBaselineValue(row, column) {
             row.predictions
             && row.predictions.creatorAdaptiveKeepBaseline
         );
+    }
+    if (column.family === 'keepInteraction') {
+        const scored = TOGETHER_CONCAT_KEEP_INTERACTION_BY_ID.get(String(row.id));
+        return scored ? number(scored.calibratedTogetherBaseline) : null;
     }
     return null;
 }
@@ -6054,6 +6194,9 @@ function coordinateEvaluationMode(column, outcome) {
     if (column.family === 'creatorAdaptiveKeepPrequential') {
         return 'registered_prequential_identity';
     }
+    if (column.family === 'keepInteraction') {
+        return 'registered_video_heldout_identity';
+    }
     if (column.family === 'creatorExcludedPublic') {
         return 'creator_excluded_identity';
     }
@@ -6089,6 +6232,9 @@ function coordinateValidationTier(column, outcome) {
     if (column.family === 'channelFree') {
         return 'channel_free_pooled_no_creator_identity';
     }
+    if (column.family === 'keepInteraction') {
+        return 'nested_video_heldout_research_with_upstream_leakage';
+    }
     return 'diagnostic_identity';
 }
 
@@ -6111,6 +6257,9 @@ function coordinatePlainEnglish(column, outcome) {
                 : (column.family === 'creatorExcludedPublic'
                     ? `${column.description} Creator exclusion makes this a retrospective account-external diagnostic, not prospective confirmation.`
                     : column.description))));
+    if (column.family === 'keepInteraction') {
+        return `${column.description} Every displayed value is an outer-fold prediction from a formula selected only inside that fold's training rows. This controls selection leakage in the two-input combiner, but shorts.stored.together.keep was fitted upstream with Tyler outcomes, so the result cannot establish incremental signal, prospective performance, or unseen-creator transfer. ${protocol}`;
+    }
     return `${upstream} ${protocol}`;
 }
 
