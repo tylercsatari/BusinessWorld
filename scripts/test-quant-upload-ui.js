@@ -112,7 +112,11 @@ async function main() {
         assert(longSource.includes("'/api/longquant/grind/start'"), 'Long Quant grind endpoint must remain wired');
         assert(!longSource.includes('id="lqx-file"'), 'Long Quant must not restore the redraw-prone nested file input');
         assert(longSource.includes('openLongRawVideoPicker') && longSource.includes('openLongRawFramePicker'), 'Long Quant raw upload controls must use the shared picker');
-        assert(shortSource.includes('openRawVideoPicker') && shortSource.includes('openRawFramePicker'), 'Shorts Quant upload controls must use the shared picker');
+        assert(
+            shortSource.includes('openRawVideoPicker')
+                && shortSource.includes("pickFiles({ accept: 'video/*', multiple: true"),
+            'Shorts Quant upload controls must use the shared multi-video picker'
+        );
         assert(!shortSource.includes('id="rawUpFile"') && !shortSource.includes('id="rawFrameFile"'), 'Shorts Quant must not restore redraw-prone nested file inputs');
 
         let live = null;
@@ -172,10 +176,10 @@ async function main() {
             ].includes(r.path)).length === 4);
             const longRequests = await livePage.evaluate(() => window.__quantRequests.filter(r => r.method === 'POST'));
             const longByPath = Object.fromEntries(longRequests.map(request => [request.path, request.body]));
-            assert.deepStrictEqual(longByPath['/api/longquant/exp/generate'], { title: 'Build a submarine out of glass', count: 3 });
+            assert.deepStrictEqual(longByPath['/api/longquant/exp/generate'], { title: 'Build a submarine out of glass', count: 3, renderExact: false });
             assert.strictEqual(longByPath['/api/longquant/exp/score-upload'].title, 'Holding my breath surrounded by sharks');
             assert(longByPath['/api/longquant/exp/score-upload'].image.startsWith('data:image/'));
-            assert.deepStrictEqual(longByPath['/api/longquant/exp/score-title'], { title: 'I Built a Glass Submarine' });
+            assert.deepStrictEqual(longByPath['/api/longquant/exp/score-title'], { title: 'I Built a Glass Submarine', async: true });
             assert.deepStrictEqual(longByPath['/api/longquant/grind/start'], {
                 idea: 'Holding my breath surrounded by sharks', threshold: '91', maxAttempts: '7', count: 3,
             });

@@ -1,41 +1,2823 @@
 {
-  "version": 1,
-  "groups": [
-    { "key": "visual", "label": "Visual", "description": "5-frame montage only" },
-    { "key": "text", "label": "Text", "description": "First-5-second transcript only" },
-    { "key": "together", "label": "Both", "description": "5-frame montage plus transcript" },
-    { "key": "novelty", "label": "Novelty", "description": "Independent novelty calibration" },
-    { "key": "cfs", "label": "Channel-free", "description": "One identical direction for every channel (ledger: channelFreeKeepDirection) — held-out OOF scores, no creator information" }
+ "version": 10,
+ "pipeline": {
+  "sourceWindow": "first 5 seconds",
+  "embeddingModel": "gemini-embedding-2",
+  "embeddingDimensions": 1536,
+  "visualInput": "Five frames sampled across the first five seconds and stitched left to right.",
+  "textInput": "Voiceover transcript from the first five seconds. The text channel is absent when coherent speech is not recovered.",
+  "togetherInput": "The same five-frame montage and transcript embedded together.",
+  "artifact": "raw/steer_models.npz",
+  "scorer": "raw_upload.py"
+ },
+ "lineageContract": {
+  "schemaVersion": 1,
+  "contractId": "jarvis.coordinate-lineage.v1",
+  "purpose": "Static, machine-readable lineage for every canonical Shorts ledger family and every exposed Long Quant output family. Runtime materializations may add artifact hashes, row counts, fit counts, and exclusion-set hashes, but may not replace these identities.",
+  "inventorySemantics": {
+   "shortsLedgerColumns": 89,
+   "shortsNonStoredDisplayTransforms": 3,
+   "shortsCompatibilityAliasesOutsideLedger": 18,
+   "shortsRetiredCoordinatesOutsideLedger": 7,
+   "shortsVisualKeepForecasts": 1,
+   "shortsCreatorAdaptiveKeepForecasts": 1,
+   "shortsDirectAxisColumns": 36,
+   "shortsDistinctDirectEmbeddingAxes": 36,
+   "shortsDirectAxisAliasColumns": 0,
+   "shortsEmbeddingDerivedTransforms": 12,
+   "shortsCombinedForecasts": 29,
+   "shortsForecastColumns": 29,
+   "shortsObservedOutcomes": 12,
+   "shortsLegacyDiagnostics": 0,
+   "longScalarOutputs": 21,
+   "longFrozenDirectAxes": 1,
+   "longNullableEmbeddingDerivedOutputs": 20,
+   "longMapPlacementsOutsideScalarLedger": 36,
+   "warning": "A ledger column is not necessarily an embedding space. The 36 active direct-axis columns are 36 distinct fitted axes; the 18 historical duplicate protocol addresses are compatibility aliases outside the active ledger. The frozen visual keep forecast reuses the visual representation. The creator-adaptive next-upload forecast reuses both the visual and together representations plus explicit prior creator outcomes. Neither derived scalar is a new embedding space. Swipe-away is one of three governed non-stored 100-minus-keep display transforms. Observed outcomes, embedding-derived transforms, combined forecasts, aliases, retired diagnostics, display transforms, and map placements must never be described as direct embedding axes."
+  },
+  "identityRules": [
+   "A coordinate identity is the tuple of coordinate ID, raw input set, representation, fit dataset, target, algorithm, calibration, artifact revision, and evaluation protocol.",
+   "Two values with different lineage tuples are different coordinates even when their labels are identical.",
+   "A 2D visualization map is a view with its own fit lineage. It is not automatically the scalar score coordinate for the same target.",
+   "Runtime row counts and hashes belong in generated provenance beside this contract; this static file intentionally does not freeze mutable corpus counts or hashes.",
+   "A population videoIdSha256 is SHA-256 over sorted unique video IDs joined by newline. Artifacts whose row order affects alignment additionally persist an orderedVideoIdSha256 over the exact ordered ID array.",
+   "Missing coherent Shorts speech makes the text representation absent. It must not be silently replaced with a zero vector.",
+   "All Gemini vectors are 1,536-dimensional and are L2-normalized before cosine placement or supervised scalar projection."
   ],
-  "features": [
-    { "key": "visual.keep", "group": "visual", "target": "keep", "source": "steer", "sourceKey": "visual_keep", "label": "Keep rate", "unit": "percent" },
-    { "key": "visual.ret5", "group": "visual", "target": "ret5", "source": "steer", "sourceKey": "visual_ret5", "label": "5s retention", "unit": "percent" },
-    { "key": "visual.views", "group": "visual", "target": "views", "source": "steer", "sourceKey": "visual_views", "label": "Views (library)", "unit": "views" },
-    { "key": "visual.realviews", "group": "visual", "target": "realviews", "source": "steer", "sourceKey": "visual_realviews", "label": "Views (your scale)", "unit": "views" },
-    { "key": "visual.outlier", "group": "visual", "target": "outlier", "source": "steer", "sourceKey": "visual_outlier", "label": "Outlier", "unit": "number" },
-    { "key": "visual.gt10M", "group": "visual", "target": "gt10M", "source": "steer", "sourceKey": "visual_gt10M", "label": "Chance over 10M", "unit": "probability" },
-
-    { "key": "text.keep", "group": "text", "target": "keep", "source": "steer", "sourceKey": "text_keep", "label": "Keep rate", "unit": "percent" },
-    { "key": "text.ret5", "group": "text", "target": "ret5", "source": "steer", "sourceKey": "text_ret5", "label": "5s retention", "unit": "percent" },
-    { "key": "text.views", "group": "text", "target": "views", "source": "steer", "sourceKey": "text_views", "label": "Views (library)", "unit": "views" },
-    { "key": "text.realviews", "group": "text", "target": "realviews", "source": "steer", "sourceKey": "text_realviews", "label": "Views (your scale)", "unit": "views" },
-    { "key": "text.outlier", "group": "text", "target": "outlier", "source": "steer", "sourceKey": "text_outlier", "label": "Outlier", "unit": "number" },
-    { "key": "text.gt10M", "group": "text", "target": "gt10M", "source": "steer", "sourceKey": "text_gt10M", "label": "Chance over 10M", "unit": "probability" },
-
-    { "key": "together.keep", "group": "together", "target": "keep", "source": "steer", "sourceKey": "together_keep", "label": "Keep rate", "unit": "percent" },
-    { "key": "together.ret5", "group": "together", "target": "ret5", "source": "steer", "sourceKey": "together_ret5", "label": "5s retention", "unit": "percent" },
-    { "key": "together.views", "group": "together", "target": "views", "source": "steer", "sourceKey": "together_views", "label": "Views (library)", "unit": "views" },
-    { "key": "together.realviews", "group": "together", "target": "realviews", "source": "steer", "sourceKey": "together_realviews", "label": "Views (your scale)", "unit": "views" },
-    { "key": "together.outlier", "group": "together", "target": "outlier", "source": "steer", "sourceKey": "together_outlier", "label": "Outlier", "unit": "number" },
-    { "key": "together.gt10M", "group": "together", "target": "gt10M", "source": "steer", "sourceKey": "together_gt10M", "label": "Chance over 10M", "unit": "probability" },
-
-    { "key": "novelty.keep", "group": "novelty", "target": "keep", "source": "novelty", "label": "Novelty to keep rate", "unit": "percent" },
-    { "key": "novelty.ret5", "group": "novelty", "target": "ret5", "source": "novelty", "label": "Novelty to 5s retention", "unit": "percent" },
-    { "key": "novelty.views", "group": "novelty", "target": "views", "source": "novelty", "label": "Novelty to views", "unit": "views" },
-
-    { "key": "cfs.visual", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free visual → keep", "unit": "percent" },
-    { "key": "cfs.text", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free text → keep", "unit": "percent" },
-    { "key": "cfs.together", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free together → keep", "unit": "percent" },
-    { "key": "cfs.concat", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free concat → keep (selected)", "unit": "percent" }
+  "registries": {
+   "rawInputSets": {
+    "input.shorts.first5-montage.v1": {
+     "domain": "shorts",
+     "kind": "image",
+     "window": "first 5 seconds",
+     "construction": "Five frames sampled across the first five seconds and stitched from left to right into one montage.",
+     "sourceCode": "raw_upload.py"
+    },
+    "input.shorts.first5-transcript.v1": {
+     "domain": "shorts",
+     "kind": "text",
+     "window": "first 5 seconds",
+     "construction": "Corpus-build transcript produced by Whisper tiny from first-five-second audio and accepted only when Whisper confidence and the deterministic coherence gate pass.",
+     "missingness": "Absent when Whisper tiny does not pass the corpus confidence/coherence gate. No Gemini transcription fallback is used during raw_embed.py corpus construction.",
+     "sourceCode": "raw_embed.py:whisper_text"
+    },
+    "input.shorts.first5-montage-transcript.v1": {
+     "domain": "shorts",
+     "kind": "multimodal",
+     "window": "first 5 seconds",
+     "members": [
+      "input.shorts.first5-montage.v1",
+      "input.shorts.first5-transcript.v1"
+     ],
+     "construction": "The corpus montage and corpus Whisper-tiny transcript are submitted in one embedding request; when corpus speech is absent, the request contains the montage only.",
+     "sourceCode": "raw_embed.py"
+    },
+    "input.shorts.first5-live-transcript.v1": {
+     "domain": "shorts",
+     "kind": "text",
+     "window": "first 5 seconds",
+     "construction": "Live scorer transcript: try Whisper tiny with the corpus confidence gate; when that fails, ask Gemini Flash for a deterministic second-opinion transcription; normalize whitespace and Unicode before embedding. User-supplied image text is used verbatim before normalization.",
+     "missingness": "Absent only when neither Whisper nor Gemini produces coherent speech, or no text is supplied for image-only scoring.",
+     "sourceCode": "raw_upload.py:whisper_text"
+    },
+    "input.shorts.first5-live-montage-transcript.v1": {
+     "domain": "shorts",
+     "kind": "multimodal",
+     "window": "first 5 seconds",
+     "members": [
+      "input.shorts.first5-montage.v1",
+      "input.shorts.first5-live-transcript.v1"
+     ],
+     "construction": "The live five-frame montage and live recovered transcript are submitted in one embedding request; when live speech is absent, the request contains the montage only.",
+     "sourceCode": "raw_upload.py"
+    },
+    "input.shorts.duration.v1": {
+     "domain": "shorts",
+     "kind": "numeric",
+     "unit": "seconds",
+     "construction": "Real video duration supplied by the client or read with ffprobe; the production realviews fallback is 30 seconds when duration is unavailable.",
+     "sourceCode": "raw_upload.py"
+    },
+    "input.shorts.private-outcomes.v1": {
+     "domain": "shorts",
+     "kind": "labels",
+     "fields": [
+      "keep_rate",
+      "ret5",
+      "average percentage viewed",
+      "retention curve",
+      "duration_s",
+      "views"
+     ],
+     "source": "Private YouTube Studio retention tables for owned accounts.",
+     "canonicalTylerSource": "buildings/jarvis/retention-study/retention_table.json"
+    },
+    "input.shorts.public-outcomes.v1": {
+     "domain": "shorts",
+     "kind": "labels",
+     "fields": [
+      "current lifetime views",
+      "subscriber snapshot",
+      "views divided by subscribers",
+      "views strictly greater than 10,000,000"
+     ],
+     "source": "Public Shorts library metadata.",
+     "sourceArtifact": "library/db.json"
+    },
+    "input.shorts.public-view-axis-trio.v1": {
+     "domain": "shorts",
+     "kind": "registered-coordinate-vector",
+     "members": [
+      "visual.views.raw",
+      "text.views.raw",
+      "together.views.raw"
+     ],
+     "construction": "The three shared creator-excluded public log-view axes, one per modality.",
+     "sourceCode": "buildings/jarvis/saved-channel-validation.js"
+    },
+    "input.long.thumbnail.v1": {
+     "domain": "long",
+     "kind": "image",
+     "construction": "One 16:9 thumbnail image with no title text supplied to the embedding request.",
+     "sourceCode": "longquant_score.py"
+    },
+    "input.long.title.v1": {
+     "domain": "long",
+     "kind": "text",
+     "construction": "The title or idea text embedded by itself.",
+     "sourceCode": "longquant_score.py"
+    },
+    "input.long.thumbnail-title.v1": {
+     "domain": "long",
+     "kind": "multimodal",
+     "members": [
+      "input.long.thumbnail.v1",
+      "input.long.title.v1"
+     ],
+     "construction": "The same thumbnail image and title or idea text submitted in one embedding request.",
+     "sourceCode": "longquant_score.py"
+    },
+    "input.long.duration.v1": {
+     "domain": "long",
+     "kind": "numeric",
+     "unit": "seconds",
+     "construction": "Observed long-form duration; the account view equation uses the account median when a corpus row has no duration.",
+     "sourceCode": "add_steered_proj_long.py"
+    },
+    "input.long.private-outcomes.v1": {
+     "domain": "long",
+     "kind": "labels",
+     "fields": [
+      "ctr",
+      "ret30",
+      "duration",
+      "views"
+     ],
+     "source": "Private long-form account performance tables.",
+     "sourcePattern": "longform/ret_{accountId}.json"
+    },
+    "input.long.public-outcomes.v1": {
+     "domain": "long",
+     "kind": "labels",
+     "fields": [
+      "current lifetime views",
+      "outlier",
+      "views strictly greater than 10,000,000"
+     ],
+     "source": "Public long-form library metadata.",
+     "sourceArtifact": "longform/db.json"
+    }
+   },
+   "representations": {
+    "representation.shorts.visual.gemini1536.v1": {
+     "domain": "shorts",
+     "modality": "visual",
+     "rawInputSetIds": [
+      "input.shorts.first5-montage.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "artifactId": "artifact.shorts.embeddings.visual.v1"
+    },
+    "representation.shorts.text.gemini1536.v1": {
+     "domain": "shorts",
+     "modality": "text",
+     "rawInputSetIds": [
+      "input.shorts.first5-transcript.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "missingness": "No representation is emitted when coherent speech is absent.",
+     "artifactId": "artifact.shorts.embeddings.text.v1"
+    },
+    "representation.shorts.together.gemini1536.v1": {
+     "domain": "shorts",
+     "modality": "together",
+     "rawInputSetIds": [
+      "input.shorts.first5-montage-transcript.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "artifactId": "artifact.shorts.embeddings.together.v1"
+    },
+    "representation.shorts.text.live-gemini1536.v1": {
+     "domain": "shorts",
+     "modality": "text",
+     "role": "live query representation",
+     "rawInputSetIds": [
+      "input.shorts.first5-live-transcript.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "missingness": "No text representation is emitted when the live transcription pipeline reports no coherent speech.",
+     "artifactId": "artifact.shorts.live-score-runtime.v1"
+    },
+    "representation.shorts.together.live-gemini1536.v1": {
+     "domain": "shorts",
+     "modality": "together",
+     "role": "live query representation",
+     "rawInputSetIds": [
+      "input.shorts.first5-live-montage-transcript.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "artifactId": "artifact.shorts.live-score-runtime.v1"
+    },
+    "representation.long.visual.gemini1536.v1": {
+     "domain": "long",
+     "modality": "visual",
+     "rawInputSetIds": [
+      "input.long.thumbnail.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "artifactId": "artifact.long.embeddings.visual.v1"
+    },
+    "representation.long.text.gemini1536.v1": {
+     "domain": "long",
+     "modality": "text",
+     "rawInputSetIds": [
+      "input.long.title.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "artifactId": "artifact.long.embeddings.text.v1"
+    },
+    "representation.long.together.gemini1536.v1": {
+     "domain": "long",
+     "modality": "together",
+     "rawInputSetIds": [
+      "input.long.thumbnail-title.v1"
+     ],
+     "model": "gemini-embedding-2",
+     "dimensions": 1536,
+     "scoringNormalization": "embedding / (L2_norm(embedding) + 1e-9)",
+     "artifactId": "artifact.long.embeddings.together.v1"
+    },
+    "representation.shorts.concat.gemini4608.v1": {
+     "domain": "shorts",
+     "modality": "concat",
+     "rawInputSetIds": [
+      "input.shorts.first5-montage.v1",
+      "input.shorts.first5-transcript.v1",
+      "input.shorts.first5-montage-transcript.v1"
+     ],
+     "model": "gemini-embedding-2 (three modality vectors concatenated)",
+     "dimensions": 4608,
+     "scoringNormalization": "each 1536-D modality embedding is L2-normalized independently, then concatenated visual+text+together",
+     "artifactId": "artifact.repo.shorts.channel-free-scores.v1"
+    }
+   },
+   "fitDatasets": {
+    "dataset.shorts.tyler-private-retention.v1": {
+     "domain": "shorts",
+     "role": "production supervised fit",
+     "representationPopulation": "Rows in the raw Shorts modality map whose video IDs join to Tyler private outcomes.",
+     "labelInputSetId": "input.shorts.private-outcomes.v1",
+     "targets": [
+      "keep",
+      "ret5",
+      "duration",
+      "views"
+     ],
+     "selectionRule": "Use the Tyler account rows with a finite label for the target being fitted.",
+     "fitRepresentationIdsByModality": {
+      "visual": "representation.shorts.visual.gemini1536.v1",
+      "text": "representation.shorts.text.gemini1536.v1",
+      "together": "representation.shorts.together.gemini1536.v1"
+     },
+     "runtimeProvenanceRequired": [
+      "modalityTargetPopulations",
+      "viewEquationFitPopulations",
+      "labelSnapshotRevision",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.public-corpus.v1": {
+     "domain": "shorts",
+     "role": "production public supervised fit",
+     "representationPopulation": "Eligible rows in the materialized raw/{modality}/map.json and embeddings.npz global corpus. Owned rows are merged into that materialization and may be included; this production scalar fit is not creator-excluded.",
+     "labelInputSetId": "input.shorts.public-outcomes.v1",
+     "targets": [
+      "log10(views + 1)",
+      "log10(outlier + 1)",
+      "views > 10000000"
+     ],
+     "selectionRule": "Views and outlier axes require a finite positive outcome and nonzero aligned embedding. The binary over-10M axis uses every row with a finite stored views value and nonzero aligned embedding, labeled with the strict rule views > 10000000.",
+     "fitRepresentationIdsByModality": {
+      "visual": "representation.shorts.visual.gemini1536.v1",
+      "text": "representation.shorts.text.gemini1536.v1",
+      "together": "representation.shorts.together.gemini1536.v1"
+     },
+     "runtimeProvenanceRequired": [
+      "modalityTargetPopulations",
+      "outcomeSnapshotRevision",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.map-manifold.v1": {
+     "domain": "shorts",
+     "role": "production visualization-map fit and transform population",
+     "representationPopulation": "Every row in the materialized raw/{modality} embedding store used by raw_embed.py to create map.pending.json, including owned rows and rows with zero public views.",
+     "labelInputSetId": "input.shorts.public-outcomes.v1",
+     "targets": [
+      "log10(views + 1), including zero views",
+      "log10(median-imputed outlier + 1)",
+      "views > 10000000",
+      "outlier at or above the materialized corpus 85th percentile"
+     ],
+     "selectionRule": "No creator exclusion is applied. PCA, UMAP, and clustering use every materialized row. Supervised PLS/LDA maps use the deterministic seed-0 70% training split and transform the full corpus; missing outlier values are median-imputed by raw_embed.py.",
+     "fitRepresentationIdsByModality": {
+      "visual": "representation.shorts.visual.gemini1536.v1",
+      "text": "representation.shorts.text.gemini1536.v1",
+      "together": "representation.shorts.together.gemini1536.v1"
+     },
+     "runtimeProvenanceRequired": [
+      "modalityPopulations"
+     ]
+    },
+    "dataset.shorts.novelty-reference.v1": {
+     "domain": "shorts",
+     "role": "production unsupervised reference",
+     "representationPopulation": "Saved Shorts corpus vectors, nearest-neighbor index, centroids, recent centroid, and PCA reconstruction model.",
+     "selectionRule": "The corpus materialized in raw embeddings and novelty artifacts.",
+     "fitRepresentationIdsByModality": {
+      "visual": "representation.shorts.visual.gemini1536.v1",
+      "text": "representation.shorts.text.gemini1536.v1",
+      "together": "representation.shorts.together.gemini1536.v1"
+     },
+     "runtimeProvenanceRequired": [
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.novelty-indicator-calibration.v1": {
+     "domain": "shorts",
+     "role": "supervised novelty selector and calibration population",
+     "representationPopulation": "Target-tagged novelty indicator rows and calibration points persisted in raw/indicators/registry.json.",
+     "labelInputSetIds": [
+      "input.shorts.private-outcomes.v1",
+      "input.shorts.public-outcomes.v1"
+     ],
+     "targets": [
+      "keep",
+      "ret5",
+      "views"
+     ],
+     "selectionRule": "For the requested target, use registry entries whose key is available and target matches. Prefer validated indicators, rank candidates by registered absolute AUC distance from 0.5 or absolute Spearman strength, apply the persisted sign, and map against that entry's persisted calibration points.",
+     "runtimeProvenanceRequired": [
+      "registryRevision",
+      "candidateIndicatorKeysByTarget",
+      "calibrationPointCountsByIndicator"
+     ],
+     "disclosure": "The registry revision fixes the eligible candidates and every calibration array. Selection is query-row-dependent because absent text can remove a primitive; each newly scored row therefore persists its exact selected key, sign, calibration count, and calibration-array hash."
+    },
+    "dataset.shorts.private-blind-population.v1": {
+     "domain": "shorts",
+     "role": "retrospective private-label population",
+     "representationPopulation": "Every row persisted in targets.keep.blindInputs.rows in the retrospective predictor research artifact, across every account available to that artifact.",
+     "labelInputSetId": "input.shorts.private-outcomes.v1",
+     "targets": [
+      "keep",
+      "ret5",
+      "duration",
+      "views"
+     ],
+     "selectionRule": "Use the artifact-persisted private rows and account labels exactly. This population is distinct from whichever subset the current UI can join for evaluation.",
+     "fitRepresentationIdsByModality": {
+      "visual": "representation.shorts.visual.gemini1536.v1",
+      "text": "representation.shorts.text.gemini1536.v1",
+      "together": "representation.shorts.together.gemini1536.v1"
+     },
+     "runtimeProvenanceRequired": [
+      "rowCount",
+      "videoIdHash",
+      "byAccount",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.video-heldout-private.v1": {
+     "domain": "shorts",
+     "role": "video-held-out retrospective validation fit",
+     "baseDatasetId": "dataset.shorts.private-blind-population.v1",
+     "selectionRule": "Assign five deterministic folds separately within each account and omit the evaluated video's entire outer fold from the private target fit. Inner cross-fitting for the realviews equation occurs only inside the permitted outer-training rows and is also grouped by account.",
+     "runtimeProvenanceRequired": [
+      "videoFolds",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.account-heldout-private.v1": {
+     "domain": "shorts",
+     "role": "account-held-out retrospective transfer fit",
+     "baseDatasetId": "dataset.shorts.private-blind-population.v1",
+     "selectionRule": "Exclude every row from the evaluated creator account from the private target fit.",
+     "runtimeProvenanceRequired": [
+      "accountHoldouts",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.creator-excluded-public.v1": {
+     "domain": "shorts",
+     "role": "creator-excluded public-axis fit",
+     "baseDatasetId": "dataset.shorts.public-corpus.v1",
+     "selectionRule": "Exclude every private, saved-channel, and validation creator video ID before fitting. Within each modality, views and over-10M use rows with a nonzero aligned embedding and finite positive views; outlier additionally requires a finite positive outlier. The resulting nine axes are fitted once and reused unchanged in both the video-held-out and account-held-out ledger views.",
+     "runtimeProvenanceRequired": [
+      "candidateUnionRowCount",
+      "modalityTargetPopulations",
+      "excludedVideoIdHash",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.visual-keep-final-fit.v1": {
+     "domain": "shorts",
+     "role": "final frozen visual keep forecast fit",
+     "baseDatasetId": "dataset.shorts.private-blind-population.v1",
+     "selectionRule": "Every private row with a canonical 1,536-dimensional visual opening embedding and a finite stayed-to-watch label. Nested training-only folds select the pooled Ridge setting before one final pooled formula is fit once on every eligible labeled row.",
+     "runtimeProvenanceRequired": [
+      "rowCount",
+      "videoIdHash",
+      "byAccount",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.creator-adaptive-keep-prequential.v1": {
+     "domain": "shorts",
+     "role": "known-creator prequential next-upload research forecast",
+     "baseDatasetId": "dataset.shorts.private-blind-population.v1",
+     "selectionRule": "A fixed four-stage registry of 43,360 prespecified time-ordered candidates is evaluated only on each creator's chronological 50%-80% window. The selected formula is a 50/50 blend of a centered-together residual analog and a visual-plus-together semantic stack. Every feature and calibration update uses only publication timestamps strictly earlier than the target; equal timestamps are simultaneous batches. The final 20% is evaluated both frozen and prequential, and every prediction requires at least eight earlier labels. This temporal protocol does not identify a causal effect.",
+     "runtimeProvenanceRequired": [
+      "population",
+      "selected",
+      "candidateRegistrySha256",
+      "candidateCountWithAllAccounts",
+      "evaluationTarget",
+      "honestHistoryBaseline",
+      "predictorEligibility",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.video-forecast-folds.v1": {
+     "domain": "shorts",
+     "role": "combined forecast validation",
+     "selectionRule": "Five outer folds assigned by deterministic hash of video ID over the current exact-ID joined evaluation population. Lambda selection occurs only inside each outer training fold. Three separate complete-outcome bundles are fitted: scalar outcomes (keep, ret5, average retention, log views, log outlier, over-10M), retention checkpoints (survival/drop at 5, 10, and 20 seconds), and the full normalized seconds 1-20 curve. Missing feature coordinates are imputed to the outer-training mean after standardization.",
+     "runtimeProvenanceRequired": [
+      "materializedEligibility",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.account-forecast-folds.v1": {
+     "domain": "shorts",
+     "role": "combined account-transfer validation",
+     "selectionRule": "Each outer fold holds out one complete creator account from the current exact-ID joined evaluation population. Lambda selection occurs only inside that outer training fold. Scalar, retention-checkpoint, and full seconds 1-20 curve bundles each require complete outcomes for that bundle. Missing feature coordinates are imputed to the outer-training mean after standardization.",
+     "runtimeProvenanceRequired": [
+      "materializedEligibility",
+      "artifactRevision"
+     ]
+    },
+    "dataset.long.tyler-private-performance.v1": {
+     "domain": "long",
+     "role": "production account fit",
+     "representationPopulation": "Raw Long rows whose video IDs join to Tyler private long-form outcomes.",
+     "labelInputSetId": "input.long.private-outcomes.v1",
+     "targets": [
+      "ctr",
+      "ret30",
+      "duration",
+      "views"
+     ],
+     "selectionRule": "The base projection aliases use Tyler; per-account projections use the selected account and require the production minimum labeled support.",
+     "runtimeProvenanceRequired": [
+      "baseAccountId",
+      "accountMetricPopulations",
+      "labelSnapshotRevisions",
+      "artifactRevision"
+     ]
+    },
+    "dataset.long.raw-manifold.v1": {
+     "domain": "long",
+     "role": "production nearest-neighbor manifold",
+     "representationPopulation": "Rows in raw-long/{modality}/embeddings.npz aligned by video ID to raw-long/{modality}/map.json.",
+     "labelInputSetId": "input.long.public-outcomes.v1",
+     "selectionRule": "Use the materialized raw-long map and its aligned embedding store.",
+     "runtimeProvenanceRequired": [
+      "modalityPopulations"
+     ]
+    },
+    "dataset.long.visual-ctr-private.v1": {
+     "domain": "long",
+     "role": "frozen thumbnail private CTR direction fit",
+     "representationPopulation": "Every raw-long visual embedding whose video ID joins to a finite private CTR across the configured long-form account tables.",
+     "labelInputSetId": "input.long.private-outcomes.v1",
+     "selectionRule": "Join every embedded visual video ID to finite private CTR; no curated-ID filter is applied to this CTR subfit.",
+     "runtimeProvenanceRequired": [
+      "ctrRowCount",
+      "ctrVideoIdHash",
+      "artifactRevision"
+     ]
+    },
+    "dataset.long.curated-visual-views.v1": {
+     "domain": "long",
+     "role": "frozen thumbnail public views direction and ladder",
+     "representationPopulation": "Visual IDs in longform/curated/all_visual.json that join to raw-long visual embeddings and finite public views.",
+     "labelInputSetId": "input.long.public-outcomes.v1",
+     "sourceArtifact": "longform/curated/all_visual.json",
+     "selectionRule": "Fit the log-view direction on the curated visual set and use the same set's final blended projections as the immutable percentile ladder.",
+     "runtimeProvenanceRequired": [
+      "curatedRowCount",
+      "curatedVideoIdHash",
+      "artifactRevision"
+     ]
+    },
+    "dataset.shorts.channel-free-private-keep.v1": {
+     "domain": "shorts",
+     "role": "channel-free pooled research fit",
+     "representationPopulation": "The 584 private keep-labeled videos across all four owned accounts with visual, text, and together embeddings present.",
+     "labelInputSetId": "input.shorts.private-outcomes.v1",
+     "targets": [
+      "keep"
+     ],
+     "selectionRule": "Pooled across accounts with NO account feature, offset, or centering; every displayed value is an out-of-fold prediction whose fold excluded the evaluated video.",
+     "identityHashSource": "predictor-lab/channel-free-scores.json:identityHash"
+    }
+   },
+   "algorithms": {
+    "algorithm.shorts.private-pls2-axis.v1": {
+     "domain": "shorts",
+     "kind": "direct_embedding_axis",
+     "estimator": "sklearn.cross_decomposition.PLSRegression",
+     "parameters": {
+      "n_components": 2
+     },
+     "fit": "Fit normalized 1,536-D modality embeddings X to one private target y.",
+     "scalarFormula": "raw_prediction = normalized_embedding @ coefficient + intercept",
+     "mapFormula": "PLS transform(X) supplies two display coordinates; display axis 0 is sign-aligned to positive Spearman correlation with the target.",
+     "sourceCode": "add_steered_proj.py"
+    },
+    "algorithm.shorts.public-pls1-axis.v1": {
+     "domain": "shorts",
+     "kind": "direct_embedding_axis",
+     "estimator": "sklearn.cross_decomposition.PLSRegression",
+     "parameters": {
+      "n_components": 1
+     },
+     "fit": "Fit normalized 1,536-D modality embeddings to log10 views, log10 outlier, or the over-10M binary label.",
+     "scalarFormula": "raw_prediction = normalized_embedding @ coefficient + intercept",
+     "sourceCode": "add_steered_proj.py"
+    },
+    "algorithm.shorts.realviews-equation.v1": {
+     "domain": "shorts",
+     "kind": "embedding_derived_transform",
+     "inputs": [
+      "projected keep",
+      "projected ret5",
+      "log10(duration_seconds + 1)"
+     ],
+     "fit": "wk is the OLS slope between duration-residualized log views and duration-residualized keep; wr is the analogous ret5 slope; wd is the marginal OLS slope of log views on log duration. A final OLS beta and alpha calibrate the composite to log views.",
+     "formula": "log10(realviews + 1) = alpha + beta * (wk * keep_est + wr * ret5_est + wd * log10(duration_seconds + 1))",
+     "runtimeFormula": "realviews = max(0, 10 ** (PS[0] * keep_est + PS[1] * ret5_est + PS[2] * log10(duration_seconds + 1) + PS[3]) - 1)",
+     "sourceCode": [
+      "add_steered_proj.py",
+      "raw_upload.py"
+     ]
+    },
+    "algorithm.shorts.novelty.global-knn13.v1": {
+     "domain": "shorts",
+     "kind": "novelty_primitive",
+     "formula": "mean(1 - cosine_similarity) over the 13 nearest saved hooks",
+     "sourceCode": "raw_upload.py"
+    },
+    "algorithm.shorts.novelty.niche-centroid.v1": {
+     "domain": "shorts",
+     "kind": "novelty_primitive",
+     "formula": "1 - max(corpus_centroids @ normalized_embedding)",
+     "sourceCode": "raw_upload.py"
+    },
+    "algorithm.shorts.novelty.temporal-centroid.v1": {
+     "domain": "shorts",
+     "kind": "novelty_primitive",
+     "formula": "1 - normalized_embedding @ recent_centroid",
+     "sourceCode": "raw_upload.py"
+    },
+    "algorithm.shorts.novelty.pca-residual.v1": {
+     "domain": "shorts",
+     "kind": "novelty_primitive",
+     "formula": "L2_norm(normalized_embedding - PCA_reconstruction) / (L2_norm(normalized_embedding) + 1e-9)",
+     "sourceCode": "raw_upload.py"
+    },
+    "algorithm.shorts.novelty.cross-modal-coherence.v1": {
+     "domain": "shorts",
+     "kind": "novelty_primitive",
+     "formula": "cosine(normalized_visual_embedding, normalized_text_embedding)",
+     "sourceCode": "raw_upload.py"
+    },
+    "algorithm.shorts.novelty.fusion-residual.v1": {
+     "domain": "shorts",
+     "kind": "novelty_primitive",
+     "formula": "1 - normalized_together_embedding @ normalize(normalized_visual_embedding + normalized_text_embedding)",
+     "sourceCode": "raw_upload.py"
+    },
+    "algorithm.shorts.novelty.target-selector.v1": {
+     "domain": "shorts",
+     "kind": "embedding_derived_transform",
+     "candidateAlgorithmIds": [
+      "algorithm.shorts.novelty.global-knn13.v1",
+      "algorithm.shorts.novelty.niche-centroid.v1",
+      "algorithm.shorts.novelty.temporal-centroid.v1",
+      "algorithm.shorts.novelty.pca-residual.v1",
+      "algorithm.shorts.novelty.cross-modal-coherence.v1",
+      "algorithm.shorts.novelty.fusion-residual.v1"
+     ],
+     "selectionRule": "For the requested keep, ret5, or views target, retain available novelty indicators registered to that target. Prefer indicators marked validated, then select the largest absolute registered AUC distance from 0.5 or absolute Spearman magnitude.",
+     "scalarFormula": "Directionally rank the selected primitive among its persisted reference points, then map that percentile to the sorted target outcomes.",
+     "sourceCode": "yt_relay_watcher.py:novelty_feature"
+    },
+    "algorithm.shorts.private-heldout-ridge.v1": {
+     "domain": "shorts",
+     "kind": "direct_embedding_axis",
+     "estimator": "sklearn.linear_model.Ridge",
+     "parameters": {
+      "alpha": 100,
+      "solver": "lsqr",
+      "tol": 0.0001
+     },
+     "fit": "Fit normalized modality embeddings directly to private keep or ret5 labels inside the permitted training fold.",
+     "scalarFormula": "target-unit Ridge prediction",
+     "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
+    },
+    "algorithm.shorts.public-heldout-pls1-quantile.v1": {
+     "domain": "shorts",
+     "kind": "direct_embedding_axis",
+     "estimator": "QuantileMappedRegressor wrapping PLSRegression",
+     "parameters": {
+      "n_components": 1
+     },
+     "fit": "Fit after excluding all private, saved-channel, and validation creator IDs.",
+     "scalarFormula": "Rank the PLS prediction within the in-sample predictions produced for the same eligible training rows used to fit PLS, then select the same quantile from sorted public outcomes. Validation creators remain excluded by the outer population rule, but this calibration ladder is not internally cross-fitted.",
+     "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
+    },
+    "algorithm.shorts.public-heldout-pls1-binary.v1": {
+     "domain": "shorts",
+     "kind": "direct_embedding_axis",
+     "estimator": "RankCalibratedBinaryAxis wrapping PLSRegression",
+     "parameters": {
+      "n_components": 1,
+      "local_radius": "max(1, training_count // 20)"
+     },
+     "fit": "Fit after excluding all private, saved-channel, and validation creator IDs.",
+     "scalarFormula": "Mean observed over-10M class in the local rank neighborhood around the PLS prediction.",
+     "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
+    },
+    "algorithm.shorts.heldout-realviews-ridge.v1": {
+     "domain": "shorts",
+     "kind": "embedding_derived_transform",
+     "estimator": "sklearn.linear_model.Ridge",
+     "parameters": {
+      "alpha": 1
+     },
+     "fit": "Cross-fit keep and ret5 inside the permitted training data, then fit log10 views from out-of-fold keep, out-of-fold ret5, and log10 duration.",
+     "formula": "log10(realviews + 1) = Ridge([oof_keep, oof_ret5, log10(duration + 1)])",
+     "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
+    },
+    "algorithm.shorts.visual-keep-pooled-ridge.v1": {
+     "domain": "shorts",
+     "kind": "combined_forecast",
+     "inputs": [
+      "L2-normalized 1,536D visual opening embedding"
+     ],
+     "estimator": "sklearn.linear_model.Ridge",
+     "fit": "Nested training-only folds select the pooled alpha. The frozen production artifact then refits one pooled Ridge formula on every permitted labeled row.",
+     "scalarFormula": "intercept + dot(L2-normalized visual embedding, 1,536 persisted coefficients). Creator identity is not an input, so an identical vector receives an identical scalar in every scoring route.",
+     "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
+    },
+    "algorithm.shorts.creator-adaptive-causal-mixture.v1": {
+     "domain": "shorts",
+     "kind": "combined_forecast",
+     "inputs": [
+      "L2-normalized 1,536D visual opening embedding",
+      "L2-normalized 1,536D together opening embedding",
+      "explicit creator profile",
+      "strictly earlier measured keep-rate outcomes"
+     ],
+     "estimator": "Selection-locked prequential residual analog plus ridge semantic stack",
+     "fit": "Exactly 43,360 staged candidates are enumerated from one immutable registry. Selection sees only the per-creator chronological 50%-80% window and minimizes worst-account error before the final tail is read. The locked candidate blends a centered-together pooled analog with a time-ordered stack over visual and together semantic experts. Every target, creator centering, correction, gate, and conformal residual is updated only after its entire equal-timestamp batch. This is a predictive replay, not causal identification.",
+     "scalarFormula": "clip(0.5 * centered-together residual analog + 0.5 * visual-plus-together semantic stack, 0, 100). The matched null is the arithmetic mean of at most 30 strictly earlier same-creator keep labels.",
+     "sourceCode": "scripts/benchmark-causal-keep-mixture.py"
+    },
+    "algorithm.shorts.nested-multitarget-ridge.v1": {
+     "domain": "shorts",
+     "kind": "combined_forecast",
+     "inputs": [
+      "visual.views.raw",
+      "visual.outlier.raw",
+      "visual.gt10M.raw",
+      "text.views.raw",
+      "text.outlier.raw",
+      "text.gt10M.raw",
+      "together.views.raw",
+      "together.outlier.raw",
+      "together.gt10M.raw"
+     ],
+     "estimator": "Standardized multi-target ridge solved by normal equations",
+     "parameters": {
+      "lambda_candidates": [
+       0.01,
+       0.1,
+       1,
+       10,
+       100,
+       1000
+      ],
+      "outer_video_folds": 5,
+      "inner_folds": "4 when training rows >= 80, otherwise 3",
+      "fold_assignment": "deterministic FNV-1a-style hash of video ID and fold salt",
+      "intercept_penalized": false
+     },
+     "fit": "For each outcome bundle, retain rows with every outcome in that bundle. Compute each feature's mean and standard deviation from the outer training rows; a missing feature is represented by standardized zero, exactly equivalent to outer-training-mean imputation. Standardize each target on the same outer training rows. Select lambda by inner-fold standardized MSE, refit on the outer training rows, and predict the bundle.",
+     "sourceCode": "buildings/jarvis/saved-channel-validation.js"
+    },
+    "algorithm.shorts.legacy-public-axis-ensemble.v1": {
+     "domain": "shorts",
+     "kind": "legacy_diagnostic",
+     "inputs": [
+      "visual.views.raw",
+      "text.views.raw",
+      "together.views.raw"
+     ],
+     "formula": "raw_log_view_score = mean(visual.views.raw, text.views.raw, together.views.raw); the persisted field is emitted only when all three axes are available, then calibration.inverse-log10-nonnegative.v1 produces ordinary views.",
+     "canonicalUse": false,
+     "sourceCode": "buildings/jarvis/saved-channel-validation.js"
+    },
+    "algorithm.identity-observed.v1": {
+     "kind": "observed_outcome",
+     "formula": "Join the measured outcome to the same video ID; apply only the coordinate's declared display transform.",
+     "sourceCode": "buildings/jarvis/saved-channel-validation.js"
+    },
+    "algorithm.legacy-diagnostic.v1": {
+     "kind": "legacy_diagnostic",
+     "fit": "Historical implementation retained only for audit compatibility.",
+     "canonicalUse": false,
+     "sourceCode": "buildings/jarvis/saved-channel-validation.js"
+    },
+    "algorithm.long.private-pls2-axis.v1": {
+     "domain": "long",
+     "kind": "target_aligned_map_axis",
+     "estimator": "sklearn.cross_decomposition.PLSRegression",
+     "parameters": {
+      "n_components": 2,
+      "minimum_owned_labels": 12
+     },
+     "fit": "Fit normalized raw-long modality embeddings to account CTR or ret30. Base projection aliases select Tyler.",
+     "scalarFormula": "PLS prediction rank is mapped to the sorted private target distribution for each map row.",
+     "mapFormula": "PLS transform(X) supplies two display coordinates; display axis 0 is sign-aligned to positive Spearman correlation with the target.",
+     "sourceCode": "add_steered_proj_long.py"
+    },
+    "algorithm.long.realviews-equation.v1": {
+     "domain": "long",
+     "kind": "embedding_derived_transform",
+     "inputs": [
+      "projected ctr",
+      "projected ret30",
+      "log10(duration_seconds + 1)"
+     ],
+     "fit": "wc and w30 are duration-residualized OLS slopes; wd is the marginal duration slope; alpha and beta calibrate the composite to log views.",
+     "formula": "log10(realviews + 1) = alpha + beta * (wc * ctr_est + w30 * ret30_est + wd * log10(duration_seconds + 1))",
+     "sourceCode": "add_steered_proj_long.py"
+    },
+    "algorithm.long.ctrviews-blend.v1": {
+     "domain": "long",
+     "kind": "direct_embedding_axis",
+     "estimator": "Two one-component PLS directions followed by a normalized linear blend",
+     "parameters": {
+      "ctr_weight": 0.3,
+      "views_weight": 0.7
+     },
+     "fit": "CTR direction is fitted on nonzero aligned rows with finite private CTR. The map views direction is fitted on nonzero aligned rows with finite positive public views and target log10(views + 1); the frozen thumbnail reward instead uses its separately registered curated visual set for the views direction and ladder.",
+     "formula": "blend = normalize(0.3 * unit_pls_ctr_direction + 0.7 * unit_pls_logviews_direction); projection = normalized_embedding @ blend",
+     "sourceCode": [
+      "add_steered_proj_long.py",
+      "build_thumb_assets.py",
+      "longquant_score.py"
+     ]
+    },
+    "algorithm.long.neighbor-placement.v1": {
+     "domain": "long",
+     "kind": "embedding_derived_transform",
+     "parameters": {
+      "archive_neighbors_max": 24,
+      "aligned_map_neighbors": "1-24 after exact video-ID join; zero is an error",
+      "similarity": "cosine over normalized embeddings",
+      "weight": "max(cosine_similarity, 0) ** 8 + 1e-6",
+      "chunk_default": 2048
+     },
+     "fit": "No query-time refit. Select up to 24 nearest rows in the embedding archive, join those neighbor IDs to the separately published map, drop unmatched IDs without refilling, and error if no IDs remain.",
+     "formula": "weighted_mean(value_i, weight_i) over the 1-24 ID-aligned map neighbors",
+     "sourceCode": "longquant_score.py"
+    },
+    "algorithm.long.neighbor-metric-resolution.v1": {
+     "domain": "long",
+     "kind": "embedding_derived_transform",
+     "resolutionRules": {
+      "ctr": "Weighted mean of the account PLS map's per-row ctr estimate; if absent, weighted map x coordinate converted to its map percentile.",
+      "ret30": "Weighted mean of the account PLS map's per-row ret30 estimate; if absent, weighted map x coordinate converted to its map percentile.",
+      "ctrviews": "The current ctrviews map producer does not persist an est array. Together output therefore uses the ID-aligned neighbors' display-scaled map x coordinates, takes their weighted mean, and converts that x value to its percentile within the same map x array.",
+      "views": "Weighted mean of neighbors' current public lifetime views, then percentile within the map views array.",
+      "realviews": "Weighted mean of the account realviews map's derived per-row estimate; if absent, weighted map x coordinate converted to its map percentile.",
+      "gt10m": "Weighted mean of the indicator views > 10000000 across neighbors.",
+      "scaled_views": "Weighted mean of neighbors' outlier values; exposed by the scorer but not one of the 12 current Long contract outputs."
+     },
+     "sourceCode": "longquant_score.py"
+    },
+    "algorithm.map.pls2-train70.v1": {
+     "kind": "visualization_map",
+     "estimator": "sklearn.cross_decomposition.PLSRegression",
+     "parameters": {
+      "n_components": 2,
+      "train_fraction": 0.7,
+      "split_seed": 0
+     },
+     "fit": "Fit on the deterministic 70% training split and transform the full normalized embedding corpus. The 30% split is used only for reported alignment.",
+     "sourceCode": [
+      "raw_embed.py",
+      "raw_embed_long.py"
+     ]
+    },
+    "algorithm.map.account-pls2.v1": {
+     "kind": "visualization_map",
+     "estimator": "sklearn.cross_decomposition.PLSRegression",
+     "parameters": {
+      "n_components": 2,
+      "diagnostic_folds": 5,
+      "diagnostic_shuffle": true,
+      "diagnostic_random_state": 0
+     },
+     "fit": "Fit the final map on every eligible account-labeled row and transform the full corpus; five-fold predictions are diagnostics only.",
+     "sourceCode": [
+      "add_steered_proj.py",
+      "add_steered_proj_long.py"
+     ]
+    },
+    "algorithm.map.derived-realviews-pls2.v1": {
+     "kind": "visualization_map",
+     "estimator": "sklearn.cross_decomposition.PLSRegression",
+     "parameters": {
+      "n_components": 2,
+      "diagnostic_components": 1,
+      "diagnostic_folds": 5,
+      "diagnostic_shuffle": true,
+      "diagnostic_random_state": 0
+     },
+     "fit": "First apply the account-fitted view equation to every reference-map row using that row's calibrated keep/ret5 or CTR/ret30 estimates and that row's duration (account median fallback). Then fit PLS2 from every nonzero aligned map embedding to the resulting per-row log-view target and transform the full map. Five-fold PLS1 predictions are diagnostic only.",
+     "mapFormula": "x/y = PLS2.transform(full reference manifold); x is sign-aligned to positive Spearman correlation with equation-derived log views and both axes are independently clipped to the 1st/99th percentiles for display.",
+     "sourceCode": [
+      "add_steered_proj.py",
+      "add_steered_proj_long.py"
+     ]
+    },
+    "algorithm.map.rawviews-pls2.v1": {
+     "kind": "visualization_map",
+     "estimator": "sklearn.cross_decomposition.PLSRegression",
+     "parameters": {
+      "n_components": 2,
+      "target": "raw lifetime views"
+     },
+     "fit": "Fit the final two-component map on aligned corpus rows; five-fold one-component predictions are diagnostics only.",
+     "sourceCode": [
+      "add_steered_proj.py",
+      "add_steered_proj_long.py"
+     ]
+    },
+    "algorithm.map.pca2.v1": {
+     "kind": "visualization_map",
+     "estimator": "SVD of centered normalized embeddings",
+     "formula": "(X_normalized - mean(X_normalized)) @ first_two_right_singular_vectors",
+     "sourceCode": [
+      "raw_embed.py",
+      "raw_embed_long.py"
+     ]
+    },
+    "algorithm.map.umap-cosine.v1": {
+     "kind": "visualization_map",
+     "estimator": "UMAP",
+     "parameters": {
+      "n_neighbors": 15,
+      "min_dist": 0.1,
+      "metric": "cosine",
+      "random_state": 0
+     },
+     "sourceCode": [
+      "raw_embed.py",
+      "raw_embed_long.py"
+     ]
+    },
+    "algorithm.map.lda-pca.v1": {
+     "kind": "visualization_map",
+     "estimator": "One-dimensional LDA plus first centered PCA axis",
+     "fit": "Fit LDA on the deterministic 70% split and transform the full corpus. The second display coordinate is the raw first centered-PCA score; the implementation does not explicitly remove its component along the LDA direction, so it must not be described as orthogonal.",
+     "sourceCode": [
+      "raw_embed.py",
+      "raw_embed_long.py"
+     ]
+    },
+    "algorithm.map.ctrviews-orthogonal.v1": {
+     "domain": "long",
+     "kind": "visualization_map",
+     "fit": "Use the 30/70 CTR+views blend as x. Remove its component from the first centered PCA vector, normalize the remainder, and use the resulting score as y.",
+     "formula": "x = X @ blend; y = (X - mean(X)) @ normalize(pc1 - dot(pc1, blend) * blend)",
+     "sourceCode": "add_steered_proj_long.py"
+    },
+    "algorithm.shorts.channel-free-pooled-ridge.v1": {
+     "domain": "shorts",
+     "kind": "direct_embedding_axis",
+     "estimator": "sklearn.linear_model.Ridge",
+     "parameters": {
+      "alphaGrid": [
+       1,
+       10,
+       100,
+       1000,
+       10000
+      ],
+      "alphaSelection": "inner 4-fold MAE on training folds only",
+      "oof": "5 shuffle seeds x 5 folds; displayed value is the seed-mean OOF prediction"
+     },
+     "fit": "One pooled direction per signal over normalized embeddings to raw keep; zero creator information.",
+     "scalarFormula": "oof_prediction = clip(normalized_embedding @ coefficient + intercept, 0, 100)",
+     "sourceCode": [
+      "buildings/jarvis/predictor-lab/run_channel_free_signal.py"
+     ]
+    }
+   },
+   "calibrations": {
+    "calibration.shorts.private-rank-to-outcome.v1": {
+     "domain": "shorts",
+     "input": "PLS scalar prediction",
+     "reference": "The prediction ladder across the materialized modality map and the sorted Tyler observed target values.",
+     "formula": "rank = searchsorted(prediction_ladder, prediction) / max(1, ladder_length - 1); estimate = sorted_private_outcome[round(rank * (outcome_count - 1))]",
+     "artifactId": "artifact.shorts.steer-models.v1"
+    },
+    "calibration.shorts.public-rank-to-log-outcome.v1": {
+     "domain": "shorts",
+     "input": "PLS scalar prediction",
+     "reference": "Sorted predictions and sorted public log10 outcome values for the eligible fit corpus.",
+     "formula": "Map prediction rank to the same quantile of sorted log10 outcome, then return max(0, 10 ** value - 1).",
+     "artifactId": "artifact.shorts.steer-models.v1"
+    },
+    "calibration.shorts.local-10m-rate.v1": {
+     "domain": "shorts",
+     "input": "PLS scalar prediction rank",
+     "reference": "Binary public outcomes ordered by the fitted prediction.",
+     "formula": "At center round(rank * (n - 1)), average outcomes in [center - max(1, n // 20), center + max(1, n // 20)).",
+     "artifactId": "artifact.shorts.steer-models.v1"
+    },
+    "calibration.shorts.novelty-target-worker.v1": {
+     "domain": "shorts",
+     "input": "Novelty primitives from the saved corpus models.",
+     "reference": "Target-specific novelty calibration persisted by the saved-channel worker.",
+     "warning": "The static scorer exposes the exact temporal, niche, combinatorial, global, coherence, and fusion primitives, but the current retrospective artifact does not reconstruct an exact held-out copy of each stored target-specific novelty output.",
+     "artifactId": "artifact.shorts.novelty-models.v1"
+    },
+    "calibration.identity-target-units.v1": {
+     "input": "Model prediction or measured outcome",
+     "formula": "No rank remapping; preserve the declared target unit."
+    },
+    "calibration.inverse-log10-nonnegative.v1": {
+     "input": "A prediction in log10(value + 1) units",
+     "formula": "display_value = max(0, 10 ** prediction - 1)"
+    },
+    "calibration.one-minus-percent.v1": {
+     "input": "Predicted keep rate in percent",
+     "formula": "predicted_swipe_percent = 100 - predicted_keep_percent"
+    },
+    "calibration.clamp-probability.v1": {
+     "input": "Unbounded continuous Ridge prediction for a binary target",
+     "formula": "display_probability = min(1, max(0, prediction))",
+     "warning": "This is a clipped continuous forecast, not a calibrated probability model."
+    },
+    "calibration.crossfit-training-percentile.v1": {
+     "domain": "shorts",
+     "input": "A held-out raw feature value",
+     "reference": "Cross-fitted raw feature values from the permitted training rows.",
+     "formula": "percentile = searchsorted(sorted_crossfit_training_reference, value, side=right) / reference_count",
+     "warning": "The canonical held-out direct ledger coordinates use the raw value. This percentile is an alternate view of that raw coordinate, not another axis."
+    },
+    "calibration.long.account-rank-to-outcome.v1": {
+     "domain": "long",
+     "input": "Account PLS prediction",
+     "reference": "Prediction ranks across the materialized modality map and the sorted account target distribution.",
+     "formula": "Map the prediction rank to the same quantile of sorted private CTR or ret30 values."
+    },
+    "calibration.long.neighbor-array-percentile.v1": {
+     "domain": "long",
+     "input": "Neighbor-weighted metric estimate or map x coordinate",
+     "reference": "Finite values in the corresponding materialized map array.",
+     "formula": "percentile = 100 * searchsorted(sorted_values, estimate) / max(1, value_count - 1)"
+    },
+    "calibration.long.frozen-visual-ctrviews-ladder.v1": {
+     "domain": "long",
+     "input": "normalized visual thumbnail embedding @ frozen blend",
+     "reference": "Sorted projections of the curated visual calibration set.",
+     "formula": "percentile = 100 * searchsorted(frozen_ladder, projection) / max(1, ladder_length)",
+     "artifactId": "artifact.long.visual-ctrviews-ladder.v1"
+    },
+    "calibration.map-grid-p01-p99.v1": {
+     "input": "Each raw 2D map coordinate independently",
+     "formula": "clip((value - percentile_1) / (percentile_99 - percentile_1), 0, 1) * 1000",
+     "warning": "Grid coordinates are display positions, not target estimates or score percentiles."
+    }
+   },
+   "artifacts": {
+    "artifact.shorts.embeddings.visual.v1": {
+     "domain": "shorts",
+     "path": "raw/visual/embeddings.npz",
+     "contains": [
+      "video IDs",
+      "visual Gemini embeddings",
+      "aligned public metadata"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256"
+     ]
+    },
+    "artifact.shorts.embeddings.text.v1": {
+     "domain": "shorts",
+     "path": "raw/text/embeddings.npz",
+     "contains": [
+      "video IDs with text coverage",
+      "text Gemini embeddings",
+      "aligned public metadata"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256"
+     ]
+    },
+    "artifact.shorts.embeddings.together.v1": {
+     "domain": "shorts",
+     "path": "raw/together/embeddings.npz",
+     "contains": [
+      "video IDs",
+      "combined Gemini embeddings",
+      "aligned public metadata"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256"
+     ]
+    },
+    "artifact.shorts.steer-models.v1": {
+     "domain": "shorts",
+     "path": "raw/steer_models.npz",
+     "manifestPath": "raw/steer_manifest.json",
+     "archivePathPattern": "raw/steer_models/by-sha256/{artifactSha256}.npz",
+     "archiveManifestPathPattern": "raw/steer_models/by-sha256/{artifactSha256}.manifest.json",
+     "producer": "add_steered_proj.py",
+     "consumer": "raw_upload.py",
+     "contains": [
+      "per-modality coefficients and intercepts",
+      "prediction ladders",
+      "sorted calibration outcomes",
+      "ordered 10M labels",
+      "realviews equation coefficients",
+      "exact fit, projection-ladder, and calibration population counts and sorted-ID SHA-256 hashes",
+      "source outcome, embedding-store, and map artifact revisions",
+      "producer source SHA-256 and Python, NumPy, scikit-learn, and SciPy versions",
+      "artifact-specific arrays required for deterministic replay"
+     ],
+     "historicalDisclosure": "Artifacts produced before lineage schema 1 have no embedded fit-ID manifest. Their exact population remains unknown and must not be reconstructed from a later map.",
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256",
+      "producerSourceSha256"
+     ]
+    },
+    "artifact.shorts.novelty-models.v1": {
+     "domain": "shorts",
+     "path": "raw/novelty_models.npz",
+     "consumer": "raw_upload.py",
+     "contains": [
+      "centroids",
+      "recent centroid",
+      "PCA components",
+      "PCA mean"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256"
+     ]
+    },
+    "artifact.shorts.indicator-registry.v1": {
+     "domain": "shorts",
+     "paths": [
+      "raw/indicators/registry.json",
+      "raw/indicators/weights.npz"
+     ],
+     "consumer": [
+      "raw_upload.py",
+      "yt_relay_watcher.py"
+     ],
+     "contains": [
+      "target assignment",
+      "validated flag",
+      "AUC and Spearman selection strength",
+      "direction sign",
+      "calibration points",
+      "optional linear probe weights"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "registrySha256",
+      "weightsSha256"
+     ]
+    },
+    "artifact.shorts.visual-keep-model.v1": {
+     "domain": "shorts",
+     "path": "raw/predictor-lab/visual-keep-model-v1.json",
+     "manifestPath": "raw/predictor-lab/visual-keep-model-v1.manifest.json",
+     "archivePathPattern": "raw/predictor-lab/visual-keep-model/by-sha256/{artifactSha256}.json",
+     "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+     "consumer": [
+      "raw_upload.py",
+      "server.js"
+     ],
+     "contains": [
+      "coordinate ID",
+      "one pooled 1,536-dimensional coefficient vector and intercept",
+      "selected pooled Ridge setting",
+      "training-population ID hash",
+      "per-training-video final-model predictions",
+      "separate held-out validation summary"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "archiveKey",
+      "producerSourceSha256"
+     ]
+    },
+    "artifact.shorts.creator-adaptive-keep-model.v1": {
+     "domain": "shorts",
+     "schemaVersion": 3,
+     "path": "raw/predictor-lab/creator-adaptive-keep-model-v1.json",
+     "manifestPath": "raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json",
+     "archivePathPattern": "raw/predictor-lab/creator-adaptive-keep-model/by-sha256/{artifactSha256}.json",
+     "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+     "consumer": [
+      "server.js",
+      "buildings/jarvis/saved-channel-validation.js"
+     ],
+     "contains": [
+      "coordinate ID",
+      "selected 43,360-candidate registry hash and four-stage locked formula",
+      "visual and together embedding fingerprints",
+      "history video IDs and training cutoff per profile",
+      "prequential and frozen final-window predictions",
+      "conformal intervals, modality ablations, rolling stability, and bootstrap uncertainty",
+      "the matched history-only baseline and incremental error for every evaluation point",
+      "explicit promoted and predictorEligible status"
+     ],
+     "availability": "Historical final-window evaluation rows only in the current UI. Anonymous raw uploads and arbitrary saved hooks must return unavailable unless a future server route requires and validates an explicit eligible creator profile.",
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "archiveKey",
+      "producerSourceSha256"
+     ]
+    },
+    "artifact.shorts.predictor-lab-release.v1": {
+     "domain": "shorts",
+     "path": "raw/predictor-lab/release-v1.json",
+     "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+     "consumer": [
+      "server.js"
+     ],
+     "contains": [
+      "one immutable predictor result artifact and manifest revision",
+      "one immutable frozen visual keep model and manifest revision",
+      "one immutable creator-adaptive keep model and manifest revision",
+      "feature-contract and producer-source hashes shared by the bundle"
+     ],
+     "publicationRule": "Upload every immutable artifact and manifest first, update compatibility aliases second, then replace this single release pointer last. Validation consumers must begin from this pointer and never independently combine mutable aliases."
+    },
+    "artifact.shorts.live-score-runtime.v1": {
+     "domain": "shorts",
+     "path": "raw_upload.py",
+     "contains": [
+      "live Whisper-to-Gemini transcription fallback",
+      "Gemini embedding request construction",
+      "input and artifact revision fingerprints"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "scorerSourceSha256",
+      "savedChannelWorkerSourceSha256"
+     ]
+    },
+    "artifact.shorts.maps.v1": {
+     "domain": "shorts",
+     "pathPattern": "raw/{modality}/map.json",
+     "plotPathPattern": "raw/{modality}/plot.json",
+     "producers": [
+      "raw_embed.py",
+      "add_steered_proj.py"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "visual.manifestSha256",
+      "visual.mapSha256",
+      "visual.plotSha256",
+      "visual.embeddingSha256",
+      "visual.producerSourceSha256",
+      "text.manifestSha256",
+      "text.mapSha256",
+      "text.plotSha256",
+      "text.embeddingSha256",
+      "text.producerSourceSha256",
+      "together.manifestSha256",
+      "together.mapSha256",
+      "together.plotSha256",
+      "together.embeddingSha256",
+      "together.producerSourceSha256"
+     ]
+    },
+    "artifact.long.embeddings.visual.v1": {
+     "domain": "long",
+     "path": "raw-long/visual/embeddings.npz",
+     "contains": [
+      "video IDs",
+      "visual Gemini embeddings",
+      "aligned public metadata"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256"
+     ]
+    },
+    "artifact.long.embeddings.text.v1": {
+     "domain": "long",
+     "path": "raw-long/text/embeddings.npz",
+     "contains": [
+      "video IDs",
+      "title Gemini embeddings",
+      "aligned public metadata"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256"
+     ]
+    },
+    "artifact.long.embeddings.together.v1": {
+     "domain": "long",
+     "path": "raw-long/together/embeddings.npz",
+     "contains": [
+      "video IDs",
+      "thumbnail-plus-title Gemini embeddings",
+      "aligned public metadata"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256"
+     ]
+    },
+    "artifact.long.maps.v1": {
+     "domain": "long",
+     "pathPattern": "raw-long/{modality}/map.json",
+     "plotPathPattern": "raw-long/{modality}/plot.json",
+     "producers": [
+      "raw_embed_long.py",
+      "add_steered_proj_long.py"
+     ],
+     "consumer": "longquant_score.py",
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "visual.manifestSha256",
+      "visual.mapSha256",
+      "visual.plotSha256",
+      "visual.generatorSourceSha256",
+      "text.manifestSha256",
+      "text.mapSha256",
+      "text.plotSha256",
+      "text.generatorSourceSha256",
+      "together.manifestSha256",
+      "together.mapSha256",
+      "together.plotSha256",
+      "together.generatorSourceSha256"
+     ]
+    },
+    "artifact.long.steer-models.v1": {
+     "domain": "long",
+     "path": "raw-long/steer_models.npz",
+     "producer": "add_steered_proj_long.py",
+     "contains": [
+      "per-account long-form view equations"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256",
+      "producerSourceSha256"
+     ]
+    },
+    "artifact.long.live-score-runtime.v1": {
+     "domain": "long",
+     "path": "longquant_score.py",
+     "contains": [
+      "exact thumbnail/title/idea input fingerprint construction",
+      "Gemini query embedding request",
+      "ID-aligned neighbor placement",
+      "map and embedding archive revision checks"
+     ],
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "scorerSourceSha256"
+     ]
+    },
+    "artifact.long.visual-ctrviews-ladder.v1": {
+     "domain": "long",
+     "path": "longform/thumb-rl/scorer_visual.npz",
+     "manifestPath": "longform/thumb-rl/scorer_visual.manifest.json",
+     "archivePathPattern": "longform/thumb-rl/by-sha256/{artifactSha256}.npz",
+     "archiveManifestPathPattern": "longform/thumb-rl/by-sha256/{artifactSha256}.manifest.json",
+     "legacyReadPath": "longform/thumb-rl/scorer_visual.json",
+     "producer": "build_thumb_assets.py",
+     "consumer": "longquant_score.py",
+     "contains": [
+      "normalized 30% CTR plus 70% log-views blend direction",
+      "sorted curated-set projection ladder",
+      "90th-percentile projection threshold",
+      "exact private-CTR fit, curated-views fit, and ladder population counts and sorted-ID SHA-256 hashes",
+      "source artifact SHA-256 revisions",
+      "producer source SHA-256 and Python, NumPy, scikit-learn, and SciPy versions"
+     ],
+     "historicalDisclosure": "Legacy JSON and pre-lineage NPZ revisions do not identify exact fit populations; that absence remains explicit.",
+     "runtimeRevisionRequired": true,
+     "runtimeRevisionRequiredFields": [
+      "artifactSha256",
+      "manifestSha256",
+      "producerSourceSha256"
+     ]
+    },
+    "artifact.repo.shorts.channel-free-scores.v1": {
+     "domain": "shorts",
+     "path": "buildings/jarvis/predictor-lab/channel-free-scores.json",
+     "contains": [
+      "video IDs",
+      "per-video held-out OOF keep predictions for visual/text/together/concat",
+      "runId",
+      "identityHash",
+      "validated summary metrics"
+     ],
+     "runtimeRevisionRequired": false,
+     "repoCommitted": true
+    }
+   },
+   "visualizationMaps": {
+    "map.shorts.pca.v1": {
+     "domain": "shorts",
+     "mapKey": "pca",
+     "algorithmId": "algorithm.map.pca2.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Unsupervised layout only."
+    },
+    "map.shorts.umap.v1": {
+     "domain": "shorts",
+     "mapKey": "umap",
+     "algorithmId": "algorithm.map.umap-cosine.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Unsupervised layout only."
+    },
+    "map.shorts.views.v1": {
+     "domain": "shorts",
+     "mapKey": "views",
+     "algorithmId": "algorithm.map.pls2-train70.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": "log10(views + 1)",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Target-aligned 2D layout from a separate PLS2 map fit; it is not the stored scalar PLS1 score."
+    },
+    "map.shorts.rawviews.v1": {
+     "domain": "shorts",
+     "mapKey": "rawviews",
+     "algorithmId": "algorithm.map.rawviews-pls2.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": "raw lifetime views",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Visualization-only raw-views fit; not the registered view-equivalent scalar."
+    },
+    "map.shorts.outlier.v1": {
+     "domain": "shorts",
+     "mapKey": "outlier",
+     "algorithmId": "algorithm.map.pls2-train70.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": "log10(outlier + 1)",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Target-aligned 2D layout from a separate PLS2 map fit; it is not the stored scalar PLS1 score."
+    },
+    "map.shorts.both.v1": {
+     "domain": "shorts",
+     "mapKey": "both",
+     "algorithmId": "algorithm.map.pls2-train70.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": [
+      "log10(views + 1)",
+      "log10(outlier + 1)"
+     ],
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Joint target-aligned layout only; it creates no scalar ledger coordinate."
+    },
+    "map.shorts.hi10m.v1": {
+     "domain": "shorts",
+     "mapKey": "hi10m",
+     "algorithmId": "algorithm.map.lda-pca.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": "views > 10000000",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Class-separation layout only; it is not the registered local-rate probability."
+    },
+    "map.shorts.hiout.v1": {
+     "domain": "shorts",
+     "mapKey": "hiout",
+     "algorithmId": "algorithm.map.lda-pca.v1",
+     "fitDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": "outlier at or above the corpus 85th percentile",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Class-separation layout only; it creates no scalar ledger coordinate."
+    },
+    "map.shorts.keep.v1": {
+     "domain": "shorts",
+     "mapKey": "keep",
+     "algorithmId": "algorithm.map.account-pls2.v1",
+     "fitDatasetId": "dataset.shorts.tyler-private-retention.v1",
+     "transformDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": "keep",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "PLS2 is fitted on private Tyler labels, then every materialized map row is transformed. The map contains target-calibrated estimates, but x and y are display coordinates rather than the scalar estimate."
+    },
+    "map.shorts.ret5.v1": {
+     "domain": "shorts",
+     "mapKey": "ret5",
+     "algorithmId": "algorithm.map.account-pls2.v1",
+     "fitDatasetId": "dataset.shorts.tyler-private-retention.v1",
+     "transformDatasetId": "dataset.shorts.map-manifold.v1",
+     "target": "ret5",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "PLS2 is fitted on private Tyler labels, then every materialized map row is transformed. The map contains target-calibrated estimates, but x and y are display coordinates rather than the scalar estimate."
+    },
+    "map.shorts.realviews.v1": {
+     "domain": "shorts",
+     "mapKey": "realviews",
+     "algorithmId": "algorithm.map.derived-realviews-pls2.v1",
+     "fitDatasetId": "dataset.shorts.tyler-private-retention.v1",
+     "fitDatasets": [
+      {
+       "id": "dataset.shorts.tyler-private-retention.v1",
+       "role": "Fit keep, ret5, and the duration-deconfounded view equation."
+      },
+      {
+       "id": "dataset.shorts.map-manifold.v1",
+       "role": "Generate one equation-derived log-view target per materialized reference row, fit the 2D PLS layout on nonzero aligned embeddings, and transform the full map."
+      }
+     ],
+     "target": "derived log10 realviews",
+     "artifactId": "artifact.shorts.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "A 2D PLS layout fitted across the materialized map to per-row derived realviews values. The registered upload scalar is instead computed directly by the view equation and is not this map coordinate."
+    },
+    "map.long.pca.v1": {
+     "domain": "long",
+     "mapKey": "pca",
+     "algorithmId": "algorithm.map.pca2.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Unsupervised layout only."
+    },
+    "map.long.umap.v1": {
+     "domain": "long",
+     "mapKey": "umap",
+     "algorithmId": "algorithm.map.umap-cosine.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Unsupervised layout only."
+    },
+    "map.long.views.v1": {
+     "domain": "long",
+     "mapKey": "views",
+     "algorithmId": "algorithm.map.pls2-train70.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "target": "log10(views + 1)",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Target-aligned layout; live Long views output is neighbor-derived rather than this map coordinate."
+    },
+    "map.long.rawviews.v1": {
+     "domain": "long",
+     "mapKey": "rawviews",
+     "algorithmId": "algorithm.map.rawviews-pls2.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "target": "raw lifetime views",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Visualization-only raw-views fit."
+    },
+    "map.long.outlier.v1": {
+     "domain": "long",
+     "mapKey": "outlier",
+     "algorithmId": "algorithm.map.pls2-train70.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "target": "log10(outlier + 1)",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Target-aligned layout; scaled views is neighbor-derived and is not one of the 12 current outputs."
+    },
+    "map.long.both.v1": {
+     "domain": "long",
+     "mapKey": "both",
+     "algorithmId": "algorithm.map.pls2-train70.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "target": [
+      "log10(views + 1)",
+      "log10(outlier + 1)"
+     ],
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Joint target-aligned layout only."
+    },
+    "map.long.hi10m.v1": {
+     "domain": "long",
+     "mapKey": "hi10m",
+     "algorithmId": "algorithm.map.lda-pca.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "target": "views > 10000000",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Class-separation layout; live gt10m is a neighbor-weighted class rate."
+    },
+    "map.long.hiout.v1": {
+     "domain": "long",
+     "mapKey": "hiout",
+     "algorithmId": "algorithm.map.lda-pca.v1",
+     "fitDatasetId": "dataset.long.raw-manifold.v1",
+     "target": "outlier at or above the corpus 85th percentile",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Class-separation layout only."
+    },
+    "map.long.ctr.v1": {
+     "domain": "long",
+     "mapKey": "ctr",
+     "algorithmId": "algorithm.map.account-pls2.v1",
+     "fitDatasetId": "dataset.long.tyler-private-performance.v1",
+     "transformDatasetId": "dataset.long.raw-manifold.v1",
+     "target": "ctr",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "The live output aggregates the map's per-row CTR estimates through nearest neighbors."
+    },
+    "map.long.ret30.v1": {
+     "domain": "long",
+     "mapKey": "ret30",
+     "algorithmId": "algorithm.map.account-pls2.v1",
+     "fitDatasetId": "dataset.long.tyler-private-performance.v1",
+     "transformDatasetId": "dataset.long.raw-manifold.v1",
+     "target": "ret30",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "The live output aggregates the map's per-row ret30 estimates through nearest neighbors."
+    },
+    "map.long.realviews.v1": {
+     "domain": "long",
+     "mapKey": "realviews",
+     "algorithmId": "algorithm.map.derived-realviews-pls2.v1",
+     "fitDatasetId": "dataset.long.tyler-private-performance.v1",
+     "fitDatasets": [
+      {
+       "id": "dataset.long.tyler-private-performance.v1",
+       "role": "Fit CTR, ret30, and the duration-deconfounded long-form view equation."
+      },
+      {
+       "id": "dataset.long.raw-manifold.v1",
+       "role": "Generate one equation-derived log-view target per reference row using that row's duration, fit the 2D PLS layout on nonzero aligned embeddings, and transform the full map."
+      }
+     ],
+     "target": "derived log10 realviews",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "The live output aggregates the map's equation-derived per-row view estimates through nearest neighbors."
+    },
+    "map.long.ctrviews.v1": {
+     "domain": "long",
+     "mapKey": "ctrviews",
+     "algorithmId": "algorithm.map.ctrviews-orthogonal.v1",
+     "fitDatasetId": "dataset.long.tyler-private-performance.v1",
+     "fitDatasets": [
+      {
+       "id": "dataset.long.tyler-private-performance.v1",
+       "role": "Fit the private CTR direction."
+      },
+      {
+       "id": "dataset.long.raw-manifold.v1",
+       "role": "Fit the public log-views direction and transform the complete reference manifold."
+      }
+     ],
+     "target": "30% CTR direction plus 70% log-views direction",
+     "artifactId": "artifact.long.maps.v1",
+     "calibrationId": "calibration.map-grid-p01-p99.v1",
+     "coordinateRelationship": "Together output uses neighbor placement on this map. Visual output is overridden by the frozen visual ladder and therefore has different lineage."
+    }
+   }
+  },
+  "coordinateFamilies": [
+   {
+    "id": "family.shorts.stored.private-axis.v1",
+    "coordinatePattern": "shorts.stored.{modality}.{target}",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "targets": [
+      "keep",
+      "ret5"
+     ],
+     "count": 6
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.live-gemini1536.v1",
+     "together": "representation.shorts.together.live-gemini1536.v1"
+    },
+    "fitRepresentationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.tyler-private-retention.v1",
+    "algorithmId": "algorithm.shorts.private-pls2-axis.v1",
+    "calibrationId": "calibration.shorts.private-rank-to-outcome.v1",
+    "artifactIds": [
+     "artifact.shorts.steer-models.v1"
+    ],
+    "visualizationMapIdByTarget": {
+     "keep": "map.shorts.keep.v1",
+     "ret5": "map.shorts.ret5.v1"
+    }
+   },
+   {
+    "id": "family.shorts.stored.public-axis.v1",
+    "coordinatePattern": "shorts.stored.{modality}.{target}",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "targets": [
+      "views",
+      "outlier"
+     ],
+     "count": 6
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.live-gemini1536.v1",
+     "together": "representation.shorts.together.live-gemini1536.v1"
+    },
+    "fitRepresentationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.public-corpus.v1",
+    "algorithmId": "algorithm.shorts.public-pls1-axis.v1",
+    "calibrationId": "calibration.shorts.public-rank-to-log-outcome.v1",
+    "artifactIds": [
+     "artifact.shorts.steer-models.v1"
+    ],
+    "visualizationMapIdByTarget": {
+     "views": "map.shorts.views.v1",
+     "outlier": "map.shorts.outlier.v1"
+    }
+   },
+   {
+    "id": "family.shorts.stored.10m-axis.v1",
+    "coordinatePattern": "shorts.stored.{modality}.gt10M",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.live-gemini1536.v1",
+     "together": "representation.shorts.together.live-gemini1536.v1"
+    },
+    "fitRepresentationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.public-corpus.v1",
+    "algorithmId": "algorithm.shorts.public-pls1-axis.v1",
+    "calibrationId": "calibration.shorts.local-10m-rate.v1",
+    "artifactIds": [
+     "artifact.shorts.steer-models.v1"
+    ],
+    "visualizationMapIds": [
+     "map.shorts.hi10m.v1"
+    ]
+   },
+   {
+    "id": "family.shorts.stored.realviews.v1",
+    "coordinatePattern": "shorts.stored.{modality}.realviews",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.live-gemini1536.v1",
+     "together": "representation.shorts.together.live-gemini1536.v1"
+    },
+    "fitRepresentationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "rawInputSetIds": [
+     "input.shorts.duration.v1"
+    ],
+    "fitDatasetId": "dataset.shorts.tyler-private-retention.v1",
+    "dependencyPatterns": [
+     "shorts.stored.{modality}.keep",
+     "shorts.stored.{modality}.ret5"
+    ],
+    "algorithmIds": [
+     "algorithm.shorts.private-pls2-axis.v1",
+     "algorithm.shorts.realviews-equation.v1"
+    ],
+    "calibrationIds": [
+     "calibration.shorts.private-rank-to-outcome.v1",
+     "calibration.identity-target-units.v1"
+    ],
+    "artifactIds": [
+     "artifact.shorts.steer-models.v1"
+    ],
+    "visualizationMapIds": [
+     "map.shorts.realviews.v1"
+    ]
+   },
+   {
+    "id": "family.shorts.stored.novelty.v1",
+    "coordinatePattern": "shorts.stored.novelty.{target}",
+    "expansion": {
+     "targets": [
+      "keep",
+      "ret5",
+      "views"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIds": [
+     "representation.shorts.visual.gemini1536.v1",
+     "representation.shorts.text.live-gemini1536.v1",
+     "representation.shorts.together.live-gemini1536.v1"
+    ],
+    "fitRepresentationIds": [
+     "representation.shorts.visual.gemini1536.v1",
+     "representation.shorts.text.gemini1536.v1",
+     "representation.shorts.together.gemini1536.v1"
+    ],
+    "fitDatasetIds": [
+     "dataset.shorts.novelty-reference.v1",
+     "dataset.shorts.novelty-indicator-calibration.v1"
+    ],
+    "algorithmIds": [
+     "algorithm.shorts.novelty.target-selector.v1",
+     "algorithm.shorts.novelty.global-knn13.v1",
+     "algorithm.shorts.novelty.niche-centroid.v1",
+     "algorithm.shorts.novelty.temporal-centroid.v1",
+     "algorithm.shorts.novelty.pca-residual.v1",
+     "algorithm.shorts.novelty.cross-modal-coherence.v1",
+     "algorithm.shorts.novelty.fusion-residual.v1"
+    ],
+    "calibrationId": "calibration.shorts.novelty-target-worker.v1",
+    "artifactIds": [
+     "artifact.shorts.novelty-models.v1",
+     "artifact.shorts.indicator-registry.v1",
+     "artifact.shorts.embeddings.visual.v1",
+     "artifact.shorts.embeddings.text.v1",
+     "artifact.shorts.embeddings.together.v1"
+    ],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.visual-keep-production.v1",
+    "coordinatePattern": "shorts.visual-keep-forecast.v1",
+    "expansion": {
+     "count": 1
+    },
+    "valueClass": "combined_forecast",
+    "rawInputSetIds": [
+     "input.shorts.first5-montage.v1"
+    ],
+    "representationId": "representation.shorts.visual.gemini1536.v1",
+    "fitDatasetId": "dataset.shorts.visual-keep-final-fit.v1",
+    "target": "observed stayed-to-watch percentage",
+    "algorithmId": "algorithm.shorts.visual-keep-pooled-ridge.v1",
+    "calibrationId": "calibration.identity-target-units.v1",
+    "artifactIds": [
+     "artifact.shorts.visual-keep-model.v1"
+    ],
+    "visualizationMapIds": [
+     "map.shorts.keep.v1"
+    ],
+    "evaluationWarning": "The frozen production value is in-sample for rows used in the final fit. Video, forward-time, and account-holdout predictions are separate validation evidence and are never substituted for this coordinate."
+   },
+   {
+    "id": "family.shorts.creator-adaptive-keep.v1",
+    "coordinatePattern": "shorts.creator-adaptive-keep.v1",
+    "expansion": {
+     "count": 1
+    },
+    "valueClass": "combined_forecast",
+    "rawInputSetIds": [
+     "input.shorts.first5-montage-transcript.v1",
+     "input.shorts.private-outcomes.v1"
+    ],
+    "representationIds": [
+     "representation.shorts.visual.gemini1536.v1",
+     "representation.shorts.together.gemini1536.v1"
+    ],
+    "fitDatasetId": "dataset.shorts.creator-adaptive-keep-prequential.v1",
+    "target": "observed stayed-to-watch percentage",
+    "algorithmId": "algorithm.shorts.creator-adaptive-causal-mixture.v1",
+    "calibrationId": "calibration.identity-target-units.v1",
+    "artifactIds": [
+     "artifact.shorts.creator-adaptive-keep-model.v1"
+    ],
+    "visualizationMapIds": [
+     "map.shorts.keep.v1"
+    ],
+    "evaluationWarning": "Retrospectively, every measured creator is below 10 percentage-point MAE and the locked mixture descriptively beats its exact recent-30 history null. This is not a claim that every prediction lands within 10 points. The development tail has been inspected, current labels are cumulative snapshots at different video ages, and prospective confirmation remains required. Historical ledger values exist only on prequential final-window points; cold start and anonymous uploads are unsupported."
+   },
+   {
+    "id": "family.shorts.video-heldout.private-axis.v1",
+    "coordinatePattern": "shorts.video-heldout.{modality}.{target}",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "targets": [
+      "keep",
+      "ret5"
+     ],
+     "count": 6
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.video-heldout-private.v1",
+    "algorithmId": "algorithm.shorts.private-heldout-ridge.v1",
+    "calibrationId": "calibration.identity-target-units.v1",
+    "alternateCalibrationId": "calibration.crossfit-training-percentile.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.account-heldout.private-axis.v1",
+    "coordinatePattern": "shorts.account-heldout.{modality}.{target}",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "targets": [
+      "keep",
+      "ret5"
+     ],
+     "count": 6
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.account-heldout-private.v1",
+    "algorithmId": "algorithm.shorts.private-heldout-ridge.v1",
+    "calibrationId": "calibration.identity-target-units.v1",
+    "alternateCalibrationId": "calibration.crossfit-training-percentile.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.video-heldout.public-axis.v1",
+    "coordinatePattern": "shorts.video-heldout.{modality}.{target}",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "targets": [
+      "views",
+      "outlier"
+     ],
+     "count": 6
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.creator-excluded-public.v1",
+    "algorithmId": "algorithm.shorts.public-heldout-pls1-quantile.v1",
+    "calibrationId": "calibration.inverse-log10-nonnegative.v1",
+    "alternateCalibrationId": "calibration.crossfit-training-percentile.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.account-heldout.public-axis.v1",
+    "coordinatePattern": "shorts.account-heldout.{modality}.{target}",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "targets": [
+      "views",
+      "outlier"
+     ],
+     "count": 6
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.creator-excluded-public.v1",
+    "algorithmId": "algorithm.shorts.public-heldout-pls1-quantile.v1",
+    "calibrationId": "calibration.inverse-log10-nonnegative.v1",
+    "alternateCalibrationId": "calibration.crossfit-training-percentile.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.video-heldout.10m-axis.v1",
+    "coordinatePattern": "shorts.video-heldout.{modality}.gt10M",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.creator-excluded-public.v1",
+    "algorithmId": "algorithm.shorts.public-heldout-pls1-binary.v1",
+    "calibrationId": "calibration.identity-target-units.v1",
+    "alternateCalibrationId": "calibration.crossfit-training-percentile.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.account-heldout.10m-axis.v1",
+    "coordinatePattern": "shorts.account-heldout.{modality}.gt10M",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.shorts.creator-excluded-public.v1",
+    "algorithmId": "algorithm.shorts.public-heldout-pls1-binary.v1",
+    "calibrationId": "calibration.identity-target-units.v1",
+    "alternateCalibrationId": "calibration.crossfit-training-percentile.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.video-heldout.realviews.v1",
+    "coordinatePattern": "shorts.video-heldout.{modality}.realviews",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "rawInputSetIds": [
+     "input.shorts.duration.v1"
+    ],
+    "fitDatasetId": "dataset.shorts.video-heldout-private.v1",
+    "dependencyPatterns": [
+     "shorts.video-heldout.{modality}.keep",
+     "shorts.video-heldout.{modality}.ret5"
+    ],
+    "algorithmIds": [
+     "algorithm.shorts.private-heldout-ridge.v1",
+     "algorithm.shorts.heldout-realviews-ridge.v1"
+    ],
+    "calibrationId": "calibration.inverse-log10-nonnegative.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.account-heldout.realviews.v1",
+    "coordinatePattern": "shorts.account-heldout.{modality}.realviews",
+    "expansion": {
+     "modalities": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByModality": {
+     "visual": "representation.shorts.visual.gemini1536.v1",
+     "text": "representation.shorts.text.gemini1536.v1",
+     "together": "representation.shorts.together.gemini1536.v1"
+    },
+    "rawInputSetIds": [
+     "input.shorts.duration.v1"
+    ],
+    "fitDatasetId": "dataset.shorts.account-heldout-private.v1",
+    "dependencyPatterns": [
+     "shorts.account-heldout.{modality}.keep",
+     "shorts.account-heldout.{modality}.ret5"
+    ],
+    "algorithmIds": [
+     "algorithm.shorts.private-heldout-ridge.v1",
+     "algorithm.shorts.heldout-realviews-ridge.v1"
+    ],
+    "calibrationId": "calibration.inverse-log10-nonnegative.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.video-forecast.v1",
+    "coordinatePattern": "shorts.video-forecast.{outcome}",
+    "expansion": {
+     "outcomes": [
+      "keep",
+      "swipe",
+      "ret5",
+      "averageRetention",
+      "views",
+      "outlier",
+      "hit10M",
+      "survival5",
+      "survival10",
+      "survival20",
+      "drop5",
+      "drop10",
+      "drop20"
+     ],
+     "count": 13
+    },
+    "valueClass": "combined_forecast",
+    "fitDatasetId": "dataset.shorts.video-forecast-folds.v1",
+    "dependencyPatterns": [
+     "shorts.video-heldout.{visual|text|together}.{views|outlier|gt10M}"
+    ],
+    "algorithmId": "algorithm.shorts.nested-multitarget-ridge.v1",
+    "calibrationIds": [
+     "calibration.identity-target-units.v1",
+     "calibration.inverse-log10-nonnegative.v1",
+     "calibration.one-minus-percent.v1",
+     "calibration.clamp-probability.v1"
+    ],
+    "calibrationRule": "Views and outlier use inverse-log10; swipe is 100 minus predicted keep; over-10M is clipped to [0,1]; all other outputs preserve target units.",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.account-forecast.v1",
+    "coordinatePattern": "shorts.account-forecast.{outcome}",
+    "expansion": {
+     "outcomes": [
+      "keep",
+      "swipe",
+      "ret5",
+      "averageRetention",
+      "views",
+      "outlier",
+      "hit10M",
+      "survival5",
+      "survival10",
+      "survival20",
+      "drop5",
+      "drop10",
+      "drop20"
+     ],
+     "count": 13
+    },
+    "valueClass": "combined_forecast",
+    "fitDatasetId": "dataset.shorts.account-forecast-folds.v1",
+    "dependencyPatterns": [
+     "shorts.account-heldout.{visual|text|together}.{views|outlier|gt10M}"
+    ],
+    "algorithmId": "algorithm.shorts.nested-multitarget-ridge.v1",
+    "calibrationIds": [
+     "calibration.identity-target-units.v1",
+     "calibration.inverse-log10-nonnegative.v1",
+     "calibration.one-minus-percent.v1",
+     "calibration.clamp-probability.v1"
+    ],
+    "calibrationRule": "Views and outlier use inverse-log10; swipe is 100 minus predicted keep; over-10M is clipped to [0,1]; all other outputs preserve target units.",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.observed.v1",
+    "coordinatePattern": "shorts.observed.{outcome}",
+    "expansion": {
+     "outcomes": [
+      "keep",
+      "swipe",
+      "ret5",
+      "averageRetention",
+      "views",
+      "outlier",
+      "hit10M",
+      "survival5",
+      "survival10",
+      "survival20",
+      "drop5",
+      "drop10",
+      "drop20"
+     ],
+     "count": 13
+    },
+    "valueClass": "observed_outcome",
+    "rawInputSetIds": [
+     "input.shorts.private-outcomes.v1",
+     "input.shorts.public-outcomes.v1"
+    ],
+    "algorithmId": "algorithm.identity-observed.v1",
+    "calibrationId": "calibration.identity-target-units.v1",
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.shorts.legacy.v1",
+    "coordinatePattern": "shorts.legacy.{diagnostic}",
+    "expansion": {
+     "diagnostics": [
+      "keep-video-heldout-model",
+      "keep-account-heldout-model",
+      "keep-forward-time-model",
+      "views-public-axis-ensemble",
+      "views-video-heldout-model",
+      "views-account-heldout-model",
+      "views-forward-time-model"
+     ],
+     "count": 7
+    },
+    "valueClass": "legacy_diagnostic",
+    "algorithmId": "algorithm.legacy-diagnostic.v1",
+    "canonicalUse": false,
+    "artifactIds": [],
+    "visualizationMapIds": []
+   },
+   {
+    "id": "family.long.visual.ctrviews-frozen.v1",
+    "coordinatePattern": "long.output.visual.ctrviews",
+    "expansion": {
+     "count": 1
+    },
+    "valueClass": "direct_embedding_axis",
+    "representationId": "representation.long.visual.gemini1536.v1",
+    "fitDatasetIds": [
+     "dataset.long.visual-ctr-private.v1",
+     "dataset.long.curated-visual-views.v1"
+    ],
+    "algorithmId": "algorithm.long.ctrviews-blend.v1",
+    "calibrationId": "calibration.long.frozen-visual-ctrviews-ladder.v1",
+    "artifactIds": [
+     "artifact.long.visual-ctrviews-ladder.v1"
+    ],
+    "visualizationMapIds": [
+     "map.long.ctrviews.v1"
+    ],
+    "warning": "The displayed raw-long ctrviews map is related by target but is not the frozen visual ladder used by the live thumbnail threshold. The live scorer fails closed when the frozen ladder artifact is unavailable; it does not substitute the neighbor map."
+   },
+   {
+    "id": "family.long.ctrviews-neighbor.v1",
+    "coordinatePattern": "long.output.{group}.ctrviews",
+    "expansion": {
+     "groups": [
+      "text",
+      "together"
+     ],
+     "count": 2
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByGroup": {
+     "text": "representation.long.text.gemini1536.v1",
+     "together": "representation.long.together.gemini1536.v1"
+    },
+    "fitDatasetIds": [
+     "dataset.long.tyler-private-performance.v1",
+     "dataset.long.raw-manifold.v1"
+    ],
+    "algorithmIds": [
+     "algorithm.long.ctrviews-blend.v1",
+     "algorithm.long.neighbor-placement.v1",
+     "algorithm.long.neighbor-metric-resolution.v1"
+    ],
+    "calibrationId": "calibration.long.neighbor-array-percentile.v1",
+    "artifactIds": [
+     "artifact.long.maps.v1"
+    ],
+    "visualizationMapIds": [
+     "map.long.ctrviews.v1"
+    ]
+   },
+   {
+    "id": "family.long.ctr-ret30-neighbor.v1",
+    "coordinatePattern": "long.output.{group}.{target}",
+    "expansion": {
+     "groups": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "targets": [
+      "ctr",
+      "ret30"
+     ],
+     "count": 6
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByGroup": {
+     "visual": "representation.long.visual.gemini1536.v1",
+     "text": "representation.long.text.gemini1536.v1",
+     "together": "representation.long.together.gemini1536.v1"
+    },
+    "fitDatasetIds": [
+     "dataset.long.tyler-private-performance.v1",
+     "dataset.long.raw-manifold.v1"
+    ],
+    "algorithmIds": [
+     "algorithm.long.private-pls2-axis.v1",
+     "algorithm.long.neighbor-placement.v1",
+     "algorithm.long.neighbor-metric-resolution.v1"
+    ],
+    "calibrationIds": [
+     "calibration.long.account-rank-to-outcome.v1",
+     "calibration.long.neighbor-array-percentile.v1"
+    ],
+    "artifactIds": [
+     "artifact.long.maps.v1"
+    ],
+    "visualizationMapIdByTarget": {
+     "ctr": "map.long.ctr.v1",
+     "ret30": "map.long.ret30.v1"
+    }
+   },
+   {
+    "id": "family.long.views-neighbor.v1",
+    "coordinatePattern": "long.output.{group}.views",
+    "expansion": {
+     "groups": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByGroup": {
+     "visual": "representation.long.visual.gemini1536.v1",
+     "text": "representation.long.text.gemini1536.v1",
+     "together": "representation.long.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.long.raw-manifold.v1",
+    "algorithmIds": [
+     "algorithm.long.neighbor-placement.v1",
+     "algorithm.long.neighbor-metric-resolution.v1"
+    ],
+    "calibrationId": "calibration.long.neighbor-array-percentile.v1",
+    "artifactIds": [
+     "artifact.long.maps.v1"
+    ],
+    "visualizationMapIds": [
+     "map.long.views.v1",
+     "map.long.rawviews.v1"
+    ]
+   },
+   {
+    "id": "family.long.outlier-neighbor.v1",
+    "coordinatePattern": "long.output.{group}.scaled_views",
+    "expansion": {
+     "groups": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByGroup": {
+     "visual": "representation.long.visual.gemini1536.v1",
+     "text": "representation.long.text.gemini1536.v1",
+     "together": "representation.long.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.long.raw-manifold.v1",
+    "algorithmIds": [
+     "algorithm.long.neighbor-placement.v1",
+     "algorithm.long.neighbor-metric-resolution.v1"
+    ],
+    "calibrationId": "calibration.long.neighbor-array-percentile.v1",
+    "artifactIds": [
+     "artifact.long.maps.v1"
+    ],
+    "visualizationMapIds": [
+     "map.long.outlier.v1"
+    ],
+    "warning": "This views-per-subscriber value is nullable and not held out. The separate outlier map placement remains visualization geometry."
+   },
+   {
+    "id": "family.long.realviews-neighbor.v1",
+    "coordinatePattern": "long.output.{group}.realviews",
+    "expansion": {
+     "groups": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByGroup": {
+     "visual": "representation.long.visual.gemini1536.v1",
+     "text": "representation.long.text.gemini1536.v1",
+     "together": "representation.long.together.gemini1536.v1"
+    },
+    "upstreamRawInputSets": [
+     {
+      "id": "input.long.private-outcomes.v1",
+      "role": "Fits CTR, ret30, and the long-form view equation."
+     },
+     {
+      "id": "input.long.duration.v1",
+      "role": "Duration of each reference-map row during map construction; candidate/query duration is not read by channel_score()."
+     }
+    ],
+    "fitDatasetIds": [
+     "dataset.long.tyler-private-performance.v1",
+     "dataset.long.raw-manifold.v1"
+    ],
+    "algorithmIds": [
+     "algorithm.long.private-pls2-axis.v1",
+     "algorithm.long.realviews-equation.v1",
+     "algorithm.long.neighbor-placement.v1",
+     "algorithm.long.neighbor-metric-resolution.v1"
+    ],
+    "calibrationId": "calibration.long.neighbor-array-percentile.v1",
+    "artifactIds": [
+     "artifact.long.maps.v1",
+     "artifact.long.steer-models.v1"
+    ],
+    "visualizationMapIds": [
+     "map.long.realviews.v1"
+    ]
+   },
+   {
+    "id": "family.long.gt10m-neighbor.v1",
+    "coordinatePattern": "long.output.{group}.gt10m",
+    "expansion": {
+     "groups": [
+      "visual",
+      "text",
+      "together"
+     ],
+     "count": 3
+    },
+    "valueClass": "embedding_derived_transform",
+    "representationIdByGroup": {
+     "visual": "representation.long.visual.gemini1536.v1",
+     "text": "representation.long.text.gemini1536.v1",
+     "together": "representation.long.together.gemini1536.v1"
+    },
+    "fitDatasetId": "dataset.long.raw-manifold.v1",
+    "algorithmIds": [
+     "algorithm.long.neighbor-placement.v1",
+     "algorithm.long.neighbor-metric-resolution.v1"
+    ],
+    "calibrationId": "calibration.identity-target-units.v1",
+    "artifactIds": [
+     "artifact.long.maps.v1"
+    ],
+    "visualizationMapIds": [
+     "map.long.hi10m.v1"
+    ]
+   }
   ]
+ },
+ "coordinateIdentity": {
+  "canonicalRegistry": "quant-coordinate-governance.json",
+  "compatibilityRule": "Historical coordinate names are resolved only through the governance alias and retirement tables; this lineage file does not define a second active registry.",
+  "relationshipRule": "A relationship is identified by scoreCoordinateId plus observedOutcomeId. It never creates another score.",
+  "percentileRule": "A percentile is a view of its score coordinate and remains in the same ledger cell.",
+  "parityRule": "The same input fingerprint and scorer/model/artifact revision must resolve to the same stored coordinate values."
+ },
+ "crossDomainInventory": {
+  "shorts": {
+   "storedOutputs": 21,
+   "groups": [
+    "visual",
+    "text",
+    "together",
+    "novelty"
+   ],
+   "mapProjections": [
+    "both",
+    "views",
+    "rawviews",
+    "realviews",
+    "outlier",
+    "hi10m",
+    "hiout",
+    "keep",
+    "ret5",
+    "umap",
+    "pca"
+   ],
+   "projectionRule": "Each map is a separately registered visualization with its own fit dataset, algorithm, target, and grid calibration. Some maps aggregate or visualize the same named outcome as a scalar, but public views/outlier maps use a separate PLS2 fit while stored public scalars use PLS1; map coordinates must never be presented as the scalar itself."
+  },
+  "longQuant": {
+   "scalarRegistry": "quant-coordinate-governance.json#expansions.longGroups+expansions.longMetrics",
+   "mapProjections": [
+    "both",
+    "views",
+    "rawviews",
+    "realviews",
+    "outlier",
+    "hi10m",
+    "hiout",
+    "ctr",
+    "ret30",
+    "ctrviews",
+    "umap",
+    "pca"
+   ],
+   "projectionRule": "Each map has independent visualization lineage under long.map-placement.{group}.{projectionKey}. Map x/y, map percentiles, and neighbor geometry never substitute for a missing long.output scalar. The frozen visual CTR+views score uses its immutable direct ladder."
+  }
+ },
+ "provenanceByTarget": {
+  "keep": {
+   "axisFitPopulation": "For each modality separately: exact raw-map video IDs that join to a finite Tyler stayed-to-watch label. The current runtime manifest supplies that modality-specific count and sorted-ID SHA-256.",
+   "calibrationPopulation": "The same target- and modality-specific finite-label population recorded in the steer artifact is used for rank-to-percent calibration.",
+   "observedOutcome": "Private YouTube Studio stayed-to-watch percentage.",
+   "warning": "Tyler stored scores are in-sample diagnostics. Hafu is account-external. Use video-held-out or account-held-out results for validation claims."
+  },
+  "ret5": {
+   "axisFitPopulation": "For each modality separately: exact raw-map video IDs that join to a finite Tyler five-second-retention label. The current runtime manifest supplies that modality-specific count and sorted-ID SHA-256.",
+   "calibrationPopulation": "The same target- and modality-specific finite-label population recorded in the steer artifact is used for rank-to-percent calibration.",
+   "observedOutcome": "Private YouTube Studio retention at five seconds.",
+   "warning": "Tyler stored scores are in-sample diagnostics. Hafu is account-external. Use video-held-out or account-held-out results for validation claims."
+  },
+  "views": {
+   "axisFitPopulation": "Public Shorts embedding corpus. Leakage-controlled retrospective validation refits the axis after excluding every Tyler and Hafu video.",
+   "calibrationPopulation": "Public lifetime-view distribution at the embedding's corpus rank.",
+   "observedOutcome": "Current public lifetime views.",
+   "warning": "This is a view-equivalent coordinate, not a guaranteed expected-view forecast; video age and creator scale remain confounds."
+  },
+  "realviews": {
+   "axisFitPopulation": "Tyler Csatari private retention-to-views model using projected keep, projected five-second retention, and duration.",
+   "calibrationPopulation": "Tyler channel-scale views.",
+   "observedOutcome": "Current public lifetime views.",
+   "warning": "This is channel-scale and is not creator-portable until account-held-out validation supports it."
+  },
+  "outlier": {
+   "axisFitPopulation": "Public Shorts embedding corpus. Leakage-controlled retrospective validation excludes every Tyler and Hafu video.",
+   "calibrationPopulation": "Public views divided by channel subscribers.",
+   "observedOutcome": "Current public views divided by the saved subscriber snapshot.",
+   "warning": "Subscriber snapshots and lifetime views are time-varying."
+  },
+  "gt10M": {
+   "axisFitPopulation": "Public Shorts embedding corpus. Leakage-controlled retrospective validation excludes every Tyler and Hafu video.",
+   "calibrationPopulation": "Local observed strictly-over-10M rate in a plus/minus five-percent rank window.",
+   "observedOutcome": "Whether current public lifetime views are strictly greater than 10,000,000.",
+   "warning": "Read this as a probability and validate with AUC and Brier score; a percentile is not a probability."
+  },
+  "novelty": {
+   "axisFitPopulation": "Saved Shorts embedding corpus centroids, recent direction, and PCA reconstruction models.",
+   "calibrationPopulation": "Target-specific novelty calibration saved by the channel worker.",
+   "observedOutcome": "Compared independently with every available private or public outcome.",
+   "warning": "The current retrospective artifact exposes temporal, niche, and combinatorial novelty inputs, not exact held-out rebuilds of the three stored target-specific novelty scores."
+  }
+ },
+ "groups": [
+  {
+   "key": "visual",
+   "label": "Visual",
+   "description": "5-frame montage only"
+  },
+  {
+   "key": "text",
+   "label": "Text",
+   "description": "First-5-second transcript only"
+  },
+  {
+   "key": "together",
+   "label": "Both",
+   "description": "5-frame montage plus transcript"
+  },
+  {
+   "key": "novelty",
+   "label": "Novelty",
+   "description": "Independent novelty calibration"
+  }
+ ],
+ "features": [
+  {
+   "key": "visual.keep",
+   "group": "visual",
+   "target": "keep",
+   "source": "steer",
+   "sourceKey": "visual_keep",
+   "label": "Keep rate",
+   "unit": "percent"
+  },
+  {
+   "key": "visual.ret5",
+   "group": "visual",
+   "target": "ret5",
+   "source": "steer",
+   "sourceKey": "visual_ret5",
+   "label": "5s retention",
+   "unit": "retention_percent_rewatch_capable"
+  },
+  {
+   "key": "visual.views",
+   "group": "visual",
+   "target": "views",
+   "source": "steer",
+   "sourceKey": "visual_views",
+   "label": "View-equivalent (corpus quantile)",
+   "unit": "views",
+   "note": "Observed public-view count at this embedding's rank in the reference corpus; not an expected-views forecast."
+  },
+  {
+   "key": "visual.realviews",
+   "group": "visual",
+   "target": "realviews",
+   "source": "steer",
+   "sourceKey": "visual_realviews",
+   "label": "Forecast views (your channel scale)",
+   "unit": "views",
+   "note": "Expected views from the keep-rate, 5-second retention, and duration model; distinct from the corpus-quantile view-equivalent axis."
+  },
+  {
+   "key": "visual.outlier",
+   "group": "visual",
+   "target": "outlier",
+   "source": "steer",
+   "sourceKey": "visual_outlier",
+   "label": "Outlier",
+   "unit": "number"
+  },
+  {
+   "key": "visual.gt10M",
+   "group": "visual",
+   "target": "gt10M",
+   "source": "steer",
+   "sourceKey": "visual_gt10M",
+   "label": "Chance over 10M",
+   "unit": "probability"
+  },
+  {
+   "key": "text.keep",
+   "group": "text",
+   "target": "keep",
+   "source": "steer",
+   "sourceKey": "text_keep",
+   "label": "Keep rate",
+   "unit": "percent"
+  },
+  {
+   "key": "text.ret5",
+   "group": "text",
+   "target": "ret5",
+   "source": "steer",
+   "sourceKey": "text_ret5",
+   "label": "5s retention",
+   "unit": "retention_percent_rewatch_capable"
+  },
+  {
+   "key": "text.views",
+   "group": "text",
+   "target": "views",
+   "source": "steer",
+   "sourceKey": "text_views",
+   "label": "View-equivalent (corpus quantile)",
+   "unit": "views",
+   "note": "Observed public-view count at this embedding's rank in the reference corpus; not an expected-views forecast."
+  },
+  {
+   "key": "text.realviews",
+   "group": "text",
+   "target": "realviews",
+   "source": "steer",
+   "sourceKey": "text_realviews",
+   "label": "Forecast views (your channel scale)",
+   "unit": "views",
+   "note": "Expected views from the keep-rate, 5-second retention, and duration model; distinct from the corpus-quantile view-equivalent axis."
+  },
+  {
+   "key": "text.outlier",
+   "group": "text",
+   "target": "outlier",
+   "source": "steer",
+   "sourceKey": "text_outlier",
+   "label": "Outlier",
+   "unit": "number"
+  },
+  {
+   "key": "text.gt10M",
+   "group": "text",
+   "target": "gt10M",
+   "source": "steer",
+   "sourceKey": "text_gt10M",
+   "label": "Chance over 10M",
+   "unit": "probability"
+  },
+  {
+   "key": "together.keep",
+   "group": "together",
+   "target": "keep",
+   "source": "steer",
+   "sourceKey": "together_keep",
+   "label": "Keep rate",
+   "unit": "percent"
+  },
+  {
+   "key": "together.ret5",
+   "group": "together",
+   "target": "ret5",
+   "source": "steer",
+   "sourceKey": "together_ret5",
+   "label": "5s retention",
+   "unit": "retention_percent_rewatch_capable"
+  },
+  {
+   "key": "together.views",
+   "group": "together",
+   "target": "views",
+   "source": "steer",
+   "sourceKey": "together_views",
+   "label": "View-equivalent (corpus quantile)",
+   "unit": "views",
+   "note": "Observed public-view count at this embedding's rank in the reference corpus; not an expected-views forecast."
+  },
+  {
+   "key": "together.realviews",
+   "group": "together",
+   "target": "realviews",
+   "source": "steer",
+   "sourceKey": "together_realviews",
+   "label": "Forecast views (your channel scale)",
+   "unit": "views",
+   "note": "Expected views from the keep-rate, 5-second retention, and duration model; distinct from the corpus-quantile view-equivalent axis."
+  },
+  {
+   "key": "together.outlier",
+   "group": "together",
+   "target": "outlier",
+   "source": "steer",
+   "sourceKey": "together_outlier",
+   "label": "Outlier",
+   "unit": "number"
+  },
+  {
+   "key": "together.gt10M",
+   "group": "together",
+   "target": "gt10M",
+   "source": "steer",
+   "sourceKey": "together_gt10M",
+   "label": "Chance over 10M",
+   "unit": "probability"
+  },
+  {
+   "key": "novelty.keep",
+   "group": "novelty",
+   "target": "keep",
+   "source": "novelty",
+   "label": "Novelty to keep rate",
+   "unit": "percent"
+  },
+  {
+   "key": "novelty.ret5",
+   "group": "novelty",
+   "target": "ret5",
+   "source": "novelty",
+   "label": "Novelty to 5s retention",
+   "unit": "retention_percent_rewatch_capable"
+  },
+  {
+   "key": "novelty.views",
+   "group": "novelty",
+   "target": "views",
+   "source": "novelty",
+   "label": "Novelty to views",
+   "unit": "log10_views",
+   "displayUnit": "views",
+   "note": "The stored raw value is log10 views; the percentile is the directionally calibrated novelty rank."
+  }
+ ]
 }

@@ -1,8 +1,16 @@
 #!/usr/bin/env node
+'use strict';
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
+const longSavedThumbnailRecord = require(
+    '../buildings/jarvis/long-saved-thumbnail-record'
+);
+const longScoreLedger = require(
+    '../buildings/jarvis/long-score-ledger'
+);
 
 const ROOT = path.resolve(__dirname, '..');
 const envPath = path.join(ROOT, '.env');
@@ -204,26 +212,136 @@ function isChannelWork(o) {
 function terminalStatus(status) {
     return TERMINAL_STATUS.has(String(status || ''));
 }
+
+function validateCanonicalLongScore(score) {
+    const validations = [
+        longScoreLedger.validateLongScoreLedger(
+            score && score.long_score_ledger
+        ),
+        longScoreLedger.validateLongOutputContract(score),
+        longScoreLedger.validateLongInputManifest(score),
+        longScoreLedger.validateLongScoreAliasContract(score),
+        longScoreLedger.validateLongScoreRewardContract(score),
+    ];
+    const errors = validations.flatMap(
+        validation => validation.errors || []
+    );
+    const cell = longScoreLedger.longLedgerCell(
+        score,
+        'visual',
+        'ctrviews'
+    );
+    if (
+        !cell.valid
+        || !cell.entry
+        || !Number.isFinite(Number(cell.percentile))
+        || Number(cell.percentile) < 0
+        || Number(cell.percentile) > 100
+    ) {
+        errors.push(
+            'Long score has no canonical visual CTR+views percentile'
+        );
+    }
+    if (
+        !score
+        || !score.score_alias_contract
+        || score.score_alias_contract.canonical_coordinate_id
+            !== longScoreLedger.VISUAL_THRESHOLD_COORDINATE
+    ) {
+        errors.push(
+            'Long thumbnail score canonical coordinate is not visual CTR+views'
+        );
+    }
+    return {
+        valid: errors.length === 0,
+        errors: [...new Set(errors)],
+        percentile:
+            errors.length === 0
+                ? Number(cell.percentile)
+                : null,
+    };
+}
+
+function thumbHasCanonicalGeneratedEvidence(thumb) {
+    return !!(
+        thumb
+        && typeof thumb === 'object'
+        && thumb.status === 'done'
+        && typeof thumb.image === 'string'
+        && thumb.image.length > 0
+        && validateCanonicalLongScore(thumb.score).valid
+    );
+}
+
 function hasGeneratedWork(run) {
     if (!run || typeof run !== 'object') return false;
     const attempts = Array.isArray(run.attempts) ? run.attempts : [];
-    if (attempts.length) return true;
-    if (run.best != null || run.baseline || run.autosaved || run.winner != null) return true;
-    if (String(run.status || '') === 'running') return true;
-    return false;
+    return attempts.some(attempt => (
+        Array.isArray(attempt && attempt.thumbs)
+        && attempt.thumbs.some(
+            thumbHasCanonicalGeneratedEvidence
+        )
+    ));
 }
 async function r2Json(key) {
+    const b = await cloud.downloadFromR2(key);
+    if (!b) return null;
     try {
-        const b = await cloud.downloadFromR2(key);
-        return b ? JSON.parse(b.toString('utf8')) : null;
-    } catch (e) {
-        return null;
+        return JSON.parse(b.toString('utf8'));
+    } catch (error) {
+        throw new Error(
+            `R2 JSON is invalid at ${key}: ${error.message}`
+        );
     }
 }
 async function putJson(key, obj) {
     await cloud.uploadToR2(key, Buffer.from(JSON.stringify(obj)), 'application/json');
 }
-async function existingLongQuantIndex() {
+
+async function loadCanonicalSavedVideoIds(
+    index,
+    readRecord = r2Json
+) {
+    const ids = new Set();
+    if (index == null) return ids;
+    const indexValidation =
+        longSavedThumbnailRecord.validateIndex(index);
+    if (!indexValidation.valid) {
+        throw new Error(
+            `Long saved-thumbnail index is not canonical: ${
+                indexValidation.errors.join('; ')
+            }`
+        );
+    }
+    for (const row of index.rows) {
+        const record = await readRecord(row.record_key);
+        if (!record) {
+            throw new Error(
+                `Long saved-thumbnail canonical record is missing: ${row.record_key}`
+            );
+        }
+        const pair =
+            longSavedThumbnailRecord.validateIndexRecordPair(
+                row,
+                record
+            );
+        if (!pair.valid) {
+            throw new Error(
+                `Long saved-thumbnail index/record binding differs for ${
+                    row.id
+                }: ${pair.errors.join('; ')}`
+            );
+        }
+        const id = sourceVideoId(record);
+        if (id) ids.add(id);
+    }
+    return ids;
+}
+
+async function existingLongQuantIndex(options = {}) {
+    const readJson = options.readJson || r2Json;
+    const listKeys = options.listKeys
+        || (prefix => cloud.listR2Keys(prefix));
     const idx = {
         generatedVideoIds: new Set(),
         pendingVideoIds: new Set(),
@@ -233,11 +351,11 @@ async function existingLongQuantIndex() {
         savedVideoIds: new Set(),
     };
     const [runKeys, reqKeys] = await Promise.all([
-        cloud.listR2Keys('longform/grind/runs/').catch(() => []),
-        cloud.listR2Keys('longform/grind/requests/').catch(() => []),
+        Promise.resolve(listKeys('longform/grind/runs/')),
+        Promise.resolve(listKeys('longform/grind/requests/')),
     ]);
     for (const key of (runKeys || []).filter(k => k.endsWith('.json')).sort()) {
-        const run = await r2Json(key);
+        const run = await readJson(key);
         if (!run || !isChannelWork(run)) continue;
         const rid = cleanRid(run.rid || key.split('/').pop().replace('.json', ''));
         const id = sourceVideoId(run);
@@ -252,7 +370,7 @@ async function existingLongQuantIndex() {
         }
     }
     for (const key of (reqKeys || []).filter(k => k.endsWith('.json')).sort()) {
-        const req = await r2Json(key);
+        const req = await readJson(key);
         if (!req || !isChannelWork(req)) continue;
         const rid = cleanRid(req.rid || key.split('/').pop().replace('.json', ''));
         const id = sourceVideoId(req);
@@ -265,13 +383,16 @@ async function existingLongQuantIndex() {
             idx.pendingByVideo.set(id, { ...prev, request: rec, id, rid: prev.rid || rid });
         }
     }
-    const saved = await r2Json('longform/saved-thumbs/index.json');
-    for (const t of ((saved && saved.thumbs) || [])) {
-        const id = sourceVideoId(t);
-        if (id) {
-            idx.savedVideoIds.add(id);
-            idx.generatedVideoIds.add(id);
-        }
+    const saved = await readJson(
+        'longform/saved-thumbs/index.json'
+    );
+    const savedVideoIds = await loadCanonicalSavedVideoIds(
+        saved,
+        readJson
+    );
+    for (const id of savedVideoIds) {
+        idx.savedVideoIds.add(id);
+        idx.generatedVideoIds.add(id);
     }
     return idx;
 }
@@ -493,7 +614,18 @@ async function main() {
     console.log(JSON.stringify({ ok: true, dryRun, batchId: bid, queued: queued.length, retained: retained.length, skipped: skipped.length, archiveStats, prior: manifest.prior }, null, 2));
 }
 
-main().catch(e => {
-    console.error(e && e.stack || e);
-    process.exit(1);
-});
+if (require.main === module) {
+    main().catch(e => {
+        console.error(e && e.stack || e);
+        process.exit(1);
+    });
+}
+
+module.exports = {
+    existingLongQuantIndex,
+    hasGeneratedWork,
+    loadCanonicalSavedVideoIds,
+    sourceVideoId,
+    thumbHasCanonicalGeneratedEvidence,
+    validateCanonicalLongScore,
+};

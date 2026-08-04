@@ -72,21 +72,18 @@ check(uiFinding.runId === signal.runId, 'artifact.json finding matches signal ru
 check((uiFinding.candidates || []).length === (finding.candidates || []).length,
     'artifact.json carries every candidate', '');
 
-// 6) Experiment-tab UI is data-driven (no resurrected hardcoding)
-const retentionUi = fs.readFileSync(path.join(ROOT, 'buildings/jarvis/jarvis-retention.js'), 'utf8');
-check(!/CFS_META\s*=\s*{/.test(retentionUi), 'Experiment tab has no hardcoded signal metrics', 'CFS_META constant found');
-check(retentionUi.includes('channel-free-scores.json'), 'Experiment tab loads the scores artifact', '');
-
-// 7) Saved-channel analysis layer carries the signals (Experiment tab -> Saved accounts)
-const scContract = read('buildings/jarvis/saved-channel-feature-contract.json');
-const cfsFeatures = (scContract.features || []).filter(f => f.group === 'cfs');
-check(cfsFeatures.length === 4, 'saved-channel contract has all 4 cfs features', `${cfsFeatures.length} found`);
-const scAnalysis = require(path.join(ROOT, 'buildings/jarvis/saved-channel-analysis.js'));
-check(scAnalysis.contract.features.filter(f => f.group === 'cfs').length === 4,
-    'saved-channel analysis module exposes cfs features', '');
-const fpProbe = scAnalysis.savedChannelAnalysisFingerprint({ videos: [] });
-check(fpProbe.includes(scores.runId), 'analysis fingerprint binds to scores runId (cache invalidates on regeneration)',
-    fpProbe);
+// 6) Saved-accounts coordinate registry (Experiment tab -> Saved accounts -> ledger/dropdown)
+const validation = require(path.join(ROOT, 'buildings/jarvis/saved-channel-validation.js'));
+const registry = validation.buildCoordinateRegistry();
+check(registry.columns.length === 93, 'coordinate registry totals 93 (89 + 4 channel-free)',
+    `${registry.columns.length} columns`);
+const cfColumns = registry.columns.filter(column => column.family === 'channelFree');
+check(cfColumns.length === 4, 'all 4 channelFree coordinates registered',
+    cfColumns.map(column => column.id).join(', '));
+check(cfColumns.every(column => column.lineage && column.lineage.runId === scores.runId),
+    'channelFree coordinate lineage binds to scores runId', '');
+const famMeta = (registry.families || []).find(family => family.key === 'channelFree');
+check(!!famMeta && famMeta.count === 4, 'channelFree family meta present with count 4', JSON.stringify(famMeta || {}));
 
 console.log(failures ? `\nFAIL — ${failures} consistency check(s) failed` : '\nPASS — every consumer agrees with the canonical run');
 process.exit(failures ? 1 : 0);

@@ -25,6 +25,15 @@ const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'tylerdaviscsatari@gmail.com').t
 
 const ROLES = ['owner', 'storage', 'pending'];
 
+function isPrimaryOwnerAccount(account) {
+    return !!(
+        account
+        && account.role === 'owner'
+        && String(account.email || '').trim().toLowerCase()
+            === OWNER_EMAIL
+    );
+}
+
 // ── Verify a Supabase access token against the Auth API → { id, email, name } ──
 const tokenCache = new Map(); // token → { user, exp }
 async function verifyToken(token) {
@@ -91,9 +100,43 @@ async function permsForAccount(account) {
     };
 }
 
-// Which building "owns" an API route (for authorization). 'shared' = any signed-in
-// member; 'owner' = owner only (safe default for anything unmapped).
+// The standalone Experiment Lab renders the canonical Shorts Experiment surface.
+// Keep its shared authorization boundary explicit: nearby Raw / Hooks research
+// routes must continue to fall through to the owner-only default.
+const SHORTS_EXPERIMENT_SHARED_ROUTES = [
+    /^\/api\/indicators\/registry$/,
+    /^\/api\/shortsquant\/jobs\/j[a-z0-9]+$/,
+    /^\/api\/raw\/(?:scorer-contract|plot|map|embed-youtube|embed-upload|embed-montage|hook-save|hook-enrich|hook-delete|folder-create|folder-delete|hook-move|saved-hooks)$/,
+    /^\/api\/raw\/saved-(?:hook|montage)\/[a-z0-9]{1,32}$/,
+    /^\/api\/raw\/saved-channels$/,
+    /^\/api\/raw\/saved-channel$/,
+    /^\/api\/raw\/saved-channel\/ch[a-f0-9]{16}(?:\/(?:analysis|stop|resume|delete))?$/,
+    /^\/api\/raw\/saved-channel\/ch[a-f0-9]{16}\/(?:video|montage)\/[\w-]{11}$/,
+    /^\/api\/storyboards$/,
+    /^\/api\/storyboards\/(?:generate|panel|montage|save)$/,
+    /^\/api\/storyboards\/sb[a-z0-9]{10,40}$/,
+    /^\/api\/storyboards\/media\/[a-f0-9]{64}\.(?:jpg|png|webp)$/,
+    /^\/api\/frames\/(?:plan|gen)$/,
+    /^\/api\/hooks\/(?:generate|warmup|grind)$/,
+    /^\/api\/hooks\/demo\/status\/[\w-]{1,40}$/,
+    /^\/api\/hooks\/grpo\/group\/demo\/[\w-]{1,32}$/,
+    /^\/api\/hooks\/grpo\/montage\/demo\/[\w-]{1,40}$/,
+    /^\/api\/hooks\/grind\/runs$/,
+    /^\/api\/hooks\/grind\/(?:run|stop)\/[a-z0-9]{1,32}$/,
+    /^\/api\/hooks\/grind\/(?:score|montage)\/[\w-]{1,48}$/,
+];
+
+function isShortsExperimentSharedRoute(pathname) {
+    const path = String(pathname || '').split(/[?#]/, 1)[0];
+    return SHORTS_EXPERIMENT_SHARED_ROUTES.some(pattern => pattern.test(path));
+}
+
+// Which building "owns" an API route (for authorization). A plus-delimited
+// value is an OR requirement. 'shared' = any signed-in member; 'owner' = owner
+// only (safe default for anything unmapped).
 function routeBuilding(pathname) {
+    if (/^\/api\/experimentlab(?:\/|$)/.test(pathname)) return 'Experiment Lab';
+    if (isShortsExperimentSharedRoute(pathname)) return 'Jarvis+Experiment Lab';
     if (/^\/api\/airtable\//.test(pathname) || /^\/api\/pinecone\//.test(pathname) || /^\/api\/data\/storage(history|boxes|items)/.test(pathname)) return 'Storage';
     if (/^\/api\/data\/inventory/.test(pathname)) return 'Storage+Workshop';
     if (/^\/api\/data\/(videos|components|orders|projects)/.test(pathname)) return 'Workshop';
@@ -106,6 +149,7 @@ function routeBuilding(pathname) {
     if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return 'Library';
     if (/^\/api\/(jarvis|tribe|longquant|shortsquant)\//.test(pathname)) return 'Jarvis';
     if (/^\/api\/(gemini|videolab)\//.test(pathname)) return 'Video Lab';
+    if (/^\/api\/casino\//.test(pathname)) return 'Casino';
     if (/^\/api\/(openai|kimi)\//.test(pathname)) return 'shared';      // AI used across buildings
     if (pathname === '/load-layout' || pathname === '/api/config' || pathname === '/config.js') return 'shared';
     if (/^\/api\/data\/settings/.test(pathname)) return 'shared';
@@ -138,7 +182,8 @@ function permsAllow(perms, pathname, method) {
     if (b === 'shared') return true;
     if (b === 'owner') return false;
     const bs = perms.buildings || [];
-    const buildingOk = (b === 'Storage+Workshop') ? (bs.includes('Storage') || bs.includes('Workshop')) : bs.includes(b);
+    const requiredBuildings = b.split('+').map(name => name.trim()).filter(Boolean);
+    const buildingOk = requiredBuildings.some(building => bs.includes(building));
     if (!buildingOk) return false;
     const sec = routeSection(pathname);
     if (sec && bs.includes(sec[0])) return sectionAllow(perms, sec[0], sec[1]);
@@ -160,19 +205,8 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/longquant/grind/original/')) return true; // source thumbnails scored as grind baselines
     if (pathname === '/api/longquant/grind/status' || pathname === '/api/longquant/grind/runs' || pathname.startsWith('/api/longquant/grind/run/')) return true; // experiment progress/status, no account secrets
     if (pathname === '/api/longquant/grind/stop') return true; // stop flag (write-only, needs the rid)
-    if (pathname.startsWith('/api/hooks/montage/')) return true; // generated hook montages (no data), lets <img> load without a token
-    if (pathname.startsWith('/api/hooks/grpo/montage/')) return true; // GRPO per-input attempt montages, lets <img> load without a token
-    if (pathname.startsWith('/api/raw/saved-montage/')) return true; // saved-hook montages (no data), lets <img> load without a token
+    if (pathname.startsWith('/api/hooks/montage/')) return true; // historical generated corpus media
     if (pathname.startsWith('/api/raw-long/saved-montage/')) return true; // saved-hook montages via raw-long alias
-    if (/^\/api\/raw\/saved-channel\/ch[a-f0-9]{16}\/montage\/[\w-]{11}$/.test(pathname)) return true; // saved-channel strips are frames from public Shorts; scores/manifests stay private
-    if (pathname.startsWith('/api/hooks/demo/status/')) return true; // demo generation progress (no data), pollable without a token
-    if (pathname === '/api/hooks/generate') return true;            // "Generate a hook" button — own Gemini+Flux, rate-guarded server-side
-    if (pathname === '/api/hooks/warmup') return true;              // GPU pre-warm on intent — server-side guard caps spend
-    if (pathname === '/api/hooks/grind') return true;               // 🎯 grind start — one-at-a-time guard server-side
-    if (pathname.startsWith('/api/hooks/grind/run/')) return true;  // grind progress polling (no sensitive data)
-    if (pathname.startsWith('/api/hooks/grind/stop/')) return true; // stop flag (write-only, needs the rid)
-    if (pathname.startsWith('/api/hooks/grind/montage/')) return true; // generated frames/strips, lets <img> load without a token
-    if (pathname.startsWith('/api/hooks/grpo/group/')) return true; // generated hook results (no sensitive data), pollable without a token
     if (pathname.startsWith('/share/')) return true;       // public share pages
     if (pathname === '/api/youtube/callback') return true; // external OAuth redirect (no token possible)
     if (!pathname.startsWith('/api/')) {
@@ -188,7 +222,19 @@ function isPublic(pathname, method) {
 async function gate(req, url) {
     const pathname = url.pathname;
     const method = req.method;
-    if (isPublic(pathname, method)) return { allow: true, account: null };
+    const scopedExperimentLabRequest =
+        String(
+            req
+            && req.headers
+            && req.headers['x-business-world-surface']
+            || ''
+        ).toLowerCase() === 'experiment-lab';
+    if (
+        isPublic(pathname, method)
+        && !scopedExperimentLabRequest
+    ) {
+        return { allow: true, account: null };
+    }
 
     const account = await accountForRequest(req, url);
     if (!account) return { allow: false, status: 401, body: { error: 'Sign in required' } };
@@ -203,5 +249,7 @@ async function gate(req, url) {
 module.exports = {
     SUPABASE_URL, SUPABASE_ANON_KEY, OWNER_EMAIL, ROLES,
     verifyToken, getOrCreateAccount, accountForRequest, gate, permsForAccount,
-    routeBuilding, permsAllow,
+    routeBuilding, permsAllow, isPublic,
+    isShortsExperimentSharedRoute,
+    isPrimaryOwnerAccount,
 };

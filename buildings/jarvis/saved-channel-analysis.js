@@ -1,27 +1,41 @@
 'use strict';
 
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const contract = require('./saved-channel-feature-contract.json');
-
-// Channel-free signal OOF scores (ledger: channelFreeKeepDirection) — merged into every
-// analyzed video's feature cells by id, so the cfs.* contract features light up wherever
-// the video is one of the 584 keep-labeled corpus videos. Tolerant load: analyses still
-// build without the artifact; cfs.* features simply stay uncovered.
-let CHANNEL_FREE_BY_ID = {};
-try {
-    const cfScores = require('./predictor-lab/channel-free-scores.json');
-    for (const row of cfScores.rows || []) {
-        CHANNEL_FREE_BY_ID[row.id] = {
-            'cfs.visual': [row.visual], 'cfs.text': [row.text],
-            'cfs.together': [row.together], 'cfs.concat': [row.concat],
-        };
+const {
+    FEATURE_CONTRACT_BYTES,
+    GOVERNANCE_BYTES,
+    sha256Canonical,
+    scoreFeatureCell,
+    scoreLedgerValidationSummary,
+    validateScoreLedger,
+    validateShortsInputManifest,
+} = require('./shorts-score-ledger');
+const {
+    CANONICAL_EVIDENCE_STATE,
+    HISTORICAL_EVIDENCE_STATE,
+    validateManifestRowBinding,
+} = require('./saved-channel-manifest-binding');
+const VERSION = 12;
+const ANALYSIS_IMPLEMENTATION_SHA256 = (() => {
+    const hash = crypto.createHash('sha256');
+    for (const source of [
+        fs.readFileSync(__filename),
+        fs.readFileSync(path.join(__dirname, 'shorts-score-ledger.js')),
+        fs.readFileSync(path.join(
+            __dirname,
+            'saved-channel-manifest-binding.js'
+        )),
+        FEATURE_CONTRACT_BYTES,
+        GOVERNANCE_BYTES,
+    ]) {
+        hash.update(source);
+        hash.update('\0');
     }
-} catch (e) { CHANNEL_FREE_BY_ID = {}; }
-
-function withChannelFreeFeatures(video) {
-    const extra = video && CHANNEL_FREE_BY_ID[video.id];
-    if (!extra) return video;
-    return { ...video, features: { ...(video.features || {}), ...extra } };
-}
+    return hash.digest('hex');
+})();
 
 const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -36,22 +50,63 @@ function stableHash(value) {
     return hash >>> 0;
 }
 
+function sha256Text(value) {
+    return crypto.createHash('sha256')
+        .update(String(value || ''))
+        .digest('hex');
+}
+
 function featureCell(video, key) {
-    const cell = video && video.features && video.features[key];
-    if (Array.isArray(cell)) return { value: finite(cell[0]) ? Number(cell[0]) : null, percentile: finite(cell[1]) ? Number(cell[1]) : null };
-    if (cell && typeof cell === 'object') return {
-        value: finite(cell.v != null ? cell.v : cell.value) ? Number(cell.v != null ? cell.v : cell.value) : null,
-        percentile: finite(cell.p != null ? cell.p : cell.percentile) ? Number(cell.p != null ? cell.p : cell.percentile) : null,
+    const cell = scoreFeatureCell(video, key);
+    return {
+        value: cell.value,
+        percentile: cell.percentile,
     };
-    return { value: null, percentile: null };
 }
 
 function modelFeatureValue(video, definition) {
     const cell = featureCell(video, definition.key);
-    if (cell.percentile != null) return cell.percentile / 100;
     if (cell.value == null) return null;
     if (definition.unit === 'views') return Math.log10(Math.max(0, cell.value) + 1);
-    return cell.value;
+    return Number(cell.value);
+}
+
+function canonicalFeatureCells(video) {
+    const validation = validateScoreLedger(
+        video && video.score_ledger
+    );
+    if (!validation.valid) return {};
+    return Object.fromEntries(contract.features.map(definition => {
+        const coordinateId = `shorts.stored.${definition.key}`;
+        const entry = validation.entriesById.get(coordinateId);
+        return [
+            definition.key,
+            entry && entry.available === true
+                ? {
+                    value: Number(entry.value),
+                    percentile:
+                        finite(entry.percentile)
+                            ? Number(entry.percentile)
+                            : null,
+                }
+                : { value: null, percentile: null },
+        ];
+    }));
+}
+
+function rowFeatureCell(row, definition) {
+    const cell = row && row.canonicalFeatureCells
+        && row.canonicalFeatureCells[definition.key];
+    return cell || { value: null, percentile: null };
+}
+
+function rowFeatureValue(row, definition) {
+    const cell = rowFeatureCell(row, definition);
+    if (cell.value == null) return null;
+    if (definition.unit === 'views') {
+        return Math.log10(Math.max(0, cell.value) + 1);
+    }
+    return Number(cell.value);
 }
 
 function average(values) {
@@ -89,6 +144,46 @@ function parsePublished(value) {
     }
     const timestamp = Date.parse(text);
     return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function fixedHorizonViewOutcome(video, publishedAt) {
+    const record = video && (
+        video.fixedHorizonOutcome
+        || video.fixed_horizon_outcome
+    );
+    if (!record || typeof record !== 'object' || publishedAt == null) {
+        return null;
+    }
+    const views = record.views;
+    const horizonDays = (
+        record.horizonDays != null
+            ? record.horizonDays
+            : record.horizon_days
+    );
+    const observedAt = parsePublished(
+        record.observedAt != null
+            ? record.observedAt
+            : record.observed_at
+    );
+    if (
+        !finite(views)
+        || Number(views) <= 0
+        || !finite(horizonDays)
+        || Number(horizonDays) <= 0
+        || observedAt == null
+    ) {
+        return null;
+    }
+    const expectedAt = publishedAt + Number(horizonDays) * 86400000;
+    const toleranceMs = 36 * 3600000;
+    if (Math.abs(observedAt - expectedAt) > toleranceMs) return null;
+    return {
+        views: Number(views),
+        horizonDays: Number(horizonDays),
+        observedAt,
+        expectedAt,
+        timestampToleranceHours: toleranceMs / 3600000,
+    };
 }
 
 function wilsonInterval(successes, total, z) {
@@ -151,26 +246,33 @@ function solveLinear(matrix, vector) {
 
 function trainModel(rows, keys, lambda) {
     const definitions = keys.map(key => contract.features.find(feature => feature.key === key));
-    const columns = definitions.map(definition => rows.map(row => modelFeatureValue(row.video, definition)).filter(finite));
+    const columns = definitions.map(definition => rows.map(row => rowFeatureValue(row, definition)).filter(finite));
     const medians = columns.map(column => median(column) == null ? 0 : median(column));
     const means = [], scales = [];
     for (let j = 0; j < definitions.length; j++) {
         const filled = rows.map(row => {
-            const value = modelFeatureValue(row.video, definitions[j]);
+            const value = rowFeatureValue(row, definitions[j]);
             return finite(value) ? Number(value) : medians[j];
         });
         const mean = average(filled) || 0;
         const variance = average(filled.map(value => (value - mean) ** 2)) || 0;
         means.push(mean); scales.push(Math.sqrt(variance) || 1);
     }
-    const width = definitions.length + 1;
+    const width = definitions.length * 2 + 1;
     const xtx = Array.from({ length: width }, () => Array(width).fill(0));
     const xty = Array(width).fill(0);
     for (const row of rows) {
         const values = [1];
         for (let j = 0; j < definitions.length; j++) {
-            const raw = modelFeatureValue(row.video, definitions[j]);
+            const raw = rowFeatureValue(row, definitions[j]);
             values.push(((finite(raw) ? Number(raw) : medians[j]) - means[j]) / scales[j]);
+        }
+        for (let j = 0; j < definitions.length; j++) {
+            values.push(
+                finite(rowFeatureValue(row, definitions[j]))
+                    ? 0
+                    : 1
+            );
         }
         for (let a = 0; a < width; a++) {
             xty[a] += values[a] * row.y;
@@ -180,38 +282,278 @@ function trainModel(rows, keys, lambda) {
     const penalty = Number.isFinite(lambda) ? lambda : 1;
     for (let j = 1; j < width; j++) xtx[j][j] += penalty;
     xtx[0][0] += 1e-8;
-    return { keys, definitions, medians, means, scales, coefficients: solveLinear(xtx, xty) };
+    return {
+        keys,
+        definitions,
+        medians,
+        means,
+        scales,
+        coefficients: solveLinear(xtx, xty),
+        missingnessIndicators: true,
+    };
 }
 
 function predictModel(model, row) {
     let prediction = model.coefficients[0];
     for (let j = 0; j < model.definitions.length; j++) {
-        const raw = modelFeatureValue(row.video, model.definitions[j]);
+        const raw = rowFeatureValue(row, model.definitions[j]);
         const value = finite(raw) ? Number(raw) : model.medians[j];
         prediction += model.coefficients[j + 1] * ((value - model.means[j]) / model.scales[j]);
+    }
+    for (let j = 0; j < model.definitions.length; j++) {
+        const raw = rowFeatureValue(row, model.definitions[j]);
+        prediction += model.coefficients[
+            1 + model.definitions.length + j
+        ] * (finite(raw) ? 0 : 1);
     }
     return prediction;
 }
 
+function normalizedContentText(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/https?:\/\/\S+/g, ' ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function contentFamilyId(row) {
+    const video = row && row.video || {};
+    for (const value of [
+        row && row.contentFamilyId,
+        row && row.content_family_id,
+        row && row.sourceContentId,
+        row && row.source_content_id,
+        row && row.originalContentId,
+        row && row.original_content_id,
+        video.contentFamilyId,
+        video.content_family_id,
+        video.sourceContentId,
+        video.source_content_id,
+        video.originalContentId,
+        video.original_content_id,
+    ]) {
+        if (value != null && String(value).trim()) {
+            return `source:${String(value).trim().toLowerCase()}`;
+        }
+    }
+    for (const value of [
+        row && row.perceptualHash,
+        row && row.perceptual_hash,
+        video.perceptualHash,
+        video.perceptual_hash,
+    ]) {
+        if (value != null && String(value).trim()) {
+            return `perceptual:${String(value).trim().toLowerCase()}`;
+        }
+    }
+    const title = normalizedContentText(
+        row && row.title != null ? row.title : video.title
+    );
+    if (title) return `title:${title}`;
+    for (const value of [
+        row && row.montageSha256,
+        row && row.montage_sha256,
+        row && row.inputManifest
+            && row.inputManifest.canonical_montage
+            && row.inputManifest.canonical_montage.montage_sha256,
+        video.montageSha256,
+        video.montage_sha256,
+        video.input_manifest
+            && video.input_manifest.canonical_montage
+            && video.input_manifest.canonical_montage.montage_sha256,
+    ]) {
+        if (value != null && String(value).trim()) {
+            return `montage:${String(value).trim().toLowerCase()}`;
+        }
+    }
+    return `video:${row && row.id || ''}`;
+}
+
+function purgeContentFamilyOverlap(trainRows, testRows) {
+    const heldOutFamilies = new Set(
+        (testRows || []).map(contentFamilyId)
+    );
+    const retained = (trainRows || []).filter(
+        row => !heldOutFamilies.has(contentFamilyId(row))
+    );
+    return {
+        rows: retained,
+        audit: {
+            trainBefore: (trainRows || []).length,
+            trainAfter: retained.length,
+            purged: (trainRows || []).length - retained.length,
+            heldOutFamilies: heldOutFamilies.size,
+            rule: 'No content family may occur in both training and evaluation rows.',
+        },
+    };
+}
+
+function contentFamilyGroups(rows) {
+    const byFamily = new Map();
+    rows.forEach((row, index) => {
+        const familyId = contentFamilyId(row);
+        if (!byFamily.has(familyId)) {
+            byFamily.set(familyId, {
+                familyId,
+                indices: [],
+                positives: 0,
+                negatives: 0,
+                hash: stableHash(familyId),
+            });
+        }
+        const group = byFamily.get(familyId);
+        group.indices.push(index);
+        if (row.y >= 0.5) group.positives++;
+        else group.negatives++;
+    });
+    return [...byFamily.values()];
+}
+
 function foldAssignments(rows, requested) {
-    const folds = clamp(Math.min(requested || 5, Math.floor(rows.length / 4)), 2, 5);
-    const order = rows.map((row, index) => ({ index, hash: stableHash(row.id) })).sort((a, b) => a.hash - b.hash || a.index - b.index);
+    const groups = contentFamilyGroups(rows);
+    const folds = Math.min(
+        requested || 5,
+        Math.floor(rows.length / 4),
+        groups.length,
+        5
+    );
+    if (folds < 2) {
+        return {
+            folds: 0,
+            assignments: new Array(rows.length).fill(null),
+            contentFamilies: groups.length,
+        };
+    }
+    const order = groups.sort(
+        (a, b) => b.indices.length - a.indices.length
+            || a.hash - b.hash
+            || a.familyId.localeCompare(b.familyId)
+    );
     const assignments = new Array(rows.length);
-    order.forEach((item, index) => { assignments[item.index] = index % folds; });
-    return { folds, assignments };
+    const foldSizes = Array(folds).fill(0);
+    order.forEach(group => {
+        let selected = 0;
+        for (let fold = 1; fold < folds; fold++) {
+            if (foldSizes[fold] < foldSizes[selected]) selected = fold;
+        }
+        group.indices.forEach(index => { assignments[index] = selected; });
+        foldSizes[selected] += group.indices.length;
+    });
+    return {
+        folds,
+        assignments,
+        contentFamilies: groups.length,
+    };
 }
 
 function stratifiedFoldAssignments(rows, requested) {
-    const positives = [], negatives = [];
-    rows.forEach((row, index) => (row.y >= 0.5 ? positives : negatives).push({ index, hash: stableHash(row.id) }));
-    const folds = Math.min(requested || 5, positives.length, negatives.length, Math.max(2, Math.floor(rows.length / 4)));
-    if (folds < 2) return null;
-    positives.sort((a, b) => a.hash - b.hash || a.index - b.index);
-    negatives.sort((a, b) => a.hash - b.hash || a.index - b.index);
-    const assignments = new Array(rows.length);
-    positives.forEach((item, index) => { assignments[item.index] = index % folds; });
-    negatives.forEach((item, index) => { assignments[item.index] = index % folds; });
-    return { folds, assignments };
+    const groups = contentFamilyGroups(rows);
+    const positiveFamilies = groups.filter(
+        group => group.positives > 0
+    ).length;
+    const negativeFamilies = groups.filter(
+        group => group.negatives > 0
+    ).length;
+    const maximumFolds = Math.min(
+        requested || 5,
+        positiveFamilies,
+        negativeFamilies,
+        groups.length,
+        Math.max(2, Math.floor(rows.length / 4))
+    );
+    if (maximumFolds < 2) return null;
+    const totalPositives = groups.reduce(
+        (sum, group) => sum + group.positives,
+        0
+    );
+    const totalNegatives = groups.reduce(
+        (sum, group) => sum + group.negatives,
+        0
+    );
+    const orderedGroups = groups.slice().sort(
+        (a, b) => (
+            Number(b.positives > 0 && b.negatives > 0)
+                - Number(a.positives > 0 && a.negatives > 0)
+            || b.indices.length - a.indices.length
+            || a.hash - b.hash
+            || a.familyId.localeCompare(b.familyId)
+        )
+    );
+    for (let folds = maximumFolds; folds >= 2; folds--) {
+        const assignments = new Array(rows.length);
+        const foldState = Array.from(
+            { length: folds },
+            () => ({ rows: 0, positives: 0, negatives: 0 })
+        );
+        orderedGroups.forEach(group => {
+            let selected = 0;
+            let selectedTuple = null;
+            for (let fold = 0; fold < folds; fold++) {
+                const state = foldState[fold];
+                const coverageGain = (
+                    Number(
+                        state.positives === 0
+                        && group.positives > 0
+                    )
+                    + Number(
+                        state.negatives === 0
+                        && group.negatives > 0
+                    )
+                );
+                const tuple = [
+                    -coverageGain,
+                    state.rows + group.indices.length,
+                    Math.abs(
+                        state.positives + group.positives
+                        - (totalPositives / folds)
+                    ) + Math.abs(
+                        state.negatives + group.negatives
+                        - (totalNegatives / folds)
+                    ),
+                    fold,
+                ];
+                if (
+                    !selectedTuple
+                    || tuple.some((value, index) => (
+                        value < selectedTuple[index]
+                        && tuple.slice(0, index).every(
+                            (prior, priorIndex) => (
+                                prior === selectedTuple[priorIndex]
+                            )
+                        )
+                    ))
+                ) {
+                    selected = fold;
+                    selectedTuple = tuple;
+                }
+            }
+            group.indices.forEach(index => {
+                assignments[index] = selected;
+            });
+            foldState[selected].rows += group.indices.length;
+            foldState[selected].positives += group.positives;
+            foldState[selected].negatives += group.negatives;
+        });
+        const valid = foldState.every(state => (
+            state.rows > 0
+            && state.positives > 0
+            && state.negatives > 0
+            && totalPositives - state.positives > 0
+            && totalNegatives - state.negatives > 0
+        ));
+        if (valid) {
+            return {
+                folds,
+                assignments,
+                contentFamilies: groups.length,
+                foldState,
+            };
+        }
+    }
+    return null;
 }
 
 function rocAuc(actual, scores) {
@@ -247,7 +589,18 @@ function binaryPredictionMetrics(actual, predicted, baseline) {
         const points = safe.map((probability, index) => ({ probability, actual: actual[index] }))
             .filter(point => point.probability >= bin / 10 && (bin === 9 ? point.probability <= 1 : point.probability < (bin + 1) / 10));
         if (!points.length) continue;
-        calibrationBins.push({ n: points.length, predicted: average(points.map(point => point.probability)), observed: average(points.map(point => point.actual)) });
+        const successes = points.reduce(
+            (sum, point) => sum + Number(point.actual >= 0.5),
+            0
+        );
+        const interval = wilsonInterval(successes, points.length);
+        calibrationBins.push({
+            n: points.length,
+            predicted: average(points.map(point => point.probability)),
+            observed: successes / points.length,
+            observedCiLow: interval.low,
+            observedCiHigh: interval.high,
+        });
     }
     const calibrationError = calibrationBins.reduce((sum, bin) => sum + bin.n / actual.length * Math.abs(bin.predicted - bin.observed), 0);
     return {
@@ -262,28 +615,41 @@ function binaryPredictionMetrics(actual, predicted, baseline) {
         prAuc: averagePrecision(actual, safe),
         calibrationError,
         calibrationBins,
+        calibrationIntervalScope: (
+            'Row-level Wilson intervals are descriptive only and do not '
+            + 'model within-content-family dependence. Use groupedCalibration '
+            + 'for family-resampled uncertainty.'
+        ),
     };
 }
 
 function trainLogisticModel(rows, keys, lambda) {
     const definitions = keys.map(key => contract.features.find(feature => feature.key === key));
-    const columns = definitions.map(definition => rows.map(row => modelFeatureValue(row.video, definition)).filter(finite));
+    const columns = definitions.map(definition => rows.map(row => rowFeatureValue(row, definition)).filter(finite));
     const medians = columns.map(column => median(column) == null ? 0 : median(column));
     const means = [], scales = [];
     for (let j = 0; j < definitions.length; j++) {
         const filled = rows.map(row => {
-            const value = modelFeatureValue(row.video, definitions[j]);
+            const value = rowFeatureValue(row, definitions[j]);
             return finite(value) ? Number(value) : medians[j];
         });
         const mean = average(filled) || 0;
         const variance = average(filled.map(value => (value - mean) ** 2)) || 0;
         means.push(mean); scales.push(Math.sqrt(variance) || 1);
     }
-    const design = rows.map(row => [1].concat(definitions.map((definition, index) => {
-        const raw = modelFeatureValue(row.video, definition);
-        return ((finite(raw) ? Number(raw) : medians[index]) - means[index]) / scales[index];
-    })));
-    const width = definitions.length + 1, penalty = finite(lambda) ? Number(lambda) : 1;
+    const design = rows.map(row => [1]
+        .concat(definitions.map((definition, index) => {
+            const raw = rowFeatureValue(row, definition);
+            return (
+                (finite(raw) ? Number(raw) : medians[index])
+                - means[index]
+            ) / scales[index];
+        }))
+        .concat(definitions.map(definition => (
+            finite(rowFeatureValue(row, definition)) ? 0 : 1
+        ))));
+    const width = definitions.length * 2 + 1;
+    const penalty = finite(lambda) ? Number(lambda) : 1;
     const positiveRate = (rows.filter(row => row.y >= 0.5).length + 0.5) / (rows.length + 1);
     const coefficients = Array(width).fill(0);
     coefficients[0] = Math.log(positiveRate / (1 - positiveRate));
@@ -309,15 +675,29 @@ function trainLogisticModel(rows, keys, lambda) {
         delta.forEach((value, index) => { coefficients[index] += value; largest = Math.max(largest, Math.abs(value)); });
         if (largest < 1e-6) break;
     }
-    return { keys, definitions, medians, means, scales, coefficients };
+    return {
+        keys,
+        definitions,
+        medians,
+        means,
+        scales,
+        coefficients,
+        missingnessIndicators: true,
+    };
 }
 
 function predictLogistic(model, row) {
     let linear = model.coefficients[0];
     for (let index = 0; index < model.definitions.length; index++) {
-        const raw = modelFeatureValue(row.video, model.definitions[index]);
+        const raw = rowFeatureValue(row, model.definitions[index]);
         const value = finite(raw) ? Number(raw) : model.medians[index];
         linear += model.coefficients[index + 1] * ((value - model.means[index]) / model.scales[index]);
+    }
+    for (let index = 0; index < model.definitions.length; index++) {
+        const raw = rowFeatureValue(row, model.definitions[index]);
+        linear += model.coefficients[
+            1 + model.definitions.length + index
+        ] * (finite(raw) ? 0 : 1);
     }
     return 1 / (1 + Math.exp(-clamp(linear, -30, 30)));
 }
@@ -330,7 +710,14 @@ function evaluateBinaryFeatureSet(rows, keys, requestedFolds, lambda, logistic) 
     for (let fold = 0; fold < assignment.folds; fold++) {
         const train = rows.filter((_, index) => assignment.assignments[index] !== fold);
         const test = rows.filter((_, index) => assignment.assignments[index] === fold);
-        if (!train.length || !test.length) continue;
+        if (
+            !train.some(row => row.y >= 0.5)
+            || !train.some(row => row.y < 0.5)
+            || !test.some(row => row.y >= 0.5)
+            || !test.some(row => row.y < 0.5)
+        ) {
+            return null;
+        }
         const model = logistic ? trainLogisticModel(train, keys, lambda) : trainModel(train, keys, lambda);
         const trainRate = (train.filter(row => row.y >= 0.5).length + 0.5) / (train.length + 1);
         for (const row of test) {
@@ -343,24 +730,288 @@ function evaluateBinaryFeatureSet(rows, keys, requestedFolds, lambda, logistic) 
 }
 
 function predictionMetrics(actual, predicted, baseline) {
-    if (!actual.length) return { n: 0, r2: null, rmseLog: null, maeLog: null, medianFactor: null, spearman: null };
-    const residuals = actual.map((value, index) => value - predicted[index]);
+    if (!actual.length) {
+        return {
+            n: 0,
+            total: 0,
+            missingPairsExcluded: 0,
+            r2: null,
+            protocolBaselineR2: null,
+            rmseLog: null,
+            maeLog: null,
+            medianFactor: null,
+            spearman: null,
+        };
+    }
+    const observed = actual.map((value, index) => ({
+        actual: value,
+        predicted: predicted[index],
+        baseline: baseline && baseline[index],
+    })).filter(point => finite(point.actual) && finite(point.predicted));
+    if (!observed.length) {
+        return {
+            n: 0,
+            total: actual.length,
+            missingPairsExcluded: actual.length,
+            r2: null,
+            protocolBaselineR2: null,
+            rmseLog: null,
+            maeLog: null,
+            medianFactor: null,
+            spearman: null,
+        };
+    }
+    const observedActual = observed.map(point => Number(point.actual));
+    const observedPredicted = observed.map(point => Number(point.predicted));
+    const residuals = observedActual.map(
+        (value, index) => value - observedPredicted[index]
+    );
     const sse = residuals.reduce((sum, value) => sum + value * value, 0);
-    const baseSse = baseline ? actual.reduce((sum, value, index) => sum + (value - baseline[index]) ** 2, 0)
-        : actual.reduce((sum, value) => sum + (value - average(actual)) ** 2, 0);
+    const actualMean = average(observedActual);
+    const totalSumSquares = observedActual.reduce(
+        (sum, value) => sum + (value - actualMean) ** 2,
+        0
+    );
+    const hasProtocolBaseline = !!baseline
+        && observed.every(point => finite(point.baseline));
+    const protocolBaselineSse = hasProtocolBaseline
+        ? observed.reduce(
+            (sum, point) => (
+                sum + (Number(point.actual) - Number(point.baseline)) ** 2
+            ),
+            0
+        )
+        : null;
     return {
-        n: actual.length,
-        r2: baseSse > 0 ? 1 - sse / baseSse : null,
-        rmseLog: Math.sqrt(sse / actual.length),
+        n: observed.length,
+        total: actual.length,
+        missingPairsExcluded: actual.length - observed.length,
+        r2: totalSumSquares > 0 ? 1 - sse / totalSumSquares : null,
+        protocolBaselineR2:
+            protocolBaselineSse > 0
+                ? 1 - sse / protocolBaselineSse
+                : null,
+        rmseLog: Math.sqrt(sse / observed.length),
         maeLog: average(residuals.map(Math.abs)),
         medianFactor: Math.pow(10, median(residuals.map(Math.abs)) || 0),
-        spearman: spearman(actual, predicted),
+        spearman: spearman(observedActual, observedPredicted),
+    };
+}
+
+function deterministicRandom(seed) {
+    let state = stableHash(seed) || 0x9e3779b9;
+    return () => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        return state / 0x100000000;
+    };
+}
+
+function intervalSummary(values) {
+    const observed = values.filter(finite).map(Number);
+    if (!observed.length) return null;
+    return {
+        low: quantile(observed, 0.025),
+        median: median(observed),
+        high: quantile(observed, 0.975),
+        validReplicates: observed.length,
+    };
+}
+
+function groupedBootstrapUncertainty(points, kind, seed, replicates) {
+    const groups = new Map();
+    (points || []).forEach(point => {
+        const familyId = point.familyId;
+        if (!groups.has(familyId)) groups.set(familyId, []);
+        groups.get(familyId).push(point);
+    });
+    const families = [...groups.keys()].sort();
+    const requestedReplicates = Math.max(
+        50,
+        Math.min(500, Number(replicates) || 200)
+    );
+    if (families.length < 3) {
+        return {
+            status: 'insufficient_content_families',
+            unit: 'content_family',
+            contentFamilies: families.length,
+            requestedReplicates,
+            validReplicates: 0,
+            intervals: {},
+        };
+    }
+    const random = deterministicRandom(
+        `${seed}:${kind}:${families.join('|')}`
+    );
+    const collected = kind === 'binary'
+        ? {
+            brier: [],
+            brierSkill: [],
+            rocAuc: [],
+            prAuc: [],
+            calibrationError: [],
+        }
+        : {
+            r2: [],
+            protocolBaselineR2: [],
+            rmseLog: [],
+            maeLog: [],
+            spearman: [],
+        };
+    let validReplicates = 0;
+    for (
+        let replicate = 0;
+        replicate < requestedReplicates;
+        replicate++
+    ) {
+        const sample = [];
+        for (let index = 0; index < families.length; index++) {
+            const family = families[
+                Math.floor(random() * families.length)
+            ];
+            sample.push(...groups.get(family));
+        }
+        const actual = sample.map(point => point.actual);
+        const predicted = sample.map(point => point.predicted);
+        const baseline = sample.map(point => point.baseline);
+        if (
+            kind === 'binary'
+            && (
+                !actual.some(value => value >= 0.5)
+                || !actual.some(value => value < 0.5)
+            )
+        ) continue;
+        const metric = kind === 'binary'
+            ? binaryPredictionMetrics(actual, predicted, baseline)
+            : predictionMetrics(actual, predicted, baseline);
+        validReplicates++;
+        Object.keys(collected).forEach(key => {
+            if (finite(metric[key])) collected[key].push(metric[key]);
+        });
+    }
+    return {
+        status: validReplicates >= Math.ceil(requestedReplicates * 0.8)
+            ? 'descriptive'
+            : 'unstable',
+        unit: 'content_family',
+        method: (
+            'Deterministic percentile cluster bootstrap over complete '
+            + 'content families. These intervals describe resampling '
+            + 'uncertainty for the already-selected OOF policy; they are '
+            + 'not selection-adjusted confidence intervals.'
+        ),
+        contentFamilies: families.length,
+        requestedReplicates,
+        validReplicates,
+        intervals: Object.fromEntries(
+            Object.entries(collected).map(([key, values]) => [
+                key,
+                intervalSummary(values),
+            ])
+        ),
+    };
+}
+
+function groupedCalibrationDiagnostics(points, seed, replicates) {
+    const groups = new Map();
+    (points || []).forEach(point => {
+        if (!groups.has(point.familyId)) groups.set(point.familyId, []);
+        groups.get(point.familyId).push(point);
+    });
+    const families = [...groups.keys()].sort();
+    const requestedReplicates = Math.max(
+        50,
+        Math.min(500, Number(replicates) || 200)
+    );
+    const original = Array.from({ length: 10 }, (_, bin) => {
+        const members = (points || []).filter(point => (
+            point.predicted >= bin / 10
+            && (
+                bin === 9
+                    ? point.predicted <= 1
+                    : point.predicted < (bin + 1) / 10
+            )
+        ));
+        return {
+            bin,
+            n: members.length,
+            contentFamilies: new Set(
+                members.map(point => point.familyId)
+            ).size,
+            predicted: average(members.map(point => point.predicted)),
+            observed: average(members.map(point => point.actual)),
+            bootstrapObserved: [],
+        };
+    }).filter(bin => bin.n > 0);
+    if (families.length < 3) {
+        return {
+            status: 'insufficient_content_families',
+            unit: 'content_family',
+            contentFamilies: families.length,
+            requestedReplicates,
+            bins: original.map(({ bootstrapObserved, ...bin }) => ({
+                ...bin,
+                observedInterval: null,
+                validReplicates: 0,
+            })),
+        };
+    }
+    const random = deterministicRandom(
+        `${seed}:grouped-calibration:${families.join('|')}`
+    );
+    for (
+        let replicate = 0;
+        replicate < requestedReplicates;
+        replicate++
+    ) {
+        const sample = [];
+        for (let index = 0; index < families.length; index++) {
+            const family = families[
+                Math.floor(random() * families.length)
+            ];
+            sample.push(...groups.get(family));
+        }
+        original.forEach(bin => {
+            const members = sample.filter(point => (
+                point.predicted >= bin.bin / 10
+                && (
+                    bin.bin === 9
+                        ? point.predicted <= 1
+                        : point.predicted < (bin.bin + 1) / 10
+                )
+            ));
+            if (members.length) {
+                bin.bootstrapObserved.push(
+                    average(members.map(point => point.actual))
+                );
+            }
+        });
+    }
+    return {
+        status: 'descriptive',
+        unit: 'content_family',
+        contentFamilies: families.length,
+        requestedReplicates,
+        method: (
+            'Reliability bins are fixed before resampling. Complete content '
+            + 'families are sampled with replacement; intervals are '
+            + 'descriptive percentile cluster-bootstrap intervals and are '
+            + 'not selection-adjusted.'
+        ),
+        bins: original.map(({ bootstrapObserved, ...bin }) => ({
+            ...bin,
+            observedInterval:
+                bootstrapObserved.length >= requestedReplicates * 0.8
+                    ? intervalSummary(bootstrapObserved)
+                    : null,
+            validReplicates: bootstrapObserved.length,
+        })),
     };
 }
 
 function evaluateFeatureSet(rows, keys, requestedFolds, lambda) {
     if (rows.length < 8 || !keys.length) return null;
     const { folds, assignments } = foldAssignments(rows, requestedFolds || 5);
+    if (folds < 2) return null;
     const actual = [], predicted = [], baseline = [];
     for (let fold = 0; fold < folds; fold++) {
         const train = rows.filter((_, index) => assignments[index] !== fold);
@@ -394,7 +1045,10 @@ function cleanMetric(metric) {
     const round = value => value == null || !finite(value) ? null : Number(Number(value).toFixed(4));
     return {
         n: metric.n,
+        total: metric.total,
+        missingPairsExcluded: metric.missingPairsExcluded,
         r2: round(metric.r2),
+        protocolBaselineR2: round(metric.protocolBaselineR2),
         rmseLog: round(metric.rmseLog),
         maeLog: round(metric.maeLog),
         medianFactor: round(metric.medianFactor),
@@ -416,36 +1070,170 @@ function cleanBinaryMetric(metric) {
         rocAuc: round(metric.rocAuc),
         prAuc: round(metric.prAuc),
         calibrationError: round(metric.calibrationError),
-        calibrationBins: (metric.calibrationBins || []).map(bin => ({ n: bin.n, predicted: round(bin.predicted), observed: round(bin.observed) })),
+        calibrationIntervalScope: metric.calibrationIntervalScope,
+        calibrationBins: (metric.calibrationBins || []).map(bin => ({
+            n: bin.n,
+            predicted: round(bin.predicted),
+            observed: round(bin.observed),
+            observedCiLow: round(bin.observedCiLow),
+            observedCiHigh: round(bin.observedCiHigh),
+        })),
     };
 }
 
 function buildRows(manifest, observedAt) {
     const now = finite(observedAt) ? Number(observedAt) : Date.now();
-    return (manifest.videos || []).filter(video => video && video.status === 'done' && finite(video.views) && Number(video.views) > 0)
-        .map(withChannelFreeFeatures)
+    return (manifest.videos || []).filter(video => (
+        video
+        && video.status === 'done'
+        && finite(video.views)
+        && Number(video.views) > 0
+        && scoreLedgerValidationSummary(video).valid === true
+        && validateManifestRowBinding(video).valid === true
+    ))
         .map(video => {
             const publishedAt = parsePublished(video.publishedAt != null ? video.publishedAt : video.published);
             const viewsObservedAt = finite(video.viewsObservedAt) ? Number(video.viewsObservedAt) : (finite(video.scoredAt) ? Number(video.scoredAt) : now);
-            const ageDays = publishedAt != null && viewsObservedAt >= publishedAt ? (viewsObservedAt - publishedAt) / 86400000 : null;
+            const fixedHorizonOutcome = fixedHorizonViewOutcome(
+                video,
+                publishedAt
+            );
+            const outcomeViews = fixedHorizonOutcome
+                ? fixedHorizonOutcome.views
+                : Number(video.views);
+            const outcomeObservedAt = fixedHorizonOutcome
+                ? fixedHorizonOutcome.observedAt
+                : viewsObservedAt;
+            const ageDays = (
+                publishedAt != null
+                && outcomeObservedAt >= publishedAt
+            )
+                ? (outcomeObservedAt - publishedAt) / 86400000
+                : null;
             const viewsHistory = (video.viewsHistory || []).filter(point => point && finite(point.at) && finite(point.views))
                 .map(point => ({ at: Number(point.at), views: Number(point.views) })).sort((a, b) => a.at - b.at);
+            const inputEvidenceValidation =
+                validateShortsInputManifest(video);
+            const declaredCanonical = (
+                video.evidence_state
+                    === CANONICAL_EVIDENCE_STATE
+                && video.canonical === true
+            );
             return {
                 id: video.id,
                 title: video.title || video.id,
-                views: Number(video.views),
-                y: Math.log10(Number(video.views) + 1),
+                views: outcomeViews,
+                currentLifetimeViews: Number(video.views),
+                y: Math.log10(outcomeViews + 1),
                 publishedAt,
                 viewsObservedAt,
+                outcomeObservedAt,
                 ageDays,
+                fixedHorizonOutcome,
                 viewsHistory,
                 video,
+                evidenceState: video.evidence_state,
+                canonicalInputBound: (
+                    declaredCanonical
+                    && inputEvidenceValidation.valid === true
+                ),
+                predictorEligible: (
+                    declaredCanonical
+                    && video.predictor_eligible === true
+                    && inputEvidenceValidation.valid === true
+                ),
+                inputEvidenceValid:
+                    inputEvidenceValidation.valid === true,
+                inputEvidenceErrors:
+                    inputEvidenceValidation.errors || [],
+                canonicalFeatureCells:
+                    canonicalFeatureCells(video),
             };
         });
 }
 
+function selectAnalysisPopulation(allRows) {
+    const canonicalRows = allRows.filter(
+        row => row.predictorEligible === true
+    );
+    const historicalRows = allRows.filter(
+        row => row.evidenceState === HISTORICAL_EVIDENCE_STATE
+    );
+    const invalidEvidenceRows = allRows.filter(row => (
+        !row.predictorEligible
+        && row.evidenceState !== HISTORICAL_EVIDENCE_STATE
+    ));
+    const invalidInputEvidenceRows = allRows.filter(
+        row => row.inputEvidenceValid !== true
+    );
+    const useCanonical = canonicalRows.length >= 8;
+    const rows = useCanonical ? canonicalRows : historicalRows;
+    const fixedHorizonDays = useCanonical
+        ? [...new Set(canonicalRows.map(row => (
+            row.fixedHorizonOutcome
+                ? Number(row.fixedHorizonOutcome.horizonDays.toFixed(6))
+                : null
+        )))]
+        : [];
+    const fixedHorizonOutcome = (
+        useCanonical
+        && fixedHorizonDays.length === 1
+        && fixedHorizonDays[0] != null
+    );
+    const mode = !useCanonical
+        ? 'historical_input_diagnostic'
+        : fixedHorizonOutcome
+            ? (
+                canonicalRows.length === allRows.length
+                    ? 'canonical_fixed_horizon_association'
+                    : 'canonical_fixed_horizon_subset_association'
+            )
+            : 'right_censored_lifetime_retrospective';
+    const claimBoundary = useCanonical
+        ? fixedHorizonOutcome
+            ? (
+                'Every fitted row has exact input binding and the same '
+                + `${fixedHorizonDays[0]}-day timestamp-validated outcome `
+                + 'horizon. This removes unequal outcome exposure, but this '
+                + 'module still does not prove that upstream supervised axes '
+                + 'excluded the evaluated video, content family, or creator. '
+                + 'Results remain retrospective associations.'
+            )
+            : (
+            'Every fitted row is declared canonical and predictor-eligible '
+            + 'by its hash-bound manifest evidence record, and its input '
+            + 'fingerprints validate internally. Historical '
+            + 'unbound rows are excluded before fitting. This proves exact '
+            + 'row identity, not upstream axis exclusion: stored axes may '
+            + 'have used the evaluated video or creator during their own '
+            + 'fit, and public views are not observed at one fixed horizon. '
+            + 'These results are therefore reproducible retrospective '
+            + 'associations, not end-to-end blind forecasts.'
+            )
+        : (
+            'Fewer than eight exact input-bound rows are available. '
+            + 'Calculations use structurally valid historical ledgers only '
+            + 'as browseable diagnostics; they are not blind validation, '
+            + 'training evidence, or predictor-eligible.'
+        );
+    return {
+        rows,
+        canonicalRows,
+        historicalRows,
+        invalidEvidenceRows,
+        invalidInputEvidenceRows,
+        mode,
+        claimBoundary,
+        inputBoundAnalysisEligible: useCanonical,
+        fixedHorizonOutcome,
+        fixedHorizonDays:
+            fixedHorizonOutcome ? fixedHorizonDays[0] : null,
+        predictorEligible: false,
+    };
+}
+
 function directFeatureStats(rows, definition) {
-    const observed = rows.map(row => ({ x: modelFeatureValue(row.video, definition), yLog: row.y, yRaw: row.views })).filter(point => finite(point.x));
+    const observed = rows.map(row => ({ x: rowFeatureValue(row, definition), yLog: row.y, yRaw: row.views })).filter(point => finite(point.x));
     const xs = observed.map(point => Number(point.x));
     return {
         available: observed.length,
@@ -457,7 +1245,7 @@ function directFeatureStats(rows, definition) {
 }
 
 function directBinaryFeatureStats(rows, definition, targetViews) {
-    const observed = rows.map(row => ({ score: modelFeatureValue(row.video, definition), hit: row.views >= targetViews }))
+    const observed = rows.map(row => ({ score: rowFeatureValue(row, definition), hit: row.views >= targetViews }))
         .filter(point => finite(point.score));
     const scores = observed.map(point => Number(point.score)), actual = observed.map(point => point.hit ? 1 : 0);
     const higherAuc = rocAuc(actual, scores);
@@ -489,8 +1277,8 @@ function directBinaryFeatureStats(rows, definition, targetViews) {
     };
 }
 
-function rawFeatureValue(video, definition) {
-    const cell = featureCell(video, definition.key);
+function rawFeatureValue(row, definition) {
+    const cell = rowFeatureCell(row, definition);
     return cell.value != null && finite(cell.value) ? Number(cell.value) : null;
 }
 
@@ -507,7 +1295,7 @@ function thresholdCandidates(values) {
 }
 
 function thresholdRisk(rows, definition, targetViews) {
-    const observed = rows.map(row => ({ score: rawFeatureValue(row.video, definition), views: row.views, hit: row.views >= targetViews }))
+    const observed = rows.map(row => ({ score: rawFeatureValue(row, definition), views: row.views, hit: row.views >= targetViews }))
         .filter(point => finite(point.score));
     const scores = observed.map(point => point.score), totalHits = observed.filter(point => point.hit).length;
     const baseRate = observed.length ? totalHits / observed.length : null;
@@ -560,7 +1348,12 @@ function thresholdRisk(rows, definition, targetViews) {
         baseRate,
         thresholds,
         calibrationBins,
-        bestEvidence,
+        bestEvidence: bestEvidence ? {
+            ...bestEvidence,
+            evidenceTier: 'full-sample-threshold-screen',
+            decisionEligible: false,
+            uncertaintyWarning: 'The threshold was selected on these same rows; its Wilson interval is descriptive and is not a post-selection confidence interval.',
+        } : null,
     };
 }
 
@@ -577,7 +1370,7 @@ function evaluateCandidateRows(rows, candidates) {
 function evaluateBinaryCandidateRows(rows, candidates) {
     const scored = [];
     for (const keys of candidates) {
-        const result = evaluateBinaryFeatureSet(rows, keys, 5, 1, false);
+        const result = evaluateBinaryFeatureSet(rows, keys, 5, 1, true);
         if (result) scored.push({ keys, ...cleanBinaryMetric(result) });
     }
     scored.sort((a, b) => (b.brierSkill == null ? -Infinity : b.brierSkill) - (a.brierSkill == null ? -Infinity : a.brierSkill)
@@ -587,7 +1380,7 @@ function evaluateBinaryCandidateRows(rows, candidates) {
 }
 
 function probabilityFeatureCalibration(rows, definition, targetViews) {
-    const observed = rows.map(row => ({ probability: rawFeatureValue(row.video, definition), actual: row.views >= targetViews ? 1 : 0 }))
+    const observed = rows.map(row => ({ probability: rawFeatureValue(row, definition), actual: row.views >= targetViews ? 1 : 0 }))
         .filter(point => finite(point.probability));
     if (!observed.length) return { key: definition.key, available: 0, metrics: null };
     const baseRate = average(observed.map(point => point.actual));
@@ -623,8 +1416,9 @@ function forwardPath(rows, keys) {
 function nestedSelection(rows, candidates) {
     if (rows.length < 12 || !candidates.length) return null;
     const { folds, assignments } = foldAssignments(rows, 5);
+    if (folds < 2) return null;
     const actual = [], predicted = [], baseline = [], chosen = {};
-    const points = [];
+    const points = [], uncertaintyPoints = [];
     for (let fold = 0; fold < folds; fold++) {
         const train = rows.filter((_, index) => assignments[index] !== fold);
         const test = rows.filter((_, index) => assignments[index] === fold);
@@ -643,11 +1437,23 @@ function nestedSelection(rows, candidates) {
             const prediction = predictModel(model, row);
             actual.push(row.y); predicted.push(prediction); baseline.push(trainMean);
             points.push({ id: row.id, title: row.title, actualViews: row.views, predictedViews: Math.max(0, Math.round(Math.pow(10, prediction) - 1)), actualLog: row.y, predictedLog: prediction });
+            uncertaintyPoints.push({
+                familyId: contentFamilyId(row),
+                actual: row.y,
+                predicted: prediction,
+                baseline: trainMean,
+            });
         }
     }
     const metric = predictionMetrics(actual, predicted, baseline);
     return {
         ...cleanMetric(metric),
+        groupedUncertainty: groupedBootstrapUncertainty(
+            uncertaintyPoints,
+            'continuous',
+            `nested:${candidates.length}`,
+            200
+        ),
         selections: Object.entries(chosen).map(([features, count]) => ({ features: features.split(' + '), folds: count })).sort((a, b) => b.folds - a.folds),
         points: points.sort((a, b) => b.actualViews - a.actualViews),
     };
@@ -658,12 +1464,13 @@ function nestedBinarySelection(rows, candidates) {
     const assignment = stratifiedFoldAssignments(rows, 5);
     if (!assignment) return null;
     const actual = [], predicted = [], baseline = [], chosen = {}, points = [];
+    const uncertaintyPoints = [];
     for (let fold = 0; fold < assignment.folds; fold++) {
         const train = rows.filter((_, index) => assignment.assignments[index] !== fold);
         const test = rows.filter((_, index) => assignment.assignments[index] === fold);
         let best = null;
         for (const keys of candidates) {
-            const metric = evaluateBinaryFeatureSet(train, keys, 3, 1, false);
+            const metric = evaluateBinaryFeatureSet(train, keys, 3, 1, true);
             if (!metric) continue;
             const score = metric.brierSkill == null ? -Infinity : metric.brierSkill;
             if (!best || score > best.score || (score === best.score && keys.length < best.keys.length)) best = { keys, score };
@@ -677,26 +1484,54 @@ function nestedBinarySelection(rows, candidates) {
             const probability = predictLogistic(model, row), hit = row.y >= 0.5 ? 1 : 0;
             actual.push(hit); predicted.push(probability); baseline.push(trainRate);
             points.push({ id: row.id, title: row.title, actualViews: row.views, hit, probability });
+            uncertaintyPoints.push({
+                familyId: contentFamilyId(row),
+                actual: hit,
+                predicted: probability,
+                baseline: trainRate,
+            });
         }
     }
     const metric = binaryPredictionMetrics(actual, predicted, baseline);
     return {
         ...cleanBinaryMetric(metric),
+        groupedUncertainty: groupedBootstrapUncertainty(
+            uncertaintyPoints,
+            'binary',
+            `nested-binary:${candidates.length}`,
+            200
+        ),
+        groupedCalibration: groupedCalibrationDiagnostics(
+            uncertaintyPoints,
+            `nested-binary:${candidates.length}`,
+            200
+        ),
         selections: Object.entries(chosen).map(([features, count]) => ({ features: features.split(' + '), folds: count })).sort((a, b) => b.folds - a.folds),
         points: points.sort((a, b) => b.probability - a.probability),
     };
 }
 
-function chronologicalBinarySelection(rows, candidates) {
+function chronologicalBinarySelection(rows, candidates, options) {
+    const fixedHorizon = !!(
+        options && options.fixedHorizon
+    );
     const dated = rows.filter(row => finite(row.publishedAt)).sort((a, b) => a.publishedAt - b.publishedAt || stableHash(a.id) - stableHash(b.id));
     if (dated.length < 20) return null;
     const split = Math.max(12, Math.min(dated.length - 6, Math.floor(dated.length * 0.7)));
-    const train = dated.slice(0, split), test = dated.slice(split);
+    const testFrom = dated[split].publishedAt;
+    const candidateTrain = dated.filter(
+        row => row.publishedAt < testFrom
+    );
+    const test = dated.filter(
+        row => row.publishedAt >= testFrom
+    );
+    const purged = purgeContentFamilyOverlap(candidateTrain, test);
+    const train = purged.rows;
     if (train.filter(row => row.y >= 0.5).length < 2 || train.filter(row => row.y < 0.5).length < 2
         || !test.some(row => row.y >= 0.5) || !test.some(row => row.y < 0.5)) return null;
     let best = null;
     for (const keys of candidates) {
-        const metric = evaluateBinaryFeatureSet(train, keys, 4, 1, false);
+        const metric = evaluateBinaryFeatureSet(train, keys, 4, 1, true);
         if (!metric) continue;
         const score = metric.brierSkill == null ? -Infinity : metric.brierSkill;
         if (!best || score > best.score || (score === best.score && keys.length < best.keys.length)) best = { keys, score };
@@ -709,10 +1544,17 @@ function chronologicalBinarySelection(rows, candidates) {
     return {
         ...cleanBinaryMetric(metric),
         features: best.keys,
+        evaluationClass: fixedHorizon
+            ? 'retrospective-time-ordered-fixed-horizon-association'
+            : 'right-censored-time-ordered-lifetime-association',
+        prospective: false,
+        fixedHorizon,
+        futureProbabilityEligible: false,
         trainN: train.length,
         testN: test.length,
         trainThrough: train[train.length - 1].publishedAt,
         testFrom: test[0].publishedAt,
+        contentFamilyPurge: purged.audit,
         points: test.map((row, index) => ({ id: row.id, title: row.title, actualViews: row.views, hit: actual[index], probability: predicted[index] }))
             .sort((a, b) => b.probability - a.probability),
     };
@@ -773,7 +1615,7 @@ function matchedViewsQuestions(riskTargets) {
 function buildIndicatorMatrix(rows) {
     const definitions = contract.features;
     const percentileByFeature = definitions.map(definition => {
-        const observed = rows.map((row, rowIndex) => ({ rowIndex, value: modelFeatureValue(row.video, definition) }))
+        const observed = rows.map((row, rowIndex) => ({ rowIndex, value: rowFeatureValue(row, definition) }))
             .filter(point => finite(point.value));
         const ranked = rank(observed.map(point => Number(point.value)));
         const values = new Map();
@@ -795,7 +1637,7 @@ function buildIndicatorMatrix(rows) {
             ageDays: row.ageDays == null ? null : Number(row.ageDays.toFixed(2)),
             viewsPercentile: rows.length <= 1 ? 100 : Number((viewRanks[rowIndex] / (rows.length - 1) * 100).toFixed(2)),
             values: percentileByFeature.map(values => values.has(rowIndex) ? values.get(rowIndex) : null),
-            rawValues: definitions.map(definition => rawFeatureValue(row.video, definition)),
+            rawValues: definitions.map(definition => rawFeatureValue(row, definition)),
         })).sort((a, b) => b.views - a.views || stableHash(a.id) - stableHash(b.id)),
     };
 }
@@ -804,8 +1646,8 @@ function buildIndicatorRelationships(rows) {
     const definitions = contract.features;
     const matrix = definitions.map(left => definitions.map(right => {
         const observed = rows.map(row => ({
-            left: modelFeatureValue(row.video, left),
-            right: modelFeatureValue(row.video, right),
+            left: rowFeatureValue(row, left),
+            right: rowFeatureValue(row, right),
         })).filter(point => finite(point.left) && finite(point.right));
         const xs = observed.map(point => Number(point.left)), ys = observed.map(point => Number(point.right));
         return {
@@ -826,8 +1668,8 @@ function buildFeatureProfiles(rows) {
         const observed = rows.map(row => ({
             id: row.id,
             title: row.title,
-            score: modelFeatureValue(row.video, definition),
-            raw: rawFeatureValue(row.video, definition),
+            score: rowFeatureValue(row, definition),
+            raw: rawFeatureValue(row, definition),
             views: row.views,
         })).filter(point => finite(point.score));
         const sorted = observed.slice().sort((a, b) => Number(a.score) - Number(b.score) || stableHash(a.id) - stableHash(b.id));
@@ -902,8 +1744,14 @@ function buildOutcomeProfile(rows) {
 
 function savedChannelAnalysisFingerprint(manifest) {
     const rows = (manifest && manifest.videos || []).map(video => {
-        const features = video.features || {};
-        const featureState = Object.keys(features).sort().map(key => `${key}=${JSON.stringify(features[key])}`).join('|');
+        const ledgerValidation = scoreLedgerValidationSummary(video);
+        const manifestBinding =
+            validateManifestRowBinding(video);
+        const ledgerState = ledgerValidation.state === 'canonical-valid'
+            ? `valid:${ledgerValidation.ledger_sha256}`
+            : ledgerValidation.state === 'canonical-invalid'
+                ? `invalid:${sha256Text(JSON.stringify(video.score_ledger))}`
+                : 'missing';
         return [
             video.id,
             video.status,
@@ -911,49 +1759,198 @@ function savedChannelAnalysisFingerprint(manifest) {
             video.viewsObservedAt,
             video.publishedAt != null ? video.publishedAt : video.published,
             video.scoredAt,
-            stableHash(featureState).toString(16),
-            stableHash(JSON.stringify(video.viewsHistory || [])).toString(16),
+            video.title || '',
+            video.silent === true ? 'silent' : 'speech-or-unknown',
+            video.contentFamilyId
+                || video.content_family_id
+                || video.sourceContentId
+                || video.source_content_id
+                || video.originalContentId
+                || video.original_content_id
+                || video.perceptualHash
+                || video.perceptual_hash
+                || video.montageSha256
+                || video.montage_sha256
+                || video.input_manifest
+                    && video.input_manifest.canonical_montage
+                    && video.input_manifest.canonical_montage.montage_sha256
+                || '',
+            ledgerState,
+            `${manifestBinding.state}:${
+                manifestBinding.recorded_sha256 || ''
+            }`,
+            sha256Canonical(video.input_manifest || null),
+            sha256Text(JSON.stringify(video.viewsHistory || [])),
+            sha256Canonical(
+                video.fixedHorizonOutcome
+                || video.fixed_horizon_outcome
+                || null
+            ),
         ].join(':');
     }).sort();
-    const cfsRun = (() => { try { return require('./predictor-lab/channel-free-scores.json').runId || 'none'; } catch (e) { return 'none'; } })();
-    return `v6:${cfsRun}:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
+    return `v${VERSION}:${ANALYSIS_IMPLEMENTATION_SHA256}:${sha256Text(rows.join('\n'))}:${rows.length}`;
 }
 
 function analyzeChannel(manifest) {
     const generatedAt = Date.now();
-    const rows = buildRows(manifest || {}, generatedAt);
+    const allRows = buildRows(manifest || {}, generatedAt);
+    const population = selectAnalysisPopulation(allRows);
+    const rows = population.rows;
     const keys = contract.features.map(feature => feature.key);
     const manifestVideos = manifest && manifest.videos || [];
+    const completedVideos = manifestVideos.filter(
+        video => video && video.status === 'done'
+    );
+    const completedLedgerStates = completedVideos.map(
+        scoreLedgerValidationSummary
+    );
+    const completedManifestBindingStates = completedVideos.map(
+        validateManifestRowBinding
+    );
     const eligibility = {
         discovered: manifestVideos.length,
-        completed: manifestVideos.filter(video => video && video.status === 'done').length,
-        completedWithPublicViews: rows.length,
-        knownPublicationDates: rows.filter(row => row.ageDays != null).length,
-        missingPublicationDates: rows.filter(row => row.ageDays == null).length,
-        note: 'All-ages analysis requires only a completed score and positive public views. Minimum-age cohorts additionally require a publication timestamp.',
+        completed: completedVideos.length,
+        completedWithPublicViews: allRows.length,
+        analysisRows: rows.length,
+        canonicalInputBoundWithPublicViews:
+            population.canonicalRows.length,
+        historicalInputUnboundWithPublicViews:
+            population.historicalRows.length,
+        invalidEvidenceStateWithPublicViews:
+            population.invalidEvidenceRows.length,
+        invalidInputEvidenceWithPublicViews:
+            population.invalidInputEvidenceRows.length,
+        canonicalLedgerValid: completedLedgerStates.filter(
+            state => state.valid === true
+        ).length,
+        legacyLedgerMissing: completedLedgerStates.filter(
+            state => state.state === 'legacy-missing'
+        ).length,
+        invalidLedgerExcluded: completedLedgerStates.filter(
+            state => state.state === 'canonical-invalid'
+        ).length,
+        hashBoundManifestRows: completedManifestBindingStates.filter(
+            state => state.valid === true
+        ).length,
+        legacyManifestBindingMissing:
+            completedManifestBindingStates.filter(
+                state => state.state === 'legacy-missing'
+            ).length,
+        invalidManifestBindingExcluded:
+            completedManifestBindingStates.filter(
+                state => state.state === 'canonical-invalid'
+            ).length,
+        knownPublicationDates:
+            rows.filter(row => row.ageDays != null).length,
+        missingPublicationDates:
+            rows.filter(row => row.ageDays == null).length,
+        note: (
+            'Hash-valid score records and exact input-bound evidence are '
+            + 'separate requirements. Canonical fitting uses only rows '
+            + 'whose manifest declares canonical_bound, canonical=true, '
+            + 'and predictor_eligible=true, and whose montage/text input '
+            + 'fingerprints validate internally. Historical unbound rows remain '
+            + 'browseable but cannot support predictor claims. '
+            + 'Minimum-age cohorts additionally require a publication '
+            + 'timestamp.'
+        ),
+    };
+    const evidence = {
+        mode: population.mode,
+        inputBoundAnalysisEligible:
+            population.inputBoundAnalysisEligible,
+        predictorEligible: false,
+        blindValidationEligible: false,
+        upstreamFitExclusionVerified: false,
+        fixedOutcomeHorizon: population.fixedHorizonOutcome,
+        fixedOutcomeHorizonDays: population.fixedHorizonDays,
+        analysisRows: rows.length,
+        canonicalInputBoundRows:
+            population.canonicalRows.length,
+        historicalInputUnboundRows:
+            population.historicalRows.length,
+        invalidEvidenceRows:
+            population.invalidEvidenceRows.length,
+        invalidInputEvidenceRows:
+            population.invalidInputEvidenceRows.length,
+        claimBoundary: population.claimBoundary,
+    };
+    const inference = {
+        confirmatory: false,
+        multiplicityAdjusted: false,
+        decisionEligible: false,
+        claimStatus: 'exploratory_only',
+        hypothesisAccounting: {
+            continuousSingleScreens: contract.features.length,
+            registeredSinglePairTripleModels: 1561,
+            publicViewTargets: 8,
+            minimumAgeSlicesPerTarget: 6,
+            directionalFeatureScreens:
+                contract.features.length * 8 * 6,
+            thresholdCutoffs: 'data-dependent and fixed cutoffs per views axis',
+            promotedUnadjustedClaims: 0,
+        },
+        searchedFamilies: [
+            '21 single-coordinate continuous associations',
+            '1,561 fixed single/pair/triple registries',
+            'eight public-view outcome thresholds',
+            'six minimum-age descriptive cohorts',
+            'multiple score cutoffs per views-valued coordinate',
+        ],
+        note: (
+            'All rankings, favorable-direction AUCs, threshold screens, '
+            + 'and confidence intervals are exploratory. No familywise '
+            + 'or false-discovery correction has been applied, and an '
+            + 'independent fixed-horizon confirmation set is required '
+            + 'before decision use.'
+        ),
     };
     if (rows.length < 8) return {
-        version: 6,
+        version: VERSION,
+        implementationSha256: ANALYSIS_IMPLEMENTATION_SHA256,
         generatedAt,
         channelId: manifest && manifest.id,
         n: rows.length,
         eligibility,
+        evidence,
+        inference,
         featureContract: contract,
         status: 'insufficient',
-        message: 'At least 8 scored Shorts with public view counts are required for held-out analysis.',
+        message: (
+            'At least 8 eligible rows are required. Exact input-bound rows '
+            + 'are required for predictor claims; historical rows may only '
+            + 'support explicitly labeled diagnostics.'
+        ),
     };
 
+    const evidenceTier = population.inputBoundAnalysisEligible
+        ? population.fixedHorizonOutcome
+            ? 'input-bound-fixed-horizon-grouped-oof-association'
+            : 'input-bound-right-censored-retrospective-association'
+        : 'historical-input-diagnostic';
     const singles = contract.features.map(definition => {
         const direct = directFeatureStats(rows, definition);
         const oof = evaluateFeatureSet(rows, [definition.key], 5, 1);
-        return { key: definition.key, group: definition.group, label: definition.label, ...direct, oof: cleanMetric(oof) };
+        return {
+            key: definition.key,
+            group: definition.group,
+            label: definition.label,
+            ...direct,
+            oof: cleanMetric(oof),
+            evidenceTier,
+            predictorEligible: false,
+            decisionEligible: false,
+        };
     }).sort((a, b) => ((b.oof && b.oof.r2) == null ? -Infinity : b.oof.r2) - ((a.oof && a.oof.r2) == null ? -Infinity : a.oof.r2));
 
     const candidates = combinations(keys, 1).concat(combinations(keys, 2), combinations(keys, 3));
     const candidateScores = evaluateCandidateRows(rows, candidates);
     const path = forwardPath(rows, keys);
-    const nestedCandidates = candidates.concat(path.map(step => step.keys).filter(stepKeys => stepKeys.length > 3));
-    const nested = nestedSelection(rows, nestedCandidates);
+    const nested = nestedSelection(rows, candidates);
+    const nestedSingles = nestedSelection(
+        rows,
+        combinations(keys, 1)
+    );
     const allIndicators = cleanMetric(evaluateFeatureSet(rows, keys, 5, 1));
     const baselineLog = average(rows.map(row => row.y));
     const primaryRiskTarget = 10000000;
@@ -962,12 +1959,21 @@ function analyzeChannel(manifest) {
     const matchedQuestions = matchedViewsQuestions(riskTargets);
     const riskRows = rows.map(row => ({ ...row, y: row.views >= primaryRiskTarget ? 1 : 0 }));
     const riskPositives = riskRows.filter(row => row.y >= 0.5).length, riskNegatives = riskRows.length - riskPositives;
-    let riskCandidateScores = [], riskNested = null, riskAll = null, riskChronological = null;
+    let riskCandidateScores = [], riskNested = null, riskNestedSingles = null;
+    let riskAll = null, riskChronological = null;
     if (riskPositives >= 3 && riskNegatives >= 3) {
         riskCandidateScores = evaluateBinaryCandidateRows(riskRows, candidates);
         riskNested = nestedBinarySelection(riskRows, candidates);
+        riskNestedSingles = nestedBinarySelection(
+            riskRows,
+            combinations(keys, 1)
+        );
         riskAll = cleanBinaryMetric(evaluateBinaryFeatureSet(riskRows, keys, 5, 1, true));
-        riskChronological = chronologicalBinarySelection(riskRows, candidates);
+        riskChronological = chronologicalBinarySelection(
+            riskRows,
+            candidates,
+            { fixedHorizon: population.fixedHorizonOutcome }
+        );
     }
     const datedRows = rows.filter(row => row.ageDays != null && row.ageDays > 0);
     const historyRows = rows.map(row => {
@@ -984,51 +1990,201 @@ function analyzeChannel(manifest) {
     const primaryCohort = primaryRisk && primaryRisk.cohorts.find(cohort => cohort.minAgeDays === 0);
     const strongestTrajectory = singles.filter(row => row.spearmanViews != null && row.spearmanViews > 0)
         .sort((a, b) => b.spearmanViews - a.spearmanViews)[0] || null;
-    const strongestBlindSingle = singles.filter(row => row.oof && row.oof.r2 != null)
-        .sort((a, b) => b.oof.r2 - a.oof.r2)[0] || null;
-    const strongestTail = primaryCohort && (primaryCohort.featureRankings || []).filter(row => row.directionalAuc != null)[0] || null;
+    const nestedSinglePolicy = nestedSingles ? {
+        performance: Object.fromEntries(
+            Object.entries(nestedSingles).filter(
+                ([key]) => !['points', 'selections'].includes(key)
+            )
+        ),
+        selections: nestedSingles.selections,
+        evidenceTier,
+        predictorEligible: false,
+        decisionEligible: false,
+        confirmationRequired: true,
+        label: 'Nested single-feature selection policy',
+        warning: (
+            'Performance belongs to the fold-local selection policy. '
+            + 'Selection frequencies are shown as a distribution; no one '
+            + 'feature name inherits the adaptive policy score.'
+        ),
+    } : null;
+    const nestedTailPolicy = riskNestedSingles ? {
+        performance: Object.fromEntries(
+            Object.entries(riskNestedSingles).filter(
+                ([key]) => !['points', 'selections'].includes(key)
+            )
+        ),
+        selections: riskNestedSingles.selections,
+        evidenceTier,
+        predictorEligible: false,
+        decisionEligible: false,
+        confirmationRequired: true,
+        label: 'Nested single-feature tail selection policy',
+        warning: (
+            'Performance belongs to the fold-local selection policy. '
+            + 'No one feature name inherits the adaptive policy score.'
+        ),
+    } : null;
+    const strongestFixedSingleExploratory = singles[0] ? {
+        key: singles[0].key,
+        group: singles[0].group,
+        label: singles[0].label,
+        oof: singles[0].oof,
+        evidenceTier: 'multiplicity-uncorrected-fixed-feature-screen',
+        predictorEligible: false,
+        decisionEligible: false,
+        warning: (
+            'This names one fixed feature and reports only that feature’s '
+            + 'own grouped OOF result. It was ranked after screening all '
+            + `${contract.features.length} features and is exploratory.`
+        ),
+    } : null;
 
     return {
-        version: 6,
+        version: VERSION,
+        implementationSha256: ANALYSIS_IMPLEMENTATION_SHA256,
         generatedAt,
         channelId: manifest && manifest.id,
         channelName: manifest && manifest.name,
-        status: 'ready',
+        status: !population.inputBoundAnalysisEligible
+            ? 'historical_diagnostic'
+            : population.fixedHorizonOutcome
+                ? 'fixed_horizon_association'
+                : 'right_censored_retrospective',
         n: rows.length,
         eligibility,
+        evidence,
+        inference,
         transcriptCoverage: rows.filter(row => !row.video.silent).length / rows.length,
         featureContract: contract,
         outcome: {
-            primary: 'log10(raw YouTube views + 1)',
-            secondary: 'raw YouTube views',
+            primary: population.fixedHorizonOutcome
+                ? (
+                    `log10(${population.fixedHorizonDays}-day `
+                    + 'YouTube views + 1)'
+                )
+                : 'log10(current cumulative YouTube views + 1)',
+            secondary: population.fixedHorizonOutcome
+                ? `${population.fixedHorizonDays}-day YouTube views`
+                : 'current cumulative YouTube views',
+            fixedHorizon: population.fixedHorizonOutcome,
+            fixedHorizonDays: population.fixedHorizonDays,
+            observationSemantics: population.fixedHorizonOutcome
+                ? (
+                    'explicit timestamp-validated common post-publication '
+                    + 'outcome horizon'
+                )
+                : (
+                    'current cumulative public-view snapshot at '
+                    + 'viewsObservedAt; unequal exposure is right-censored'
+                ),
             baselineViews: Math.round(Math.pow(10, baselineLog) - 1),
-            validation: 'Deterministic out-of-fold predictions; preprocessing is fit inside each training fold.',
+            modelCoordinate: 'raw canonical score-ledger value with the feature contract unit; view-valued coordinates are transformed once with log10(value + 1)',
+            validation: population.inputBoundAnalysisEligible
+                ? (
+                    'Deterministic content-family-grouped out-of-fold '
+                    + 'associations over exact input-bound rows. Medians, '
+                    + 'scaling, and the missing-input indicator are fit '
+                    + 'inside each training fold. '
+                    + (
+                        population.fixedHorizonOutcome
+                            ? (
+                                'Every outcome uses the same timestamp-'
+                                + 'validated horizon. '
+                            )
+                            : (
+                                'Cumulative views have unequal exposure and '
+                                + 'remain right-censored. '
+                            )
+                    )
+                    + 'Upstream coordinate fits are not certified held out '
+                    + 'here, so this is not an end-to-end blind forecast.'
+                )
+                : (
+                    'Diagnostic content-family-grouped out-of-fold '
+                    + 'arithmetic over historical unbound scores. It does '
+                    + 'not establish blind predictor performance.'
+                ),
         },
         search: {
             exhaustiveThroughSize: 3,
             exhaustiveCandidates: candidates.length,
             theoreticalAllSubsets: Math.pow(2, keys.length) - 1,
             forwardPathModels: path.length,
-            note: 'Singles, pairs, and triples are exhaustive. Larger sets use a deterministic forward path plus an all-21 ridge model; the nested-selected score is the selection-safe headline.',
+            nestedCandidateRegistry: 'fixed exhaustive singles, pairs, and triples only',
+            exploratoryForwardPathEligibleForHeadline: false,
+            note: 'Singles, pairs, and triples are the fixed nested-selection registry. The larger deterministic forward path is a full-data exploratory screen only and is never admitted to the headline nested score. The all-21 ridge model is a separately fixed model.',
         },
         singles,
         signalSummary: {
-            strongestTrajectory,
-            strongestBlindSingle,
-            strongestTail,
-            note: 'Trajectory uses positive Spearman rank correlation, blind-single uses out-of-fold R², and tail separation uses directional ROC AUC for actual 10M+ outcomes. They remain separate so no arbitrary weighting is disguised as one score.',
+            strongestTrajectory: strongestTrajectory ? {
+                ...strongestTrajectory,
+                evidenceTier: population.inputBoundAnalysisEligible
+                    ? 'full-sample-descriptive-screen'
+                    : 'historical-input-diagnostic',
+                predictorEligible: false,
+                decisionEligible: false,
+            } : null,
+            nestedSinglePolicy,
+            nestedTailPolicy,
+            strongestFixedSingleExploratory,
+            note: population.inputBoundAnalysisEligible
+                ? (
+                    'The single and tail policies select inside nested '
+                    + 'training folds, but upstream axis exclusion is not '
+                    + 'certified here. Full-sample rankings and policy '
+                    + 'scores remain retrospective and are never '
+                    + 'decision-eligible.'
+                )
+                : (
+                    'All summaries use historical unbound scores and are '
+                    + 'diagnostic only. None is blind, predictor-eligible, '
+                    + 'or decision-eligible.'
+                ),
         },
         indicatorMatrix: buildIndicatorMatrix(rows),
         indicatorRelationships: buildIndicatorRelationships(rows),
         featureProfiles: buildFeatureProfiles(rows),
         outcomeProfile: buildOutcomeProfile(rows),
-        topCombinations: candidateScores.slice(0, 30),
-        bestBySize: [1, 2, 3].map(size => candidateScores.find(row => row.keys.length === size)).filter(Boolean),
+        topCombinations: candidateScores.slice(0, 30).map(row => ({
+            ...row,
+            evidenceTier: population.inputBoundAnalysisEligible
+                ? 'full-sample-exploratory-screen'
+                : 'historical-input-diagnostic',
+            predictorEligible: false,
+            decisionEligible: false,
+        })),
+        bestBySize: [1, 2, 3].map(size => candidateScores.find(row => row.keys.length === size))
+            .filter(Boolean)
+            .map(row => ({
+                ...row,
+                evidenceTier: population.inputBoundAnalysisEligible
+                    ? 'full-sample-exploratory-screen'
+                    : 'historical-input-diagnostic',
+                predictorEligible: false,
+                decisionEligible: false,
+            })),
         forwardPath: path,
         models: {
-            nestedSelected: nested,
-            allIndicators,
-            bestExploratory: candidateScores[0] || null,
+            nestedSelected: nested ? {
+                ...nested,
+                evidenceTier,
+                predictorEligible: false,
+                decisionEligible: false,
+            } : null,
+            allIndicators: allIndicators ? {
+                ...allIndicators,
+                evidenceTier,
+                predictorEligible: false,
+                decisionEligible: false,
+            } : null,
+            bestExploratory: candidateScores[0] ? {
+                ...candidateScores[0],
+                evidenceTier: population.inputBoundAnalysisEligible
+                    ? 'full-sample-exploratory-screen'
+                    : 'historical-input-diagnostic',
+                predictorEligible: false,
+            } : null,
         },
         risk: {
             primaryTargetViews: primaryRiskTarget,
@@ -1036,10 +2192,25 @@ function analyzeChannel(manifest) {
             targets: riskTargets,
             matchedQuestions,
             viewAgeConfound: {
+                fixedHorizon: population.fixedHorizonOutcome,
+                fixedHorizonDays: population.fixedHorizonDays,
                 knownAge: datedRows.length,
                 total: rows.length,
                 pearsonLogAgeToLogViews: viewAgeCorrelation == null ? null : Number(viewAgeCorrelation.toFixed(4)),
-                note: 'Public views are a cumulative snapshot. Minimum-age cohorts keep young, right-censored Shorts from being silently compared with mature Shorts.',
+                note: population.fixedHorizonOutcome
+                    ? (
+                        'Every analyzed outcome uses the same explicit '
+                        + `${population.fixedHorizonDays}-day timestamped `
+                        + 'horizon. This removes unequal exposure but does '
+                        + 'not certify upstream axis exclusion.'
+                    )
+                    : (
+                        'Public views are cumulative snapshots at unequal '
+                        + 'horizons. Minimum-age cohorts expose and reduce '
+                        + 'the youngest censoring, but they do not create '
+                        + 'fixed-horizon labels or calibrated future hit '
+                        + 'probabilities.'
+                    ),
             },
             viewHistory: {
                 videosWithMultipleSnapshots: historyRows.length,
@@ -1049,24 +2220,70 @@ function analyzeChannel(manifest) {
                 note: 'Each channel refresh appends a bounded public-view snapshot. Multiple snapshots enable future score-at-time-T versus later-outcome validation.',
             },
             model: {
-                status: riskPositives >= 3 && riskNegatives >= 3 ? 'ready' : 'insufficient',
+                status: riskPositives < 3 || riskNegatives < 3
+                    ? 'insufficient'
+                    : population.fixedHorizonOutcome
+                        ? 'fixed_horizon_retrospective_association'
+                        : 'right_censored_retrospective_association',
                 targetViews: primaryRiskTarget,
                 positives: riskPositives,
                 negatives: riskNegatives,
                 exhaustiveCandidates: candidates.length,
-                validation: 'Tail probabilities are predicted out of fold. Combination selection happens inside each training fold; the chronological test trains on older Shorts and evaluates only newer Shorts.',
+                evidenceTier,
+                predictorEligible: false,
+                decisionEligible: false,
+                fixedHorizon: population.fixedHorizonOutcome,
+                futureProbabilityEligible: false,
+                validation: population.inputBoundAnalysisEligible
+                    ? (
+                        'Tail classifications are calculated out of fold. '
+                        + 'Combination selection happens inside each '
+                        + 'training fold. The time-ordered split trains on '
+                        + 'older Shorts and evaluates newer Shorts. '
+                        + (
+                            population.fixedHorizonOutcome
+                                ? 'Outcomes share one fixed horizon, but '
+                                : 'Unequal exposure remains right-censored, and '
+                        )
+                        + 'uncertified upstream axis exclusion prevents a '
+                        + 'prospective probability claim.'
+                    )
+                    : (
+                        'Tail calculations use historical unbound scores '
+                        + 'and are diagnostic only. They do not estimate '
+                        + 'prospective hit probability.'
+                    ),
                 nestedSelected: riskNested,
+                nestedSingleSelected: riskNestedSingles,
                 allIndicators: riskAll,
                 chronological: riskChronological,
-                topCombinations: riskCandidateScores.slice(0, 30),
+                topCombinations: riskCandidateScores.slice(0, 30).map(row => ({
+                    ...row,
+                    evidenceTier: population.inputBoundAnalysisEligible
+                        ? 'full-sample-exploratory-screen'
+                        : 'historical-input-diagnostic',
+                    predictorEligible: false,
+                    decisionEligible: false,
+                })),
             },
-            probabilityCalibration: contract.features.filter(definition => definition.target === 'gt10M')
-                .map(definition => probabilityFeatureCalibration(rows, definition, primaryRiskTarget)),
+            probabilityCalibrationStatus: population.fixedHorizonOutcome
+                ? 'descriptive_fixed_horizon_not_end_to_end_blind'
+                : 'quarantined_right_censored_lifetime',
+            probabilityCalibration: population.fixedHorizonOutcome
+                ? contract.features.filter(
+                    definition => definition.target === 'gt10M'
+                ).map(definition => probabilityFeatureCalibration(
+                    rows,
+                    definition,
+                    primaryRiskTarget
+                ))
+                : [],
         },
     };
 }
 
 module.exports = {
+    VERSION,
     contract,
     featureCell,
     modelFeatureValue,
@@ -1074,6 +2291,11 @@ module.exports = {
     spearman,
     evaluateFeatureSet,
     evaluateBinaryFeatureSet,
+    contentFamilyId,
+    foldAssignments,
+    stratifiedFoldAssignments,
+    _predictionMetrics: predictionMetrics,
+    _purgeContentFamilyOverlap: purgeContentFamilyOverlap,
     wilsonInterval,
     savedChannelAnalysisFingerprint,
     analyzeChannel,

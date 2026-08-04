@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 4,
+  "ledgerVersion": 11,
+  "domain": "shorts-and-long-quant",
+  "percentileStorageUnit": "percentile_0_100",
+  "valueUnits": {
+    "percent": {
+      "minimumInclusive": 0,
+      "maximumInclusive": 100,
+      "description": "A non-rewatch percentage whose complete support is the closed interval [0, 100]."
+    },
+    "retention_percent_rewatch_capable": {
+      "minimumInclusive": 0,
+      "maximumInclusive": null,
+      "description": "Audience retention percentage that may exceed 100 when rewatches contribute additional watch events. It has no arbitrary finite upper bound."
+    },
+    "probability": {
+      "minimumInclusive": 0,
+      "maximumInclusive": 1,
+      "description": "A probability on the closed interval [0, 1]."
+    },
+    "views": {
+      "minimumInclusive": 0,
+      "maximumInclusive": null,
+      "description": "A nonnegative view count or view-equivalent estimate."
+    },
+    "log10_views": {
+      "minimumInclusive": 0,
+      "maximumInclusive": null,
+      "description": "A nonnegative base-10 view coordinate used by the registered novelty output."
+    },
+    "number": {
+      "minimumInclusive": null,
+      "maximumInclusive": null,
+      "description": "A finite scalar without additional range restrictions."
+    }
+  },
+  "rules": [
+    "One numerical estimator or fitted axis has exactly one active canonical coordinate ID.",
+    "Validation protocols are evaluation metadata; they do not duplicate a shared scalar coordinate.",
+    "Historical IDs resolve through aliases or retirement records and never appear as active ledger columns.",
+    "The 21-feature scorer contract remains an independently versioned, byte-pinned model-input contract.",
+    "Every active coordinate declares input, representation, fit population, algorithm, calibration, artifact revision, validation protocol, and visualization lineage.",
+    "Measured outcomes are source-of-truth labels and are never predictor eligible.",
+    "An exact algebraic complement is stored once. Alternate presentation is a governed non-stored display transform.",
+    "Every stored value is validated against its named governed unit. Five-second retention uses retention_percent_rewatch_capable and is never clipped at 100."
+  ],
+  "coordinates": {
+    "observedPattern": "shorts.observed.{outcomeKey}",
+    "storedPattern": "shorts.stored.{featureKey}",
+    "creatorExcludedPublicPattern": "shorts.creator-excluded.{featureKey}",
+    "privateHeldoutPattern": "shorts.{protocol}-heldout.{featureKey}",
+    "forecastPattern": "shorts.{protocol}-forecast.{outcomeKey}",
+    "longOutputPattern": "long.output.{group}.{metricKey}",
+    "longMapPlacementPattern": "long.map-placement.{group}.{projectionKey}",
+    "visualKeepForecast": {
+      "id": "shorts.visual-keep-forecast.v1",
+      "family": "visualKeepForecast"
+    },
+    "creatorAdaptiveKeepForecast": {
+      "id": "shorts.creator-adaptive-keep.v1",
+      "family": "creatorAdaptiveKeepForecast"
+    },
+    "visualKeepProtocols": {
+      "videoHoldout": {
+        "id": "shorts.visual-keep-protocol.video-heldout.v1",
+        "protocol": "visual_video_holdout",
+        "label": "Visual-only protocol · known-creator video-held-out keep",
+        "familyId": "family.shorts.visual-keep-video-holdout.v1",
+        "datasetId": "dataset.shorts.visual-keep-video-holdout.v1",
+        "algorithmId": "algorithm.shorts.visual-keep-video-holdout-nested-blend.v1",
+        "description": "Leakage-controlled research prediction made after excluding this video while retaining other labeled videos from the same creator."
+      },
+      "forwardTime": {
+        "id": "shorts.visual-keep-protocol.forward-time.v1",
+        "protocol": "visual_forward_time",
+        "label": "Visual-only protocol · future-upload keep",
+        "familyId": "family.shorts.visual-keep-forward-time.v1",
+        "datasetId": "dataset.shorts.visual-keep-forward-time.v1",
+        "algorithmId": "algorithm.shorts.visual-keep-forward-time-ridge.v1",
+        "description": "Chronological research prediction fitted and selected from strictly earlier videos by the same creator."
+      },
+      "accountHoldout": {
+        "id": "shorts.visual-keep-protocol.account-heldout.v1",
+        "protocol": "visual_account_holdout",
+        "label": "Visual-only protocol · unseen-creator keep",
+        "familyId": "family.shorts.visual-keep-account-holdout.v1",
+        "datasetId": "dataset.shorts.visual-keep-account-holdout.v1",
+        "algorithmId": "algorithm.shorts.visual-keep-account-holdout-ridge.v1",
+        "description": "Cold-start research prediction made after excluding every labeled video from this creator."
+      }
+    }
+  },
+  "expansions": {
+    "creatorExcludedPublicCanonicalSource": "videoHeldOut",
+    "modalities": [
+      "visual",
+      "text",
+      "together"
+    ],
+    "creatorExcludedPublicTargets": [
+      "views",
+      "outlier",
+      "gt10M"
+    ],
+    "privateHeldoutTargets": [
+      "keep",
+      "ret5",
+      "realviews"
+    ],
+    "heldoutProtocols": [
+      "video",
+      "account"
+    ],
+    "longGroups": [
+      "visual",
+      "text",
+      "together"
+    ],
+    "longMetrics": [
+      {
+        "key": "ctrviews",
+        "label": "CTR + views",
+        "unit": "percentile",
+        "target": "ctrviews",
+        "projectionKey": "ctrviews"
+      },
+      {
+        "key": "ctr",
+        "label": "Click-through rate",
+        "unit": "percent",
+        "target": "ctr",
+        "projectionKey": "ctr"
+      },
+      {
+        "key": "ret30",
+        "label": "30-second retention",
+        "unit": "percent",
+        "target": "ret30",
+        "projectionKey": "ret30"
+      },
+      {
+        "key": "views",
+        "label": "Raw views",
+        "unit": "views",
+        "target": "views",
+        "projectionKey": "views"
+      },
+      {
+        "key": "scaled_views",
+        "label": "Views / subscribers",
+        "unit": "number",
+        "target": "outlier",
+        "projectionKey": "outlier"
+      },
+      {
+        "key": "realviews",
+        "label": "Forecast views (channel scale)",
+        "unit": "views",
+        "target": "realviews",
+        "projectionKey": "realviews"
+      },
+      {
+        "key": "gt10m",
+        "label": "Chance over 10M",
+        "unit": "probability",
+        "target": "gt10m",
+        "projectionKey": "hi10m"
+      }
+    ]
+  },
+  "displayTransforms": [
+    {
+      "id": "shorts.observed.swipe",
+      "sourceCoordinateId": "shorts.observed.keep",
+      "formula": "100 - source",
+      "protocol": "observed",
+      "unit": "percent",
+      "stored": false,
+      "predictorEligible": false
+    },
+    {
+      "id": "shorts.video-forecast.swipe",
+      "sourceCoordinateId": "shorts.video-forecast.keep",
+      "formula": "100 - source",
+      "protocol": "video",
+      "unit": "percent",
+      "stored": false,
+      "predictorEligible": false
+    },
+    {
+      "id": "shorts.account-forecast.swipe",
+      "sourceCoordinateId": "shorts.account-forecast.keep",
+      "formula": "100 - source",
+      "protocol": "account",
+      "unit": "percent",
+      "stored": false,
+      "predictorEligible": false
+    }
+  ],
+  "compatibility": {
+    "migratableLedgerRevisions": [
+      {
+        "ledgerVersion": 10,
+        "featureContractVersion": 9,
+        "featureContractIdentitySchemaVersion": 1,
+        "featureContractSha256": "833be61f6e5f18572f6767314f627603f2e75d9a3fd3a65e31100cf544f2a433",
+        "featureContractDocumentSha256": "9fd6b6d792c5b4ba2c9acffc31babad192d77b0cafecf7dd3bff9cbd4dc5b92b",
+        "coordinateGovernanceVersion": 3,
+        "coordinateGovernanceSha256": "295fb197375bb2c576172ccd3a9fb572c28d1b55efc037431ef946cea7123ed1",
+        "expectedCoordinateIdsSha256": "18e3bf9f28da95ad955bee9b4f9f3a9bccfaa89d2ec8390d38597d76b04713d7",
+        "scoreValueMigration": {
+          "kind": "target-unit-relabel",
+          "target": "ret5",
+          "fromUnit": "percent",
+          "toUnit": "retention_percent_rewatch_capable",
+          "numericTransform": "identity",
+          "priorMinimumInclusive": 0,
+          "priorMaximumInclusive": null,
+          "historicalUpperBoundWasEnforced": false
+        },
+        "reason": "Exact v10 to v11 correction of the ret5 unit label. The historical producer emitted rewatch-capable retention and the historical validator imposed no upper bound, despite the generic percent label. Values are preserved exactly; only the unit identity is corrected."
+      },
+      {
+        "ledgerVersion": 9,
+        "featureContractVersion": 9,
+        "featureContractIdentitySchemaVersion": 1,
+        "featureContractSha256": "833be61f6e5f18572f6767314f627603f2e75d9a3fd3a65e31100cf544f2a433",
+        "featureContractDocumentSha256": "9fd6b6d792c5b4ba2c9acffc31babad192d77b0cafecf7dd3bff9cbd4dc5b92b",
+        "coordinateGovernanceVersion": 2,
+        "coordinateGovernanceSha256": "461e305922ce76dbcc3e7a4217d16bf7bea85fbb4aebdb0f94bf918c70f51dda",
+        "expectedCoordinateIdsSha256": "18e3bf9f28da95ad955bee9b4f9f3a9bccfaa89d2ec8390d38597d76b04713d7",
+        "scoreValueMigration": {
+          "kind": "target-unit-relabel",
+          "target": "ret5",
+          "fromUnit": "percent",
+          "toUnit": "retention_percent_rewatch_capable",
+          "numericTransform": "identity",
+          "priorMinimumInclusive": 0,
+          "priorMaximumInclusive": null,
+          "historicalUpperBoundWasEnforced": false
+        },
+        "reason": "Exact v9 to v11 migration. The historical producer emitted rewatch-capable retention and the historical validator imposed no upper bound, despite the generic percent label. Values are preserved exactly; only the unit identity is corrected."
+      }
+    ],
+    "migratableLongLedgerRevisions": [
+      {
+        "ledgerVersion": 10,
+        "governanceSchemaVersion": 3,
+        "governanceSha256": "295fb197375bb2c576172ccd3a9fb572c28d1b55efc037431ef946cea7123ed1",
+        "coordinateIdsSha256": "bb22d18ce9730d3769fde6e800272f8debc3f3f6e0827fa8590836818f3e0587",
+        "reason": "Exact Long Quant v10 to v11 governance migration. Long Quant coordinate identities and numeric values are unchanged by the Shorts ret5 unit correction."
+      },
+      {
+        "ledgerVersion": 9,
+        "governanceSchemaVersion": 2,
+        "governanceSha256": "461e305922ce76dbcc3e7a4217d16bf7bea85fbb4aebdb0f94bf918c70f51dda",
+        "coordinateIdsSha256": "bb22d18ce9730d3769fde6e800272f8debc3f3f6e0827fa8590836818f3e0587",
+        "reason": "Exact Long Quant v9 to v11 governance-only migration. The 21 coordinate identities and values are unchanged."
+      }
+    ],
+    "aliasPatterns": [
+      {
+        "from": "shorts.video-heldout.{featureKey}",
+        "to": "shorts.creator-excluded.{featureKey}",
+        "targets": [
+          "views",
+          "outlier",
+          "gt10M"
+        ],
+        "reason": "The old video-held-out address and the old account-held-out address both copied the same creator-excluded public axis."
+      },
+      {
+        "from": "shorts.account-heldout.{featureKey}",
+        "to": "shorts.creator-excluded.{featureKey}",
+        "targets": [
+          "views",
+          "outlier",
+          "gt10M"
+        ],
+        "reason": "The old account-held-out address and the old video-held-out address both copied the same creator-excluded public axis."
+      }
+    ],
+    "retired": [
+      {
+        "id": "shorts.legacy.keep-video-heldout-model",
+        "replacement": "shorts.video-forecast.keep",
+        "reason": "Historical multi-input diagnostic superseded by the registered video-held-out forecast."
+      },
+      {
+        "id": "shorts.legacy.keep-account-heldout-model",
+        "replacement": "shorts.account-forecast.keep",
+        "reason": "Historical multi-input diagnostic superseded by the registered account-held-out forecast."
+      },
+      {
+        "id": "shorts.legacy.keep-forward-time-model",
+        "replacement": "shorts.visual-keep-protocol.forward-time.v1",
+        "reason": "Historical forward-time field lacked complete replayable lineage."
+      },
+      {
+        "id": "shorts.legacy.views-public-axis-ensemble",
+        "replacement": "shorts.video-forecast.views",
+        "reason": "Historical three-axis average was redundant with the registered combined forecast family."
+      },
+      {
+        "id": "shorts.legacy.views-video-heldout-model",
+        "replacement": "shorts.video-forecast.views",
+        "reason": "Historical multi-input diagnostic superseded by the registered video-held-out forecast."
+      },
+      {
+        "id": "shorts.legacy.views-account-heldout-model",
+        "replacement": "shorts.account-forecast.views",
+        "reason": "Historical multi-input diagnostic superseded by the registered account-held-out forecast."
+      },
+      {
+        "id": "shorts.legacy.views-forward-time-model",
+        "replacement": null,
+        "reason": "Historical forward-time views field has no fully replayable canonical replacement and is retired rather than inferred."
+      }
+    ]
+  },
+  "inference": {
+    "outcomeHypothesisFamilies": {
+      "keep": "feed-decision",
+      "swipe": "feed-decision",
+      "ret5": "ret5",
+      "averageRetention": "average-retention",
+      "views": "views",
+      "outlier": "outlier",
+      "hit10M": "hit10m",
+      "survival5": "survival5",
+      "survival10": "survival10",
+      "survival20": "survival20",
+      "drop5": "drop5",
+      "drop10": "drop10",
+      "drop20": "drop20"
+    },
+    "minimumIndependentAccountsForConfirmatoryClaim": 5,
+    "currentPValueStatus": "creator-and-content-family-blocked-exploratory",
+    "currentPValueWarning": "Inference first collapses repeated content families within each creator, then treats creators as the independent units. Fewer than three creators returns no transfer p-value. Benjamini-Hochberg q-values remain exploratory; confirmatory promotion additionally requires the governed creator minimum and a content-addressed preregistration."
+  }
+}

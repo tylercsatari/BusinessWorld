@@ -103,6 +103,8 @@ function harnessHtml(origin) {
 }
 
 async function installRoutes(page, origin, artifact) {
+    const releaseSha256 = 'a'.repeat(64);
+    const artifactSha256 = 'b'.repeat(64);
     await page.route(`${origin}/__predictor_lab_ui_qa__`, route => route.fulfill({
         status: 200,
         contentType: 'text/html',
@@ -122,11 +124,22 @@ async function installRoutes(page, origin, artifact) {
             });
         }
         let payload;
+        let responseHeaders = {};
         if (url.pathname === '/api/raw/predictor-lab') {
             payload = artifact;
+            responseHeaders = {
+                'X-Predictor-Release-SHA256':
+                    releaseSha256,
+                'X-Artifact-SHA256':
+                    artifactSha256,
+            };
         } else if (url.pathname === '/api/raw/predictor-lab/status') {
             payload = {
                 version: 1,
+                releaseSha256,
+                artifactSha256,
+                sourceOfTruth:
+                    'raw/predictor-lab/release.json',
                 stage: 'embedding',
                 updatedAt: Date.now(),
                 message: 'Gemini embedding credits or project quota are exhausted.',
@@ -166,6 +179,7 @@ async function installRoutes(page, origin, artifact) {
         return route.fulfill({
             status: 200,
             contentType: 'application/json',
+            headers: responseHeaders,
             body: JSON.stringify(payload),
         });
     });
@@ -238,6 +252,52 @@ async function verifyFormulaAndCalibration(page, artifact, target) {
     return {
         formulaTerms: targetData.formula.terms.length,
         calibrationBins: await calibrationCircles.count(),
+    };
+}
+
+async function verifyBlockedTarget(page, artifact, target) {
+    const targetData = artifact.targets[target];
+    assert(
+        targetData
+        && targetData.availability
+        && targetData.availability.state !== 'ready',
+        `${target} is not a blocked target`
+    );
+    const card = page.locator(
+        `[data-predictor-target-blocked="${target}"]`
+    );
+    await card.waitFor({ state: 'visible' });
+    await card.getByText(
+        String(targetData.availability.state).replace(/_/g, ' '),
+        { exact: true }
+    ).waitFor({ state: 'visible' });
+    await page.getByText(
+        'Descriptive 21-ledger associations · not a views predictor',
+        { exact: true }
+    ).waitFor({ state: 'visible' });
+    assert.strictEqual(
+        await page.getByText(
+            'Final fitted research formula · every downstream input exposed',
+            { exact: true }
+        ).count(),
+        0,
+        `${target} must not render a fitted formula while blocked`
+    );
+    assert.strictEqual(
+        await page.getByText(
+            'Retrospective interpolation · predicted vs actual · every point is clickable',
+            { exact: true }
+        ).count(),
+        0,
+        `${target} must not render predictor points while blocked`
+    );
+    return {
+        blocked: true,
+        state: targetData.availability.state,
+        eligibleRows:
+            targetData.availability.eligibleRows,
+        diagnosticRows:
+            targetData.availability.diagnosticRows,
     };
 }
 
@@ -377,8 +437,26 @@ async function verifyMobileLayout(page, artifact) {
 
     await page.screenshot({ path: path.join(QA_DIR, 'mobile-predictor-top.png'), fullPage: false });
 
-    await scrollJarvisTo(page, page.getByText('Final fitted research formula · every downstream input exposed', { exact: true }).first());
-    await page.screenshot({ path: path.join(QA_DIR, 'mobile-predictor-formula.png'), fullPage: false });
+    const viewsBlocked = !!(
+        artifact.targets.views.availability
+        && artifact.targets.views.availability.state !== 'ready'
+    );
+    const mobileTarget = viewsBlocked
+        ? page.locator('[data-predictor-target-blocked="views"]')
+        : page.getByText(
+            'Final fitted research formula · every downstream input exposed',
+            { exact: true }
+        ).first();
+    await scrollJarvisTo(page, mobileTarget);
+    await page.screenshot({
+        path: path.join(
+            QA_DIR,
+            viewsBlocked
+                ? 'mobile-predictor-blocked.png'
+                : 'mobile-predictor-formula.png'
+        ),
+        fullPage: false,
+    });
 
     const content = page.locator('.jarvis-content');
     const maxScroll = await content.evaluate(element => element.scrollHeight - element.clientHeight);
@@ -393,9 +471,29 @@ async function verifyMobileLayout(page, artifact) {
     assert(after.panelOverflow <= 1, `Mobile panel overflow appeared after scrolling (${after.panelOverflow}px)`);
     assert.strictEqual(after.targetOverlap, false, 'Target controls overlap after mobile scroll');
 
-    const formulaFeature = artifact.targets.views.formula.terms[0].feature;
-    const formulaCard = page.locator('[data-predictor-formula="research"]');
-    assert.strictEqual(await formulaCard.getByText(formulaFeature, { exact: true }).count(), 1, 'Views formula content disappeared in mobile layout');
+    if (viewsBlocked) {
+        assert.strictEqual(
+            await page.locator(
+                '[data-predictor-target-blocked="views"]'
+            ).count(),
+            1,
+            'Blocked views state disappeared in mobile layout'
+        );
+    } else {
+        const formulaFeature =
+            artifact.targets.views.formula.terms[0].feature;
+        const formulaCard = page.locator(
+            '[data-predictor-formula="research"]'
+        );
+        assert.strictEqual(
+            await formulaCard.getByText(
+                formulaFeature,
+                { exact: true }
+            ).count(),
+            1,
+            'Views formula content disappeared in mobile layout'
+        );
+    }
     return { before, after, movedTo };
 }
 
@@ -446,13 +544,46 @@ async function main() {
 
         await page.locator('[data-predictortarget="views"]').click();
         await waitForTarget(page, 'views');
-        await page.getByText('true median multiplicative views error', { exact: true }).waitFor({ state: 'visible' });
-        const viewsSections = await verifyFormulaAndCalibration(page, artifact, 'views');
-        const viewsDrilldown = await verifyScatterDrilldown(page, artifact, 'views');
+        const viewsBlocked = !!(
+            artifact.targets.views.availability
+            && artifact.targets.views.availability.state !== 'ready'
+        );
+        const viewsSections = viewsBlocked
+            ? await verifyBlockedTarget(page, artifact, 'views')
+            : await verifyFormulaAndCalibration(
+                page,
+                artifact,
+                'views'
+            );
+        const viewsDrilldown = viewsBlocked
+            ? {}
+            : await verifyScatterDrilldown(
+                page,
+                artifact,
+                'views'
+            );
         await setJarvisScroll(page, 0);
         await page.screenshot({ path: path.join(QA_DIR, 'desktop-views-overview.png'), fullPage: false });
-        await scrollJarvisTo(page, page.getByText('Final fitted research formula · every downstream input exposed', { exact: true }).first());
-        await page.screenshot({ path: path.join(QA_DIR, 'desktop-views-formula.png'), fullPage: false });
+        await scrollJarvisTo(
+            page,
+            viewsBlocked
+                ? page.locator(
+                    '[data-predictor-target-blocked="views"]'
+                )
+                : page.getByText(
+                    'Final fitted research formula · every downstream input exposed',
+                    { exact: true }
+                ).first()
+        );
+        await page.screenshot({
+            path: path.join(
+                QA_DIR,
+                viewsBlocked
+                    ? 'desktop-views-blocked.png'
+                    : 'desktop-views-formula.png'
+            ),
+            fullPage: false,
+        });
 
         const desktopLayout = await viewportAudit(page);
         assert(desktopLayout.globalOverflow <= 1, `Desktop document overflows horizontally by ${desktopLayout.globalOverflow}px`);

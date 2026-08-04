@@ -1,6 +1,7 @@
 numpy
 scipy
 scikit-learn
+Pillow
 requests
 boto3
 yt-dlp>=2024.4

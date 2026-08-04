@@ -1612,7 +1612,6 @@
       "depth": 2,
       "parent": "retention",
       "resolution": "R5",
-      "status": "measured",
       "note": "RETRACTED: r=-0.280 but only 9 videos have streak>=2, 2 have >=3. FALSE SIGNAL — driven by extreme outliers. Binary(>=3) r=-0.058 (ns). Does NOT add to model. Ignore.",
       "r_partial_dur": -0.1236,
       "status": "retracted"

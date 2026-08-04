@@ -44,9 +44,12 @@ def run_steering():
     # re-inject the per-account ctr/ret30/realviews projections that build_map() strips each rebuild
     try:
         import subprocess, sys as _sys
-        subprocess.run([_sys.executable, os.path.join(HERE, 'add_steered_proj_long.py')], cwd=HERE, timeout=900)
+        child_env = dict(os.environ)
+        child_env['RAW_STEER_USE_PENDING'] = '1'
+        subprocess.run([_sys.executable, os.path.join(HERE, 'add_steered_proj_long.py')], cwd=HERE, env=child_env, timeout=1800, check=True)
     except Exception as e:
-        print('  steering skipped:', str(e)[:80], flush=True)
+        print('  steering/artifact publication failed:', str(e)[:160], flush=True)
+        raise
 
 def embed(parts):
     for attempt in range(6):
@@ -184,7 +187,8 @@ def build_map(c):
                'subs': [float(x) for x in s['subs']], 'id': list(ids), 'title': [str(t)[:60] for t in s['title']],
                'txt': [str(t)[:200] for t in s['txt']], 'mine': mine, 'silent': [False] * len(ids), 'owner': s.get('owner', [''] * len(ids)),
                'clusters': clusters, 'nmine': int(sum(mine)), 'nsilent': 0}
-        r2_put(f'raw-long/{c}/map.json', json.dumps(out).encode(), 'application/json')
+        # Keep the last complete map live while its replacement is enriched and validated.
+        r2_put(f'raw-long/{c}/map.pending.json', json.dumps(out).encode(), 'application/json')
         print(f"  map[{c}]: n={len(ids)} mine={sum(mine)} AUC(>10M)={auc} r(views)={r} · " + ' '.join(f"{k}(v{proj[k]['cv']}/o{proj[k]['co']})" for k in proj), flush=True)
     except Exception as e:
         print(f'map[{c}] skipped:', str(e)[:140], flush=True)

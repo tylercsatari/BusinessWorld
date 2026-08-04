@@ -402,7 +402,7 @@
             window.addEventListener('message', onMsg);
         };
     }
-    const ALL_BUILDINGS = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Experiment Lab', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Video Lab'];
+    const ALL_BUILDINGS = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Experiment Lab', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Casino', 'Video Lab'];
     // Buildings with internal tabs that can be granted individually (mirrors access-registry.js).
     const BUILDING_SECTIONS = (window.ACCESS_REGISTRY
         ? Object.fromEntries(Object.entries(window.ACCESS_REGISTRY).map(([b, r]) => [b, r.sections.map(s => [s.id, s.label])]))

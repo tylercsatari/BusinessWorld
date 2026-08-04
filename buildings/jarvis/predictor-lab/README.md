@@ -58,9 +58,11 @@ only a few independent channels and views are lifetime snapshots. The artifact
 reports Brier skill against the base-rate null, but it does not frame the
 current calibration as decision-grade financial risk.
 
-Every source object read by a run is content-hashed. Raw arrays are rejected
-when IDs, vectors, labels, metadata, or flags are misaligned, and a run aborts
-if it observes two byte generations for the same source.
+Every source object read by a run is content-hashed. Mutable NPZ inputs are
+copied to create-only, content-addressed R2 snapshots and read back byte for
+byte before fitting, so a concurrent backfill cannot change the evidence
+under a long run. Raw arrays are rejected when IDs, vectors, labels, metadata,
+or flags are misaligned.
 
 ## Science Center backfill
 
@@ -71,25 +73,3 @@ reruns the predictor artifact after completion. It does not run on Render.
 ```bash
 scripts/run-predictor-backfill.sh
 ```
-
-## Channel-free hook signal
-
-`run_channel_free_signal.py` is the canonical (and only) generator for
-`channel-free-signal.json` (validation record) and `channel-free-scores.json`
-(per-video OOF scores). Both share a `runId`; every consumer reads from them —
-the promotion ledger finding (`channelFreeKeepDirection`), the Principles Lab
-visualization (Quant audit + Evidence ledger tabs), and the Experiment-tab
-"Channel-free hook signal" card (labels and metrics are data-driven, nothing
-hardcoded).
-
-When data changes (new videos or embeddings), regenerate in order:
-
-```bash
-python3 buildings/jarvis/predictor-lab/run_channel_free_signal.py
-node buildings/jarvis/principles-lab/quant/promotion-ledger.js --out buildings/jarvis/principles-lab/quant/promotion-ledger.json
-node buildings/jarvis/principles-lab/build-artifact.js
-node scripts/test-channel-free-signal.js   # consistency gate — must PASS
-```
-
-The ledger cross-checks the two artifacts' runIds itself; a mismatch becomes a
-high-severity integrity finding, and the test script fails loudly.

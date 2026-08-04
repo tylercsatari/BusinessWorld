@@ -5,11 +5,13 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const {
+    blindResidualScale,
     duplicateGroups,
     fitRidge,
     forwardFolds,
     groupFolds,
     logScoreBits,
+    purgeLeakageGroupOverlap,
     regressionReport,
 } = require('./factorized-validation');
 
@@ -31,16 +33,42 @@ for (const fold of groupFolds(groupedRows)) {
     assert(!fold.test.some(row => trainSources.has(row.source)));
 }
 
+const crossSourceCopies = groupedRows.map(row => ({
+    ...row,
+    copyGroup:
+        row.id === '0' || row.id === '30'
+            ? 'same-upload'
+            : `copy-${row.id}`,
+}));
+for (const fold of groupFolds(crossSourceCopies)) {
+    const testCopies = new Set(fold.test.map(row => row.copyGroup));
+    assert(
+        !fold.train.some(row => testCopies.has(row.copyGroup)),
+        'whole-source folds must purge duplicate content from training'
+    );
+}
+const directPurge = purgeLeakageGroupOverlap(
+    [{ id: 'a', copyGroup: 'same' }, { id: 'b', copyGroup: 'other' }],
+    [{ id: 'c', copyGroup: 'same' }]
+);
+assert.deepStrictEqual(directPurge.rows.map(row => row.id), ['b']);
+
 const datedRows = Array.from({ length: 40 }, (_, index) => ({
     id: String(index),
     source: 'one',
     publishedAt: Date.UTC(2024, 0, index + 1),
+    copyGroup:
+        index === 2 || index === 30
+            ? 'chronological-copy'
+            : `dated-${index}`,
 }));
 for (const fold of forwardFolds(datedRows)) {
     assert(
         Math.max(...fold.train.map(row => row.publishedAt))
-            <= Math.min(...fold.test.map(row => row.publishedAt))
+            < Math.min(...fold.test.map(row => row.publishedAt))
     );
+    const testCopies = new Set(fold.test.map(row => row.copyGroup));
+    assert(!fold.train.some(row => testCopies.has(row.copyGroup)));
 }
 
 const copies = duplicateGroups([
@@ -68,6 +96,34 @@ assert(logScoreBits(improved, baseline).bitsPerObservation > 0);
 const report = regressionReport(improved);
 assert(report.calibration && report.discrimination);
 
+const uncertaintyRows = Array.from({ length: 90 }, (_, index) => {
+    const source = `source-${Math.floor(index / 30)}`;
+    const signal = (index % 30) / 10;
+    return {
+        id: `uncertainty-${index}`,
+        source,
+        copyGroup: `uncertainty-${index}`,
+        y: 2 + 3 * signal + ((index * 17) % 7 - 3) * 0.2,
+        features: { signal },
+    };
+});
+const uncertainty = blindResidualScale(
+    uncertaintyRows,
+    'grouped',
+    ['signal'],
+    {
+        controls: [],
+        includeOpportunity: false,
+        includeAge: false,
+    }
+);
+assert(Number.isFinite(uncertainty.sigma) && uncertainty.sigma > 0);
+assert.strictEqual(uncertainty.residualN, uncertaintyRows.length);
+assert.strictEqual(
+    uncertainty.method,
+    'fully_nested_inner_holdout_rmse'
+);
+
 const outputPath = path.join(__dirname, 'factorized-validation.json');
 assert(fs.existsSync(outputPath), 'analysis result must exist');
 const output = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
@@ -85,6 +141,6 @@ assert(
 
 process.stdout.write(JSON.stringify({
     passed: true,
-    checks: 9,
+    checks: 15,
     output: path.relative(process.cwd(), outputPath),
 }) + '\n');

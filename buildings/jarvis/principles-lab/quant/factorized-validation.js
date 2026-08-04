@@ -26,6 +26,10 @@ const {
     GetObjectCommand,
     S3Client,
 } = require('@aws-sdk/client-s3');
+const {
+    scoreFeatureCell,
+    scoreLedgerValidationSummary,
+} = require('../../shorts-score-ledger');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const OUTPUT_PATH = path.join(__dirname, 'factorized-validation.json');
@@ -38,6 +42,7 @@ const PATHS = {
     marketHold: 'buildings/jarvis/promise-lab/.cache/market-reward.json',
     promise20s: 'buildings/jarvis/promise-lab/.cache/opening-20s.json',
     featureContract: 'buildings/jarvis/saved-channel-feature-contract.json',
+    coordinateGovernance: 'buildings/jarvis/quant-coordinate-governance.json',
 };
 
 const FACTORS = [
@@ -557,16 +562,9 @@ function createR2Loader(provenance) {
 }
 
 function savedFeatureValue(video, definition) {
-    const cell = (video.features || {})[definition.key];
-    let raw = null;
-    let percentile = null;
-    if (Array.isArray(cell)) {
-        raw = number(cell[0]);
-        percentile = number(cell[1]);
-    } else if (cell && typeof cell === 'object') {
-        raw = number(cell.v ?? cell.value);
-        percentile = number(cell.p ?? cell.percentile);
-    }
+    const cell = scoreFeatureCell(video, definition.key);
+    let raw = number(cell.value);
+    let percentile = number(cell.percentile);
     if (percentile !== null && percentile > 1) percentile /= 100;
     if (
         raw !== null
@@ -588,6 +586,7 @@ async function loadSavedChannelRows(getR2, contract) {
                 video.status !== 'done'
                 || !finite(video.views)
                 || Number(video.views) <= 0
+                || scoreLedgerValidationSummary(video).valid !== true
             ) {
                 continue;
             }
@@ -738,7 +737,11 @@ function groupFolds(rows, groupKey = 'source') {
     const groups = [...new Set(rows.map(row => row[groupKey]))].sort();
     return groups.map(group => {
         const test = rows.filter(row => row[groupKey] === group);
-        const train = rows.filter(row => row[groupKey] !== group);
+        const purged = purgeLeakageGroupOverlap(
+            rows.filter(row => row[groupKey] !== group),
+            test
+        );
+        const train = purged.rows;
         assert(
             !train.some(row => row[groupKey] === group),
             `group ${group} appeared in both train and test`
@@ -748,8 +751,35 @@ function groupFolds(rows, groupKey = 'source') {
             train,
             test,
             heldOut: group,
+            leakageGroupPurge: purged.audit,
         };
     }).filter(fold => fold.train.length >= 20 && fold.test.length >= 5);
+}
+
+function leakageGroupId(row) {
+    const copyGroup = row && row.copyGroup;
+    return copyGroup !== null
+        && copyGroup !== undefined
+        && String(copyGroup) !== ''
+        ? `copy:${String(copyGroup)}`
+        : `id:${String(row && row.id || '')}`;
+}
+
+function purgeLeakageGroupOverlap(trainRows, testRows) {
+    const heldOut = new Set((testRows || []).map(leakageGroupId));
+    const rows = (trainRows || []).filter(
+        row => !heldOut.has(leakageGroupId(row))
+    );
+    return {
+        rows,
+        audit: {
+            trainBefore: (trainRows || []).length,
+            trainAfter: rows.length,
+            purged: (trainRows || []).length - rows.length,
+            heldOutGroups: heldOut.size,
+            unit: 'copy_group_or_row_identity',
+        },
+    };
 }
 
 function balancedHashFolds(rows, groupKey = 'copyGroup', count = 5) {
@@ -787,12 +817,21 @@ function forwardFolds(rows, options = {}) {
     for (let block = 0; block < blockCount; block += 1) {
         const testStart = initial + Math.floor(remaining * block / blockCount);
         const testEnd = initial + Math.floor(remaining * (block + 1) / blockCount);
-        const train = dated.slice(0, testStart);
         const test = dated.slice(testStart, testEnd);
-        if (train.length < 20 || test.length < 5) continue;
+        if (test.length < 5) continue;
+        const testFrom = Math.min(...test.map(row => row.publishedAt));
+        const chronologicalTrain = dated.slice(0, testStart).filter(
+            row => row.publishedAt < testFrom
+        );
+        const purged = purgeLeakageGroupOverlap(
+            chronologicalTrain,
+            test
+        );
+        const train = purged.rows;
+        if (train.length < 20) continue;
         assert(
             Math.max(...train.map(row => row.publishedAt))
-                <= Math.min(...test.map(row => row.publishedAt)),
+                < Math.min(...test.map(row => row.publishedAt)),
             `forward fold ${block + 1} is not chronological`
         );
         folds.push({
@@ -802,6 +841,7 @@ function forwardFolds(rows, options = {}) {
             trainThrough: new Date(Math.max(...train.map(row => row.publishedAt))).toISOString(),
             testFrom: new Date(Math.min(...test.map(row => row.publishedAt))).toISOString(),
             testThrough: new Date(Math.max(...test.map(row => row.publishedAt))).toISOString(),
+            leakageGroupPurge: purged.audit,
         });
     }
     return folds;
@@ -811,6 +851,13 @@ function innerFolds(rows, mode) {
     if (mode === 'grouped') {
         const grouped = groupFolds(rows);
         if (grouped.length >= 2) return grouped;
+        const copyGroups = new Set(rows.map(leakageGroupId));
+        if (copyGroups.size >= 2) {
+            return balancedHashFolds(rows.map(row => ({
+                ...row,
+                innerGroup: leakageGroupId(row),
+            })), 'innerGroup', 3);
+        }
         return balancedHashFolds(rows.map(row => ({
             ...row,
             innerGroup: `hash-${stableHash(row.id) % 3}`,
@@ -818,6 +865,13 @@ function innerFolds(rows, mode) {
     }
     const forward = forwardFolds(rows, { initialFraction: 0.55, blockCount: 2 });
     if (forward.length) return forward;
+    const copyGroups = new Set(rows.map(leakageGroupId));
+    if (copyGroups.size >= 2) {
+        return balancedHashFolds(rows.map(row => ({
+            ...row,
+            innerGroup: leakageGroupId(row),
+        })), 'innerGroup', 3);
+    }
     return balancedHashFolds(rows.map(row => ({
         ...row,
         innerGroup: `hash-${stableHash(row.id) % 3}`,
@@ -880,6 +934,65 @@ function chooseAlpha(rows, mode, featureNames, options) {
     return scores[0].alpha;
 }
 
+function blindResidualScale(rows, mode, featureNames, options) {
+    const residuals = [];
+    const calibrationFolds = innerFolds(rows, mode);
+    const foldAudit = [];
+    for (const fold of calibrationFolds) {
+        if (fold.train.length < 20 || fold.test.length < 5) continue;
+        const alpha = chooseAlpha(
+            fold.train,
+            mode,
+            featureNames,
+            options
+        );
+        const matrices = buildFeatureMatrices(
+            fold.train,
+            fold.test,
+            featureNames,
+            options
+        );
+        const model = fitRidge(
+            matrices.train,
+            fold.train.map(row => row.y),
+            alpha,
+            {
+                nonNegativeIndices: matrices.featureNames
+                    .map((name, index) => (
+                        (options.nonNegativeFeatures || []).includes(name)
+                            ? index
+                            : null
+                    ))
+                    .filter(index => index !== null),
+            }
+        );
+        const predicted = model.predict(matrices.test);
+        predicted.forEach((value, index) => {
+            if (finite(value) && finite(fold.test[index].y)) {
+                residuals.push(Number(fold.test[index].y) - Number(value));
+            }
+        });
+        foldAudit.push({
+            fold: fold.id,
+            trainN: fold.train.length,
+            testN: fold.test.length,
+            selectedAlpha: alpha,
+        });
+    }
+    return {
+        sigma: residuals.length
+            ? Math.max(
+                Math.sqrt(mean(residuals.map(value => value * value))),
+                1e-4
+            )
+            : null,
+        residualN: residuals.length,
+        folds: foldAudit,
+        method: 'fully_nested_inner_holdout_rmse',
+        rule: 'Each uncertainty residual is produced by a model and alpha selected without that residual row.',
+    };
+}
+
 function evaluateRidgeSubset(folds, mode, featureNames, options) {
     const records = [];
     const foldReports = [];
@@ -906,6 +1019,12 @@ function evaluateRidgeSubset(folds, mode, featureNames, options) {
             }
         );
         const predicted = model.predict(matrices.test);
+        const uncertainty = blindResidualScale(
+            fold.train,
+            mode,
+            featureNames,
+            options
+        );
         const highThreshold = quantile(fold.train.map(row => row.y), 0.75);
         const foldRecords = fold.test.map((row, index) => ({
             key: `${fold.id}:${row.id}`,
@@ -914,7 +1033,7 @@ function evaluateRidgeSubset(folds, mode, featureNames, options) {
             source: row.source,
             actual: row.y,
             predicted: predicted[index],
-            sigma: model.sigma,
+            sigma: uncertainty.sigma,
             highLabel: row.y >= highThreshold,
         }));
         records.push(...foldRecords);
@@ -928,6 +1047,7 @@ function evaluateRidgeSubset(folds, mode, featureNames, options) {
             trainThrough: fold.trainThrough || null,
             testFrom: fold.testFrom || null,
             testThrough: fold.testThrough || null,
+            uncertainty,
             metrics: regressionReport(foldRecords),
         });
     }
@@ -2116,6 +2236,7 @@ if (require.main === module) {
 
 module.exports = {
     auc,
+    blindResidualScale,
     duplicateGroups,
     evaluateMarketHold,
     evaluatePromiseOpening,
@@ -2124,6 +2245,7 @@ module.exports = {
     forwardFolds,
     groupFolds,
     logScoreBits,
+    purgeLeakageGroupOverlap,
     regressionReport,
     shapleyBits,
 };

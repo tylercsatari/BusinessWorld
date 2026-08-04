@@ -13,6 +13,9 @@ const fs = require('fs');
 const path = require('path');
 const cloud = require('./cloud-storage');
 const sc = require('./shorts-crawler');
+const longformVideoIndex = require(
+    './buildings/jarvis/longform-video-index'
+);
 if (cloud.initR2 && !cloud.isR2Ready()) cloud.initR2();
 
 const MIN_VIEWS = 1_000;                   // ~1k → billions (full range, last year)
@@ -138,10 +141,25 @@ async function saveDb(force) {
     const now = Date.now();
     if (!force && now - saveT < 20000) return;       // throttle
     saveT = now; db.updated = now;
-    try { fs.writeFileSync(LOCAL_DB, JSON.stringify(db)); } catch (e) {}
+    const dbBytes = Buffer.from(JSON.stringify(db));
+    try { fs.writeFileSync(LOCAL_DB, dbBytes); } catch (e) {}
     try {
-        await cloud.uploadToR2(DB_KEY, Buffer.from(JSON.stringify(db)), 'application/json');
+        const index = longformVideoIndex.buildIndex(db, dbBytes, {
+            generatedAtMs: now,
+        });
+        const release = longformVideoIndex.bindRelease(index);
+        await cloud.uploadToR2(DB_KEY, dbBytes, 'application/json');
+        await cloud.uploadToR2(
+            longformVideoIndex.immutableIndexKey(index),
+            Buffer.from(JSON.stringify(index)),
+            'application/json'
+        );
         await cloud.uploadToR2(STATS_KEY, Buffer.from(JSON.stringify(computeStats())), 'application/json');
+        await cloud.uploadToR2(
+            longformVideoIndex.RELEASE_KEY,
+            Buffer.from(JSON.stringify(release)),
+            'application/json'
+        );
     } catch (e) { console.warn('longform: saveDb', e.message); }
 }
 

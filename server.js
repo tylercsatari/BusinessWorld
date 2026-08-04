@@ -34,6 +34,12 @@ process.on('uncaughtException', (e) => { try { console.error('[uncaughtException
 process.on('unhandledRejection', (e) => { try { console.error('[unhandledRejection]', e && e.stack || e); } catch (_) {} });
 
 const cloud = require('./cloud-storage');
+const {
+    acquireR2Lease,
+    heartbeatR2Lease,
+    releaseR2Lease,
+    inspectR2Lease,
+} = require('./buildings/jarvis/r2-lease');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
 const auth = require('./auth');
@@ -46,12 +52,556 @@ const jarvisMetrics = require('./buildings/jarvis/jarvis-metrics');
 const streamJson = require('./buildings/jarvis/stream-json');
 const viralIdeaEngine = require('./buildings/jarvis/viral-idea-engine');
 const savedChannelAnalysis = require('./buildings/jarvis/saved-channel-analysis');
+const savedChannelValidation = require('./buildings/jarvis/saved-channel-validation');
+const savedChannelManifestBinding = require(
+    './buildings/jarvis/saved-channel-manifest-binding'
+);
+const {
+    savedChannelRecordArtifactKey,
+    validateSavedChannelEvidenceState,
+    validateSavedChannelRecordBinding,
+} = require('./buildings/jarvis/saved-channel-record-binding');
+const shortsScoreLedger = require(
+    './buildings/jarvis/shorts-score-ledger'
+);
+const longScoreLedger = require(
+    './buildings/jarvis/long-score-ledger'
+);
+const longSavedThumbnailRecord = require(
+    './buildings/jarvis/long-saved-thumbnail-record'
+);
+const longformVideoIndex = require(
+    './buildings/jarvis/longform-video-index'
+);
+const longHookLibraryIndex = require(
+    './buildings/jarvis/long-hook-library-index'
+);
+const savedHookRecordBinding = require(
+    './buildings/jarvis/saved-hook-record-binding'
+);
+const savedHookRuntimeIndex = require(
+    './buildings/jarvis/saved-hook-runtime-index'
+);
+const savedChannelIndexContract = require(
+    './buildings/jarvis/saved-channel-index-contract'
+);
+const visualKeepForecastContract = require(
+    './buildings/jarvis/visual-keep-forecast-contract'
+);
+const creatorAdaptiveKeepForecastContract = require(
+    './buildings/jarvis/creator-adaptive-keep-forecast-contract'
+);
+const storyboardContract = require(
+    './buildings/jarvis/storyboard-contract'
+);
+const experimentLabWorkspace = require(
+    './buildings/experimentlab/experimentlab-workspace'
+);
+const {
+    createR2JsonCasMutator,
+} = require('./buildings/jarvis/r2-json-cas');
+const {
+    WorldLayoutConflictError,
+    createWorldLayoutStore,
+    layoutRevisionMetadata,
+} = require('./world-layout-store');
+const {
+    canonicalJsonBytes,
+    sha256Bytes,
+} = require('./buildings/jarvis/canonical-json-artifact');
+const quantJobIdentity = require(
+    './buildings/jarvis/quant-job-identity'
+);
+const quantCoordinateGovernance = shortsScoreLedger.GOVERNANCE;
+const quantCoordinateGovernanceBytes = shortsScoreLedger.GOVERNANCE_BYTES;
+const quantCoordinateGovernanceSha256 =
+    shortsScoreLedger.GOVERNANCE_SHA256;
+const savedChannelFeatureContract =
+    shortsScoreLedger.FEATURE_CONTRACT;
+const savedChannelFeatureContractBytes =
+    shortsScoreLedger.FEATURE_CONTRACT_BYTES;
+const savedChannelFeatureContractDocumentSha256 =
+    shortsScoreLedger.FEATURE_CONTRACT_DOCUMENT_SHA256;
+const savedChannelFeatureContractIdentitySchemaVersion =
+    shortsScoreLedger.FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION;
+const savedChannelFeatureContractSha256 =
+    shortsScoreLedger.FEATURE_CONTRACT_SHA256;
+const canonicalShortsStoredCoordinates =
+    shortsScoreLedger.FEATURE_DEFINITIONS;
+const shortsScoreLedgerRuntime = Object.freeze({
+    schema: 'shorts-score-ledger-browser-runtime-v1',
+    schemaVersion: 1,
+    ledgerSchema: 'shorts-stored-score-ledger-v1',
+    ledgerSchemaVersion: 1,
+    ledgerVersion: shortsScoreLedger.GOVERNANCE.ledgerVersion,
+    percentileUnit:
+        shortsScoreLedger.GOVERNANCE.percentileStorageUnit,
+    featureIdentitySchemaVersion:
+        shortsScoreLedger.FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+    featureContractSha256:
+        shortsScoreLedger.FEATURE_CONTRACT_SHA256,
+    featureContractDocumentSha256:
+        shortsScoreLedger.FEATURE_CONTRACT_DOCUMENT_SHA256,
+    governanceVersion:
+        shortsScoreLedger.GOVERNANCE.schemaVersion,
+    governanceSha256:
+        shortsScoreLedger.GOVERNANCE_SHA256,
+    expectedCoordinateIds:
+        shortsScoreLedger.EXPECTED_COORDINATE_IDS,
+    unitBounds: Object.fromEntries(
+        Object.entries(
+            shortsScoreLedger.GOVERNANCE.valueUnits
+        ).map(([unit, definition]) => [unit, {
+            min: definition.minimumInclusive,
+            max: definition.maximumInclusive,
+        }])
+    ),
+    definitions: canonicalShortsStoredCoordinates.map(
+        definition => ({
+            coordinateId: definition.coordinateId,
+            featureKey: definition.key,
+            group: definition.group,
+            target: definition.target,
+            source: definition.source,
+            sourceKey:
+                definition.sourceKey || definition.key,
+            unit: definition.unit,
+            displayUnit: definition.displayUnit ?? null,
+        })
+    ),
+});
+const {
+    SAVED_HOOK_INDEX_VERSION,
+    compactSavedHookBindingPayload,
+    compactSavedHookRecord,
+    historicalSavedHookDisplay,
+    savedHookScoreRecordSha256,
+    scoreDomainForRecord,
+    validateCompactSavedHookRecord,
+    validateCompactSavedHookSource,
+    validateHistoricalSavedHookDisplay,
+} = require('./embedding-display-contract');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
+const { Worker } = require('worker_threads');
 const PORT = process.env.PORT || 8002;
 const IS_RENDER = !!process.env.RENDER;  // Render sets this env var automatically
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// BEGIN QUEUE_LEASE_RUNTIME
+const QUEUE_LEASE_FENCE_SCHEMA =
+    'business-world.queue-lease-fence';
+const QUEUE_LEASE_FENCE_VERSION = 1;
+const QUEUE_LEASE_NAMES = Object.freeze({
+    SHORTS_HOOK: 'shorts-hook',
+    SHORTS_GRIND: 'shorts-grind',
+    LONG_GRIND: 'long-grind',
+});
+
+class QueueLeaseOwnershipError extends Error {
+    constructor(message, {
+        queueName,
+        jobId,
+        operation,
+        cause = null,
+    } = {}) {
+        super(message);
+        this.name = 'QueueLeaseOwnershipError';
+        this.code = 'QUEUE_LEASE_OWNERSHIP_UNCERTAIN';
+        this.queueName = queueName || null;
+        this.jobId = jobId || null;
+        this.operation = operation || null;
+        if (cause) this.cause = cause;
+    }
+}
+
+function createQueueLeaseCoordinator({
+    leaseApi,
+    ownerId,
+    ttlMs = 120000,
+    heartbeatIntervalMs = 20000,
+    clock = Date.now,
+    setIntervalFn = setInterval,
+    clearIntervalFn = clearInterval,
+} = {}) {
+    if (
+        !leaseApi
+        || typeof leaseApi.acquire !== 'function'
+        || typeof leaseApi.heartbeat !== 'function'
+        || typeof leaseApi.release !== 'function'
+        || typeof leaseApi.inspect !== 'function'
+    ) {
+        throw new TypeError(
+            'Queue lease coordinator requires acquire, heartbeat, release, and inspect'
+        );
+    }
+    if (typeof ownerId !== 'string' || !ownerId) {
+        throw new TypeError('Queue lease coordinator requires an owner ID');
+    }
+    if (!Number.isSafeInteger(ttlMs) || ttlMs < 1000) {
+        throw new RangeError('Queue lease TTL must be at least 1000ms');
+    }
+    if (
+        !Number.isSafeInteger(heartbeatIntervalMs)
+        || heartbeatIntervalMs < 1
+        || heartbeatIntervalMs >= ttlMs
+    ) {
+        throw new RangeError(
+            'Queue lease heartbeat interval must be positive and below the TTL'
+        );
+    }
+
+    const safePart = (value, field) => {
+        const normalized = String(value || '')
+            .replace(/[^a-zA-Z0-9_-]/g, '')
+            .slice(0, 96);
+        if (!normalized) {
+            throw new TypeError(
+                `Queue lease ${field} must contain a safe identifier`
+            );
+        }
+        return normalized;
+    };
+    const keyFor = (queueName, jobId) =>
+        `queue-leases/${safePart(queueName, 'queue')}/`
+        + `${safePart(jobId, 'job')}.json`;
+    const uncertain = (
+        queueName,
+        jobId,
+        operation,
+        cause
+    ) => new QueueLeaseOwnershipError(
+        `Queue lease ownership became uncertain during ${operation}`,
+        { queueName, jobId, operation, cause }
+    );
+
+    async function acquire(queueNameValue, jobIdValue) {
+        const queueName = safePart(queueNameValue, 'queue');
+        const jobId = safePart(jobIdValue, 'job');
+        const key = keyFor(queueName, jobId);
+        let acquisition;
+        try {
+            acquisition = await leaseApi.acquire({
+                key,
+                ownerId,
+                ttlMs,
+            });
+        } catch (cause) {
+            throw uncertain(
+                queueName,
+                jobId,
+                'acquire',
+                cause
+            );
+        }
+        if (!acquisition || acquisition.acquired !== true) {
+            return null;
+        }
+
+        let lease = acquisition.lease;
+        let lastConfirmedAtMs = Number(clock());
+        let heartbeatInFlight = null;
+        let lostError = null;
+        let closed = false;
+
+        const markLost = (operation, cause) => {
+            if (!lostError) {
+                lostError = uncertain(
+                    queueName,
+                    jobId,
+                    operation,
+                    cause
+                );
+            }
+            return lostError;
+        };
+        const fence = () => Object.freeze({
+            schema: QUEUE_LEASE_FENCE_SCHEMA,
+            schema_version: QUEUE_LEASE_FENCE_VERSION,
+            queue_name: queueName,
+            job_id: jobId,
+            lease_key: key,
+            owner_id: ownerId,
+            generation: lease.generation,
+            acquired_at_ms: lease.acquiredAtMs,
+            renewed_at_ms: lease.renewedAtMs,
+            expires_at_ms: lease.expiresAtMs,
+        });
+        const heartbeat = async ({
+            force = false,
+            operation = 'heartbeat',
+        } = {}) => {
+            if (lostError) throw lostError;
+            if (closed) {
+                throw markLost(
+                    operation,
+                    new Error('lease ownership is already closed')
+                );
+            }
+            if (heartbeatInFlight) {
+                await heartbeatInFlight;
+                if (lostError) throw lostError;
+                return lease;
+            }
+            const ageMs = Number(clock()) - lastConfirmedAtMs;
+            if (
+                !force
+                && ageMs >= 0
+                && ageMs < Math.max(
+                    1,
+                    Math.floor(heartbeatIntervalMs / 2)
+                )
+            ) {
+                return lease;
+            }
+            const currentLease = lease;
+            heartbeatInFlight = (async () => {
+                try {
+                    const renewed = await leaseApi.heartbeat({
+                        lease: currentLease,
+                        ownerId,
+                        ttlMs,
+                    });
+                    lease = renewed;
+                    lastConfirmedAtMs = Number(clock());
+                    return renewed;
+                } catch (cause) {
+                    throw markLost(operation, cause);
+                }
+            })();
+            try {
+                return await heartbeatInFlight;
+            } finally {
+                heartbeatInFlight = null;
+            }
+        };
+        const timer = setIntervalFn(() => {
+            heartbeat({
+                force: true,
+                operation: 'scheduled heartbeat',
+            }).catch(() => {});
+        }, heartbeatIntervalMs);
+        if (timer && typeof timer.unref === 'function') timer.unref();
+
+        return Object.freeze({
+            queueName,
+            jobId,
+            key,
+            ownerId,
+            get generation() {
+                return lease.generation;
+            },
+            get lost() {
+                return !!lostError;
+            },
+            fence() {
+                if (lostError) throw lostError;
+                return fence();
+            },
+            heartbeat(operation = 'explicit heartbeat') {
+                return heartbeat({ force: true, operation });
+            },
+            async checkpoint(operation = 'ownership checkpoint') {
+                await heartbeat({ force: false, operation });
+                if (lostError) throw lostError;
+                return fence();
+            },
+            async mutate(operation, mutation) {
+                if (typeof mutation !== 'function') {
+                    throw new TypeError(
+                        'Queue lease mutation must be a function'
+                    );
+                }
+                await heartbeat({ force: false, operation });
+                if (lostError) throw lostError;
+                return mutation(fence());
+            },
+            async release() {
+                if (closed) {
+                    return Object.freeze({
+                        released: false,
+                        reason: 'already-closed',
+                    });
+                }
+                closed = true;
+                clearIntervalFn(timer);
+                if (heartbeatInFlight) {
+                    try {
+                        await heartbeatInFlight;
+                    } catch (error) {}
+                }
+                if (lostError) {
+                    return Object.freeze({
+                        released: false,
+                        reason: 'ownership-uncertain',
+                        error: lostError,
+                    });
+                }
+                try {
+                    lease = await leaseApi.release({
+                        lease,
+                        ownerId,
+                    });
+                    return Object.freeze({
+                        released: true,
+                        reason: 'owner-released',
+                        fence: fence(),
+                    });
+                } catch (cause) {
+                    return Object.freeze({
+                        released: false,
+                        reason: 'release-uncertain',
+                        error: markLost('release', cause),
+                    });
+                }
+            },
+        });
+    }
+
+    async function inspect(queueNameValue, jobIdValue) {
+        const queueName = safePart(queueNameValue, 'queue');
+        const jobId = safePart(jobIdValue, 'job');
+        try {
+            return await leaseApi.inspect({
+                key: keyFor(queueName, jobId),
+            });
+        } catch (cause) {
+            throw uncertain(
+                queueName,
+                jobId,
+                'inspect',
+                cause
+            );
+        }
+    }
+
+    return Object.freeze({
+        acquire,
+        inspect,
+        keyFor,
+        ownerId,
+        ttlMs,
+        heartbeatIntervalMs,
+    });
+}
+// END QUEUE_LEASE_RUNTIME
+
+const QUEUE_LEASE_TTL_MS = Math.max(
+    30000,
+    Math.min(
+        15 * 60 * 1000,
+        parseInt(
+            process.env.QUEUE_LEASE_TTL_MS || '120000',
+            10
+        ) || 120000
+    )
+);
+const QUEUE_LEASE_HEARTBEAT_MS = Math.max(
+    5000,
+    Math.min(
+        Math.floor(QUEUE_LEASE_TTL_MS / 3),
+        parseInt(
+            process.env.QUEUE_LEASE_HEARTBEAT_MS || '20000',
+            10
+        ) || 20000
+    )
+);
+const QUEUE_LEASE_OWNER_ID =
+    `business-world:${require('crypto').randomUUID()}`;
+const queueLeaseCoordinator = createQueueLeaseCoordinator({
+    leaseApi: {
+        acquire: acquireR2Lease,
+        heartbeat: heartbeatR2Lease,
+        release: releaseR2Lease,
+        inspect: inspectR2Lease,
+    },
+    ownerId: QUEUE_LEASE_OWNER_ID,
+    ttlMs: QUEUE_LEASE_TTL_MS,
+    heartbeatIntervalMs: QUEUE_LEASE_HEARTBEAT_MS,
+});
+
+function isQueueLeaseOwnershipError(error) {
+    return !!error
+        && error.code === 'QUEUE_LEASE_OWNERSHIP_UNCERTAIN';
+}
+
+function requireQueueLeaseOwnership(
+    ownership,
+    queueName,
+    jobId
+) {
+    if (
+        !ownership
+        || ownership.queueName !== queueName
+        || ownership.jobId !== jobId
+        || typeof ownership.mutate !== 'function'
+    ) {
+        throw new QueueLeaseOwnershipError(
+            'Queue work cannot run without its exact lease owner',
+            {
+                queueName,
+                jobId,
+                operation: 'worker entry',
+            }
+        );
+    }
+    return ownership;
+}
+
+const savedChannelAnalysisInflight = new Map();
+let savedChannelAnalysisQueue = Promise.resolve();
+function analyzeSavedChannelOffThread(manifest, fingerprint) {
+    if (savedChannelAnalysisInflight.has(fingerprint)) {
+        return savedChannelAnalysisInflight.get(fingerprint);
+    }
+    const task = savedChannelAnalysisQueue
+        .catch(() => {})
+        .then(() => new Promise((resolve, reject) => {
+            const worker = new Worker(path.join(
+                __dirname,
+                'buildings/jarvis/saved-channel-analysis-worker.js'
+            ), {
+                workerData: { manifest },
+            });
+            let settled = false;
+            const settle = callback => value => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                callback(value);
+            };
+            const timer = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                worker.terminate().catch(() => {});
+                reject(new Error(
+                    'Saved-channel analysis exceeded its 15-minute limit.'
+                ));
+            }, 15 * 60 * 1000);
+            worker.once('message', message => {
+                worker.terminate().catch(() => {});
+                if (message && message.ok) settle(resolve)(message.value);
+                else settle(reject)(new Error(
+                    message && message.error
+                    || 'Saved-channel analysis worker failed.'
+                ));
+            });
+            worker.once('error', settle(reject));
+            worker.once('exit', code => {
+                if (!settled) settle(reject)(new Error(
+                    `Saved-channel analysis worker exited ${code} before returning a result.`
+                ));
+            });
+        }));
+    savedChannelAnalysisQueue = task;
+    savedChannelAnalysisInflight.set(fingerprint, task);
+    task.finally(() => {
+        if (savedChannelAnalysisInflight.get(fingerprint) === task) {
+            savedChannelAnalysisInflight.delete(fingerprint);
+        }
+    }).catch(() => {});
+    return task;
+}
 // ── Hook reasoning engine support: server-side LLM JSON + memory persistence ──
 function _extractJsonObject(text) {
     if (!text) return null;
@@ -191,16 +741,20 @@ const LAYOUT_FILE = path.join(DIR, 'layout.json');
 const BUILD_TS = Date.now();
 
 // ── Jarvis Compact Helpers ────────────────────────────────────────────
-function sendJsonGz(req, res, data, statusCode) {
+function sendJsonGz(req, res, data, statusCode, headers = {}) {
     const json = typeof data === 'string' ? data : JSON.stringify(data);
     const accepts = (req.headers['accept-encoding'] || '');
     if (accepts.includes('gzip')) {
         zlib.gzip(Buffer.from(json, 'utf8'), (err, compressed) => {
             if (err) {
-                res.writeHead(statusCode || 200, { 'Content-Type': 'application/json' });
+                res.writeHead(statusCode || 200, {
+                    ...headers,
+                    'Content-Type': 'application/json',
+                });
                 res.end(json);
             } else {
                 res.writeHead(statusCode || 200, {
+                    ...headers,
                     'Content-Type': 'application/json',
                     'Content-Encoding': 'gzip',
                     'Vary': 'Accept-Encoding',
@@ -209,7 +763,10 @@ function sendJsonGz(req, res, data, statusCode) {
             }
         });
     } else {
-        res.writeHead(statusCode || 200, { 'Content-Type': 'application/json' });
+        res.writeHead(statusCode || 200, {
+            ...headers,
+            'Content-Type': 'application/json',
+        });
         res.end(json);
     }
 }
@@ -278,7 +835,11 @@ async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallback
         const fresh = result && result.entry;
         sourceError = result && result.error;
         if (fresh) { e = fresh; gzCacheSet(cacheKey, e); }
-        else if (e) { e.t = now; }   // source hiccup → keep serving the stale copy
+        else if (e && options.allowStaleOnSourceError !== false) {
+            e.t = now;
+        } else {
+            e = null;
+        }
     }
     if (!e && sourceError && options.surfaceSourceErrors) {
         res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
@@ -289,8 +850,20 @@ async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallback
         return;
     }
     if (!e) { res.writeHead(fallbackStatus || 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); res.end(JSON.stringify(fallback || { error: 'not found' })); return; }
-    const hdr = { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'ETag': e.etag, 'Vary': 'Accept-Encoding' };
-    if (req.headers['if-none-match'] === e.etag) { res.writeHead(304, hdr); res.end(); return; }
+    const staleHeaders = sourceError ? {
+        'X-Source-Status': 'stale-cache',
+        'Warning': '110 - "Response is stale because its source could not be refreshed"',
+    } : {};
+    const hdr = {
+        'Content-Type': 'application/json',
+        'Cache-Control':
+            options.cacheControl || 'no-cache',
+        'ETag': options.etag || e.etag,
+        'Vary': 'Accept-Encoding',
+        ...staleHeaders,
+        ...(options.headers || {}),
+    };
+    if (req.headers['if-none-match'] === hdr.ETag) { res.writeHead(304, hdr); res.end(); return; }
     if ((req.headers['accept-encoding'] || '').includes('gzip')) { res.writeHead(200, { ...hdr, 'Content-Encoding': 'gzip' }); res.end(e.gz); }
     else { res.writeHead(200, hdr); res.end(await _gunzipP(e.gz)); }
 }
@@ -302,19 +875,6 @@ const gzCacheInvalidate = key => {
     _gzCache.delete(key);
 };
 
-async function redirectR2Object(res, key, opts = {}) {
-    if (opts.checkExists !== false) {
-        const ok = await cloud.existsInR2(key).catch(() => false);
-        if (!ok) return false;
-    }
-    const signed = await cloud.getR2SignedUrl(key, opts.expiresIn || 3600);
-    res.writeHead(302, {
-        'Location': signed,
-        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
-    });
-    res.end();
-    return true;
-}
 async function serveR2GzipJsonStream(res, key, cacheControl = 'private, max-age=300') {
     const stream = await cloud.getR2Stream(key).catch(() => null);
     if (!stream) return false;
@@ -328,17 +888,6 @@ async function serveR2GzipJsonStream(res, key, cacheControl = 'private, max-age=
     stream.pipe(res);
     return true;
 }
-async function serveR2Object(res, key, contentType, opts = {}) {
-    const buf = await cloud.downloadFromR2(key).catch(() => null);
-    if (!buf) return false;
-    res.writeHead(200, {
-        'Content-Type': contentType || 'application/octet-stream',
-        'Content-Length': buf.length,
-        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
-    });
-    res.end(buf);
-    return true;
-}
 async function serveR2ObjectForRequest(req, res, key, contentType, opts = {}) {
     if (req.method === 'HEAD') {
         const ok = await cloud.existsInR2(key).catch(() => false);
@@ -350,16 +899,537 @@ async function serveR2ObjectForRequest(req, res, key, contentType, opts = {}) {
         res.end();
         return true;
     }
-    return serveR2Object(res, key, contentType, opts);
+    const stream = await cloud.getR2Stream(key).catch(() => null);
+    if (!stream) return false;
+    res.writeHead(200, {
+        'Content-Type': contentType || 'application/octet-stream',
+        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
+    });
+    stream.on('error', () => { try { res.destroy(); } catch (e) {} });
+    stream.pipe(res);
+    return true;
+}
+
+// Experiment score cards only need a small, truthful sample of each projection plus
+// the selected hook's exact nearest-neighbour placement. Sending the complete Raw map
+// used to transfer 15-50MB per channel and then create hundreds of thousands of SVG
+// nodes on phones. Compact plot artifacts retain every id/x/y server-side, but expose
+// at most a few hundred real corpus points to the browser. The full map remains behind
+// /api/raw(-long)/map and is loaded only when someone explicitly opens Raw.
+const QUANT_PLOT_PROJECTIONS = Object.freeze({
+    raw: ['keep', 'ret5', 'views', 'realviews', 'outlier', 'hi10m'],
+    'raw-long': ['ctrviews', 'ctr', 'ret30', 'views', 'realviews', 'hi10m', 'outlier'],
+});
+const _quantPlotCache = new Map();
+const _quantPlotInflight = new Map();
+const _quantProjectionReleaseCache = new Map();
+const QUANT_PLOT_CACHE_MAX = Math.max(1, parseInt(process.env.QUANT_PLOT_CACHE_MAX || '3', 10));
+let _longformVideoIndexCache = null;
+function finiteNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+function quantPlotSampleIndices(n, limit = 360) {
+    if (!n) return [];
+    if (n <= limit) return Array.from({ length: n }, (_, i) => i);
+    const out = [];
+    for (let i = 0; i < limit; i++) out.push(Math.min(n - 1, Math.floor((i + 0.5) * n / limit)));
+    return out;
+}
+function quantPlotLimitPoints(points, limit) {
+    if (!Array.isArray(points) || points.length <= limit) return Array.isArray(points) ? points : [];
+    return quantPlotSampleIndices(points.length, limit).map(index => points[index]);
+}
+function quantPlotCacheSet(key, artifact) {
+    if (_quantPlotCache.has(key)) _quantPlotCache.delete(key);
+    _quantPlotCache.set(key, artifact);
+    while (_quantPlotCache.size > QUANT_PLOT_CACHE_MAX) _quantPlotCache.delete(_quantPlotCache.keys().next().value);
+}
+
+async function readLongformVideoIndex() {
+    const releaseBuffer = await cloud.downloadFromR2(
+        longformVideoIndex.RELEASE_KEY
+    );
+    if (!releaseBuffer) {
+        throw new Error('Long-form video index release is missing.');
+    }
+    const release = JSON.parse(releaseBuffer.toString('utf8'));
+    const releaseValidation =
+        longformVideoIndex.validateRelease(release);
+    if (!releaseValidation.valid) {
+        throw new Error(
+            `Long-form video index release failed validation: ${
+                releaseValidation.errors.join('; ')
+            }`
+        );
+    }
+    if (
+        _longformVideoIndexCache
+        && _longformVideoIndexCache.releaseSha256
+            === release.release_sha256
+    ) return _longformVideoIndexCache;
+    const indexBuffer = await cloud.downloadFromR2(
+        release.index.key
+    );
+    if (!indexBuffer) {
+        throw new Error(
+            'Long-form immutable video index is missing.'
+        );
+    }
+    const index = JSON.parse(indexBuffer.toString('utf8'));
+    const indexValidation =
+        longformVideoIndex.validateIndex(index);
+    if (
+        !indexValidation.valid
+        || index.artifact_sha256 !== release.index.sha256
+        || index.source.sha256 !== release.source.sha256
+        || index.stored_video_count
+            !== release.index.stored_video_count
+        || index.max_rows_per_list
+            !== release.index.max_rows_per_list
+    ) {
+        throw new Error(
+            'Long-form video index does not match its atomic release.'
+        );
+    }
+    _longformVideoIndexCache = {
+        releaseSha256: release.release_sha256,
+        release,
+        index,
+    };
+    return _longformVideoIndexCache;
+}
+
+function validateQuantProjectionArtifact(
+    artifact,
+    domain,
+    channel,
+    kind
+) {
+    const plural = kind === 'map' ? 'maps' : 'plots';
+    const suffix = kind === 'map' ? 'map.json' : 'plot.json';
+    const key = domain === 'raw'
+        ? artifact && artifact.archiveKey
+        : artifact && artifact.immutable_key;
+    const sha256 = domain === 'raw'
+        ? artifact && artifact.artifactSha256
+        : artifact && artifact.sha256;
+    const byteLength = domain === 'raw'
+        ? null
+        : artifact && artifact.content_length;
+    const canonicalKey = domain === 'raw'
+        ? artifact && artifact.canonicalKey
+        : artifact && artifact.mutable_key;
+    if (
+        !exactSha256(sha256)
+        || key !== (
+            `${domain}/${channel}/${plural}/by-sha256/`
+            + `${sha256}.json`
+        )
+        || canonicalKey !== `${domain}/${channel}/${suffix}`
+        || (
+            domain !== 'raw'
+            && (
+                !Number.isSafeInteger(byteLength)
+                || byteLength <= 0
+            )
+        )
+    ) {
+        throw new Error(
+            `${domain}/${channel} ${kind} release coordinates are invalid.`
+        );
+    }
+    return Object.freeze({
+        key,
+        sha256: String(sha256).toLowerCase(),
+        byteLength,
+        canonicalKey,
+    });
+}
+
+async function readQuantProjectionRelease(domain, channel) {
+    if (!['raw', 'raw-long'].includes(domain)) {
+        throw new Error('Unknown projection domain.');
+    }
+    if (!['visual', 'text', 'together'].includes(channel)) {
+        throw new Error('Unknown projection channel.');
+    }
+    const manifestKey = `${domain}/${channel}/map.manifest.json`;
+    const pointerBuffer = await cloud.downloadFromR2(manifestKey);
+    if (!pointerBuffer) {
+        throw new Error(
+            `No projection release manifest is stored at ${manifestKey}.`
+        );
+    }
+    const pointerSha256 = sha256Bytes(pointerBuffer);
+    const cached = _quantProjectionReleaseCache.get(manifestKey);
+    if (cached && cached.pointerSha256 === pointerSha256) {
+        return cached;
+    }
+    let pointer;
+    try {
+        pointer = JSON.parse(pointerBuffer.toString('utf8'));
+    } catch (error) {
+        throw new Error(
+            `Projection release manifest is invalid JSON: ${manifestKey}`
+        );
+    }
+    let manifest = pointer;
+    let manifestSha256 = pointerSha256;
+    let immutableManifestKey = manifestKey;
+    if (domain === 'raw') {
+        if (
+            pointer.modality !== channel
+            || !pointer.publishedMap
+            || !pointer.publishedPlot
+        ) {
+            throw new Error(
+                `Projection release manifest is inconsistent: ${manifestKey}`
+            );
+        }
+        const mapSha256 = pointer.publishedMap.artifactSha256;
+        if (!exactSha256(mapSha256)) {
+            throw new Error(
+                `Projection release manifest has no valid map hash: ${manifestKey}`
+            );
+        }
+        immutableManifestKey =
+            `${domain}/${channel}/maps/by-sha256/`
+            + `${mapSha256}.manifest.json`;
+        const immutableManifestBuffer =
+            await cloud.downloadFromR2(immutableManifestKey);
+        if (
+            !immutableManifestBuffer
+            || !immutableManifestBuffer.equals(pointerBuffer)
+        ) {
+            throw new Error(
+                `The Shorts map release pointer is not byte-identical to ${immutableManifestKey}.`
+            );
+        }
+    } else {
+        if (
+            pointer.channel !== channel
+            || !exactSha256(pointer.manifest_sha256)
+            || pointer.immutable_manifest_key !== (
+                `${domain}/${channel}/manifests/by-sha256/`
+                + `${pointer.manifest_sha256}.json`
+            )
+        ) {
+            throw new Error(
+                `Projection release pointer is inconsistent: ${manifestKey}`
+            );
+        }
+        immutableManifestKey = pointer.immutable_manifest_key;
+        const immutableManifestBuffer =
+            await cloud.downloadFromR2(immutableManifestKey);
+        if (
+            !immutableManifestBuffer
+            || sha256Bytes(immutableManifestBuffer)
+                !== pointer.manifest_sha256
+        ) {
+            throw new Error(
+                `The immutable Long Quant manifest differs from ${manifestKey}.`
+            );
+        }
+        try {
+            manifest = JSON.parse(
+                immutableManifestBuffer.toString('utf8')
+            );
+        } catch (error) {
+            throw new Error(
+                `Projection immutable manifest is invalid JSON: ${immutableManifestKey}`
+            );
+        }
+        manifestSha256 = pointer.manifest_sha256;
+        for (const field of ['map_artifact', 'plot_artifact']) {
+            const pointerArtifact = pointer[field] || {};
+            const immutableArtifact = manifest[field] || {};
+            if (
+                pointerArtifact.sha256 !== immutableArtifact.sha256
+                || pointerArtifact.immutable_key
+                    !== immutableArtifact.immutable_key
+                || pointerArtifact.content_length
+                    !== immutableArtifact.content_length
+            ) {
+                throw new Error(
+                    `Projection pointer ${field} does not match its immutable manifest.`
+                );
+            }
+        }
+    }
+    const map = validateQuantProjectionArtifact(
+        domain === 'raw'
+            ? manifest.publishedMap
+            : manifest.map_artifact,
+        domain,
+        channel,
+        'map'
+    );
+    const plot = validateQuantProjectionArtifact(
+        domain === 'raw'
+            ? manifest.publishedPlot
+            : manifest.plot_artifact,
+        domain,
+        channel,
+        'plot'
+    );
+    const release = Object.freeze({
+        domain,
+        channel,
+        manifestKey,
+        pointerSha256,
+        immutableManifestKey,
+        manifestSha256,
+        map,
+        plot,
+    });
+    _quantProjectionReleaseCache.set(manifestKey, release);
+    return release;
+}
+
+async function loadQuantPlotArtifact(domain, channel) {
+    const release = await readQuantProjectionRelease(domain, channel);
+    const manifestKey = release.manifestKey;
+    const manifestSha256 = release.manifestSha256;
+    const artifactKey = release.plot.key;
+    const artifactSha256 = release.plot.sha256;
+    const artifactBytes = release.plot.byteLength;
+    const cacheKey =
+        `${domain}:${channel}:${artifactSha256}`;
+    const cached = _quantPlotCache.get(cacheKey);
+    if (cached) {
+        _quantPlotCache.delete(cacheKey);
+        _quantPlotCache.set(cacheKey, cached);
+        return cached;
+    }
+    let pending = _quantPlotInflight.get(cacheKey);
+    if (!pending) {
+        pending = (async () => {
+            const buffer = await cloud.downloadFromR2(artifactKey)
+                .catch(() => null);
+            if (
+                !buffer
+                || sha256Bytes(buffer) !== artifactSha256
+                || (
+                    artifactBytes !== null
+                    && buffer.length !== artifactBytes
+                )
+            ) {
+                throw new Error(
+                    `The immutable projection artifact differs from ${manifestKey}.`
+                );
+            }
+            const artifact = buffer
+                ? JSON.parse(buffer.toString('utf8'))
+                : null;
+            if (!artifact || !artifact.plots || !Array.isArray(artifact.id)) {
+                throw new Error(
+                    `No valid compact plot artifact is stored at ${artifactKey}. `
+                    + 'Run the offline plot-artifact build; production will not '
+                    + 'load the full embedding map into server memory.'
+                );
+            }
+            artifact._idIndex = new Map((artifact.id || []).map((id, index) => [String(id), index]));
+            artifact._release = Object.freeze({
+                manifest_key: manifestKey,
+                manifest_sha256: manifestSha256,
+                pointer_sha256: release.pointerSha256,
+                immutable_manifest_key:
+                    release.immutableManifestKey,
+                artifact_key: artifactKey,
+                artifact_sha256: artifactSha256,
+                artifact_byte_length: buffer.length,
+            });
+            for (const priorKey of [..._quantPlotCache.keys()]) {
+                if (
+                    priorKey.startsWith(`${domain}:${channel}:`)
+                    && priorKey !== cacheKey
+                ) {
+                    _quantPlotCache.delete(priorKey);
+                }
+            }
+            quantPlotCacheSet(cacheKey, artifact);
+            return artifact;
+        })().finally(() => _quantPlotInflight.delete(cacheKey));
+        _quantPlotInflight.set(cacheKey, pending);
+    }
+    return pending;
+}
+
+async function serveQuantMap(req, res, url, domain) {
+    const channel = String(
+        url.searchParams.get('channel') || 'visual'
+    ).replace(/[^a-z]/g, '');
+    if (!['visual', 'text', 'together'].includes(channel)) {
+        res.writeHead(400, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+        });
+        res.end(JSON.stringify({
+            error: 'Invalid embedding channel.',
+        }));
+        return;
+    }
+    try {
+        const release =
+            await readQuantProjectionRelease(domain, channel);
+        await serveGzCached(
+            req,
+            res,
+            `immutable:${release.map.key}`,
+            Number.MAX_SAFE_INTEGER,
+            async () => {
+                const buffer = await cloud.downloadFromR2(
+                    release.map.key
+                );
+                if (
+                    !buffer
+                    || sha256Bytes(buffer) !== release.map.sha256
+                    || (
+                        release.map.byteLength !== null
+                        && buffer.length
+                            !== release.map.byteLength
+                    )
+                ) {
+                    throw new Error(
+                        'The immutable embedding map does not match '
+                        + 'its release manifest.'
+                    );
+                }
+                return buffer;
+            },
+            {
+                error: 'The pinned embedding map release is unavailable.',
+                source_of_truth: release.immutableManifestKey,
+            },
+            503,
+            {
+                allowStaleOnSourceError: false,
+                surfaceSourceErrors: true,
+                sourceErrorMessage:
+                    'The pinned embedding map release is unavailable.',
+                cacheControl: 'private, no-cache',
+                etag: `"${release.map.sha256}"`,
+                headers: {
+                    'X-Map-Release-SHA256':
+                        release.manifestSha256,
+                    'X-Map-Pointer-SHA256':
+                        release.pointerSha256,
+                    'X-Artifact-SHA256':
+                        release.map.sha256,
+                },
+            }
+        );
+    } catch (error) {
+        res.writeHead(503, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+        });
+        res.end(JSON.stringify({
+            error: 'The pinned embedding map release is unavailable.',
+            detail: error.message,
+        }));
+    }
+}
+function parseQuantPlotNeighbors(url) {
+    const raw = url.searchParams.get('neighbors');
+    if (!raw) return [];
+    try {
+        const rows = JSON.parse(raw);
+        if (!Array.isArray(rows)) return [];
+        return rows.slice(0, 20).map(row => ({
+            id: String(row && row.id || '').slice(0, 80),
+            sim: Math.max(0.001, finiteNumber(row && row.sim) || 0.001),
+        })).filter(row => row.id);
+    } catch (e) { return []; }
+}
+function quantPlotMarker(artifact, projection, neighbors, weightPower) {
+    if (!projection || !neighbors.length) return null;
+    let sx = 0, sy = 0, sw = 0;
+    for (const neighbor of neighbors) {
+        const index = artifact._idIndex && artifact._idIndex.get(neighbor.id);
+        if (index == null) continue;
+        const x = finiteNumber(projection.x && projection.x[index]);
+        const y = finiteNumber(projection.y && projection.y[index]);
+        if (x == null || y == null) continue;
+        const weight = Math.pow(neighbor.sim, weightPower);
+        sx += x * weight; sy += y * weight; sw += weight;
+    }
+    if (!sw) return null;
+    const x = sx / sw, y = sy / sw;
+    const xs = (projection.x || []).filter(Number.isFinite);
+    const percentile = xs.length ? xs.reduce((count, value) => count + (value <= x ? 1 : 0), 0) / xs.length * 100 : null;
+    return {
+        x: Math.round(x * 100) / 100,
+        y: Math.round(y * 100) / 100,
+        x_empirical_percentile:
+            percentile == null
+                ? null
+                : Math.round(percentile * 10) / 10,
+        value_kind: 'non_authoritative_geometry',
+        coordinate_id: null,
+        scalar_score_use: 'forbidden',
+    };
+}
+async function serveQuantPlot(req, res, url, domain) {
+    const channel = String(url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
+    if (!['visual', 'text', 'together'].includes(channel)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid embedding channel.' }));
+        return;
+    }
+    try {
+        const artifact = await loadQuantPlotArtifact(domain, channel);
+        const neighbors = parseQuantPlotNeighbors(url);
+        const requested = String(url.searchParams.get('projections') || '').split(',').map(x => x.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
+        const names = requested.length ? requested : (QUANT_PLOT_PROJECTIONS[domain] || []);
+        const pointLimit = Math.max(40, Math.min(360, parseInt(url.searchParams.get('limit') || '160', 10) || 160));
+        const plots = {};
+        for (const name of names) {
+            const projection = artifact.plots && artifact.plots[name];
+            if (!projection) continue;
+            plots[name] = {
+                points: quantPlotLimitPoints(projection.points, pointLimit),
+                zMin: projection.zMin, zMax: projection.zMax,
+                colorKind: projection.colorKind || 'axis',
+                cv: projection.cv, co: projection.co,
+                marker: quantPlotMarker(artifact, projection, neighbors, domain === 'raw-long' ? 8 : 1),
+            };
+        }
+        sendJsonGz(req, res, {
+            version: 1,
+            channel,
+            n: artifact.n || (artifact.id || []).length,
+            plots,
+            missing: names.filter(name => !plots[name]),
+            plot_artifact: artifact._release,
+            geometry_contract: {
+                authority: 'non_authoritative_visualization_only',
+                scalar_score_use: 'forbidden',
+                marker_percentile:
+                    'empirical rank of the marker x-position only',
+            },
+        }, 200, {
+            'Cache-Control': 'private, no-store',
+        });
+    } catch (error) {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify({ error: `Compact embedding plots are temporarily unavailable: ${error.message}` }));
+    }
 }
 
 const _limiters = new Map();
+let _serverStopping = false;
 function runLimited(name, limit, fn, front) {
     limit = Math.max(1, parseInt(limit, 10) || 1);
     let q = _limiters.get(name);
     if (!q) { q = { active: 0, waiters: [] }; _limiters.set(name, q); }
     return new Promise((resolve, reject) => {
         const run = () => {
+            if (_serverStopping) {
+                reject(new Error('server is shutting down; retry when the new instance is ready'));
+                return;
+            }
             q.active++;
             Promise.resolve().then(fn).then(resolve, reject).finally(() => {
                 q.active--;
@@ -367,7 +1437,8 @@ function runLimited(name, limit, fn, front) {
                 if (next) next();
             });
         };
-        if (q.active < limit) run();
+        if (_serverStopping) reject(new Error('server is shutting down; retry when the new instance is ready'));
+        else if (q.active < limit) run();
         else if (front) q.waiters.unshift(run);   // interactive work jumps ahead of queued background scores
         else q.waiters.push(run);
     });
@@ -379,38 +1450,158 @@ const runHeavyScoreInteractive = fn => runLimited('heavy-score', HEAVY_SCORE_LIM
 // ── async scoring jobs: POST returns a job id instantly (no Render 100s proxy ceiling),
 //    the scorer runs in-process, results persist to R2 so a redeploy can't lose them silently ──
 const _quantJobs = new Map();
+const _quantJobRequests = new Map();
+const _quantJobInitialPersists = new Map();
+const QUANT_JOB_INSTANCE = `${process.pid}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+const QUANT_JOB_RESTART_GRACE_MS = Math.max(15000, parseInt(process.env.QUANT_JOB_RESTART_GRACE_MS || '45000', 10));
 function quantJobNamespace(namespace) {
-    return namespace === 'shorts' ? 'shorts' : 'longform';
+    return quantJobIdentity.normalizeNamespace(namespace);
 }
-function quantJobSubmit(kind, runner, namespace = 'longform') {
+function quantRequestId(req) {
+    return quantJobIdentity.normalizeRequestId(
+        req && req.headers && req.headers['x-quant-request-id']
+    );
+}
+function quantJobExisting(
+    kind,
+    namespace = 'longform',
+    requestId = '',
+    requestFingerprint = ''
+) {
     namespace = quantJobNamespace(namespace);
+    requestId = quantJobIdentity.normalizeRequestId(requestId);
+    if (!requestId || !requestFingerprint) return '';
+    const prior = _quantJobRequests.get(`${namespace}:${kind}:${requestId}`);
+    return quantJobIdentity.reusableJobId(
+        prior,
+        requestFingerprint
+    );
+}
+function quantJobSubmit(
+    kind,
+    runner,
+    namespace = 'longform',
+    requestId = '',
+    requestFingerprint = ''
+) {
+    namespace = quantJobNamespace(namespace);
+    requestId = quantJobIdentity.normalizeRequestId(requestId);
+    if (
+        typeof requestFingerprint !== 'string'
+        || !/^[a-f0-9]{64}$/.test(requestFingerprint)
+    ) {
+        throw new TypeError(
+            `quant job ${kind} requires an exact request fingerprint`
+        );
+    }
+    const requestKey = requestId ? `${namespace}:${kind}:${requestId}` : '';
+    const prior = requestKey && _quantJobRequests.get(requestKey);
+    const reusable = quantJobIdentity.reusableJobId(
+        prior,
+        requestFingerprint
+    );
+    if (reusable) return reusable;
     const jid = 'j' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-    const rec = { jid, kind, namespace, status: 'queued', ts: Date.now() };
+    const rec = {
+        jid,
+        kind,
+        namespace,
+        requestId: requestId || null,
+        requestFingerprint,
+        requestFingerprintSchema:
+            quantJobIdentity.REQUEST_FINGERPRINT_SCHEMA,
+        requestFingerprintVersion:
+            quantJobIdentity.REQUEST_FINGERPRINT_VERSION,
+        instance: QUANT_JOB_INSTANCE,
+        status: 'queued',
+        ts: Date.now(),
+    };
     _quantJobs.set(`${namespace}:${jid}`, rec);
-    const persist = () => cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
-    persist();   // visible from R2 from the FIRST moment — hung or deploy-killed jobs are never invisible
+    if (requestKey) {
+        _quantJobRequests.set(requestKey, {
+            jid,
+            ts: Date.now(),
+            requestFingerprint,
+        });
+    }
+    let persistChain = Promise.resolve();
+    const persist = () => {
+        const snapshot = Buffer.from(JSON.stringify(rec));
+        persistChain = persistChain.catch(() => {}).then(async () => {
+            try {
+                await cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, snapshot, 'application/json');
+            } catch (error) {
+                console.warn(`[quant-job ${jid}] status persistence failed:`, error.message || error);
+            }
+        });
+        return persistChain;
+    };
+    const initialPersist = persist();
+    _quantJobInitialPersists.set(`${namespace}:${jid}`, initialPersist);
+    initialPersist.finally(() => _quantJobInitialPersists.delete(`${namespace}:${jid}`));
     (async () => {
+        // Serialize status writes so a slower queued write cannot overwrite
+        // the newer running state.
+        await initialPersist;
         rec.status = 'running'; rec.ts = Date.now();
-        persist();
+        await persist();
+        let heartbeat = null;
+        if (kind.startsWith('raw-')) {
+            heartbeat = setInterval(() => {
+                if (rec.status !== 'running') return;
+                rec.ts = Date.now();
+                persist();
+            }, 15000);
+            heartbeat.unref();
+        }
         try { rec.result = await runner(rec); rec.status = 'done'; }
         catch (e) { rec.status = 'error'; rec.error = String((e && e.message) || e).slice(0, 300); }
+        finally { if (heartbeat) clearInterval(heartbeat); }
         rec.ts = Date.now();
-        await cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
-        setTimeout(() => _quantJobs.delete(`${namespace}:${jid}`), 20 * 60e3);
+        await persist();
+        setTimeout(() => {
+            _quantJobs.delete(`${namespace}:${jid}`);
+            if (
+                requestKey
+                && _quantJobRequests.get(requestKey)
+                && _quantJobRequests.get(requestKey).jid === jid
+            ) {
+                _quantJobRequests.delete(requestKey);
+            }
+        }, quantJobIdentity.REQUEST_REUSE_TTL_MS);
     })();
     return jid;
+}
+async function quantJobReady(jid, namespace = 'longform') {
+    const pending = _quantJobInitialPersists.get(`${quantJobNamespace(namespace)}:${jid}`);
+    if (pending) await pending;
 }
 async function quantJobGet(jid, namespace = 'longform') {
     namespace = quantJobNamespace(namespace);
     const m = _quantJobs.get(`${namespace}:${jid}`);
     if (m) return m;
     const b = await cloud.downloadFromR2(`${namespace}/jobs/${jid}.json`).catch(() => null);
-    if (b) { try { return JSON.parse(b.toString('utf8')); } catch (e) {} }
+    if (b) {
+        try {
+            const rec = JSON.parse(b.toString('utf8'));
+            if (['queued', 'running'].includes(rec.status)
+                && rec.instance !== QUANT_JOB_INSTANCE
+                && Date.now() - Number(rec.ts || 0) > QUANT_JOB_RESTART_GRACE_MS) return null;
+            return rec;
+        } catch (e) {}
+    }
     return null;   // lost (deploy killed it before any write) — client resubmits
 }
 
-async function sendQuantJobStatus(res, jid, namespace = 'longform') {
-    const rec = await quantJobGet(jid, namespace);
+async function sendQuantJobStatus(
+    res,
+    jid,
+    namespace = 'longform',
+    suppliedRecord
+) {
+    const rec = suppliedRecord === undefined
+        ? await quantJobGet(jid, namespace)
+        : suppliedRecord;
     res.writeHead(rec ? 200 : 404, {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
@@ -646,15 +1837,361 @@ const RAW_PYTHON = (() => {
     const cands = [process.env.RAW_PYTHON, '/Users/tylercsatari/miniforge3/bin/python3',
         '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', '/usr/bin/python3'].filter(Boolean);
     for (const p of cands) {
-        try { execSync(`"${p}" -c "import numpy, boto3, scipy, sklearn"`, { stdio: 'ignore', timeout: 12000, env: RAW_PY_ENV }); return p; }
+        try { execSync(`"${p}" -c "import numpy, boto3, scipy, sklearn, PIL"`, { stdio: 'ignore', timeout: 12000, env: RAW_PY_ENV }); return p; }
         catch (e) {}
     }
     return 'python3';
 })();
 console.log('[raw-upload] using python:', RAW_PYTHON);
+const _rawScoreChildren = new Set();
+function spawnRawPython(args, options) {
+    const child = spawn(RAW_PYTHON, args, {
+        env: RAW_PY_ENV,
+        ...(options || {}),
+        detached: process.platform !== 'win32',
+    });
+    _rawScoreChildren.add(child);
+    child.once('close', () => _rawScoreChildren.delete(child));
+    child.once('error', () => _rawScoreChildren.delete(child));
+    return child;
+}
+function killRawPythonTree(child, signal = 'SIGKILL') {
+    if (!child || !child.pid) return;
+    try {
+        if (process.platform !== 'win32') process.kill(-child.pid, signal);
+        else child.kill(signal);
+    } catch (error) {
+        try { child.kill(signal); } catch (_) {}
+    }
+}
+function validateRawScoreResult(result, options = {}) {
+    if (!result || typeof result !== 'object') throw new Error('scorer returned no JSON result');
+    if (result.error) throw new Error(result.error);
+    const requireCompatibilityCaches =
+        options.requireCompatibilityCaches !== false;
+    const fatal = [];
+    const warnings = [];
+    const ledger = result.score_ledger;
+    const ledgerValidation = shortsScoreLedger.validateScoreLedger(ledger);
+    const ledgerEntries = ledgerValidation.entries;
+    if (!ledgerValidation.valid) {
+        fatal.push(
+            `canonical 21-coordinate score ledger: ${
+                ledgerValidation.errors.join('; ')
+            }`
+        );
+    } else {
+        const transcriptUsed = !!(
+            result.input_manifest
+            && result.input_manifest.transcript_used
+        );
+        const valuesById = ledger.values_by_id || {};
+        const percentilesById = ledger.percentiles_by_id || {};
+        const compactFeatures = result.features || {};
+        const expectedCompactFeatureKeys = ledgerEntries
+            .filter(entry => entry.available === true)
+            .map(entry => entry.feature_key)
+            .sort();
+        const actualCompactFeatureKeys = Object.keys(compactFeatures).sort();
+        if (
+            requireCompatibilityCaches
+            && (
+                actualCompactFeatureKeys.length
+                    !== expectedCompactFeatureKeys.length
+                || actualCompactFeatureKeys.some(
+                    (key, index) => (
+                        key !== expectedCompactFeatureKeys[index]
+                    )
+                )
+            )
+        ) {
+            warnings.push('denormalized feature cache inventory');
+        }
+        canonicalShortsStoredCoordinates.forEach((definition, index) => {
+            const entry = ledgerEntries[index] || {};
+            const finiteValue = (
+                entry.value !== null
+                && entry.value !== undefined
+                && entry.value !== ''
+                && Number.isFinite(Number(entry.value))
+            );
+            const value = finiteValue ? Number(entry.value) : null;
+            const available = entry.available === true && finiteValue;
+            const required = (
+                definition.group !== 'text'
+                || transcriptUsed
+            );
+            if (required && !available) {
+                fatal.push(
+                    `${definition.coordinateId} (${entry.unavailable_reason || 'unavailable'})`
+                );
+            }
+            if (
+                entry.feature_key !== definition.key
+                || entry.group !== definition.group
+                || entry.target !== definition.target
+                || entry.source !== definition.source
+                || entry.source_key
+                    !== (definition.sourceKey || definition.key)
+                || entry.unit !== definition.unit
+                || Boolean(entry.available) !== finiteValue
+            ) {
+                fatal.push(`${definition.coordinateId} ledger identity`);
+            }
+            const mapValue = valuesById[definition.coordinateId];
+            const mapPercentile = percentilesById[definition.coordinateId];
+            const compactFeature = compactFeatures[definition.key];
+            const compactValueMatches = !requireCompatibilityCaches || (
+                Array.isArray(compactFeature)
+                && Number(compactFeature[0]) === value
+            );
+            const percentileMatches = entry.percentile == null
+                ? mapPercentile == null
+                    && (
+                        !requireCompatibilityCaches
+                        || (
+                            Array.isArray(compactFeature)
+                            && compactFeature[1] == null
+                        )
+                    )
+                : Number(mapPercentile) === Number(entry.percentile)
+                    && (
+                        !requireCompatibilityCaches
+                        || (
+                            Array.isArray(compactFeature)
+                            && Number(compactFeature[1])
+                                === Number(entry.percentile)
+                        )
+                    );
+            if (
+                available
+                && (
+                    Number(mapValue) !== value
+                    || !compactValueMatches
+                    || !percentileMatches
+                )
+            ) {
+                fatal.push(`${definition.coordinateId} materialization parity`);
+            }
+            if (
+                requireCompatibilityCaches
+                && definition.source === 'steer'
+            ) {
+                const output = result.steer
+                    && result.steer[definition.sourceKey];
+                if (
+                    !output
+                    || output.coordinate_id !== definition.coordinateId
+                    || output.feature_key !== definition.key
+                    || output.group !== definition.group
+                    || output.target !== definition.target
+                    || (
+                        available
+                        && Number(output.est) !== value
+                    )
+                ) {
+                    warnings.push(`${definition.coordinateId} producer address`);
+                }
+            }
+        });
+        if (
+            !result.input_manifest
+            || result.input_manifest
+                .feature_contract_identity_schema_version
+                !== savedChannelFeatureContractIdentitySchemaVersion
+            || result.input_manifest.feature_contract_sha256
+                !== savedChannelFeatureContractSha256
+            || result.input_manifest.feature_contract_document_sha256
+                !== savedChannelFeatureContractDocumentSha256
+            || result.input_manifest.coordinate_governance_sha256
+                !== quantCoordinateGovernanceSha256
+        ) {
+            warnings.push('score manifest ledger revisions');
+        }
+    }
+    const validPreview = value => Array.isArray(value) && value.length === 48 && value.every(Number.isFinite);
+    const validPlacement = channel => channel && Array.isArray(channel.neighbors)
+        && channel.neighbors.length > 0
+        && channel.neighbors.every(item => item && item.id != null && Number.isFinite(Number(item.sim)));
+    if (!result.montage) warnings.push('5-frame montage');
+    if (!result.emb_preview || !validPreview(result.emb_preview.visual)) warnings.push('visual embedding');
+    if (!result.emb_preview || !validPreview(result.emb_preview.together)) warnings.push('combined embedding');
+    if (!result.indicators || !Object.keys(result.indicators).length) warnings.push('indicator outputs');
+    const visualKeepForecast = result.visual_keep_forecast;
+    const visualKeepManifestRevision = result.input_manifest
+        && result.input_manifest.scorer_revisions
+        && result.input_manifest.scorer_revisions.artifacts
+        && result.input_manifest.scorer_revisions.artifacts[
+            'raw/predictor-lab/visual-keep-model-v1.manifest.json'
+        ];
+    const visualKeepAudit =
+        visualKeepForecastContract.validateVisualKeepForecast(
+            visualKeepForecast,
+            {
+                coordinateId:
+                    quantCoordinateGovernance.coordinates
+                        .visualKeepForecast.id,
+                modelManifestSha256:
+                    visualKeepManifestRevision
+                    && visualKeepManifestRevision.sha256,
+                featureContractVersion:
+                    savedChannelFeatureContract.version,
+                featureContractSha256:
+                    savedChannelFeatureContractDocumentSha256,
+            }
+        );
+    if (!visualKeepAudit.valid) {
+        warnings.push('frozen visual keep forecast');
+    }
+    const requestedCreatorProfile = String(
+        result.input_manifest && result.input_manifest.creator_profile || ''
+    ).trim();
+    const creatorForecast = result.creator_adaptive_keep_forecast;
+    const scorerArtifacts = result.input_manifest
+        && result.input_manifest.scorer_revisions
+        && result.input_manifest.scorer_revisions.artifacts || {};
+    const creatorModelManifestRevision = scorerArtifacts[
+        'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json'
+    ];
+    const creatorServingManifestRevision = scorerArtifacts[
+        'raw/predictor-lab/creator-adaptive-keep-serving-v1.manifest.json'
+    ];
+    const creatorForecastAudit = requestedCreatorProfile
+        ? creatorAdaptiveKeepForecastContract
+            .validateCreatorAdaptiveKeepForecast(
+                creatorForecast,
+                {
+                    coordinateId:
+                        quantCoordinateGovernance.coordinates
+                            .creatorAdaptiveKeepForecast.id,
+                    profileAccount: requestedCreatorProfile,
+                    modelManifestSha256:
+                        creatorModelManifestRevision
+                        && creatorModelManifestRevision.sha256,
+                    servingManifestSha256:
+                        creatorServingManifestRevision
+                        && creatorServingManifestRevision.sha256,
+                    featureContractVersion:
+                        savedChannelFeatureContract.version,
+                    featureContractSha256:
+                        savedChannelFeatureContractDocumentSha256,
+                }
+            )
+        : null;
+    if (
+        requestedCreatorProfile
+        && (!creatorForecastAudit || !creatorForecastAudit.valid)
+    ) {
+        warnings.push(
+            'creator-adaptive keep forecast'
+            + (
+                creatorForecastAudit
+                && creatorForecastAudit.errors.length
+                    ? ` (${creatorForecastAudit.errors.join('; ').slice(0, 300)})`
+                    : ''
+            )
+            + (result.creator_adaptive_keep_forecast_error
+                ? ` (${String(result.creator_adaptive_keep_forecast_error).slice(0, 140)})`
+                : '')
+        );
+    } else if (!requestedCreatorProfile && creatorForecast) {
+        warnings.push(
+            'unexpected creator-adaptive forecast without an explicit profile'
+        );
+    }
+    if (!result.channels || !validPlacement(result.channels.visual)) warnings.push('visual map placement');
+    if (!result.channels || !validPlacement(result.channels.together)) warnings.push('combined map placement');
+    if (fatal.length) {
+        throw new Error(
+            'scorer returned an invalid canonical score ledger ('
+            + `${fatal.join(', ')}); check Gemini credit/billing and `
+            + '/api/raw/upload-health'
+        );
+    }
+    result.score_ledger_validation = {
+        state: 'canonical-valid',
+        valid: true,
+        ledger_sha256: ledger.ledger_sha256,
+        errors: [],
+        note: 'All displayed stored coordinates are read from this validated ledger.',
+    };
+    result.score_display_eligible = true;
+    result.score_runtime_validation = {
+        state: warnings.length
+            ? 'canonical-ledger-with-optional-evidence-gaps'
+            : 'complete',
+        complete: warnings.length === 0,
+        warnings: [...new Set(warnings)],
+        note: (
+            'Optional forecasts, denormalized caches, previews, and map '
+            + 'geometry never replace or suppress canonical ledger scalars.'
+        ),
+    };
+    // These are producer compatibility projections of the same 21 values.
+    // Validate their parity above, then remove them at the API boundary so the
+    // canonical ledger remains the sole runtime authority.
+    delete result.features;
+    delete result.steer;
+    result.score_record_sha256 =
+        savedHookScoreRecordSha256(result);
+    result.score_record_validation = {
+        state: 'verified',
+        valid: true,
+        recorded_sha256: result.score_record_sha256,
+        calculated_sha256: result.score_record_sha256,
+    };
+    return result;
+}
 // Most recent raw_upload.py run (exit code, kill signal, stage markers) — surfaced in
 // /api/raw/upload-health so a scorer that the kernel OOM-kills is visible remotely.
 let lastRawScorer = null;
+let lastRawUpload = null;
+let rawScorerContractCache = null;
+const _rawActiveTempPaths = new Set();
+function safeCreatorProfile(value) {
+    const profile = String(value || '').trim().toLowerCase();
+    return /^[a-z0-9_-]{1,40}$/.test(profile) ? profile : '';
+}
+async function readRawScorerContract(force = false) {
+    if (!force && rawScorerContractCache
+        && Date.now() - rawScorerContractCache.at < 300000) {
+        return rawScorerContractCache.value;
+    }
+    const value = await new Promise((resolve, reject) => {
+        const py = spawnRawPython([
+            path.join(__dirname, 'raw_upload.py'),
+            '--contract',
+        ]);
+        let out = '', err = '', timedOut = false;
+        py.stdout.on('data', chunk => out += chunk);
+        py.stderr.on('data', chunk => err += chunk);
+        const timer = setTimeout(() => {
+            timedOut = true;
+            killRawPythonTree(py);
+        }, 90000);
+        py.on('close', () => {
+            clearTimeout(timer);
+            if (timedOut) {
+                reject(new Error('scorer contract lookup timed out'));
+                return;
+            }
+            const line = out.trim().split('\n')
+                .filter(item => item.trim().startsWith('{')).pop();
+            if (!line) {
+                reject(new Error(
+                    'scorer contract produced no result — '
+                    + (err.trim().split('\n').pop() || 'no output').slice(-160)
+                ));
+                return;
+            }
+            try { resolve(JSON.parse(line)); }
+            catch (error) { reject(error); }
+        });
+        py.on('error', reject);
+    });
+    rawScorerContractCache = { at: Date.now(), value };
+    return value;
+}
 function rawBoxStats() {
     const os = require('os');
     const mu = process.memoryUsage();
@@ -662,6 +2199,22 @@ function rawBoxStats() {
     try {   // cgroup v2 — the REAL container limit (os.totalmem() reports the HOST inside containers)
         const lim = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
         st.cgroup = { limitMB: lim === 'max' ? null : Math.round(+lim / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory.current', 'utf8') / 1048576) };
+        try { st.cgroup.peakMB = Math.round(+fs.readFileSync('/sys/fs/cgroup/memory.peak', 'utf8') / 1048576); } catch (e) {}
+        try {
+            st.cgroup.events = Object.fromEntries(fs.readFileSync('/sys/fs/cgroup/memory.events', 'utf8').trim().split('\n').map(line => {
+                const [key, value] = line.trim().split(/\s+/);
+                return [key, Number(value)];
+            }));
+        } catch (e) {}
+        try {
+            const memoryStat = Object.fromEntries(fs.readFileSync('/sys/fs/cgroup/memory.stat', 'utf8').trim().split('\n').map(line => {
+                const [key, value] = line.trim().split(/\s+/);
+                return [key, Number(value)];
+            }));
+            st.cgroup.anonMB = Math.round(Number(memoryStat.anon || 0) / 1048576);
+            st.cgroup.fileMB = Math.round(Number(memoryStat.file || 0) / 1048576);
+            st.cgroup.shmemMB = Math.round(Number(memoryStat.shmem || 0) / 1048576);
+        } catch (e) {}
     } catch (e) {
         try { st.cgroup = { limitMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8') / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf8') / 1048576) }; } catch (e2) { st.cgroup = null; }
     }
@@ -669,21 +2222,67 @@ function rawBoxStats() {
     try {
         st.rawembCacheMB = fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('rawemb_')).map(f => { try { return { f, mb: Math.round(fs.statSync(path.join(os.tmpdir(), f)).size / 1048576) }; } catch (e) { return { f, mb: null }; } });
     } catch (e) { st.rawembCacheMB = null; }
+    try {
+        const rawTemps = fs.readdirSync(os.tmpdir()).filter(f => /^(rawup_|rawmon_|rawyt_)/.test(f));
+        st.rawTemp = {
+            files: rawTemps.length,
+            mb: Math.round(rawTemps.reduce((sum, file) => {
+                try { return sum + fs.statSync(path.join(os.tmpdir(), file)).blocks * 512; } catch (e) { return sum; }
+            }, 0) / 1048576),
+        };
+    } catch (e) { st.rawTemp = null; }
+    const heavy = _limiters.get('heavy-score');
+    st.heavyScore = heavy ? { active: heavy.active, queued: heavy.waiters.length, limit: HEAVY_SCORE_LIMIT } : { active: 0, queued: 0, limit: HEAVY_SCORE_LIMIT };
+    st.rawScoreChildren = _rawScoreChildren.size;
     st.lastScorer = lastRawScorer;
+    st.lastUpload = lastRawUpload;
     return st;
 }
+function sweepRawUploadTemps(maxAgeMs = 30 * 60e3) {
+    const os = require('os');
+    let removed = 0;
+    try {
+        for (const file of fs.readdirSync(os.tmpdir())) {
+            if (!/^(rawup_|rawmon_|rawyt_)/.test(file)) continue;
+            const target = path.join(os.tmpdir(), file);
+            if (_rawActiveTempPaths.has(target)) continue;
+            let age = 0;
+            try { age = Date.now() - fs.statSync(target).mtimeMs; } catch (e) { continue; }
+            if (age < maxAgeMs) continue;
+            try { fs.rmSync(target, { recursive: true, force: true }); removed++; } catch (e) {}
+        }
+    } catch (e) {}
+    if (removed) console.log(`[raw-upload] swept ${removed} abandoned temp item(s)`);
+}
+setTimeout(() => sweepRawUploadTemps(), 5000);
+setInterval(() => sweepRawUploadTemps(), 15 * 60e3);
 // Pre-warm the scorer's neighbour-library disk cache in the background shortly after boot.
 // A deploy wipes /tmp, and a cold warm streams ~900MB from R2 (~4MB/s on the deploy box →
 // minutes) — pre-warming means the first upload after a deploy scores at normal speed
-// instead of eating that wait. Runs outside the heavy-score queue; cache writes are atomic.
-if (process.env.R2_ACCESS_KEY_ID) setTimeout(() => {
-    try {
-        const pw = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--prewarm'], { env: RAW_PY_ENV, stdio: ['ignore', 'ignore', 'pipe'] });
-        let perr = '';
-        pw.stderr.on('data', d => { perr += d; if (perr.length > 8192) perr = perr.slice(-4096); });
-        pw.on('close', code => console.log('[raw-prewarm] exit', code, '—', String(perr).trim().split('\n').slice(-3).join(' | ')));
-        pw.on('error', e => console.log('[raw-prewarm] spawn failed:', e.message));
-    } catch (e) { console.log('[raw-prewarm] failed:', e.message); }
+// instead of eating that wait. It shares the heavy-score queue so only one process can
+// touch the full neighbour library at a time on the memory-limited Render service.
+if (process.env.R2_ACCESS_KEY_ID && process.env.RAW_PREWARM !== '0') setTimeout(() => {
+    // Prewarming and an interactive scorer both mmap/touch the ~900MB neighbour
+    // library. They must share the same limiter or a request during boot can run a
+    // second copy concurrently and push the Render service over its memory limit.
+    runHeavyScore(() => new Promise(resolve => {
+        try {
+            const pw = spawnRawPython([path.join(__dirname, 'raw_upload.py'), '--prewarm'], { stdio: ['ignore', 'ignore', 'pipe'] });
+            let perr = '';
+            let timedOut = false;
+            const timer = setTimeout(() => {
+                timedOut = true;
+                killRawPythonTree(pw);
+            }, 8 * 60e3);
+            pw.stderr.on('data', d => { perr += d; if (perr.length > 8192) perr = perr.slice(-4096); });
+            pw.on('close', code => {
+                clearTimeout(timer);
+                console.log('[raw-prewarm] exit', code, timedOut ? '(timeout)' : '', '—', String(perr).trim().split('\n').slice(-3).join(' | '));
+                resolve();
+            });
+            pw.on('error', e => { clearTimeout(timer); console.log('[raw-prewarm] spawn failed:', e.message); resolve(); });
+        } catch (e) { console.log('[raw-prewarm] failed:', e.message); resolve(); }
+    })).catch(e => console.log('[raw-prewarm] queue failed:', e.message));
 }, 15000);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
@@ -698,6 +2297,135 @@ const LONGQUANT_SCORE_TEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
 const LONGQUANT_DEMO_REQUEST_PREFIX = 'longform/guesses/app-requests/';
 const TRIBE_CACHE = process.env.TRIBE_CACHE
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/cache';
+
+function quantLocalFileSha256(relativePath) {
+    return sha256Bytes(fs.readFileSync(path.join(__dirname, relativePath)));
+}
+
+function quantLedgerScorerIdentity(extra = {}) {
+    const payload = {
+        coordinate_governance_sha256:
+            quantCoordinateGovernanceSha256,
+        feature_contract_version:
+            savedChannelFeatureContract.version,
+        feature_contract_sha256:
+            savedChannelFeatureContractSha256,
+        feature_contract_document_sha256:
+            savedChannelFeatureContractDocumentSha256,
+        ...extra,
+    };
+    return {
+        ...payload,
+        revision_fingerprint:
+            sha256Bytes(canonicalJsonBytes(payload)),
+    };
+}
+
+function quantRequestFingerprint(
+    kind,
+    namespace,
+    input,
+    scorer
+) {
+    return quantJobIdentity.requestFingerprint({
+        kind,
+        namespace,
+        input,
+        scorer,
+    });
+}
+
+function rawQuantScorerIdentity(contract) {
+    const revision = String(
+        contract && contract.revision_fingerprint || ''
+    );
+    if (!/^[a-f0-9]{64}$/.test(revision)) {
+        throw new Error(
+            'Shorts scorer contract has no exact revision fingerprint'
+        );
+    }
+    return quantLedgerScorerIdentity({
+        domain: 'shorts',
+        scorer: 'raw_upload.py',
+        scorer_contract_revision_fingerprint: revision,
+    });
+}
+
+function promiseHookScorerIdentity() {
+    return quantLedgerScorerIdentity({
+        domain: 'shorts',
+        scorer: 'promise-lab/score_hook.py',
+        scorer_source_sha256: quantLocalFileSha256(
+            'buildings/jarvis/promise-lab/score_hook.py'
+        ),
+    });
+}
+
+let longQuantRequestScorerIdentityCache = null;
+async function longQuantRequestScorerIdentity(force = false) {
+    if (
+        !force
+        && longQuantRequestScorerIdentityCache
+        && Date.now() - longQuantRequestScorerIdentityCache.at
+            < 60 * 1000
+    ) {
+        return longQuantRequestScorerIdentityCache.value;
+    }
+    const revisionKeys = [
+        'raw-long/visual/map.json',
+        'raw-long/visual/embeddings.npz',
+        'raw-long/text/map.json',
+        'raw-long/text/embeddings.npz',
+        'raw-long/together/map.json',
+        'raw-long/together/embeddings.npz',
+    ];
+    const revisions = await Promise.all(
+        revisionKeys.map(async key => {
+            const objects = await cloud.listR2Objects(key);
+            const exact = objects.find(object => object.key === key);
+            if (!exact || !exact.etag) {
+                throw new Error(
+                    `Long Quant scorer artifact revision is missing: ${key}`
+                );
+            }
+            return {
+                key,
+                etag: exact.etag,
+                size: exact.size,
+                last_modified: exact.lastModified,
+            };
+        })
+    );
+    const directManifest = await cloud.getR2SmallObject(
+        longScoreLedger.VISUAL_CTRVIEWS_MANIFEST_KEY,
+        { maxBytes: 2 * 1024 * 1024 }
+    );
+    const value = quantLedgerScorerIdentity({
+        domain: 'longform',
+        scorer: 'longquant_score.py',
+        scorer_source_sha256:
+            quantLocalFileSha256('longquant_score.py'),
+        ledger_source_sha256:
+            quantLocalFileSha256(
+                'buildings/jarvis/long-score-ledger.js'
+            ),
+        output_contract_version:
+            longScoreLedger.OUTPUT_CONTRACT_VERSION,
+        embedding_model: 'gemini-embedding-2',
+        embedding_dimensions: 1536,
+        map_artifact_revisions: revisions,
+        visual_ctrviews_manifest: {
+            key: longScoreLedger.VISUAL_CTRVIEWS_MANIFEST_KEY,
+            sha256: sha256Bytes(directManifest.body),
+            etag: directManifest.etag,
+        },
+    });
+    longQuantRequestScorerIdentityCache = {
+        at: Date.now(),
+        value,
+    };
+    return value;
+}
 
 async function longQuantGeminiEmbed(parts) {
     if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured');
@@ -794,7 +2522,24 @@ async function longQuantScoreTitleText(title, interactive) {
                     if (!line) return no(new Error('longquant scorer: ' + (err.trim().split('\n').pop() || 'no output').slice(-180)));
                     try {
                         const j = JSON.parse(line);
-                        return j.error ? no(new Error(j.error)) : ok(j);
+                        if (j.error) return no(new Error(j.error));
+                        const score = longQuantPublicTextScore(j);
+                        if (
+                            !score.output_contract
+                            || !score.output_contract.contract_valid
+                        ) {
+                            return no(new Error(
+                                `Long Quant text coordinate ledger failed validation: ${
+                                    (
+                                        score.output_contract
+                                        && score.output_contract.producer_errors
+                                        || []
+                                    ).join(', ')
+                                    || 'missing or stale ledger'
+                                }`
+                            ));
+                        }
+                        return ok(score);
                     } catch (e) { return no(e); }
                 });
                 py.on('error', e => { clearTimeout(t); no(e); });
@@ -870,92 +2615,3445 @@ function _tribeStartJob(videoId, videoPath) {
     return job;
 }
 
-// Helper: read request body as JSON
-function readBody(req) {
+const DEFAULT_JSON_BODY_LIMIT = Math.max(
+    1024 * 1024,
+    Number.parseInt(
+        process.env.JSON_BODY_LIMIT_BYTES || String(32 * 1024 * 1024),
+        10
+    )
+);
+
+class HttpRequestError extends Error {
+    constructor(statusCode, message, code) {
+        super(message);
+        this.name = 'HttpRequestError';
+        this.statusCode = statusCode;
+        this.code = code || 'request_error';
+    }
+}
+
+// JSON routes are bounded independently from the streaming upload routes.
+function readBody(req, maxBytes = DEFAULT_JSON_BODY_LIMIT) {
     return new Promise((resolve, reject) => {
-        let body = '';
-        req.on('data', chunk => body += chunk);
-        req.on('end', () => {
-            try { resolve(body ? JSON.parse(body) : {}); }
-            catch (e) { reject(e); }
+        const declaredLength = Number(req.headers['content-length']);
+        if (
+            Number.isFinite(declaredLength)
+            && declaredLength > maxBytes
+        ) {
+            reject(new HttpRequestError(
+                413,
+                `JSON request body exceeds the ${maxBytes}-byte limit`,
+                'request_body_too_large'
+            ));
+            return;
+        }
+        let settled = false;
+        let size = 0;
+        const chunks = [];
+        const fail = error => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+        };
+        req.on('data', chunk => {
+            if (settled) return;
+            size += chunk.length;
+            if (size > maxBytes) {
+                fail(new HttpRequestError(
+                    413,
+                    `JSON request body exceeds the ${maxBytes}-byte limit`,
+                    'request_body_too_large'
+                ));
+                return;
+            }
+            chunks.push(chunk);
         });
-        req.on('error', reject);
+        req.on('end', () => {
+            if (settled) return;
+            settled = true;
+            const body = chunks.length
+                ? Buffer.concat(chunks, size).toString('utf8')
+                : '';
+            try {
+                resolve(body ? JSON.parse(body) : {});
+            } catch (error) {
+                reject(new HttpRequestError(
+                    400,
+                    'Request body is not valid JSON',
+                    'invalid_json'
+                ));
+            }
+        });
+        req.on('aborted', () => fail(new HttpRequestError(
+            400,
+            'Request body was interrupted',
+            'request_aborted'
+        )));
+        req.on('error', fail);
     });
 }
 
 const SAVED_CHANNEL_ROOT = 'raw/saved-channels/';
 const SAVED_CHANNEL_INDEX_KEY = SAVED_CHANNEL_ROOT + 'index.json';
 const SAVED_CHANNEL_REQUEST_ROOT = 'shorts/channel-import/requests/';
+const SAVED_CHANNEL_VALIDATION_KEY = SAVED_CHANNEL_ROOT + 'blind-validation.json';
+const SAVED_HOOK_INDEX_KEY = 'raw/saved-hooks/index.json';
+const SAVED_HOOK_MEDIA_ROOT = 'raw/saved-hooks/media/by-sha256/';
+const STORYBOARD_ROOT = 'raw/storyboards/v1/';
+const STORYBOARD_INDEX_KEY = `${STORYBOARD_ROOT}index.json`;
+const STORYBOARD_MEDIA_ROOT =
+    `${STORYBOARD_ROOT}media/by-sha256/`;
+const STORYBOARD_MANIFEST_ROOT =
+    `${STORYBOARD_ROOT}manifests/`;
+const STORYBOARD_REVISION_ROOT =
+    `${STORYBOARD_ROOT}revisions/`;
+const STORYBOARD_INDEX_REPAIR_ROOT =
+    `${STORYBOARD_ROOT}index-repair/`;
+const STORYBOARD_MAX_MEDIA_BYTES = 12 * 1024 * 1024;
+const STORYBOARD_MAX_REFERENCE_BYTES = 6 * 1024 * 1024;
+const STORYBOARD_MAX_REFERENCE_TOTAL_BYTES = 24 * 1024 * 1024;
+const STORYBOARD_MAX_IMAGE_SIDE = 8192;
+const STORYBOARD_MAX_IMAGE_PIXELS = 40 * 1000 * 1000;
+const LONG_SAVED_THUMBNAIL_INDEX_KEY =
+    'longform/saved-thumbs/index.json';
+const LONG_HOOK_LIBRARY_INDEX_KEY =
+    'longform/hook-embeds/index.json';
+const VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json';
+const VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json';
+const PREDICTOR_LAB_RELEASE_KEY = 'raw/predictor-lab/release-v1.json';
+const VISUAL_KEEP_COORDINATE_ID =
+    quantCoordinateGovernance.coordinates.visualKeepForecast.id;
+const CREATOR_ADAPTIVE_KEEP_MODEL_KEY = 'raw/predictor-lab/creator-adaptive-keep-model-v1.json';
+const CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json';
+const CREATOR_ADAPTIVE_KEEP_COORDINATE_ID =
+    quantCoordinateGovernance.coordinates.creatorAdaptiveKeepForecast.id;
+const CREATOR_PREQUENTIAL_KEEP_COORDINATE_ID =
+    quantCoordinateGovernance.coordinates.forecastPattern
+        .replace('{protocol}', 'creator-prequential')
+        .replace('{outcomeKey}', 'keep');
+const CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION = 3;
+const CREATOR_ADAPTIVE_KEEP_BENCHMARK_ID = 'shorts.causal-keep-mixture-benchmark.v1';
+const CREATOR_ADAPTIVE_KEEP_CANDIDATE_COUNT = 43360;
+const CREATOR_ADAPTIVE_KEEP_CANDIDATE_SHA256 = 'bc7ae80a7afeac82a40648c3ff07e066cc238d3b27918d5f82bf3bbbd04de3ff';
+const CREATOR_ADAPTIVE_KEEP_BENCHMARK_SHA256 = 'c82a290cd4180974d754e6b1c0afec8d456d08d0434794925936ffb11ea82747';
+const CREATOR_ADAPTIVE_KEEP_RESULT_CORE_SHA256 = 'a8dc76db007bc1b158c1e9a04775d1ae7f32656c19b44e733b0523256a42391a';
+let visualKeepModelCache = null;
+let creatorAdaptiveKeepModelCache = null;
+
+const r2JsonCasStorage = Object.freeze({
+    get: (key, options) =>
+        cloud.getR2SmallObject(key, options),
+    put: (key, bytes, options) =>
+        cloud.putR2SmallObjectConditional(
+            key,
+            bytes,
+            options
+        ),
+    isMissing: error =>
+        cloud.isMissingR2ObjectError(error),
+    isPreconditionFailed: error =>
+        cloud.isR2PreconditionFailedError(error),
+});
+
+const experimentLabWorkspaceCasCache = new Map();
+
+function experimentLabCanInspectTeam(account) {
+    return auth.isPrimaryOwnerAccount(account);
+}
+
+function experimentLabPermissionBuildings(req) {
+    const permissions = req && req._perms;
+    return new Set(
+        Array.isArray(permissions && permissions.buildings)
+            ? permissions.buildings
+            : []
+    );
+}
+
+function isExperimentLabRequest(req, url) {
+    if (
+        url
+        && String(url.pathname || '').startsWith(
+            '/api/experimentlab/'
+        )
+    ) return true;
+    const surface = String(
+        req && req.headers
+        && req.headers['x-business-world-surface']
+        || url && url.searchParams.get('surface')
+        || ''
+    ).toLowerCase();
+    if (surface === 'experiment-lab') return true;
+    const buildings = experimentLabPermissionBuildings(req);
+    return !!(
+        req
+        && req._account
+        && req._account.role !== 'owner'
+        && buildings.has('Experiment Lab')
+        && !buildings.has('Jarvis')
+    );
+}
+
+function experimentLabTargetId(req, url) {
+    return String(
+        req && req.headers
+        && req.headers['x-experiment-lab-account']
+        || url && url.searchParams.get('experiment_lab_account')
+        || ''
+    ).trim();
+}
+
+async function experimentLabAccountScope(
+    req,
+    url,
+    { write = false } = {}
+) {
+    if (!isExperimentLabRequest(req, url)) return null;
+    const viewer = req && req._account;
+    if (!viewer || !viewer.id) {
+        throw new HttpRequestError(
+            401,
+            'Sign in is required for an Experiment Lab workspace.',
+            'experiment_lab_sign_in_required'
+        );
+    }
+    const targetId = experimentLabTargetId(req, url);
+    if (!targetId) {
+        return {
+            viewer,
+            account: viewer,
+            readOnly: false,
+        };
+    }
+    if (targetId === viewer.id) {
+        if (write) {
+            throw new HttpRequestError(
+                403,
+                'Team workspace inspection is read-only.',
+                'experiment_lab_team_read_only'
+            );
+        }
+        return {
+            viewer,
+            account: viewer,
+            readOnly: true,
+        };
+    }
+    if (!experimentLabCanInspectTeam(viewer)) {
+        throw new HttpRequestError(
+            403,
+            'You cannot inspect another Experiment Lab account.',
+            'experiment_lab_account_forbidden'
+        );
+    }
+    if (write) {
+        throw new HttpRequestError(
+            403,
+            'Owner team inspection is read-only.',
+            'experiment_lab_team_read_only'
+        );
+    }
+    const target = await dataStore.getById('accounts', targetId);
+    if (!target) {
+        throw new HttpRequestError(
+            404,
+            'Experiment Lab account not found.',
+            'experiment_lab_account_not_found'
+        );
+    }
+    return {
+        viewer,
+        account: target,
+        readOnly: true,
+    };
+}
+
+function experimentLabWorkspaceCas(account) {
+    const identity = experimentLabWorkspace.accountIdentity(account);
+    const identitySha256 = sha256Bytes(
+        canonicalJsonBytes(identity)
+    );
+    const cached = experimentLabWorkspaceCasCache.get(identity.id);
+    if (
+        cached
+        && cached.identitySha256 === identitySha256
+    ) {
+        return cached.cas;
+    }
+    const cas = createR2JsonCasMutator({
+        key: experimentLabWorkspace.workspaceKey(identity.id),
+        storage: r2JsonCasStorage,
+        emptyValue: () =>
+            experimentLabWorkspace.emptyWorkspace(identity),
+        validate: value =>
+            experimentLabWorkspace.validateWorkspaceForAccount(
+                value,
+                identity,
+                { allowIdentityNormalization: true }
+            ),
+        bind: value => experimentLabWorkspace.bindWorkspace({
+            ...value,
+            account: identity,
+            updatedAt: Date.now(),
+        }),
+        label: `Experiment Lab workspace ${identity.id}`,
+    });
+    experimentLabWorkspaceCasCache.set(identity.id, {
+        identitySha256,
+        cas,
+    });
+    return cas;
+}
+
+async function readExperimentLabWorkspace(account) {
+    return experimentLabWorkspace
+        .readWorkspaceRevisionForAccount(
+            experimentLabWorkspaceCas(account),
+            account
+        );
+}
+
+async function mutateExperimentLabWorkspace(account, mutator) {
+    return experimentLabWorkspaceCas(account).mutate(
+        async workspace => {
+            await mutator(workspace);
+            return workspace;
+        }
+    );
+}
+
+function experimentLabHasItem(workspace, kind, id) {
+    return !!(
+        workspace
+        && workspace.collections
+        && workspace.collections[kind]
+        && workspace.collections[kind].items.some(
+            item => item.id === id
+        )
+    );
+}
+
+function experimentLabCanControlSavedChannel(scope, manifest) {
+    if (!scope) return true;
+    if (experimentLabCanInspectTeam(scope.viewer)) return true;
+    return !!(
+        manifest
+        && manifest.experimentLabControlKey
+            === experimentLabWorkspace.accountKey(
+                scope.account.id
+            )
+    );
+}
+
+function experimentLabHasActivityRequest(
+    workspace,
+    requestId,
+    types
+) {
+    const expectedTypes = Array.isArray(types)
+        ? new Set(types)
+        : null;
+    return !!(
+        workspace
+        && Array.isArray(workspace.activity)
+        && workspace.activity.some(activity => (
+            activity.requestId === requestId
+            && (
+                !expectedTypes
+                || expectedTypes.has(activity.type)
+            )
+        ))
+    );
+}
+
+async function requireExperimentLabActivity(
+    req,
+    url,
+    requestId,
+    types,
+    options
+) {
+    const scope = await experimentLabAccountScope(
+        req,
+        url,
+        options
+    );
+    if (!scope) return null;
+    const workspace =
+        await experimentLabWorkspaceForScope(scope);
+    if (
+        !experimentLabHasActivityRequest(
+            workspace,
+            requestId,
+            types
+        )
+    ) {
+        throw new HttpRequestError(
+            404,
+            'This run is not part of the selected Experiment Lab workspace.',
+            'experiment_lab_run_not_found'
+        );
+    }
+    return {
+        ...scope,
+        workspace,
+    };
+}
+
+async function requireExperimentLabItem(
+    req,
+    url,
+    kind,
+    id,
+    options
+) {
+    const scope = await experimentLabAccountScope(
+        req,
+        url,
+        options
+    );
+    if (!scope) return null;
+    const { workspace } =
+        await readExperimentLabWorkspace(scope.account);
+    if (!experimentLabHasItem(workspace, kind, id)) {
+        throw new HttpRequestError(
+            404,
+            `This ${kind.slice(0, -1)} is not saved in the selected workspace.`,
+            'experiment_lab_artifact_not_saved'
+        );
+    }
+    return {
+        ...scope,
+        workspace,
+    };
+}
+
+async function experimentLabWorkspaceForScope(scope) {
+    if (!scope) return null;
+    if (!scope.readOnly) {
+        return ensureInitialExperimentLabWorkspace(
+            scope.account
+        );
+    }
+    return (
+        await readExperimentLabWorkspace(scope.account)
+    ).workspace;
+}
+
+async function attachExperimentLabItem(
+    scope,
+    kind,
+    id,
+    activity
+) {
+    if (!scope) return null;
+    return mutateExperimentLabWorkspace(
+        scope.account,
+        workspace => {
+            experimentLabWorkspace.upsertItem(
+                workspace,
+                kind,
+                { id }
+            );
+            experimentLabWorkspace.addActivity(
+                workspace,
+                {
+                    ...activity,
+                    status: 'saved',
+                    artifactKind: kind,
+                    artifactId: id,
+                    saved: true,
+                }
+            );
+        }
+    );
+}
+
+function compactExperimentLabForecast(forecast) {
+    if (!forecast || typeof forecast !== 'object') return null;
+    const rawValue = forecast.value != null
+        ? forecast.value
+        : forecast.predicted_keep_rate != null
+            ? forecast.predicted_keep_rate
+            : forecast.raw != null
+                ? forecast.raw
+                : forecast.est != null
+                    ? forecast.est
+                    : forecast.prediction;
+    return {
+        coordinateId: String(
+            forecast.coordinate_id || forecast.coordinateId || ''
+        ).slice(0, 180) || null,
+        value: Number.isFinite(Number(rawValue))
+            ? Number(rawValue)
+            : null,
+        valueUnit: String(
+            forecast.value_unit
+            || forecast.valueUnit
+            || forecast.unit
+            || 'percent'
+        ).slice(0, 60),
+    };
+}
+
+function experimentLabScoreActivityEvidence(result) {
+    if (!result || typeof result !== 'object') return {};
+    const validation = shortsScoreLedger.validateScoreLedger(
+        result.score_ledger
+    );
+    if (!validation.valid) return {};
+    const manifest = result.input_manifest || {};
+    const montage = manifest.canonical_montage || {};
+    return {
+        inputEvidence: {
+            kind: String(result.source || 'canonical-shorts-input')
+                .slice(0, 80),
+            durationSeconds: Number.isFinite(Number(
+                result.dur_s != null
+                    ? result.dur_s
+                    : result.duration
+            ))
+                ? Number(
+                    result.dur_s != null
+                        ? result.dur_s
+                        : result.duration
+                )
+                : null,
+            hasTranscript: !!String(
+                result.transcript || result.text || ''
+            ).trim(),
+            creatorProfile: String(
+                manifest.creator_profile || ''
+            ).slice(0, 120) || null,
+            scoreInputFingerprint: String(
+                manifest.score_input_fingerprint
+                || manifest.input_fingerprint
+                || ''
+            ).slice(0, 64) || null,
+            montageSha256: String(
+                montage.montage_sha256 || ''
+            ).slice(0, 64) || null,
+        },
+        output: {
+            kind: 'canonical-shorts-score',
+            ledgerSha256: result.score_ledger.ledger_sha256,
+            coordinateCount: validation.entries.length,
+            availableCoordinateCount: validation.entries.filter(
+                entry => entry && entry.available === true
+            ).length,
+            derivedKeepForecasts: {
+                visual: compactExperimentLabForecast(
+                    result.visual_keep_forecast
+                ),
+                creator: compactExperimentLabForecast(
+                    result.creator_adaptive_keep_forecast
+                ),
+            },
+            predictorEligible: result.predictor_eligible !== false,
+        },
+    };
+}
+
+function experimentLabJobActivityEvidence(record) {
+    if (!record || typeof record !== 'object') return {};
+    const scoreEvidence = experimentLabScoreActivityEvidence(record.result);
+    if (scoreEvidence.output) return scoreEvidence;
+    const result = record.result && typeof record.result === 'object'
+        ? record.result
+        : {};
+    const media = result.media && typeof result.media === 'object'
+        ? result.media
+        : {};
+    return {
+        inputEvidence: {
+            requestFingerprint: String(
+                record.requestFingerprint || result.requestFingerprint || ''
+            ).slice(0, 64) || null,
+        },
+        output: {
+            kind: String(record.kind || 'operation-result').slice(0, 80),
+            model: String(
+                result.model || result.effectiveModel || ''
+            ).slice(0, 120) || null,
+            requestedModel: String(
+                result.requestedModel || ''
+            ).slice(0, 120) || null,
+            relation: String(result.relation || '').slice(0, 40) || null,
+            panelCount: Number.isFinite(Number(result.panelCount))
+                ? Number(result.panelCount)
+                : null,
+            mediaUrl: String(
+                media.url
+                || (typeof result.image === 'string'
+                    && result.image.startsWith('/api/')
+                    ? result.image
+                    : '')
+            ).slice(0, 500) || null,
+            mediaSha256: String(media.sha256 || '').slice(0, 64) || null,
+        },
+    };
+}
+
+async function recordExperimentLabActivity(scope, activity) {
+    if (!scope) return null;
+    const requestId = String(
+        activity && activity.requestId || ''
+    ).trim();
+    if (requestId) {
+        const { workspace } =
+            await readExperimentLabWorkspace(scope.account);
+        const existing = workspace.activity.find(
+            candidate => candidate.requestId === requestId
+        );
+        if (
+            existing
+            && Object.entries(activity).every(([key, value]) => (
+                value === undefined
+                || JSON.stringify(existing[key])
+                    === JSON.stringify(value)
+            ))
+        ) return existing;
+    }
+    let recorded;
+    await mutateExperimentLabWorkspace(
+        scope.account,
+        workspace => {
+            recorded = experimentLabWorkspace.addActivity(
+                workspace,
+                activity
+            );
+        }
+    );
+    return recorded;
+}
+
+async function ensureInitialExperimentLabWorkspace(account) {
+    const current = await readExperimentLabWorkspace(account);
+    if (current.exists) return current.workspace;
+    const importsLegacyOwnerWorkspace =
+        experimentLabCanInspectTeam(account);
+    let legacy = {
+        hooks: [],
+        channels: [],
+        storyboards: [],
+    };
+    if (importsLegacyOwnerWorkspace) {
+        const [hookIndex, channelIndex, storyboardIndex] =
+            await Promise.all([
+                readSavedHookIndex().then(result =>
+                    ensureSavedHookIndexIntegrity(result)
+                ),
+                readSavedChannelIndex(),
+                readStoryboardIndex(),
+            ]);
+        legacy = {
+            hooks: []
+                .concat(
+                    hookIndex && hookIndex.hooks || [],
+                    hookIndex && hookIndex.legacy_hooks || []
+                )
+                .filter(row => (
+                    row
+                    && row.id
+                    && row.score_domain === 'shorts'
+                ))
+                .map(row => row.id),
+            channels: (channelIndex && channelIndex.channels || [])
+                .filter(row => row && row.id)
+                .map(row => row.id),
+            storyboards:
+                (storyboardIndex && storyboardIndex.storyboards || [])
+                    .filter(row => row && row.id)
+                    .map(row => row.id),
+        };
+    }
+    return mutateExperimentLabWorkspace(
+        account,
+        workspace => {
+            for (const kind of experimentLabWorkspace.COLLECTIONS) {
+                for (const id of legacy[kind] || []) {
+                    experimentLabWorkspace.upsertItem(
+                        workspace,
+                        kind,
+                        { id }
+                    );
+                }
+            }
+            experimentLabWorkspace.addActivity(workspace, {
+                type: importsLegacyOwnerWorkspace
+                    ? 'legacy-owner-import'
+                    : 'workspace-created',
+                status: 'complete',
+                title: importsLegacyOwnerWorkspace
+                    ? 'Imported the existing owner Experiment library'
+                    : 'Created Experiment Lab workspace',
+                detail: importsLegacyOwnerWorkspace
+                    ? (
+                        `${legacy.hooks.length} hooks, `
+                        + `${legacy.channels.length} channels, and `
+                        + `${legacy.storyboards.length} storyboards`
+                    )
+                    : null,
+            });
+        }
+    );
+}
+
+async function experimentLabAccountSummaries() {
+    const accounts = await dataStore.getAll('accounts');
+    const eligible = await Promise.all(accounts.map(async account => {
+        const permissions = await auth.permsForAccount(account);
+        if (
+            account.role !== 'owner'
+            && !(
+                Array.isArray(permissions.buildings)
+                && permissions.buildings.includes('Experiment Lab')
+            )
+        ) return null;
+        try {
+            const { workspace } =
+                await readExperimentLabWorkspace(account);
+            return experimentLabWorkspace.summary(workspace);
+        } catch (error) {
+            console.warn(
+                'Experiment Lab team workspace unavailable:',
+                account && account.id,
+                error && error.message
+            );
+            return {
+                account:
+                    experimentLabWorkspace.accountIdentity(account),
+                counts: {
+                    hooks: 0,
+                    channels: 0,
+                    storyboards: 0,
+                },
+                folderCounts: {
+                    hooks: 0,
+                    channels: 0,
+                    storyboards: 0,
+                },
+                activityCount: 0,
+                updatedAt: 0,
+                workspace_sha256: null,
+                unavailable: true,
+                error: String(
+                    error && error.message
+                    || 'Workspace unavailable'
+                ),
+            };
+        }
+    }));
+    return eligible.filter(Boolean).sort((left, right) => (
+        Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
+    ));
+}
+
+const storyboardIndexCas = createR2JsonCasMutator({
+    key: STORYBOARD_INDEX_KEY,
+    storage: r2JsonCasStorage,
+    emptyValue: () => storyboardContract.bindIndex({
+        storyboards: [],
+        updatedAt: Date.now(),
+    }),
+    validate: storyboardContract.validateIndex,
+    bind: index => storyboardContract.bindIndex({
+        ...index,
+        updatedAt: Date.now(),
+    }),
+    label: 'Shorts storyboard index',
+});
+
+function updateStoryboardIndex(mutator) {
+    return storyboardIndexCas.mutate(async index => {
+        await mutator(index);
+        return index;
+    });
+}
+
+async function repairStoryboardIndexEntry(id) {
+    const record = await readStoryboardRecord(id);
+    if (!record) return false;
+    await updateStoryboardIndex(index => {
+        const rows = Array.isArray(index.storyboards)
+            ? index.storyboards
+            : [];
+        const existing = rows.find(row => row.id === id);
+        if (existing && existing.revision === record.revision) return;
+        index.storyboards = rows.filter(row => row.id !== id);
+        index.storyboards.unshift(
+            storyboardContract.compactDocument(record)
+        );
+    });
+    await cloud.deleteFromR2(
+        `${STORYBOARD_INDEX_REPAIR_ROOT}${id}.json`
+    ).catch(() => {});
+    return true;
+}
+
+async function queueStoryboardIndexRepair(record) {
+    await cloud.uploadToR2(
+        `${STORYBOARD_INDEX_REPAIR_ROOT}${record.id}.json`,
+        canonicalJsonBytes({
+            schema: 'shorts-storyboard-index-repair-v1',
+            id: record.id,
+            revision: record.revision,
+            queuedAt: Date.now(),
+        }),
+        'application/json'
+    );
+}
+
+let storyboardIndexRepairInflight = null;
+async function repairPendingStoryboardIndexes() {
+    if (storyboardIndexRepairInflight) {
+        return storyboardIndexRepairInflight;
+    }
+    storyboardIndexRepairInflight = (async () => {
+        const keys = await cloud.listR2Keys(
+            STORYBOARD_INDEX_REPAIR_ROOT
+        );
+        const pending = (keys || []).slice(0, 20);
+        for (const key of pending) {
+            const match = key.match(
+                /\/(sb[a-z0-9]{10,40})\.json$/
+            );
+            if (!match) continue;
+            await repairStoryboardIndexEntry(match[1]);
+        }
+    })().finally(() => {
+        storyboardIndexRepairInflight = null;
+    });
+    return storyboardIndexRepairInflight;
+}
+
+async function readStoryboardIndex() {
+    await repairPendingStoryboardIndexes().catch(error => {
+        console.warn(
+            '[storyboard] pending index repair deferred:',
+            error.message || error
+        );
+    });
+    const revision = await storyboardIndexCas.readRevision();
+    const validation = storyboardContract.validateIndex(revision.value);
+    if (!validation.valid) {
+        throw new HttpRequestError(
+            409,
+            'The storyboard index failed integrity validation: '
+                + validation.errors.join('; '),
+            'storyboard_index_invalid'
+        );
+    }
+    return revision.value;
+}
+
+function storyboardId() {
+    return 'sb'
+        + Date.now().toString(36)
+        + Math.floor(Math.random() * 1e12).toString(36);
+}
+
+function storyboardJpegDimensions(bytes) {
+    let offset = 2;
+    const sof = new Set([
+        0xc0, 0xc1, 0xc2, 0xc3,
+        0xc5, 0xc6, 0xc7,
+        0xc9, 0xca, 0xcb,
+        0xcd, 0xce, 0xcf,
+    ]);
+    while (offset + 4 <= bytes.length) {
+        if (bytes[offset] !== 0xff) {
+            offset++;
+            continue;
+        }
+        while (offset < bytes.length && bytes[offset] === 0xff) offset++;
+        const marker = bytes[offset++];
+        if (marker === 0xd8 || marker === 0xd9) continue;
+        if (marker === 0xda || offset + 2 > bytes.length) break;
+        const length = bytes.readUInt16BE(offset);
+        if (length < 2 || offset + length > bytes.length) break;
+        if (sof.has(marker) && length >= 7) {
+            return {
+                width: bytes.readUInt16BE(offset + 5),
+                height: bytes.readUInt16BE(offset + 3),
+            };
+        }
+        offset += length;
+    }
+    return null;
+}
+
+function storyboardWebpDimensions(bytes) {
+    const chunk = bytes.subarray(12, 16).toString('ascii');
+    if (chunk === 'VP8X' && bytes.length >= 30) {
+        return {
+            width: 1 + bytes.readUIntLE(24, 3),
+            height: 1 + bytes.readUIntLE(27, 3),
+        };
+    }
+    if (
+        chunk === 'VP8L'
+        && bytes.length >= 25
+        && bytes[20] === 0x2f
+    ) {
+        const bits = bytes.readUInt32LE(21);
+        return {
+            width: (bits & 0x3fff) + 1,
+            height: ((bits >>> 14) & 0x3fff) + 1,
+        };
+    }
+    if (
+        chunk === 'VP8 '
+        && bytes.length >= 30
+        && bytes[23] === 0x9d
+        && bytes[24] === 0x01
+        && bytes[25] === 0x2a
+    ) {
+        return {
+            width: bytes.readUInt16LE(26) & 0x3fff,
+            height: bytes.readUInt16LE(28) & 0x3fff,
+        };
+    }
+    return null;
+}
+
+function validatedStoryboardDimensions(dimensions) {
+    const width = dimensions && Number(dimensions.width);
+    const height = dimensions && Number(dimensions.height);
+    if (
+        !Number.isSafeInteger(width)
+        || !Number.isSafeInteger(height)
+        || width < 1
+        || height < 1
+        || width > STORYBOARD_MAX_IMAGE_SIDE
+        || height > STORYBOARD_MAX_IMAGE_SIDE
+        || width * height > STORYBOARD_MAX_IMAGE_PIXELS
+    ) {
+        throw new HttpRequestError(
+            415,
+            'Storyboard media has invalid or unsafe pixel dimensions.',
+            'storyboard_media_dimensions'
+        );
+    }
+    return { width, height };
+}
+
+function storyboardImageType(bytes) {
+    if (
+        bytes.length >= 4
+        && bytes[0] === 0xff
+        && bytes[1] === 0xd8
+        && bytes[bytes.length - 2] === 0xff
+        && bytes[bytes.length - 1] === 0xd9
+    ) {
+        return {
+            extension: 'jpg',
+            mediaType: 'image/jpeg',
+            ...validatedStoryboardDimensions(
+                storyboardJpegDimensions(bytes)
+            ),
+        };
+    }
+    if (
+        bytes.length >= 8
+        && bytes.subarray(0, 8).equals(Buffer.from([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]))
+    ) {
+        const dimensions = (
+            bytes.length >= 24
+            && bytes.subarray(12, 16).toString('ascii') === 'IHDR'
+        ) ? {
+            width: bytes.readUInt32BE(16),
+            height: bytes.readUInt32BE(20),
+        } : null;
+        return {
+            extension: 'png',
+            mediaType: 'image/png',
+            ...validatedStoryboardDimensions(dimensions),
+        };
+    }
+    if (
+        bytes.length >= 12
+        && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
+        && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+    ) {
+        return {
+            extension: 'webp',
+            mediaType: 'image/webp',
+            ...validatedStoryboardDimensions(
+                storyboardWebpDimensions(bytes)
+            ),
+        };
+    }
+    throw new HttpRequestError(
+        415,
+        'Storyboard media must be a structurally valid JPEG, PNG, or WebP.',
+        'storyboard_media_unsupported'
+    );
+}
+
+function decodeStoryboardDataImage(
+    value,
+    label = 'image',
+    maxBytes = STORYBOARD_MAX_MEDIA_BYTES
+) {
+    const match = String(value || '').match(
+        /^data:image\/(?:jpeg|jpg|png|webp);base64,([a-z0-9+/=\s]+)$/i
+    );
+    if (!match) {
+        throw new HttpRequestError(
+            422,
+            `${label} is not a supported image payload`,
+            'storyboard_media_invalid'
+        );
+    }
+    const bytes = Buffer.from(match[1].replace(/\s/g, ''), 'base64');
+    if (bytes.length < 100 || bytes.length > maxBytes) {
+        throw new HttpRequestError(
+            413,
+            `${label} must be between 100 bytes and ${
+                Math.floor(maxBytes / (1024 * 1024))
+            } MB`,
+            'storyboard_media_size'
+        );
+    }
+    const type = storyboardImageType(bytes);
+    return { bytes, ...type };
+}
+
+function storyboardMediaReference(bytes, type) {
+    const sha256 = sha256Bytes(bytes);
+    return {
+        schema: 'shorts-storyboard-media-v1',
+        url:
+            `/api/storyboards/media/${sha256}.${type.extension}`,
+        key:
+            `${STORYBOARD_MEDIA_ROOT}${sha256}.${type.extension}`,
+        sha256,
+        byte_length: bytes.length,
+        media_type: type.mediaType,
+    };
+}
+
+async function writeImmutableStoryboardMedia(reference, bytes) {
+    const existingObject = await cloud.getR2SmallObject(
+        reference.key,
+        { maxBytes: reference.byte_length }
+    ).catch(error => {
+        if (cloud.isMissingR2ObjectError(error)) return null;
+        throw error;
+    });
+    const existing = existingObject && existingObject.body;
+    if (existingObject) {
+        if (
+            existing.length !== bytes.length
+            || sha256Bytes(existing) !== reference.sha256
+            || !existing.equals(bytes)
+        ) {
+            throw new Error(
+                'content-addressed storyboard media collision'
+            );
+        }
+        return reference;
+    }
+    await cloud.uploadToR2(
+        reference.key,
+        bytes,
+        reference.media_type
+    );
+    const verifiedObject = await cloud.getR2SmallObject(
+        reference.key,
+        { maxBytes: reference.byte_length }
+    );
+    const verified = verifiedObject && verifiedObject.body;
+    if (
+        !verified
+        || verified.length !== bytes.length
+        || !verified.equals(bytes)
+    ) {
+        throw new Error(
+            'storyboard media failed read-after-write validation'
+        );
+    }
+    return reference;
+}
+
+async function readStoryboardMediaReference(
+    value,
+    label,
+    maxBytes = STORYBOARD_MAX_MEDIA_BYTES
+) {
+    const candidate = typeof value === 'object' && value
+        ? value.url || value.image || ''
+        : value;
+    const own = String(candidate || '').match(
+        storyboardContract.MEDIA_URL_PATTERN
+    );
+    if (own) {
+        const extension = own[2];
+        const type = {
+            extension,
+            mediaType: extension === 'png'
+                ? 'image/png'
+                : extension === 'webp'
+                    ? 'image/webp'
+                    : 'image/jpeg',
+        };
+        const key = `${STORYBOARD_MEDIA_ROOT}${own[1]}.${extension}`;
+        const stored = await cloud.getR2SmallObject(
+            key,
+            { maxBytes }
+        ).catch(error => {
+            if (cloud.isMissingR2ObjectError(error)) return null;
+            throw error;
+        });
+        const bytes = stored && stored.body;
+        if (!bytes || sha256Bytes(bytes) !== own[1]) {
+            throw new HttpRequestError(
+                409,
+                `${label} references missing or invalid stored media`,
+                'storyboard_media_missing'
+            );
+        }
+        return storyboardMediaReference(bytes, type);
+    }
+    const decoded = decodeStoryboardDataImage(
+        candidate,
+        label,
+        maxBytes
+    );
+    const reference = storyboardMediaReference(
+        decoded.bytes,
+        decoded
+    );
+    await writeImmutableStoryboardMedia(reference, decoded.bytes);
+    return reference;
+}
+
+async function optionalStoryboardMedia(value, label) {
+    if (!value) return null;
+    return readStoryboardMediaReference(value, label);
+}
+
+async function persistedStoryboardPanel(value, index) {
+    const panel = value && typeof value === 'object' ? value : {};
+    const revisions = [];
+    const sourceRevisions = Array.isArray(panel.revisions)
+        ? panel.revisions.slice(-12)
+        : [];
+    for (let at = 0; at < sourceRevisions.length; at++) {
+        const revision = sourceRevisions[at] || {};
+        const media = await optionalStoryboardMedia(
+            revision.image || revision.media,
+            `frame ${index + 1} revision ${at + 1}`
+        );
+        if (!media) continue;
+        revisions.push({ ...revision, media, image: undefined });
+    }
+    return {
+        ...panel,
+        media: await optionalStoryboardMedia(
+            panel.image || panel.media,
+            `frame ${index + 1}`
+        ),
+        image: undefined,
+        revisions,
+    };
+}
+
+async function persistedStoryboardReference(value, index) {
+    const reference = value && typeof value === 'object' ? value : {};
+    return {
+        ...reference,
+        media: await readStoryboardMediaReference(
+            reference.image || reference.media,
+            `reference ${index + 1}`,
+            STORYBOARD_MAX_REFERENCE_BYTES
+        ),
+        image: undefined,
+    };
+}
+
+function storyboardClientRecord(record) {
+    return {
+        ...record,
+        composite: record.composite && record.composite.url || null,
+        references: (record.references || []).map(reference => ({
+            ...reference,
+            image: reference.media && reference.media.url || null,
+        })),
+        panels: (record.panels || []).map(panel => ({
+            ...panel,
+            image: panel.media && panel.media.url || null,
+            revisions: (panel.revisions || []).map(revision => ({
+                ...revision,
+                image: revision.media && revision.media.url || null,
+            })),
+        })),
+    };
+}
+
+async function readStoryboardManifestRevision(id) {
+    if (!storyboardContract.ID_PATTERN.test(String(id || ''))) {
+        throw new HttpRequestError(
+            400,
+            'Storyboard id is invalid.',
+            'storyboard_id_invalid'
+        );
+    }
+    let revision;
+    try {
+        revision = await cloud.getR2SmallObject(
+            `${STORYBOARD_MANIFEST_ROOT}${id}.json`
+        );
+    } catch (error) {
+        if (cloud.isMissingR2ObjectError(error)) return null;
+        throw error;
+    }
+    const bytes = revision.body;
+    let record;
+    try {
+        record = JSON.parse(bytes.toString('utf8'));
+    } catch (error) {
+        throw new HttpRequestError(
+            409,
+            'Stored storyboard manifest is invalid JSON.',
+            'storyboard_manifest_invalid'
+        );
+    }
+    const validation = storyboardContract.validateDocument(record);
+    if (!validation.valid) {
+        throw new HttpRequestError(
+            409,
+            'Stored storyboard failed integrity validation: '
+                + validation.errors.join('; '),
+            'storyboard_manifest_integrity'
+        );
+    }
+    return { record, etag: revision.etag };
+}
+
+async function readStoryboardRecord(id) {
+    const revision = await readStoryboardManifestRevision(id);
+    return revision && revision.record || null;
+}
+
+async function writeImmutableStoryboardRevision(record) {
+    const key =
+        `${STORYBOARD_REVISION_ROOT}${record.id}/${record.revision}.json`;
+    const bytes = canonicalJsonBytes(record);
+    try {
+        await cloud.putR2SmallObjectConditional(
+            key,
+            bytes,
+            {
+                ifNoneMatch: '*',
+                contentType: 'application/json',
+            }
+        );
+    } catch (error) {
+        if (!cloud.isR2PreconditionFailedError(error)) throw error;
+        const existing = await cloud.getR2SmallObject(
+            key,
+            { maxBytes: bytes.length }
+        );
+        if (!existing.body.equals(bytes)) {
+            throw new Error(
+                'content-addressed storyboard revision collision'
+            );
+        }
+        return;
+    }
+    const verifiedObject = await cloud.getR2SmallObject(
+        key,
+        { maxBytes: bytes.length }
+    );
+    const verified = verifiedObject && verifiedObject.body;
+    if (!verified || !verified.equals(bytes)) {
+        throw new Error(
+            'storyboard revision failed read-after-write validation'
+        );
+    }
+}
+
+async function storyboardGenerationReferences(refs) {
+    const materialized = [];
+    const identities = [];
+    const descriptions = [];
+    let totalBytes = 0;
+    for (let index = 0; index < Math.min(8, (refs || []).length); index++) {
+        const specification = (
+            refs[index]
+            && typeof refs[index] === 'object'
+            && !Array.isArray(refs[index])
+        ) ? refs[index] : null;
+        const source = specification
+            ? specification.image || specification.url || ''
+            : refs[index];
+        const panels = [...new Set((
+            specification && Array.isArray(specification.panels)
+                ? specification.panels
+                : []
+        ).map(Number).filter(panelIndex => (
+            Number.isInteger(panelIndex)
+            && panelIndex >= 0
+            && panelIndex < storyboardContract.PANEL_COUNT
+        )))].sort((left, right) => left - right);
+        const global = !specification || specification.global !== false;
+        const name = String(
+            specification && specification.name
+            || `Reference ${index + 1}`
+        ).trim().slice(0, 80);
+        let bytes;
+        let type;
+        const own = String(source || '').match(
+            storyboardContract.MEDIA_URL_PATTERN
+        );
+        if (own) {
+            const stored = await cloud.getR2SmallObject(
+                `${STORYBOARD_MEDIA_ROOT}${own[1]}.${own[2]}`,
+                { maxBytes: STORYBOARD_MAX_REFERENCE_BYTES }
+            ).catch(error => {
+                if (cloud.isMissingR2ObjectError(error)) return null;
+                throw error;
+            });
+            bytes = stored && stored.body;
+            if (!bytes || sha256Bytes(bytes) !== own[1]) {
+                throw new HttpRequestError(
+                    409,
+                    `generation reference ${index + 1} is unavailable`,
+                    'storyboard_reference_missing'
+                );
+            }
+            type = storyboardImageType(bytes);
+        } else {
+            const decoded = decodeStoryboardDataImage(
+                source,
+                `generation reference ${index + 1}`,
+                STORYBOARD_MAX_REFERENCE_BYTES
+            );
+            bytes = decoded.bytes;
+            type = decoded;
+        }
+        totalBytes += bytes.length;
+        if (totalBytes > STORYBOARD_MAX_REFERENCE_TOTAL_BYTES) {
+            throw new HttpRequestError(
+                413,
+                'Storyboard references exceed the 24 MB combined limit.',
+                'storyboard_reference_total_size'
+            );
+        }
+        const sha256 = sha256Bytes(bytes);
+        identities.push({
+            sha256,
+            byte_length: bytes.length,
+            media_type: type.mediaType,
+            name,
+            global,
+            panels,
+        });
+        descriptions.push(
+            `REFERENCE IMAGE ${index + 1} (${name}) applies to ${
+                global || !panels.length
+                    ? 'all five panels'
+                    : panels.map(panelIndex => (
+                        `panel ${panelIndex + 1}`
+                    )).join(', ')
+            }.`
+        );
+        materialized.push(
+            `data:${type.mediaType};base64,${bytes.toString('base64')}`
+        );
+    }
+    return { materialized, identities, descriptions };
+}
+
+async function storyboardMediaBytes(reference, label) {
+    if (
+        !reference
+        || !reference.key
+        || !exactSha256(reference.sha256)
+        || !Number.isSafeInteger(reference.byte_length)
+        || reference.byte_length < 100
+        || reference.byte_length > STORYBOARD_MAX_MEDIA_BYTES
+    ) {
+        throw new HttpRequestError(
+            422,
+            `${label} has an invalid media reference`,
+            'storyboard_media_reference_invalid'
+        );
+    }
+    const stored = await cloud.getR2SmallObject(
+        reference.key,
+        { maxBytes: reference.byte_length }
+    ).catch(error => {
+        if (cloud.isMissingR2ObjectError(error)) return null;
+        throw error;
+    });
+    const bytes = stored && stored.body;
+    if (
+        !bytes
+        || bytes.length !== reference.byte_length
+        || sha256Bytes(bytes) !== reference.sha256
+    ) {
+        throw new HttpRequestError(
+            409,
+            `${label} is missing or failed its content hash`,
+            'storyboard_media_integrity'
+        );
+    }
+    return bytes;
+}
+
+async function canonicalStoryboardMontage(panels) {
+    if (
+        !Array.isArray(panels)
+        || panels.length !== storyboardContract.PANEL_COUNT
+        || panels.some(panel => !panel || !panel.media)
+    ) {
+        throw new HttpRequestError(
+            422,
+            'All five storyboard panels are required before scoring.',
+            'storyboard_incomplete'
+        );
+    }
+    const os = require('os');
+    const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'storyboard_')
+    );
+    let bytes;
+    try {
+        const framePaths = [];
+        for (let index = 0; index < panels.length; index++) {
+            const panelBytes = await storyboardMediaBytes(
+                panels[index].media,
+                `frame ${index + 1}`
+            );
+            const framePath = path.join(
+                directory,
+                `frame-${index + 1}.img`
+            );
+            fs.writeFileSync(framePath, panelBytes);
+            framePaths.push(framePath);
+        }
+        bytes = await composeMontageFiles(framePaths, directory);
+    } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
+    const type = storyboardImageType(bytes);
+    const media = storyboardMediaReference(bytes, type);
+    await writeImmutableStoryboardMedia(media, bytes);
+    return {
+        bytes,
+        media,
+        panelMediaSha256s: panels.map(panel => panel.media.sha256),
+    };
+}
+
+async function canonicalStoryboardScore(
+    value,
+    panels,
+    hookText
+) {
+    if (!value) return null;
+    if (!value.score_ledger || !value.input_manifest) {
+        throw new HttpRequestError(
+            422,
+            'A scored storyboard requires its canonical ledger and input manifest.',
+            'storyboard_score_incomplete'
+        );
+    }
+    const submittedScoreRecordSha256 = value.score_record_sha256;
+    const calculatedScoreRecordSha256 =
+        savedHookScoreRecordSha256(value);
+    if (
+        !exactSha256(submittedScoreRecordSha256)
+        || submittedScoreRecordSha256
+            !== calculatedScoreRecordSha256
+    ) {
+        throw new HttpRequestError(
+            422,
+            'The storyboard score record does not match the canonical '
+                + 'scorer response. Score these frames again.',
+            'storyboard_score_record_mismatch'
+        );
+    }
+    const montage = await canonicalStoryboardMontage(panels);
+    const submittedMontage = await readStoryboardMediaReference(
+        value.score_montage || value.scoreMontage,
+        'scored storyboard montage'
+    );
+    if (submittedMontage.sha256 !== montage.media.sha256) {
+        throw new HttpRequestError(
+            422,
+            'The score belongs to different storyboard panels. Score these five frames again.',
+            'storyboard_score_panel_mismatch'
+        );
+    }
+    const manifest = value.input_manifest;
+    const inputValidation =
+        shortsScoreLedger.validateShortsInputManifest(
+            value,
+            {
+                montageBytes: montage.bytes,
+                text: hookText || '',
+                durationS: manifest.duration_s,
+                creatorProfile: manifest.creator_profile,
+            }
+        );
+    if (!inputValidation.valid) {
+        throw new HttpRequestError(
+            422,
+            'The storyboard score input does not match: '
+                + inputValidation.errors.join('; '),
+            'storyboard_score_input_mismatch'
+        );
+    }
+    const validated = validateRawScoreResult(
+        {
+            ...JSON.parse(JSON.stringify(value)),
+            montage: montage.bytes.toString('base64'),
+            transcript: String(hookText || ''),
+            text: String(hookText || ''),
+        },
+        { requireCompatibilityCaches: false }
+    );
+    if (
+        validated.score_record_sha256
+        !== submittedScoreRecordSha256
+    ) {
+        throw new HttpRequestError(
+            422,
+            'The storyboard score evidence changed during validation. '
+                + 'Score these frames again.',
+            'storyboard_score_evidence_mismatch'
+        );
+    }
+    const scoreInput = storyboardContract.bindScoreInput({
+        montage_sha256: montage.media.sha256,
+        panel_media_sha256s: montage.panelMediaSha256s,
+        hookText,
+        score_input_fingerprint:
+            manifest.score_input_fingerprint
+            || manifest.input_fingerprint,
+        score_ledger_sha256:
+            validated.score_ledger.ledger_sha256,
+        score_record_sha256:
+            validated.score_record_sha256,
+        output_fingerprint: manifest.output_fingerprint,
+        scorer_revision_fingerprint:
+            manifest.revision_fingerprint,
+    });
+    const durationValue = value.duration_s !== undefined
+        ? value.duration_s
+        : value.dur_s;
+    return {
+        ...value,
+        title: String(value.title || '').slice(0, 140),
+        text: String(hookText || '').slice(0, 2000),
+        duration_s: Number.isFinite(Number(
+            durationValue
+        )) && durationValue !== null && durationValue !== ''
+            ? Number(durationValue)
+            : null,
+        score_ledger_validation:
+            validated.score_ledger_validation,
+        score_record_sha256:
+            validated.score_record_sha256,
+        score_montage: montage.media,
+        score_input: scoreInput,
+    };
+}
+
+function storyboardSheetGeometry(modelKey) {
+    if (modelKey === 'flux-2-pro') {
+        return {
+            aspect_ratio: 'custom',
+            width: 1440,
+            height: 512,
+            panel_aspect_ratio: '9:16',
+            postprocess: 'five-equal-columns',
+        };
+    }
+    if (modelKey === 'seedream-4') {
+        return {
+            size: 'custom',
+            width: 2880,
+            height: 1024,
+            panel_aspect_ratio: '9:16',
+            postprocess: 'five-equal-columns',
+        };
+    }
+    return {
+        aspect_ratio: '21:9',
+        panel_aspect_ratio: '9:16',
+        postprocess: 'five-equal-columns-center-crop',
+    };
+}
+
+function storyboardGenerationIdentity(modelKey, mode) {
+    const model = STORY_MODELS[modelKey] || STORY_MODELS['flux-2-pro'];
+    const payload = {
+        schema: 'shorts-storyboard-generation-contract-v1',
+        provider: 'replicate',
+        model_key: modelKey,
+        model_slug: model.slug,
+        mode,
+        prompt_template: mode === 'coherent-sheet'
+            ? 'five-panel-coherent-sheet-v1'
+            : 'single-panel-generation-v1',
+        geometry: mode === 'coherent-sheet'
+            ? storyboardSheetGeometry(modelKey)
+            : { aspect_ratio: '9:16' },
+    };
+    return {
+        ...payload,
+        revision_fingerprint: sha256Bytes(canonicalJsonBytes(payload)),
+    };
+}
+
+function storyboardSheetPrompt({
+    brief,
+    hookText,
+    panels,
+    referenceDescriptions = [],
+}) {
+    const opening = brief || hookText || 'A compelling visual opening.';
+    const panelLines = panels.map((prompt, index) => (
+        `PANEL ${index + 1}: ${
+            String(prompt || '').trim()
+            || `Continue the visual progression of: ${opening}`
+        }`
+    ));
+    return [
+        'Create one single edge-to-edge photographic storyboard sheet.',
+        'The sheet must contain exactly five equal vertical panels arranged '
+            + 'left to right in chronological order.',
+        'Maintain the exact same people, faces, wardrobe, objects, location, '
+            + 'lighting logic, and visual style whenever they recur.',
+        'Each panel must be a complete 9:16 composition within its fifth of '
+            + 'the sheet. Use clean edge-to-edge panel boundaries.',
+        'Do not add captions, words, letters, numbers, watermarks, borders, '
+            + 'gaps, frames, contact-sheet labels, or UI.',
+        `OVERALL OPENING: ${opening}`,
+        hookText ? `SPOKEN CONTEXT: ${hookText}` : '',
+        referenceDescriptions.length
+            ? 'REFERENCE SCOPE (obey this panel mapping exactly):'
+            : '',
+        ...referenceDescriptions,
+        ...panelLines,
+    ].filter(Boolean).join('\n');
+}
+
+const longHookLibraryIndexCas = createR2JsonCasMutator({
+    key: LONG_HOOK_LIBRARY_INDEX_KEY,
+    storage: r2JsonCasStorage,
+    emptyValue: () => longHookLibraryIndex.bindIndex({
+        rows: [],
+        recut: null,
+        migration_release: null,
+    }),
+    validate: longHookLibraryIndex.validateIndex,
+    bind: index => longHookLibraryIndex.bindIndex({
+        ...index,
+        updated_at: Date.now(),
+    }),
+    label: 'Long hook library index',
+});
+
+function updateLongHookLibraryIndex(mutator) {
+    return longHookLibraryIndexCas.mutate(async index => {
+        await mutator(index);
+        return index;
+    });
+}
+
+async function readLongHookLibraryIndex() {
+    const bytes = await cloud.downloadFromR2(
+        LONG_HOOK_LIBRARY_INDEX_KEY
+    );
+    if (!bytes) {
+        throw new HttpRequestError(
+            503,
+            'The Long hook library index has not been built.',
+            'long_hook_library_index_missing'
+        );
+    }
+    const index = JSON.parse(bytes.toString('utf8'));
+    const validation =
+        longHookLibraryIndex.validateIndex(index);
+    if (!validation.valid) {
+        throw new HttpRequestError(
+            409,
+            'The Long hook library index requires its offline '
+                + `migration: ${validation.errors.join('; ')}`,
+            'long_hook_library_index_integrity_failed'
+        );
+    }
+    return index;
+}
+
+function exactSha256(value) {
+    return /^[a-f0-9]{64}$/i.test(String(value || ''));
+}
+
+async function readPredictorLabReleaseManifest() {
+    const buffer = await cloud.downloadFromR2(PREDICTOR_LAB_RELEASE_KEY);
+    if (!buffer) throw new Error('The predictor-lab atomic release pointer is not available.');
+    const manifest = JSON.parse(buffer.toString('utf8'));
+    const predictor = manifest.predictor || {};
+    const visualKeepModel = manifest.visualKeepModel || {};
+    const creatorAdaptiveKeepModel = manifest.creatorAdaptiveKeepModel || {};
+    const validComponent = (component, artifactPrefix, manifestPrefix) => (
+        exactSha256(component.artifactSha256)
+        && exactSha256(component.manifestSha256)
+        && component.artifactKey
+            === `${artifactPrefix}${String(component.artifactSha256).toLowerCase()}.json`
+        && component.manifestKey
+            === `${manifestPrefix}${String(component.artifactSha256).toLowerCase()}.manifest.json`
+    );
+    if (
+        Number(manifest.schemaVersion) !== 1
+        || !exactSha256(manifest.featureContractSha256)
+        || Number(manifest.featureContractVersion)
+            !== Number(savedChannelFeatureContract.version)
+        || manifest.featureContractSha256
+            !== savedChannelFeatureContractDocumentSha256
+        || !exactSha256(manifest.producerSourceSha256)
+        || !validComponent(
+            predictor,
+            'raw/predictor-lab/by-sha256/',
+            'raw/predictor-lab/by-sha256/'
+        )
+        || !validComponent(
+            visualKeepModel,
+            'raw/predictor-lab/visual-keep-model/by-sha256/',
+            'raw/predictor-lab/visual-keep-model/by-sha256/'
+        )
+        || !validComponent(
+            creatorAdaptiveKeepModel,
+            'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/',
+            'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/'
+        )
+    ) {
+        throw new Error('The predictor-lab atomic release pointer failed integrity validation.');
+    }
+    return {
+        manifest,
+        buffer,
+        sha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+        predictor,
+        visualKeepModel,
+        creatorAdaptiveKeepModel,
+    };
+}
+
+async function readPinnedPredictorArtifactBytes(
+    predictorLabRelease = null
+) {
+    const release = predictorLabRelease
+        || await readPredictorLabReleaseManifest();
+    const component = release.predictor;
+    const manifestBuffer = await cloud.downloadFromR2(
+        component.manifestKey
+    );
+    if (!manifestBuffer) {
+        throw new Error(
+            'The predictor manifest pinned by the atomic release is not available.'
+        );
+    }
+    const crypto = require('crypto');
+    const manifestSha256 = crypto
+        .createHash('sha256')
+        .update(manifestBuffer)
+        .digest('hex');
+    if (manifestSha256 !== component.manifestSha256) {
+        throw new Error(
+            'The predictor manifest bytes do not match the atomic release.'
+        );
+    }
+    const manifest = JSON.parse(
+        manifestBuffer.toString('utf8')
+    );
+    if (
+        manifest.artifactSha256 !== component.artifactSha256
+        || manifest.archiveKey !== component.artifactKey
+        || manifest.producerSourceSha256
+            !== release.manifest.producerSourceSha256
+        || manifest.featureContractSha256
+            !== release.manifest.featureContractSha256
+        || Number(manifest.generatedAt)
+            !== Number(release.manifest.generatedAt)
+    ) {
+        throw new Error(
+            'The predictor manifest is incompatible with the atomic release.'
+        );
+    }
+    const artifactBuffer = await cloud.downloadFromR2(
+        component.artifactKey
+    );
+    if (!artifactBuffer) {
+        throw new Error(
+            'The predictor artifact pinned by the atomic release is not available.'
+        );
+    }
+    const artifactSha256 = crypto
+        .createHash('sha256')
+        .update(artifactBuffer)
+        .digest('hex');
+    if (artifactSha256 !== component.artifactSha256) {
+        throw new Error(
+            'The predictor artifact bytes do not match the atomic release.'
+        );
+    }
+    return {
+        release,
+        manifest,
+        manifestBuffer,
+        manifestSha256,
+        artifactBuffer,
+        artifactSha256,
+    };
+}
+
+function predictorLabUiArtifactBuffer(
+    artifactBuffer,
+    artifactSha256
+) {
+    const artifact = JSON.parse(
+        artifactBuffer.toString('utf8')
+    );
+    const provenance = artifact.provenance
+        && typeof artifact.provenance === 'object'
+        ? artifact.provenance
+        : {};
+    const populations = provenance.publicAxisFitPopulations
+        && typeof provenance.publicAxisFitPopulations === 'object'
+        ? provenance.publicAxisFitPopulations
+        : {};
+    const populationIndex = Object.entries(populations)
+        .map(([sha256, population]) => ({
+            rowsSha256: sha256,
+            rowCount: Array.isArray(
+                population && population.rows
+            )
+                ? population.rows.length
+                : null,
+        }))
+        .sort((left, right) => (
+            left.rowsSha256.localeCompare(right.rowsSha256)
+        ));
+    delete provenance.publicAxisFitPopulations;
+    provenance.publicAxisFitPopulationIndex =
+        populationIndex;
+    artifact.provenance = provenance;
+    artifact.transport_projection = {
+        schema: 'predictor-lab-ui-projection-v1',
+        source_artifact_sha256: artifactSha256,
+        omitted_from_transport: [
+            'provenance.publicAxisFitPopulations.rows',
+        ],
+        omitted_population_count: populationIndex.length,
+        omitted_row_references: populationIndex.reduce(
+            (total, population) => (
+                total + (
+                    Number.isSafeInteger(population.rowCount)
+                        ? population.rowCount
+                        : 0
+                )
+            ),
+            0
+        ),
+        authority: (
+            'The atomic Predictor Lab release remains the complete '
+            + 'source of truth. This browser payload omits fit-row '
+            + 'manifests that the UI does not consume and retains '
+            + 'their exact population hashes and counts.'
+        ),
+    };
+    return Buffer.from(JSON.stringify(artifact));
+}
+
+async function readVisualKeepReleaseManifest(pinned = null) {
+    const manifestKey = pinned && pinned.manifestKey
+        || VISUAL_KEEP_MODEL_MANIFEST_KEY;
+    const manifestBuffer = await cloud.downloadFromR2(manifestKey);
+    if (!manifestBuffer) throw new Error('The frozen visual keep model release manifest is not available.');
+    const manifest = JSON.parse(manifestBuffer.toString('utf8'));
+    const artifactSha256 = String(manifest.artifactSha256 || '').toLowerCase();
+    const manifestSha256 = require('crypto').createHash('sha256')
+        .update(manifestBuffer)
+        .digest('hex');
+    const expectedArchiveKey = `raw/predictor-lab/visual-keep-model/by-sha256/${artifactSha256}.json`;
+    if (
+        manifest.coordinateId !== VISUAL_KEEP_COORDINATE_ID
+        || manifest.canonicalKey !== VISUAL_KEEP_MODEL_KEY
+        || !exactSha256(artifactSha256)
+        || manifest.archiveKey !== expectedArchiveKey
+        || !exactSha256(manifest.producerSourceSha256)
+        || !exactSha256(manifest.featureContractSha256)
+        || Number(manifest.featureContractVersion)
+            !== Number(savedChannelFeatureContract.version)
+        || manifest.featureContractSha256
+            !== savedChannelFeatureContractDocumentSha256
+        || (pinned && (
+            artifactSha256 !== String(pinned.artifactSha256).toLowerCase()
+            || manifest.archiveKey !== pinned.artifactKey
+            || manifestSha256 !== String(pinned.manifestSha256).toLowerCase()
+        ))
+    ) {
+        throw new Error('The frozen visual keep model release manifest failed integrity validation.');
+    }
+    return {
+        manifest,
+        manifestBuffer,
+        manifestSha256,
+        manifestKey,
+        artifactSha256,
+        artifactKey: manifest.archiveKey,
+    };
+}
+
+async function readVisualKeepModel(forceRefresh = false, pinnedRelease = null) {
+    // Always read the small release pointer before accepting the cache. This
+    // prevents an old cached model plus an old persisted score from appearing
+    // current after a new release has been published.
+    const release = pinnedRelease || await readVisualKeepReleaseManifest();
+    if (
+        !forceRefresh
+        && visualKeepModelCache
+        && visualKeepModelCache.artifactSha256 === release.artifactSha256
+        && visualKeepModelCache.manifestSha256 === release.manifestSha256
+    ) {
+        return visualKeepModelCache;
+    }
+    const buffer = await cloud.downloadFromR2(release.artifactKey);
+    if (!buffer) throw new Error('The frozen visual keep model immutable artifact is not available.');
+    const actualSha256 = require('crypto').createHash('sha256').update(buffer).digest('hex');
+    if (actualSha256 !== release.artifactSha256) {
+        throw new Error('The frozen visual keep model immutable artifact does not match its manifest.');
+    }
+    const model = JSON.parse(buffer.toString('utf8'));
+    if (
+        model.coordinateId !== VISUAL_KEEP_COORDINATE_ID
+        || model.producerSourceSha256 !== release.manifest.producerSourceSha256
+        || model.featureContractVersion !== release.manifest.featureContractVersion
+        || model.featureContractSha256 !== release.manifest.featureContractSha256
+        || !model.formula
+        || model.formula.scope !== 'pooled_global'
+        || model.formula.accounts
+        || model.formula.outputTransform
+            !== 'clip(linear_prediction, 0, 100)'
+        || !Array.isArray(model.formula.outputBounds)
+        || Number(model.formula.outputBounds[0]) !== 0
+        || Number(model.formula.outputBounds[1]) !== 100
+    ) {
+        throw new Error('The frozen visual keep model provenance is incompatible with its release manifest.');
+    }
+    visualKeepModelCache = {
+        loadedAt: Date.now(),
+        artifactSha256: release.artifactSha256,
+        artifactKey: release.artifactKey,
+        artifactBuffer: buffer,
+        manifestSha256: release.manifestSha256,
+        manifestBuffer: release.manifestBuffer,
+        manifest: release.manifest,
+        model,
+        byVideoId: new Map((model.trainingPredictions || []).map(point => [String(point.id), point])),
+    };
+    return visualKeepModelCache;
+}
+
+async function readCreatorAdaptiveKeepReleaseManifest(pinned = null) {
+    const manifestKey = pinned && pinned.manifestKey
+        || CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY;
+    const manifestBuffer = await cloud.downloadFromR2(
+        manifestKey
+    );
+    if (!manifestBuffer) {
+        throw new Error('The creator-adaptive keep model release manifest is not available.');
+    }
+    const manifest = JSON.parse(manifestBuffer.toString('utf8'));
+    const artifactSha256 = String(manifest.artifactSha256 || '').toLowerCase();
+    const manifestSha256 = require('crypto')
+        .createHash('sha256')
+        .update(manifestBuffer)
+        .digest('hex');
+    const expectedArchiveKey = (
+        'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/'
+        + `${artifactSha256}.json`
+    );
+    if (
+        Number(manifest.schemaVersion) !== CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION
+        || manifest.coordinateId !== CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        || manifest.canonicalKey !== CREATOR_ADAPTIVE_KEEP_MODEL_KEY
+        || !exactSha256(artifactSha256)
+        || manifest.archiveKey !== expectedArchiveKey
+        || !exactSha256(manifest.producerSourceSha256)
+        || !exactSha256(manifest.featureContractSha256)
+        || Number(manifest.featureContractVersion)
+            !== Number(savedChannelFeatureContract.version)
+        || manifest.featureContractSha256
+            !== savedChannelFeatureContractDocumentSha256
+        || (pinned && (
+            artifactSha256 !== String(pinned.artifactSha256).toLowerCase()
+            || manifest.archiveKey !== pinned.artifactKey
+            || manifestSha256 !== String(pinned.manifestSha256).toLowerCase()
+        ))
+    ) {
+        throw new Error(
+            'The creator-adaptive keep model release manifest failed integrity validation.'
+        );
+    }
+    return {
+        manifest,
+        manifestBuffer,
+        manifestSha256,
+        manifestKey,
+        artifactSha256,
+        artifactKey: manifest.archiveKey,
+    };
+}
+
+async function readCreatorAdaptiveKeepModel(
+    forceRefresh = false,
+    pinnedRelease = null
+) {
+    const release = pinnedRelease || await readCreatorAdaptiveKeepReleaseManifest();
+    if (
+        !forceRefresh
+        && creatorAdaptiveKeepModelCache
+        && creatorAdaptiveKeepModelCache.artifactSha256 === release.artifactSha256
+        && creatorAdaptiveKeepModelCache.manifestSha256 === release.manifestSha256
+    ) {
+        return creatorAdaptiveKeepModelCache;
+    }
+    const buffer = await cloud.downloadFromR2(release.artifactKey);
+    if (!buffer) {
+        throw new Error(
+            'The creator-adaptive keep model immutable artifact is not available.'
+        );
+    }
+    const actualSha256 = require('crypto')
+        .createHash('sha256')
+        .update(buffer)
+        .digest('hex');
+    if (actualSha256 !== release.artifactSha256) {
+        throw new Error(
+            'The creator-adaptive keep model immutable artifact does not match its manifest.'
+        );
+    }
+    const model = JSON.parse(buffer.toString('utf8'));
+    const formula = model.formula || {};
+    const selection = model.selection || {};
+    const selected = selection.selected || {};
+    const status = model.status || {};
+    const benchmark = model.benchmark || {};
+    const lockedFormula = formula.lockedFormula || {};
+    const profiles = formula.accounts && typeof formula.accounts === 'object'
+        ? formula.accounts
+        : {};
+    const populationAccounts = (
+        model.population && Array.isArray(model.population.accounts)
+            ? model.population.accounts
+            : []
+    ).map(account => String(account && account.id || '')).filter(Boolean);
+    const embeddingDimensions = Number(
+        model.population && model.population.embeddingDimensions
+    );
+    const profileEntries = Object.entries(profiles);
+    const profilesValid = profileEntries.length === populationAccounts.length
+        && populationAccounts.every(account => profiles[account])
+        && profileEntries.every(([account, profile]) => (
+            populationAccounts.includes(account)
+            && Number.isInteger(Number(profile.historyN))
+            && Number(profile.historyN) >= Number(formula.minimumHistoryN)
+            && Number(profile.historyN) <= Number(formula.historyWindow)
+            && Number(profile.historyWindow) === Number(formula.historyWindow)
+            && Array.isArray(profile.historyVideoIds)
+            && profile.historyVideoIds.length === Number(profile.historyN)
+            && new Set(profile.historyVideoIds.map(String)).size
+                === profile.historyVideoIds.length
+            && Number.isFinite(Number(profile.historyThrough))
+        ));
+    const evaluationPoints = model.evaluation
+        && Array.isArray(model.evaluation.points)
+        ? model.evaluation.points
+        : [];
+    const evaluationPointIds = evaluationPoints.map(point => String(point && point.id || ''));
+    const evaluationValid = evaluationPoints.length > 0
+        && evaluationPointIds.every(Boolean)
+        && new Set(evaluationPointIds).size === evaluationPointIds.length
+        && evaluationPoints.every(point => (
+            profiles[String(point && point.account || '')]
+            && Number.isFinite(Number(point && point.predicted))
+            && Number.isFinite(Number(point && point.actual))
+            && Number.isFinite(Number(point && point.baseline))
+            && Number.isFinite(Number(point && point.componentA))
+            && Number.isFinite(Number(point && point.componentB))
+            && Number.isInteger(Number(point && point.historyN))
+            && Number(point.historyN) >= Number(formula.minimumHistoryN)
+            && Number(point.historyN) <= Number(formula.historyWindow)
+            && Array.isArray(point && point.historyVideoIds)
+            && point.historyVideoIds.length === Number(point.historyN)
+            && Number.isFinite(Number(point && point.historyEnd))
+        ));
+    if (
+        Number(model.schemaVersion) !== CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION
+        || model.coordinateId !== CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        || model.producerSourceSha256 !== release.manifest.producerSourceSha256
+        || model.featureContractVersion !== release.manifest.featureContractVersion
+        || model.featureContractSha256 !== release.manifest.featureContractSha256
+        || formula.modalityClass !== 'multimodal'
+        || Number(formula.historyWindow) !== 30
+        || Number(formula.minimumHistoryN) !== 8
+        || formula.outputTransform !== 'clip(0.5 * centered-together residual analog + 0.5 * visual+together semantic stack, 0, 100)'
+        || !Array.isArray(formula.outputBounds)
+        || Number(formula.outputBounds[0]) !== 0
+        || Number(formula.outputBounds[1]) !== 100
+        || Number(selection.candidateCount) !== CREATOR_ADAPTIVE_KEEP_CANDIDATE_COUNT
+        || Number(selection.candidateCountWithAllAccounts) <= 0
+        || selection.candidateRegistrySha256 !== CREATOR_ADAPTIVE_KEEP_CANDIDATE_SHA256
+        || selected.benchmarkId !== CREATOR_ADAPTIVE_KEEP_BENCHMARK_ID
+        || selected.modalityClass !== formula.modalityClass
+        || selected.formula !== lockedFormula.formula
+        || benchmark.benchmarkId !== CREATOR_ADAPTIVE_KEEP_BENCHMARK_ID
+        || benchmark.candidateRegistrySha256 !== CREATOR_ADAPTIVE_KEEP_CANDIDATE_SHA256
+        || benchmark.artifactSha256 !== CREATOR_ADAPTIVE_KEEP_BENCHMARK_SHA256
+        || benchmark.resultCoreSha256 !== CREATOR_ADAPTIVE_KEEP_RESULT_CORE_SHA256
+        || embeddingDimensions !== 1536
+        || status.predictorEligible !== false
+        || status.promoted !== false
+        || !profilesValid
+        || !evaluationValid
+    ) {
+        throw new Error(
+            'The creator-adaptive keep model provenance is incompatible with its release manifest.'
+        );
+    }
+    creatorAdaptiveKeepModelCache = {
+        loadedAt: Date.now(),
+        artifactSha256: release.artifactSha256,
+        artifactKey: release.artifactKey,
+        artifactBuffer: buffer,
+        manifestSha256: release.manifestSha256,
+        manifestBuffer: release.manifestBuffer,
+        manifest: release.manifest,
+        model,
+        byVideoId: new Map(
+            ((model.evaluation && model.evaluation.points) || [])
+                .map(point => [String(point.id), point])
+        ),
+    };
+    return creatorAdaptiveKeepModelCache;
+}
+
+function visualKeepForecastMatchesRelease(value, cached) {
+    if (!cached || !cached.manifest || !cached.model) return false;
+    return visualKeepForecastContract.validateVisualKeepForecast(
+        value,
+        {
+            coordinateId: VISUAL_KEEP_COORDINATE_ID,
+            modelArtifactSha256: cached.artifactSha256,
+            modelManifestSha256: cached.manifestSha256,
+            producerSourceSha256:
+                cached.manifest.producerSourceSha256,
+            featureContractVersion:
+                cached.manifest.featureContractVersion,
+            featureContractSha256:
+                cached.manifest.featureContractSha256,
+        }
+    ).valid;
+}
+
+async function visualKeepFullFitDiagnostic(videoId, modelCache = null) {
+    const cached = modelCache || await readVisualKeepModel();
+    const point = cached.byVideoId.get(String(videoId));
+    if (!point || !Number.isFinite(Number(point.predicted))) return null;
+    return {
+        diagnostic_id: 'shorts.visual-keep.full-fit-diagnostic.v1',
+        related_coordinate_id: VISUAL_KEEP_COORDINATE_ID,
+        est: Number(point.predicted),
+        raw: Number(point.predicted),
+        pctile: null,
+        kind: 'in_sample_keep_rate_fit',
+        unit: 'percent',
+        calibration_scope: 'pooled_global',
+        account_model: null,
+        model_artifact_sha256: cached.artifactSha256,
+        model_artifact_key: cached.artifactKey,
+        model_artifact_canonical_key: VISUAL_KEEP_MODEL_KEY,
+        model_manifest_key: VISUAL_KEEP_MODEL_MANIFEST_KEY,
+        model_manifest_sha256: cached.manifestSha256,
+        producer_source_sha256: cached.model.producerSourceSha256 || null,
+        feature_contract_version: cached.model.featureContractVersion || null,
+        feature_contract_sha256: cached.model.featureContractSha256 || null,
+        model_generated_at: cached.model.generatedAt || null,
+        model_status: cached.model.status || null,
+        input: cached.model.input || null,
+        source: 'in_sample_full_fit_diagnostic',
+        predictor_eligible: false,
+        claim_boundary: (
+            'The video was in this model artifact fitting population. '
+            + 'This value is not held out and is not a pre-upload forecast.'
+        ),
+    };
+}
+
+async function historicalCreatorAdaptiveKeepForecast(
+    videoId,
+    modelCache = null,
+    expectedAccount = null
+) {
+    const cached = modelCache || await readCreatorAdaptiveKeepModel();
+    const point = cached.byVideoId.get(String(videoId));
+    if (
+        !point
+        || !Number.isFinite(Number(point.predicted))
+        || (expectedAccount && String(point.account) !== String(expectedAccount))
+    ) return null;
+    return {
+        coordinate_id: CREATOR_PREQUENTIAL_KEEP_COORDINATE_ID,
+        est: Number(point.predicted),
+        raw: Number(point.predicted),
+        pctile: null,
+        kind: 'keep_rate_percent',
+        unit: 'percent',
+        calibration_scope: 'creator_prequential_next_upload',
+        profile_account: point.account || null,
+        profile_account_name: point.accountName || null,
+        history_only_baseline: Number.isFinite(Number(point.baseline))
+            ? Number(point.baseline)
+            : null,
+        history_n: Number.isFinite(Number(point.historyN)) ? Number(point.historyN) : null,
+        history_start: Number.isFinite(Number(point.historyStart)) ? Number(point.historyStart) : null,
+        history_end: Number.isFinite(Number(point.historyEnd)) ? Number(point.historyEnd) : null,
+        history_video_ids: Array.isArray(point.historyVideoIds)
+            ? point.historyVideoIds.map(String)
+            : [],
+        component_a: Number.isFinite(Number(point.componentA))
+            ? Number(point.componentA)
+            : null,
+        component_b: Number.isFinite(Number(point.componentB))
+            ? Number(point.componentB)
+            : null,
+        component_a_definition: (
+            'Centered together-embedding residual analog'
+        ),
+        component_b_definition: (
+            'Visual-plus-together semantic stack'
+        ),
+        model_modality: cached.model.formula
+            && cached.model.formula.modalityClass
+            || null,
+        model_history_window: cached.model.formula
+            && Number.isFinite(Number(cached.model.formula.historyWindow))
+            ? Number(cached.model.formula.historyWindow)
+            : null,
+        model_minimum_history_n: cached.model.formula
+            && Number.isFinite(Number(cached.model.formula.minimumHistoryN))
+            ? Number(cached.model.formula.minimumHistoryN)
+            : null,
+        model_formula: cached.model.formula
+            && cached.model.formula.outputTransform
+            || null,
+        benchmark_id: cached.model.benchmark
+            && cached.model.benchmark.benchmarkId
+            || null,
+        benchmark_artifact_sha256: cached.model.benchmark
+            && cached.model.benchmark.artifactSha256
+            || null,
+        candidate_registry_sha256: cached.model.selection
+            && cached.model.selection.candidateRegistrySha256
+            || null,
+        candidate_count: cached.model.selection
+            && Number.isFinite(Number(cached.model.selection.candidateCount))
+            ? Number(cached.model.selection.candidateCount)
+            : null,
+        model_artifact_sha256: cached.artifactSha256,
+        model_artifact_key: cached.artifactKey,
+        model_artifact_canonical_key: CREATOR_ADAPTIVE_KEEP_MODEL_KEY,
+        model_manifest_key: CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY,
+        model_manifest_sha256: cached.manifestSha256,
+        producer_source_sha256: cached.model.producerSourceSha256 || null,
+        feature_contract_version: cached.model.featureContractVersion || null,
+        feature_contract_sha256: cached.model.featureContractSha256 || null,
+        model_generated_at: cached.model.generatedAt || null,
+        model_status: cached.model.status || null,
+        predictor_eligible: !!(
+            cached.model.status
+            && cached.model.status.predictorEligible
+        ),
+        input: cached.model.input || null,
+        source: 'causal_final20_prequential',
+        claim_boundary: (
+            'Historical causal evaluation value for a known creator next upload. '
+            + (
+                cached.model.status
+                && cached.model.status.predictorEligible
+                    ? 'The artifact is marked predictor-eligible. '
+                    : 'This is a research diagnostic and is not predictor-eligible. '
+            )
+            + 'Cold start and frozen future-backlog scoring are unsupported.'
+        ),
+    };
+}
+
+async function readSavedHookIndex() {
+    const buffer = await cloud.downloadFromR2(SAVED_HOOK_INDEX_KEY);
+    if (!buffer) {
+        return {
+            version: 0,
+            hooks: [],
+            folders: [],
+            indexMissing: true,
+        };
+    }
+    let index;
+    try {
+        index = JSON.parse(buffer.toString('utf8'));
+    } catch (error) {
+        throw new HttpRequestError(
+            409,
+            'The saved-hook ledger index is not valid JSON. Run the '
+                + 'offline saved-hook index migration before serving it.',
+            'saved_hook_index_invalid'
+        );
+    }
+    if (!Array.isArray(index.hooks)) index.hooks = [];
+    if (!Array.isArray(index.folders)) index.folders = [];
+    return index;
+}
+
+function savedHookIndexBindingPayload(index) {
+    return savedHookRuntimeIndex.bindingPayload(index);
+}
+
+function validateSavedHookRuntimeIndex(index) {
+    return savedHookRuntimeIndex.validateIndex(index);
+}
+
+function legacySavedHookIndexRow(row) {
+    return savedHookRuntimeIndex.legacyRow(row);
+}
+
+async function ensureSavedHookIndexIntegrity(index) {
+    const validation = validateSavedHookRuntimeIndex(index);
+    if (validation.valid) return index;
+    throw new HttpRequestError(
+        409,
+        'The saved-hook ledger index failed integrity validation. Run '
+            + 'the offline saved-hook index migration before serving it: '
+            + validation.errors.join('; '),
+        'saved_hook_index_integrity_failed'
+    );
+}
+
+function savedHookIndexEvidence(index, id) {
+    const canonical = (index.hooks || []).find(
+        row => row && String(row.id) === String(id)
+    );
+    if (canonical) {
+        return {
+            evidenceClass: 'canonical',
+            row: canonical,
+        };
+    }
+    const legacy = (index.legacy_hooks || []).find(
+        row => row && String(row.id) === String(id)
+    );
+    if (legacy) {
+        return {
+            evidenceClass: 'legacy',
+            row: legacy,
+        };
+    }
+    return null;
+}
+
+const savedHookIndexCas = createR2JsonCasMutator({
+    key: SAVED_HOOK_INDEX_KEY,
+    storage: r2JsonCasStorage,
+    emptyValue: () => savedHookRuntimeIndex.bindIndex({
+        hooks: [],
+        legacy_hooks: [],
+        folders: [],
+    }),
+    validate: validateSavedHookRuntimeIndex,
+    bind: index => savedHookRuntimeIndex.bindIndex(index, {
+        updatedAt: Date.now(),
+    }),
+    label: 'saved-hook runtime index',
+});
+
+function updateSavedHookIndex(mutator) {
+    return savedHookIndexCas.mutate(async index => {
+        await mutator(index);
+        const canonicalIds = new Set(
+            (index.hooks || []).map(row => String(row.id))
+        );
+        index.legacy_hooks = (index.legacy_hooks || []).filter(
+            row => !canonicalIds.has(String(row && row.id))
+        );
+        return index;
+    });
+}
 
 function savedChannelId(channelUrl) {
     const digest = require('crypto').createHash('sha256').update(String(channelUrl || '').toLowerCase()).digest('hex').slice(0, 16);
     return 'ch' + digest;
 }
 
+function persistedShortsLedgerValidation(record) {
+    return shortsScoreLedger.scoreLedgerValidationSummary(record);
+}
+
+function withPersistedShortsLedgerValidation(record) {
+    if (!record || typeof record !== 'object') return record;
+    const calculatedRecordSha256 = savedHookScoreRecordSha256(record);
+    const recordedRecordSha256 = record.score_record_sha256 || null;
+    const recordBindingValid = recordedRecordSha256
+        ? recordedRecordSha256 === calculatedRecordSha256
+        : null;
+    const ledgerValidation = persistedShortsLedgerValidation(record);
+    return {
+        ...record,
+        score_record_validation: {
+            state: recordedRecordSha256
+                ? recordBindingValid
+                    ? 'verified'
+                    : 'invalid'
+                : 'unverified-legacy',
+            valid: recordBindingValid,
+            recorded_sha256: recordedRecordSha256,
+            calculated_sha256: calculatedRecordSha256,
+        },
+        score_ledger_validation: ledgerValidation,
+    };
+}
+
+function withPersistedLongLedgerValidation(record) {
+    if (!record || typeof record !== 'object') return record;
+    const score = (
+        record.score
+        && typeof record.score === 'object'
+    ) ? record.score : record;
+    const calculatedRecordSha256 = savedHookScoreRecordSha256(record);
+    const recordedRecordSha256 = record.score_record_sha256 || null;
+    const recordBindingValid = recordedRecordSha256
+        ? recordedRecordSha256 === calculatedRecordSha256
+        : null;
+    const ledgerValidation =
+        longScoreLedger.validateLongScoreLedger(
+            score.long_score_ledger
+        );
+    const contractValidation =
+        longScoreLedger.validateLongOutputContract(score);
+    const inputValidation =
+        longScoreLedger.validateLongInputManifest(score);
+    const decisionValidation =
+        score.decision_trace == null
+            ? { valid: true, errors: [] }
+            : longSavedThumbnailRecord
+                .validateDecisionTrace(score.decision_trace);
+    const geometryValidation =
+        score.non_authoritative_geometry == null
+            ? { valid: true, errors: [] }
+            : longSavedThumbnailRecord.validateGeometry(
+                score.non_authoritative_geometry
+            );
+    const predictorValid = (
+        recordBindingValid !== false
+        && ledgerValidation.valid
+        && contractValidation.valid
+        && inputValidation.valid
+        && decisionValidation.valid
+        && geometryValidation.valid
+    );
+    return {
+        ...record,
+        score_record_validation: {
+            state: recordedRecordSha256
+                ? recordBindingValid
+                    ? 'verified'
+                    : 'invalid'
+                : 'unverified-legacy',
+            valid: recordBindingValid,
+            recorded_sha256: recordedRecordSha256,
+            calculated_sha256: calculatedRecordSha256,
+        },
+        long_score_ledger_validation: {
+            state: ledgerValidation.valid
+                ? 'canonical-valid'
+                : 'canonical-invalid',
+            valid: ledgerValidation.valid,
+            ledger_sha256:
+                ledgerValidation.valid
+                    ? score.long_score_ledger.ledger_sha256
+                    : null,
+            errors: [].concat(ledgerValidation.errors),
+            note: (
+                'Ledger validity controls exact scalar display only. '
+                + 'Prediction eligibility is reported separately.'
+            ),
+        },
+        long_score_predictor_validation: {
+            state: predictorValid
+                ? 'predictor-eligible'
+                : 'display-only',
+            valid: predictorValid,
+            ledger_sha256:
+                ledgerValidation.valid
+                    ? score.long_score_ledger.ledger_sha256
+                    : null,
+            errors: []
+                .concat(ledgerValidation.errors)
+                .concat(contractValidation.errors)
+                .concat(inputValidation.errors)
+                .concat(decisionValidation.errors)
+                .concat(geometryValidation.errors)
+                .concat(
+                    recordBindingValid === false
+                        ? [
+                            'persisted score record binding does not match its scored fields',
+                        ]
+                        : []
+                ),
+        },
+    };
+}
+
+function withPersistedSavedHookValidation(record) {
+    return scoreDomainForRecord(record) === 'longquant'
+        ? withPersistedLongLedgerValidation(record)
+        : withPersistedShortsLedgerValidation(record);
+}
+
+function decodeSavedHookMontage(value) {
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const marker = value.indexOf('base64,');
+    const encoded = marker >= 0
+        ? value.slice(marker + 7)
+        : value;
+    const bytes = Buffer.from(encoded, 'base64');
+    if (
+        bytes.length < 100
+        || bytes.length > 12 * 1024 * 1024
+        || bytes[0] !== 0xff
+        || bytes[1] !== 0xd8
+        || bytes[bytes.length - 2] !== 0xff
+        || bytes[bytes.length - 1] !== 0xd9
+    ) {
+        throw new Error(
+            'saved hook montage must be a non-empty JPEG under 12 MB'
+        );
+    }
+    return bytes;
+}
+
+function savedHookMediaReference(bytes) {
+    if (!bytes) return null;
+    const sha256 = require('crypto')
+        .createHash('sha256')
+        .update(bytes)
+        .digest('hex');
+    return {
+        schema: 'saved-hook-canonical-media-v1',
+        key: `${SAVED_HOOK_MEDIA_ROOT}${sha256}.jpg`,
+        sha256,
+        byte_length: bytes.length,
+        media_type: 'image/jpeg',
+    };
+}
+
+async function writeImmutableSavedHookMedia(reference, bytes) {
+    if (!reference || !bytes) return;
+    const existing = await cloud.downloadFromR2(reference.key)
+        .catch(() => null);
+    if (existing) {
+        const existingSha256 = require('crypto')
+            .createHash('sha256')
+            .update(existing)
+            .digest('hex');
+        if (
+            existing.length !== reference.byte_length
+            || existingSha256 !== reference.sha256
+            || !existing.equals(bytes)
+        ) {
+            throw new Error(
+                'content-addressed saved-hook media collision'
+            );
+        }
+        return;
+    }
+    await cloud.uploadToR2(
+        reference.key,
+        bytes,
+        reference.media_type
+    );
+    const verified = await cloud.downloadFromR2(reference.key);
+    if (
+        !verified
+        || verified.length !== reference.byte_length
+        || !verified.equals(bytes)
+    ) {
+        throw new Error(
+            'saved-hook media failed read-after-write validation'
+        );
+    }
+}
+
+function canonicalSavedHookRecord(record, montageBytes) {
+    const domain = scoreDomainForRecord(record);
+    const scored = record && record.kind === 'scored';
+    const mediaReference = savedHookMediaReference(montageBytes);
+    const canonical = {
+        ...record,
+        score_domain: domain,
+        hasMontage: !!mediaReference,
+        montage_ref: mediaReference,
+    };
+    delete canonical.steer;
+    delete canonical.features;
+    delete canonical.m;
+    delete canonical.m_identity;
+    if (domain === 'longquant' && canonical.channels) {
+        for (const channel of Object.values(canonical.channels)) {
+            if (channel && typeof channel === 'object') {
+                delete channel.metrics;
+            }
+        }
+    }
+    if (scored && !mediaReference) {
+        throw new Error(
+            'a scored saved hook requires its exact canonical montage'
+        );
+    }
+    if (scored && domain === 'shorts') {
+        validateRawScoreResult(
+            {
+                ...canonical,
+                montage: montageBytes.toString('base64'),
+            },
+            { requireCompatibilityCaches: false }
+        );
+        const inputValidation =
+            shortsScoreLedger.validateShortsInputManifest(
+                canonical,
+                {
+                    montageBytes,
+                    text: canonical.text || '',
+                    durationS:
+                        canonical.input_manifest
+                        && canonical.input_manifest.duration_s,
+                    creatorProfile:
+                        canonical.input_manifest
+                        && canonical.input_manifest.creator_profile,
+                }
+            );
+        if (!inputValidation.valid) {
+            throw new Error(inputValidation.errors.join('; '));
+        }
+    }
+    if (scored && domain === 'longquant') {
+        const leanScore =
+            longSavedThumbnailRecord.canonicalScore({
+                ...canonical,
+                output_contract:
+                    canonical.output_contract
+                    || longScoreLedger.longOutputContract(
+                        canonical.long_score_ledger
+                    ),
+            });
+        const validations = [
+            longSavedThumbnailRecord.validateScore(leanScore),
+            longScoreLedger.validateLongInputManifest(
+                leanScore,
+                { imageBytes: montageBytes }
+            ),
+        ];
+        const errors = validations.flatMap(
+            validation => validation.errors || []
+        );
+        if (errors.length) {
+            throw new Error([...new Set(errors)].join('; '));
+        }
+        canonical.long_score_ledger =
+            leanScore.long_score_ledger;
+        canonical.output_contract =
+            leanScore.output_contract;
+        canonical.input_manifest =
+            leanScore.input_manifest;
+        canonical.decision_trace =
+            leanScore.decision_trace || null;
+        canonical.non_authoritative_geometry =
+            leanScore.non_authoritative_geometry || null;
+        [
+            'pct',
+            'pctile',
+            'visual_pctile',
+            'text_pctile',
+            'thumbnail_potential',
+            'reward',
+            'training_reward',
+            'idea_model_reward',
+            'thumbnail_model_reward',
+            'reward_trace',
+            'relevance',
+            'nn_cos',
+            'metrics',
+            'score_alias_contract',
+            'channels',
+            'emb_preview',
+        ].forEach(field => {
+            delete canonical[field];
+        });
+    }
+    canonical.score_record_sha256 =
+        savedHookScoreRecordSha256(canonical);
+    return canonical;
+}
+
+async function savedHookMontageBytes(
+    record,
+    id,
+    { evidenceClass = 'canonical' } = {}
+) {
+    const reference = record && record.montage_ref;
+    if (evidenceClass === 'canonical' && !reference) {
+        throw new Error(
+            'canonical saved-hook record is missing montage_ref'
+        );
+    }
+    const key = reference
+        ? reference.key
+        : `raw/saved-hooks/${id}.jpg`;
+    if (
+        reference
+        && (
+            reference.schema !== 'saved-hook-canonical-media-v1'
+            || typeof reference.sha256 !== 'string'
+            || !/^[a-f0-9]{64}$/.test(reference.sha256)
+            || reference.key
+                !== `${SAVED_HOOK_MEDIA_ROOT}${reference.sha256}.jpg`
+            || !Number.isSafeInteger(reference.byte_length)
+            || reference.byte_length <= 0
+        )
+    ) {
+        throw new Error(
+            'saved-hook canonical media reference is invalid'
+        );
+    }
+    const stored = await cloud.getR2SmallObject(
+        key,
+        {
+            // A canonical reference is its own exact allocation ceiling.
+            // Legacy evidence remains bounded rather than using the
+            // unbounded compatibility downloader.
+            maxBytes: reference
+                ? reference.byte_length
+                : 16 * 1024 * 1024,
+        }
+    ).catch(error => {
+        if (cloud.isMissingR2ObjectError(error)) return null;
+        throw error;
+    });
+    const bytes = stored && stored.body || null;
+    if (!bytes) return null;
+    if (reference) {
+        const sha256 = require('crypto')
+            .createHash('sha256')
+            .update(bytes)
+            .digest('hex');
+        if (
+            reference.byte_length !== bytes.length
+            || reference.sha256 !== sha256
+        ) {
+            throw new Error(
+                'saved-hook canonical media binding is invalid'
+            );
+        }
+    }
+    return bytes;
+}
+
+function savedChannelRowIsCanonicalDone(row) {
+    return !!(
+        row
+        && row.status === 'done'
+        && persistedShortsLedgerValidation(row).valid === true
+        && savedChannelManifestBinding
+            .validateManifestRowBinding(row).valid === true
+    );
+}
+
+function savedChannelCounts(manifest) {
+    const videos = Array.isArray(manifest && manifest.videos)
+        ? manifest.videos
+        : [];
+    return {
+        discovered: videos.length,
+        completed: videos.filter(savedChannelRowIsCanonicalDone).length,
+        failed: videos.filter(video => video && video.status === 'error').length,
+        queued: videos.filter(video => (
+            video
+            && (video.status === 'queued' || video.status === 'scoring')
+        )).length,
+        integrityFailures: videos.filter(video => (
+            video
+            && video.status === 'done'
+            && !savedChannelRowIsCanonicalDone(video)
+        )).length,
+    };
+}
+
+function withSavedChannelRowValidation(row) {
+    const validated = withPersistedShortsLedgerValidation(row);
+    const manifestRowValidation =
+        savedChannelManifestBinding.validateManifestRowBinding(row);
+    const integrityError = (
+        row
+        && row.status === 'done'
+        && !savedChannelRowIsCanonicalDone(row)
+    );
+    return {
+        ...validated,
+        persisted_status: row && row.status || null,
+        status: integrityError ? 'integrity_error' : row && row.status,
+        manifest_row_validation: manifestRowValidation,
+        integrity_error: integrityError
+            ? (
+                []
+                    .concat(
+                        validated.score_ledger_validation
+                        && validated.score_ledger_validation.errors || []
+                    )
+                    .concat(manifestRowValidation.errors || [])
+                    .join('; ')
+                || 'canonical saved-channel score binding is invalid'
+            )
+            : null,
+    };
+}
+
 function compactSavedChannel(manifest) {
+    const counts = savedChannelCounts(manifest);
+    const effectiveStatus = (
+        counts.integrityFailures > 0
+        && manifest.status === 'done'
+    )
+        ? 'integrity_error'
+        : (
+            manifest.status === 'done'
+            && counts.completed < counts.discovered
+        )
+            ? 'partial'
+            : manifest.status;
     return {
         id: manifest.id,
         url: manifest.url,
         name: manifest.name,
-        status: manifest.status,
-        phase: manifest.phase,
+        status: effectiveStatus,
+        phase: effectiveStatus === manifest.status
+            ? manifest.phase
+            : effectiveStatus,
         createdAt: manifest.createdAt,
         updatedAt: manifest.updatedAt,
-        discovered: manifest.discovered || 0,
-        completed: manifest.completed || 0,
-        failed: manifest.failed || 0,
-        queued: manifest.queued || 0,
+        discovered: counts.discovered,
+        completed: counts.completed,
+        failed: counts.failed,
+        integrityFailures: counts.integrityFailures,
+        queued: counts.queued,
         current: manifest.current || null,
         error: manifest.error || null,
     };
 }
 
+function savedChannelManifestRevision(manifest) {
+    return shortsScoreLedger.sha256Canonical({
+        schema: 'saved-channel-poll-revision-v1',
+        channel: compactSavedChannel(manifest),
+        rows: (manifest.videos || []).map(row => ({
+            id: row && row.id || null,
+            status: row && row.status || null,
+            attempts: row && row.attempts || 0,
+            manifest_row_sha256:
+                row && row.manifest_row_sha256 || null,
+        })),
+    });
+}
+
 async function readSavedChannelManifest(id) {
-    const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`).catch(() => null);
+    const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`);
     if (!buffer) return null;
-    try { return JSON.parse(buffer.toString('utf8')); } catch (e) { return null; }
+    try { return JSON.parse(buffer.toString('utf8')); }
+    catch (e) { throw new Error(`Saved-channel manifest ${id} is invalid JSON`); }
 }
 
 async function readSavedChannelIndex() {
-    const buffer = await cloud.downloadFromR2(SAVED_CHANNEL_INDEX_KEY).catch(() => null);
-    if (!buffer) return { version: 1, channels: [] };
+    let revision = null;
     try {
-        const index = JSON.parse(buffer.toString('utf8'));
-        if (!Array.isArray(index.channels)) index.channels = [];
+        revision = await cloud.getR2SmallObject(
+            SAVED_CHANNEL_INDEX_KEY
+        );
+    } catch (error) {
+        if (!cloud.isMissingR2ObjectError(error)) {
+            throw error;
+        }
+    }
+    if (!revision) {
+        return {
+            version: 1,
+            channels: [],
+            indexMissing: true,
+        };
+    }
+    try {
+        const index = JSON.parse(
+            revision.body.toString('utf8')
+        );
+        const validation =
+            savedChannelIndexContract.validateSavedChannelIndex(index);
+        if (!validation.valid) {
+            throw new Error(validation.errors.join('; '));
+        }
         return index;
-    } catch (e) { return { version: 1, channels: [] }; }
+    } catch (e) {
+        throw new HttpRequestError(
+            409,
+            'The saved-channel navigation index is invalid. Rebuild it '
+                + 'offline from the canonical channel manifests.',
+            'saved_channel_index_invalid'
+        );
+    }
 }
 
-async function writeSavedChannelIndex(index) {
-    index.version = 1;
-    index.updatedAt = Date.now();
-    await cloud.uploadToR2(SAVED_CHANNEL_INDEX_KEY, Buffer.from(JSON.stringify(index)), 'application/json');
+const savedChannelIndexCas = createR2JsonCasMutator({
+    key: SAVED_CHANNEL_INDEX_KEY,
+    storage: r2JsonCasStorage,
+    emptyValue: () =>
+        savedChannelIndexContract
+            .buildSavedChannelIndexFromEntries([], {
+                updatedAt: Date.now(),
+            }),
+    validate:
+        savedChannelIndexContract
+            .validateSavedChannelIndex,
+    serialize:
+        savedChannelIndexContract.canonicalIndexBytes,
+    label: 'saved-channel navigation index',
+});
+
+function mutateSavedChannelIndex(mutator) {
+    return savedChannelIndexCas.mutate(mutator);
 }
 
-async function upsertSavedChannelIndex(manifest) {
-    const index = await readSavedChannelIndex();
-    index.channels = index.channels.filter(channel => channel.id !== manifest.id);
-    index.channels.push(compactSavedChannel(manifest));
-    index.channels.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    await writeSavedChannelIndex(index);
+async function upsertSavedChannelIndex(manifest, manifestBytes) {
+    await mutateSavedChannelIndex(index => (
+        savedChannelIndexContract
+            .replaceSavedChannelIndexEntry(
+                index,
+                {
+                    key: `${SAVED_CHANNEL_ROOT}${manifest.id}/manifest.json`,
+                    manifest,
+                    bytes: manifestBytes,
+                },
+                { updatedAt: Date.now() }
+            )
+    ));
 }
 
-async function writeSavedChannelManifest(manifest) {
-    manifest.updatedAt = Date.now();
-    const videos = Array.isArray(manifest.videos) ? manifest.videos : [];
-    manifest.discovered = videos.length;
-    manifest.completed = videos.filter(video => video.status === 'done').length;
-    manifest.failed = videos.filter(video => video.status === 'error').length;
-    manifest.queued = videos.filter(video => video.status === 'queued' || video.status === 'scoring').length;
-    await cloud.uploadToR2(`${SAVED_CHANNEL_ROOT}${manifest.id}/manifest.json`, Buffer.from(JSON.stringify(manifest)), 'application/json');
-    await upsertSavedChannelIndex(manifest);
+function validateSavedChannelManifestStructure(manifest, id) {
+    if (manifest == null) return { valid: true, errors: [] };
+    const videos = manifest && manifest.videos;
+    const ids = Array.isArray(videos)
+        ? videos.map(row => String(row && row.id || ''))
+        : [];
+    const errors = [];
+    if (
+        !manifest
+        || typeof manifest !== 'object'
+        || Array.isArray(manifest)
+        || manifest.id !== id
+        || !Array.isArray(videos)
+    ) {
+        errors.push('saved-channel manifest identity differs');
+    }
+    if (
+        ids.some((videoId, index) => (
+            !videoId || ids.indexOf(videoId) !== index
+        ))
+    ) {
+        errors.push(
+            'saved-channel manifest has missing or duplicate video IDs'
+        );
+    }
+    if (
+        manifest
+        && manifest.controlRevision != null
+        && (
+            !Number.isSafeInteger(manifest.controlRevision)
+            || manifest.controlRevision < 0
+        )
+    ) {
+        errors.push(
+            'saved-channel control revision is invalid'
+        );
+    }
+    if (
+        manifest
+        && manifest.experimentLabControlKey != null
+        && !/^[a-f0-9]{32}$/.test(
+            String(manifest.experimentLabControlKey)
+        )
+    ) {
+        errors.push(
+            'saved-channel Experiment Lab control key is invalid'
+        );
+    }
+    return {
+        valid: errors.length === 0,
+        errors,
+    };
+}
+
+const savedChannelManifestCasById = new Map();
+function savedChannelManifestCas(id) {
+    let instance = savedChannelManifestCasById.get(id);
+    if (instance) return instance;
+    instance = createR2JsonCasMutator({
+        key: `${SAVED_CHANNEL_ROOT}${id}/manifest.json`,
+        storage: r2JsonCasStorage,
+        emptyValue: () => null,
+        validate: manifest =>
+            validateSavedChannelManifestStructure(
+                manifest,
+                id
+            ),
+        bind: manifest => {
+            if (!manifest || manifest.id !== id) {
+                throw new Error(
+                    'saved-channel manifest mutation returned no manifest'
+                );
+            }
+            manifest.updatedAt = Date.now();
+            Object.assign(
+                manifest,
+                savedChannelCounts(manifest)
+            );
+            return manifest;
+        },
+        label: `saved-channel manifest ${id}`,
+    });
+    savedChannelManifestCasById.set(id, instance);
+    return instance;
+}
+
+function advanceSavedChannelControl(manifest, intent) {
+    manifest.controlRevision = (
+        Number.isSafeInteger(manifest.controlRevision)
+            ? manifest.controlRevision
+            : 0
+    ) + 1;
+    manifest.controlIntent = intent;
+    manifest.controlUpdatedAt = Date.now();
     return manifest;
 }
 
+async function refreshSavedChannelIndexEntry(id) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+        const revision = await cloud.getR2SmallObject(
+            `${SAVED_CHANNEL_ROOT}${id}/manifest.json`
+        );
+        const manifest = JSON.parse(
+            revision.body.toString('utf8')
+        );
+        const validation =
+            validateSavedChannelManifestStructure(
+                manifest,
+                id
+            );
+        if (!validation.valid) {
+            throw new Error(validation.errors.join('; '));
+        }
+        await upsertSavedChannelIndex(
+            manifest,
+            revision.body
+        );
+        try {
+            await cloud.getR2SmallObject(
+                `${SAVED_CHANNEL_ROOT}${id}/manifest.json`,
+                { ifMatch: revision.etag }
+            );
+            return manifest;
+        } catch (error) {
+            if (!cloud.isR2PreconditionFailedError(error)) {
+                throw error;
+            }
+        }
+    }
+    throw new Error(
+        `saved-channel manifest ${id} changed repeatedly while indexing`
+    );
+}
+
+async function mutateSavedChannelManifest(id, mutator) {
+    await savedChannelManifestCas(id).mutate(mutator);
+    return refreshSavedChannelIndexEntry(id);
+}
+
 async function removeSavedChannelIndex(id) {
-    const index = await readSavedChannelIndex();
-    index.channels = index.channels.filter(channel => channel.id !== id);
-    await writeSavedChannelIndex(index);
+    await mutateSavedChannelIndex(index => (
+        index
+            ? savedChannelIndexContract
+                .removeSavedChannelIndexEntry(
+                    index,
+                    id,
+                    { updatedAt: Date.now() }
+                )
+            : null
+    ));
+}
+
+async function readPinnedPredictorLabBundle() {
+    const predictorLabRelease = await readPredictorLabReleaseManifest();
+    const visualKeepRelease = await readVisualKeepReleaseManifest(
+        predictorLabRelease.visualKeepModel
+    );
+    const creatorAdaptiveKeepRelease =
+        await readCreatorAdaptiveKeepReleaseManifest(
+            predictorLabRelease.creatorAdaptiveKeepModel
+        );
+    for (const modelRelease of [visualKeepRelease, creatorAdaptiveKeepRelease]) {
+        if (
+            modelRelease.manifest.featureContractSha256
+                !== predictorLabRelease.manifest.featureContractSha256
+            || modelRelease.manifest.producerSourceSha256
+                !== predictorLabRelease.manifest.producerSourceSha256
+            || Number(modelRelease.manifest.generatedAt)
+                !== Number(predictorLabRelease.manifest.generatedAt)
+        ) {
+            throw new Error(
+                'The predictor-lab release pointer combines incompatible model revisions.'
+            );
+        }
+    }
+    const pinnedPredictor =
+        await readPinnedPredictorArtifactBytes(
+            predictorLabRelease
+        );
+    const predictorBuffer =
+        pinnedPredictor.artifactBuffer;
+    const predictor = JSON.parse(predictorBuffer.toString('utf8'));
+    const predictorArtifactSha256 =
+        pinnedPredictor.artifactSha256;
+    const predictorManifest =
+        pinnedPredictor.manifest;
+    const predictorManifestBuffer =
+        pinnedPredictor.manifestBuffer;
+    const predictorManifestSha256 =
+        pinnedPredictor.manifestSha256;
+    if (
+        !predictor.provenance
+        || predictor.provenance.featureContractSha256
+            !== predictorLabRelease.manifest.featureContractSha256
+        || predictor.provenance.producerSourceSha256
+            !== predictorLabRelease.manifest.producerSourceSha256
+    ) {
+        throw new Error(
+            'The predictor artifact provenance does not match the atomic release pointer.'
+        );
+    }
+    predictor.provenance = {
+        ...predictor.provenance,
+        artifactSha256: predictorArtifactSha256,
+        artifactArchiveKey: predictorManifest.archiveKey,
+        artifactManifestKey:
+            predictorLabRelease.predictor.manifestKey,
+        artifactManifestSha256: predictorManifestSha256,
+        artifactGeneratedAt: predictor.generatedAt || null,
+        releaseKey: PREDICTOR_LAB_RELEASE_KEY,
+        releaseSha256: predictorLabRelease.sha256,
+    };
+    const predictorVisualKeepArtifact = predictor
+        && predictor.targets
+        && predictor.targets.keep
+        && predictor.targets.keep.visualOnlyStudy
+        && predictor.targets.keep.visualOnlyStudy.modelArtifact
+        || predictor.provenance.visualKeepModelArtifact
+        || null;
+    if (
+        !predictorVisualKeepArtifact
+        || predictorVisualKeepArtifact.artifactSha256
+            !== visualKeepRelease.artifactSha256
+        || predictorVisualKeepArtifact.archiveKey
+            !== visualKeepRelease.artifactKey
+        || predictorVisualKeepArtifact.producerSourceSha256
+            !== visualKeepRelease.manifest.producerSourceSha256
+        || predictor.provenance.featureContractVersion
+            !== visualKeepRelease.manifest.featureContractVersion
+        || predictor.provenance.featureContractSha256
+            !== visualKeepRelease.manifest.featureContractSha256
+    ) {
+        throw new Error(
+            'The predictor results and frozen visual keep release pointer are not on the same immutable revision.'
+        );
+    }
+    const visualKeepModel =
+        await readVisualKeepModel(false, visualKeepRelease);
+    const predictorCreatorAdaptiveArtifact = predictor
+        && predictor.targets
+        && predictor.targets.keep
+        && predictor.targets.keep.creatorAdaptiveStudy
+        && predictor.targets.keep.creatorAdaptiveStudy.modelArtifact
+        || predictor.provenance.creatorAdaptiveKeepModelArtifact
+        || null;
+    if (
+        !predictorCreatorAdaptiveArtifact
+        || predictorCreatorAdaptiveArtifact.artifactSha256
+            !== creatorAdaptiveKeepRelease.artifactSha256
+        || predictorCreatorAdaptiveArtifact.archiveKey
+            !== creatorAdaptiveKeepRelease.artifactKey
+        || predictorCreatorAdaptiveArtifact.producerSourceSha256
+            !== creatorAdaptiveKeepRelease.manifest.producerSourceSha256
+        || predictor.provenance.featureContractVersion
+            !== creatorAdaptiveKeepRelease.manifest.featureContractVersion
+        || predictor.provenance.featureContractSha256
+            !== creatorAdaptiveKeepRelease.manifest.featureContractSha256
+    ) {
+        throw new Error(
+            'The predictor results and creator-adaptive keep release pointer are not on the same immutable revision.'
+        );
+    }
+    const creatorAdaptiveKeepModel =
+        await readCreatorAdaptiveKeepModel(
+            false,
+            creatorAdaptiveKeepRelease
+        );
+    return {
+        predictorLabRelease,
+        visualKeepRelease,
+        creatorAdaptiveKeepRelease,
+        predictor,
+        predictorBuffer,
+        predictorArtifactSha256,
+        predictorManifest,
+        predictorManifestBuffer,
+        predictorManifestSha256,
+        visualKeepModel,
+        creatorAdaptiveKeepModel,
+    };
+}
+
+async function buildSavedChannelValidationBuffer() {
+    // A validation claim is rebuilt from its current sources or it fails
+    // closed. An older artifact cannot establish that mutable source rows
+    // still match merely because its model release remains compatible.
+    return buildFreshSavedChannelValidationBuffer(
+        await readPinnedPredictorLabBundle()
+    );
+}
+
+async function buildFreshSavedChannelValidationBuffer(
+    bundle
+) {
+    const {
+        predictorLabRelease,
+        visualKeepRelease,
+        creatorAdaptiveKeepRelease,
+        predictor,
+        predictorBuffer,
+        predictorArtifactSha256,
+        predictorManifest,
+        predictorManifestBuffer,
+        predictorManifestSha256,
+        visualKeepModel,
+        creatorAdaptiveKeepModel,
+    } = bundle;
+    const sourceBuffers = new Map();
+    sourceBuffers.set(predictorLabRelease.predictor.artifactKey, predictorBuffer);
+    sourceBuffers.set(
+        predictorLabRelease.predictor.manifestKey,
+        predictorManifestBuffer
+    );
+    sourceBuffers.set(PREDICTOR_LAB_RELEASE_KEY, predictorLabRelease.buffer);
+    sourceBuffers.set(visualKeepRelease.manifestKey, visualKeepRelease.manifestBuffer);
+    sourceBuffers.set(visualKeepRelease.artifactKey, visualKeepModel.artifactBuffer);
+    sourceBuffers.set(
+        creatorAdaptiveKeepRelease.manifestKey,
+        creatorAdaptiveKeepRelease.manifestBuffer
+    );
+    sourceBuffers.set(
+        creatorAdaptiveKeepRelease.artifactKey,
+        creatorAdaptiveKeepModel.artifactBuffer
+    );
+    const runtimeManifests = {};
+    runtimeManifests.predictorLabRelease = {
+        key: PREDICTOR_LAB_RELEASE_KEY,
+        sha256: predictorLabRelease.sha256,
+        generatedAt: predictorLabRelease.manifest.generatedAt,
+    };
+    runtimeManifests.visualKeepModelRelease = {
+        key: visualKeepRelease.manifestKey,
+        artifactSha256: visualKeepRelease.artifactSha256,
+        manifestSha256: visualKeepRelease.manifestSha256,
+        archiveKey: visualKeepRelease.artifactKey,
+        producerSourceSha256: visualKeepRelease.manifest.producerSourceSha256,
+        featureContractSha256: visualKeepRelease.manifest.featureContractSha256,
+    };
+    runtimeManifests.creatorAdaptiveKeepModelRelease = {
+        key: creatorAdaptiveKeepRelease.manifestKey,
+        artifactSha256: creatorAdaptiveKeepRelease.artifactSha256,
+        manifestSha256: creatorAdaptiveKeepRelease.manifestSha256,
+        archiveKey: creatorAdaptiveKeepRelease.artifactKey,
+        producerSourceSha256:
+            creatorAdaptiveKeepRelease.manifest.producerSourceSha256,
+        featureContractSha256:
+            creatorAdaptiveKeepRelease.manifest.featureContractSha256,
+    };
+    for (const [name, key] of [
+        ['shortsSteer', 'raw/steer_manifest.json'],
+        ['shortsVisualMap', 'raw/visual/map.manifest.json'],
+        ['shortsTextMap', 'raw/text/map.manifest.json'],
+        ['shortsTogetherMap', 'raw/together/map.manifest.json'],
+        ['longVisualMap', 'raw-long/visual/map.manifest.json'],
+        ['longTextMap', 'raw-long/text/map.manifest.json'],
+        ['longTogetherMap', 'raw-long/together/map.manifest.json'],
+        ['longSteer', 'raw-long/steer_models.manifest.json'],
+        ['longVisualScorer', 'longform/thumb-rl/scorer_visual.manifest.json'],
+        ['indicatorRegistry', 'raw/indicators/registry.json'],
+    ]) {
+        const buffer = await cloud.downloadFromR2(key).catch(() => null);
+        if (!buffer) continue;
+        sourceBuffers.set(key, buffer);
+        runtimeManifests[name] = {
+            key,
+            artifactSha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+            value: JSON.parse(buffer.toString('utf8')),
+        };
+    }
+    for (const [name, key] of [
+        ['noveltyModels', 'raw/novelty_models.npz'],
+        ['indicatorWeights', 'raw/indicators/weights.npz'],
+    ]) {
+        const buffer = await cloud.downloadFromR2(key).catch(() => null);
+        if (!buffer) continue;
+        sourceBuffers.set(key, buffer);
+        runtimeManifests[name] = {
+            key,
+            artifactSha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+            bytes: buffer.length,
+        };
+    }
+    for (const [name, relativePath] of [
+        ['shortsLiveScoreSource', 'raw_upload.py'],
+        ['shortsScoreLedgerProducerSource', 'shorts_score_ledger.py'],
+        ['shortsScoreLedgerReaderSource', 'buildings/jarvis/shorts-score-ledger.js'],
+        ['savedChannelManifestBindingSource', 'buildings/jarvis/saved-channel-manifest-binding.js'],
+        ['longScoreLedgerReaderSource', 'buildings/jarvis/long-score-ledger.js'],
+        ['savedScoreDisplayContractSource', 'embedding-display-contract.js'],
+        ['shortsChannelWorkerSource', 'yt_relay_watcher.py'],
+        ['shortsSteerProducerSource', 'add_steered_proj.py'],
+        ['shortsThumbnailProducerSource', 'build_thumb_assets.py'],
+        ['longScoreSource', 'longquant_score.py'],
+        ['longSteerProducerSource', 'add_steered_proj_long.py'],
+        ['predictorProducerSource', 'buildings/jarvis/predictor-lab/run_predictor_lab.py'],
+        ['validationProducerSource', 'buildings/jarvis/saved-channel-validation.js'],
+    ]) {
+        const absolutePath = path.join(__dirname, relativePath);
+        const buffer = fs.readFileSync(absolutePath);
+        const key = `local:${relativePath}`;
+        sourceBuffers.set(key, buffer);
+        runtimeManifests[name] = {
+            key,
+            artifactSha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+            bytes: buffer.length,
+            kind: 'source-code',
+        };
+    }
+    predictor.provenance.runtimeManifests = runtimeManifests;
+    if (!predictor.targets || !predictor.targets.keep || !predictor.targets.keep.blindInputs) {
+        throw new Error('The predictor artifact predates row-level blind inputs and must be rebuilt.');
+    }
+    const channels = [];
+    for (const definition of savedChannelValidation.SUPPORTED_CHANNELS) {
+        const manifestKey = `${SAVED_CHANNEL_ROOT}${definition.channelId}/manifest.json`;
+        const manifestBuffer = await cloud.downloadFromR2(manifestKey);
+        if (!manifestBuffer) throw new Error(`Saved channel ${definition.accountName} is missing.`);
+        sourceBuffers.set(manifestKey, manifestBuffer);
+        let privateBuffer;
+        if (definition.accountId === 'tyler') {
+            privateBuffer = fs.readFileSync(path.join(__dirname, 'buildings/jarvis/retention-study/retention_table.json'));
+            sourceBuffers.set('local:retention_table.json', privateBuffer);
+        } else {
+            const privateKey = `retention/${definition.accountId}.json`;
+            privateBuffer = await cloud.downloadFromR2(privateKey);
+            if (!privateBuffer) throw new Error(`Private retention data for ${definition.accountName} is missing.`);
+            sourceBuffers.set(privateKey, privateBuffer);
+        }
+        channels.push({
+            ...definition,
+            manifest: JSON.parse(manifestBuffer.toString('utf8')),
+            privateTable: JSON.parse(privateBuffer.toString('utf8')),
+        });
+    }
+    sourceBuffers.set(
+        'local:saved-channel-feature-contract.json',
+        savedChannelFeatureContractBytes
+    );
+    sourceBuffers.set(
+        'local:quant-coordinate-governance.json',
+        quantCoordinateGovernanceBytes
+    );
+    const fingerprintHash = require('crypto').createHash('sha256');
+    for (const [name, buffer] of [...sourceBuffers.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+        fingerprintHash.update(name);
+        fingerprintHash.update('\0');
+        fingerprintHash.update(buffer);
+        fingerprintHash.update('\0');
+    }
+    const fingerprint = fingerprintHash.digest('hex');
+    const cachedBuffer = await cloud.downloadFromR2(SAVED_CHANNEL_VALIDATION_KEY).catch(() => null);
+    if (cachedBuffer) {
+        try {
+            const cached = JSON.parse(cachedBuffer.toString('utf8'));
+            if (cached.sourceFingerprint === fingerprint && cached.version === savedChannelValidation.VERSION) {
+                cached.artifact = {
+                    cacheStatus: 'hit',
+                    persisted: true,
+                    storage: 'R2',
+                    generatedAt: cached.generatedAt,
+                    fingerprint,
+                };
+                return Buffer.from(JSON.stringify(cached));
+            }
+        } catch (e) {}
+    }
+    const validation = savedChannelValidation.buildValidation({
+        channels,
+        predictor,
+        creatorAdaptiveKeepModel,
+        sourceFingerprint: fingerprint,
+    });
+    validation.artifact = {
+        cacheStatus: 'generated',
+        persisted: true,
+        storage: 'R2',
+        generatedAt: validation.generatedAt,
+        fingerprint,
+    };
+    const buffer = Buffer.from(JSON.stringify(validation));
+    const persisted = await cloud.uploadToR2(SAVED_CHANNEL_VALIDATION_KEY, buffer, 'application/json')
+        .then(() => true)
+        .catch(() => false);
+    if (!persisted) {
+        validation.artifact.persisted = false;
+        validation.artifact.storage = 'response only';
+        validation.artifact.note = 'The validation completed, but its durable R2 artifact could not be written.';
+        return Buffer.from(JSON.stringify(validation));
+    }
+    return buffer;
 }
 
 function requestIsLoopback(req) {
@@ -1036,9 +6134,28 @@ async function handlePromiseHookScore(req, res) {
             });
         };
         if (body.async) {
-            const jobId = quantJobSubmit('promise-hook-score', scoreRunner, 'shorts');
+            const requestFingerprint = quantRequestFingerprint(
+                'promise-hook-score',
+                'shorts',
+                {
+                    text,
+                    duration_seconds: durationSeconds,
+                },
+                promiseHookScorerIdentity()
+            );
+            const jobId = quantJobSubmit(
+                'promise-hook-score',
+                scoreRunner,
+                'shorts',
+                quantRequestId(req),
+                requestFingerprint
+            );
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ ok: true, jobId }));
+            res.end(JSON.stringify({
+                ok: true,
+                jobId,
+                requestFingerprint,
+            }));
             return;
         }
         const value = await scoreRunner();
@@ -1776,11 +6893,15 @@ function appendCasinoChat(entry) {
     return write;
 }
 
+const worldLayoutStore = createWorldLayoutStore({
+    storage: r2JsonCasStorage,
+});
+
 const STATIC_STREAM_THRESHOLD = Math.max(
     1024 * 1024,
     parseInt(process.env.STATIC_STREAM_THRESHOLD || String(16 * 1024 * 1024), 10)
 );
-const server = http.createServer(async (req, res) => {
+async function handleHttpRequest(req, res) {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const pathname = url.pathname;
 
@@ -1794,7 +6915,21 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+        res.setHeader('Access-Control-Allow-Headers', [
+            'Content-Type',
+            'Authorization',
+            'X-API-Key',
+            'X-Quant-Request-Id',
+            'X-Raw-Ext',
+            'X-Raw-Title',
+            'X-Raw-Duration',
+            'X-Raw-Async',
+            'X-Raw-Upload-Mode',
+            'X-Raw-Sparse',
+            'X-Raw-Original-Size',
+            'X-Raw-Head-Size',
+            'X-Raw-Tail-Size',
+        ].join(', '));
         if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
@@ -1804,6 +6939,88 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/auth/config' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ url: auth.SUPABASE_URL, anonKey: auth.SUPABASE_ANON_KEY }));
+        return;
+    }
+
+    // Loaded synchronously before either Quant UI. This script is generated
+    // directly from the canonical registry so browser code cannot carry a
+    // copied coordinate inventory, unit, version, or registry hash.
+    if (
+        pathname === '/api/quant-coordinate-governance.json'
+        && req.method === 'GET'
+    ) {
+        const payload = Buffer.from(JSON.stringify({
+            governance: quantCoordinateGovernance,
+            governanceSha256: quantCoordinateGovernanceSha256,
+            shortsScoreLedgerRuntime,
+        }));
+        const etag = `"${sha256Bytes(payload)}"`;
+        if (req.headers['if-none-match'] === etag) {
+            res.writeHead(304, {
+                ETag: etag,
+                'Cache-Control':
+                    'public, max-age=300, stale-while-revalidate=86400, '
+                    + 'stale-if-error=604800',
+            });
+            res.end();
+            return;
+        }
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': payload.length,
+            'Cache-Control':
+                'public, max-age=300, stale-while-revalidate=86400, '
+                + 'stale-if-error=604800',
+            ETag: etag,
+            'X-Content-Type-Options': 'nosniff',
+        });
+        res.end(payload);
+        return;
+    }
+    if (
+        pathname === '/api/quant-coordinate-governance.js'
+        && req.method === 'GET'
+    ) {
+        const script = [
+            '(function (root) {',
+            '  "use strict";',
+            `  const document = ${quantCoordinateGovernanceBytes.toString('utf8')};`,
+            '  const deepFreeze = value => {',
+            '    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;',
+            '    Object.values(value).forEach(deepFreeze);',
+            '    return Object.freeze(value);',
+            '  };',
+            '  Object.defineProperty(root, "__QUANT_COORDINATE_GOVERNANCE__", {',
+            '    value: deepFreeze(document), writable: false, configurable: false',
+            '  });',
+            '  Object.defineProperty(root, "__QUANT_COORDINATE_GOVERNANCE_SHA256__", {',
+            `    value: "${quantCoordinateGovernanceSha256}", writable: false, configurable: false`,
+            '  });',
+            '  Object.defineProperty(root, "__SHORTS_SCORE_LEDGER_RUNTIME__", {',
+            `    value: deepFreeze(${JSON.stringify(shortsScoreLedgerRuntime)}), writable: false, configurable: false`,
+            '  });',
+            '}(globalThis));',
+        ].join('\n');
+        const etag = `"${sha256Bytes(Buffer.from(script))}"`;
+        if (req.headers['if-none-match'] === etag) {
+            res.writeHead(304, {
+                ETag: etag,
+                'Cache-Control':
+                    'public, max-age=300, stale-while-revalidate=86400, '
+                    + 'stale-if-error=604800',
+            });
+            res.end();
+            return;
+        }
+        res.writeHead(200, {
+            'Content-Type': 'application/javascript; charset=utf-8',
+            'Cache-Control':
+                'public, max-age=300, stale-while-revalidate=86400, '
+                + 'stale-if-error=604800',
+            ETag: etag,
+            'X-Content-Type-Options': 'nosniff',
+        });
+        res.end(script);
         return;
     }
     // AUTH: who am I — verifies token, returns the account + resolved permissions
@@ -1993,11 +7210,12 @@ const server = http.createServer(async (req, res) => {
         const t0 = Date.now();
         try {
             const r = await runHeavyScoreInteractive(() => new Promise(ok => {
-                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmpImg, '--text', 'selftest hook do not save', '--title', 'selftest'], { env: RAW_PY_ENV });
+                const py = spawnRawPython([path.join(__dirname, 'raw_upload.py'), '--image', tmpImg, '--text', 'selftest hook do not save', '--title', 'selftest']);
                 let out = '', err = '';
+                let timedOut = false;
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} ok({ code: null, signal: 'TIMEOUT-420s', out, err }); }, 420000);
-                py.on('close', (code, signal) => { clearTimeout(timer); ok({ code, signal, out, err }); });
+                const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 420000);
+                py.on('close', (code, signal) => { clearTimeout(timer); ok({ code, signal: timedOut ? 'TIMEOUT-420s' : signal, out, err }); });
                 py.on('error', e => { clearTimeout(timer); ok({ code: -1, signal: null, out, err: err + '\nspawn: ' + e.message }); });
             }));
             const ms = Date.now() - t0;
@@ -2049,6 +7267,238 @@ const server = http.createServer(async (req, res) => {
             return;
         }
         req._account = decision.account;
+        req._perms = decision.perms;
+    }
+    const experimentLabInspectionTarget =
+        experimentLabTargetId(req, url);
+    const experimentLabTeamAccess =
+        experimentLabCanInspectTeam(req._account);
+    if (
+        isExperimentLabRequest(req, url)
+        && experimentLabWorkspace
+            .isReadOnlyInspectionMutation(
+                req._account && req._account.id,
+                experimentLabInspectionTarget,
+                req.method
+            )
+    ) {
+        res.writeHead(403, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+        });
+        res.end(JSON.stringify({
+            error: experimentLabTeamAccess
+                ? 'Owner team inspection is read-only.'
+                : 'You cannot modify another Experiment Lab account.',
+            code: experimentLabTeamAccess
+                ? 'experiment_lab_team_read_only'
+                : 'experiment_lab_account_forbidden',
+        }));
+        return;
+    }
+
+    // =========================================
+    // EXPERIMENT LAB: account-scoped workspace references.
+    // Scoring and generation continue through the canonical Jarvis routes;
+    // only organization, membership, and activity are tenant-specific.
+    // =========================================
+    if (
+        pathname === '/api/experimentlab/context'
+        && req.method === 'GET'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const workspace = scope.readOnly
+                ? (
+                    await readExperimentLabWorkspace(scope.account)
+                ).workspace
+                : await ensureInitialExperimentLabWorkspace(
+                    scope.account
+                );
+            const teamAccess =
+                experimentLabCanInspectTeam(scope.viewer);
+            const response = {
+                schema: experimentLabWorkspace.SCHEMA,
+                surface: 'experiment-lab',
+                viewer:
+                    experimentLabWorkspace.accountIdentity(
+                        scope.viewer
+                    ),
+                activeAccount: workspace.account,
+                readOnly: scope.readOnly,
+                workspace,
+                summary:
+                    experimentLabWorkspace.summary(workspace),
+                owner: teamAccess,
+                teamAccess,
+                accounts: teamAccess
+                    ? await experimentLabAccountSummaries()
+                    : [],
+            };
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'private, no-store',
+                'Vary':
+                    'Authorization, X-Business-World-Surface, '
+                    + 'X-Experiment-Lab-Account',
+            });
+            res.end(JSON.stringify(response));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_context_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/experimentlab/folder'
+        && req.method === 'POST'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = (await readBody(req)) || {};
+            let folder;
+            const workspace =
+                await mutateExperimentLabWorkspace(
+                    scope.account,
+                    current => {
+                        folder =
+                            experimentLabWorkspace.createFolder(
+                                current,
+                                String(body.kind || ''),
+                                body.name
+                            );
+                    }
+                );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                folder,
+                workspace_sha256:
+                    workspace.workspace_sha256,
+            }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_folder_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/experimentlab/folder/delete'
+        && req.method === 'POST'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = (await readBody(req)) || {};
+            const workspace =
+                await mutateExperimentLabWorkspace(
+                    scope.account,
+                    current => {
+                        experimentLabWorkspace.deleteFolder(
+                            current,
+                            String(body.kind || ''),
+                            body.id
+                        );
+                    }
+                );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                workspace_sha256:
+                    workspace.workspace_sha256,
+            }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_folder_delete_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/experimentlab/item/move'
+        && req.method === 'POST'
+    ) {
+        try {
+            const scope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = (await readBody(req)) || {};
+            const workspace =
+                await mutateExperimentLabWorkspace(
+                    scope.account,
+                    current => {
+                        experimentLabWorkspace.moveItem(
+                            current,
+                            String(body.kind || ''),
+                            body.id,
+                            body.folderId
+                        );
+                    }
+                );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                workspace_sha256:
+                    workspace.workspace_sha256,
+            }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'experiment_lab_item_move_failed',
+            }));
+        }
+        return;
     }
 
     // =========================================
@@ -2120,26 +7570,56 @@ const server = http.createServer(async (req, res) => {
     // =========================================
     // RAW upload — embed an uploaded video's first-5s hook (visual/text/together) and
     // locate it in the existing map by nearest neighbours. Raw binary body; ext in X-Raw-Ext.
+    if (pathname === '/api/raw/scorer-contract' && req.method === 'GET') {
+        try {
+            const contract = await readRawScorerContract(
+                url.searchParams.get('refresh') === '1'
+            );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify(contract));
+        } catch (error) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
     // ⬇ score a hook straight from a YouTube link: server downloads the short, extracts the
     // 5-frame montage + first-5s transcript, embeds and scores — identical record to an upload.
     if (pathname === '/api/raw/embed-youtube' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = await readBody(req);
             const yurl = String(body.url || '').trim().slice(0, 300);
             if (!/^[\w-]{11}$/.test(yurl) && !/youtube\.com|youtu\.be/i.test(yurl)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"paste a YouTube link (watch, shorts, or youtu.be)"}'); return; }
             const ytArgs = [path.join(__dirname, 'raw_upload.py'), '--youtube', yurl];
             const yTitle = String(body.title || '').slice(0, 80).trim();
             if (yTitle) ytArgs.push('--title', yTitle);
+            const creatorProfile = safeCreatorProfile(body.creatorProfile);
+            if (creatorProfile) {
+                ytArgs.push('--creator-profile', creatorProfile);
+            }
             const ytRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
-                const py = spawn(RAW_PYTHON, ytArgs, { env: RAW_PY_ENV });
+                const py = spawnRawPython(ytArgs);
                 let out = '', err = '';
+                let timedOut = false;
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('YouTube score timeout (download + embed took >8 min)')); }, 480000);
+                const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 480000);
                 py.on('close', () => {
                     clearTimeout(timer);
+                    if (timedOut) return no(new Error('YouTube score timeout (download + embed took >8 min)'));
                     const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
                     if (!line) return no(new Error('no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
-                    try { const j = JSON.parse(line); return j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); }
+                    try { return ok(validateRawScoreResult(JSON.parse(line))); } catch (e) { no(e); }
                 });
                 py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
             }));
@@ -2148,10 +7628,24 @@ const server = http.createServer(async (req, res) => {
                 catch (e) {
                     const msg = String((e && e.message) || e);
                     if (!/cookie|bot|confirm|sign in|authenticat|403|429|too many requests|ffmpeg exited with code (8|183)/i.test(msg)) throw e;
-                    // YouTube bot-blocks this datacenter IP — relay the job through the Mac watcher,
-                    // which downloads on a residential IP and runs the identical scoring pipeline.
+                    // YouTube bot-blocks this datacenter IP. The Mac watcher acquires only the
+                    // source video; this server still runs the canonical scorer and artifacts.
                     const rid = 'y' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-                    await cloud.uploadToR2(`shorts/yt-relay/requests/${rid}.json`, Buffer.from(JSON.stringify({ url: yurl, title: yTitle, ts: Date.now() })), 'application/json');
+                    const expectedContract = await readRawScorerContract();
+                    const expectedRevisionFingerprint = String(
+                        expectedContract && expectedContract.revision_fingerprint || ''
+                    );
+                    await cloud.uploadToR2(
+                        `shorts/yt-relay/requests/${rid}.json`,
+                        Buffer.from(JSON.stringify({
+                            url: yurl,
+                            title: yTitle,
+                            creatorProfile: creatorProfile || null,
+                            expectedRevisionFingerprint,
+                            ts: Date.now(),
+                        })),
+                        'application/json'
+                    );
                     for (let i = 0; i < 100; i++) {
                         await new Promise(r => setTimeout(r, 5000));
                         const b = await cloud.downloadFromR2(`shorts/yt-relay/results/${rid}.json`).catch(() => null);
@@ -2159,73 +7653,581 @@ const server = http.createServer(async (req, res) => {
                             await cloud.deleteFromR2(`shorts/yt-relay/results/${rid}.json`).catch(() => {});
                             const j = JSON.parse(b.toString('utf8'));
                             if (j.error) throw new Error(j.error);
-                            return j;
+                            const relayVideoKey = String(
+                                j.relayVideoKey || ''
+                            );
+                            if (!/^shorts\/yt-relay\/videos\/[\w.-]+\.(?:mp4|mov|mkv|webm|m4v)$/i.test(relayVideoKey)) {
+                                throw new Error(
+                                    'YouTube relay returned no usable acquisition'
+                                );
+                            }
+                            const extension = path.extname(relayVideoKey)
+                                .replace(/[^a-z0-9.]/gi, '')
+                                .slice(0, 8) || '.mp4';
+                            const relayTemp = path.join(
+                                require('os').tmpdir(),
+                                `rawyt_relay_${rid}${extension}`
+                            );
+                            await cloud.downloadFromR2ToFile(
+                                relayVideoKey,
+                                relayTemp,
+                                {
+                                    maxBytes: Math.max(
+                                        72 * 1024 * 1024,
+                                        Number.parseInt(
+                                            process.env
+                                                .RAW_YT_RELAY_MAX_BYTES
+                                            || String(512 * 1024 * 1024),
+                                            10
+                                        )
+                                    ),
+                                }
+                            );
+                            let scored;
+                            try {
+                                const relayArgs = [
+                                    path.join(__dirname, 'raw_upload.py'),
+                                    '--file', relayTemp,
+                                    '--title', (
+                                        yTitle
+                                        || j.sourceTitle
+                                        || j.videoId
+                                        || 'YouTube hook'
+                                    ).toString().slice(0, 80),
+                                ];
+                                const sourceDuration = Number(
+                                    j.sourceDuration
+                                );
+                                if (
+                                    sourceDuration > 0
+                                    && Number.isFinite(sourceDuration)
+                                ) {
+                                    relayArgs.push(
+                                        '--duration',
+                                        String(
+                                            Math.round(
+                                                sourceDuration * 1000
+                                            ) / 1000
+                                        )
+                                    );
+                                }
+                                if (creatorProfile) {
+                                    relayArgs.push(
+                                        '--creator-profile',
+                                        creatorProfile
+                                    );
+                                }
+                                scored = await runHeavyScoreInteractive(
+                                    () => new Promise((resolve, reject) => {
+                                        const py = spawnRawPython(relayArgs);
+                                        let stdout = '', stderr = '';
+                                        let timedOut = false;
+                                        py.stdout.on(
+                                            'data',
+                                            chunk => stdout += chunk
+                                        );
+                                        py.stderr.on(
+                                            'data',
+                                            chunk => stderr += chunk
+                                        );
+                                        const timer = setTimeout(() => {
+                                            timedOut = true;
+                                            killRawPythonTree(py);
+                                        }, 240000);
+                                        py.on('close', () => {
+                                            clearTimeout(timer);
+                                            if (timedOut) {
+                                                reject(new Error(
+                                                    'relayed YouTube scoring '
+                                                    + 'timed out'
+                                                ));
+                                                return;
+                                            }
+                                            const line = stdout.trim()
+                                                .split('\n')
+                                                .filter(value => (
+                                                    value.trim()
+                                                        .startsWith('{')
+                                                )).pop();
+                                            if (!line) {
+                                                reject(new Error(
+                                                    'relayed YouTube scorer '
+                                                    + 'produced no result — '
+                                                    + (
+                                                        stderr.trim()
+                                                            .split('\n')
+                                                            .pop()
+                                                        || 'no output'
+                                                    ).slice(-160)
+                                                ));
+                                                return;
+                                            }
+                                            try {
+                                                // Acquisition metadata is added below. Keep
+                                                // the producer payload intact until then so
+                                                // its denormalized compatibility caches are
+                                                // checked exactly once at the API boundary.
+                                                resolve(JSON.parse(line));
+                                            } catch (error) {
+                                                reject(error);
+                                            }
+                                        });
+                                        py.on('error', reject);
+                                    })
+                                );
+                            } finally {
+                                fs.rmSync(relayTemp, { force: true });
+                                await cloud.deleteFromR2(
+                                    relayVideoKey
+                                ).catch(() => {});
+                            }
+                            scored = {
+                                ...scored,
+                                videoId: j.videoId || null,
+                                sourceUrl: j.sourceUrl || yurl,
+                                sourceTitle: j.sourceTitle || '',
+                                sourceViews: j.sourceViews,
+                                sourceChannel: j.sourceChannel || '',
+                                sourcePublished: j.sourcePublished || null,
+                                sourceSubscribers: j.sourceSubscribers,
+                                sourceAcquisition:
+                                    `${j.sourceAcquisition || 'relay'}`
+                                    + '+server-score',
+                                relayedBy: j.relayedBy || 'mac',
+                            };
+                            if (scored.input_manifest) {
+                                scored.input_manifest.source_mode =
+                                    'youtube-relay-acquisition';
+                            }
+                            const actualRevision = String(
+                                scored.input_manifest
+                                && scored.input_manifest.revision_fingerprint
+                                || ''
+                            );
+                            if (
+                                !expectedRevisionFingerprint
+                                || actualRevision !== expectedRevisionFingerprint
+                            ) {
+                                throw new Error(
+                                    'YouTube relay scorer revision mismatch: '
+                                    + `expected ${expectedRevisionFingerprint.slice(0, 12) || 'unknown'}, `
+                                    + `received ${actualRevision.slice(0, 12) || 'unknown'}. `
+                                    + 'The deploy changed while this request was running; retry it.'
+                                );
+                            }
+                            return validateRawScoreResult(scored);
                         }
                     }
                     await cloud.deleteFromR2(`shorts/yt-relay/requests/${rid}.json`).catch(() => {});
                     throw new Error('YouTube blocks this server and the Mac relay did not answer in 8 min — is the relay watcher running? (launchctl list | grep ytrelay)');
                 }
             };
-            if (body.async) { const jobId = quantJobSubmit('raw-embed-youtube', relayRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) {
+                const scorerIdentity = rawQuantScorerIdentity(
+                    await readRawScorerContract()
+                );
+                const requestFingerprint = quantRequestFingerprint(
+                    'raw-embed-youtube',
+                    'shorts',
+                    {
+                        source_url: yurl,
+                        title: yTitle,
+                        creator_profile: creatorProfile || null,
+                    },
+                    scorerIdentity
+                );
+                const jobId = quantJobSubmit(
+                    'raw-embed-youtube',
+                    relayRunner,
+                    'shorts',
+                    quantRequestId(req),
+                    requestFingerprint
+                );
+                await quantJobReady(jobId, 'shorts');
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'hook-scored-from-link',
+                        status: 'started',
+                        title: yTitle || yurl,
+                        requestId: jobId,
+                        detail:
+                            'Canonical Shorts score from YouTube link',
+                        input: {
+                            kind: 'youtube-link',
+                            url: yurl,
+                            title: yTitle || null,
+                            creatorProfile: creatorProfile || null,
+                        },
+                        saved: false,
+                    }
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({
+                    ok: true,
+                    jobId,
+                    requestFingerprint,
+                })); return;
+            }
             const out = await relayRunner();
+            await recordExperimentLabActivity(
+                labScope,
+                {
+                    type: 'hook-scored-from-link',
+                    status: 'complete',
+                    title: yTitle || yurl,
+                    requestId:
+                        quantRequestId(req)
+                        || `youtube:${yurl}`,
+                    detail:
+                        'Canonical Shorts score from YouTube link',
+                    input: {
+                        kind: 'youtube-link',
+                        url: yurl,
+                        title: yTitle || null,
+                        creatorProfile: creatorProfile || null,
+                    },
+                    ...experimentLabScoreActivityEvidence(out),
+                    saved: false,
+                }
+            );
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
+        const labScope = await experimentLabAccountScope(
+            req,
+            url,
+            { write: true }
+        );
+        const requestId = quantRequestId(req);
         const ext = (req.headers['x-raw-ext'] || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
         const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);
         const durH = parseFloat(req.headers['x-raw-duration']);   // real full-video length (client trims to 6s but sends this so realviews isn't skewed)
+        const uploadMode = String(req.headers['x-raw-upload-mode'] || 'direct').replace(/[^a-z-]/gi, '').slice(0, 24) || 'direct';
+        const creatorProfile = safeCreatorProfile(
+            req.headers['x-raw-creator-profile']
+        );
+        const sparse = String(req.headers['x-raw-sparse'] || '') === '1';
+        const logicalSize = Number(req.headers['x-raw-original-size'] || 0);
+        const headSize = Number(req.headers['x-raw-head-size'] || 0);
+        const tailSize = Number(req.headers['x-raw-tail-size'] || 0);
+        const DIRECT_MAX = 32 * 1024 * 1024;
+        const SPARSE_MAX = 72 * 1024 * 1024;
+        const LOGICAL_MAX = 8 * 1024 * 1024 * 1024;
+        const MAX = sparse ? SPARSE_MAX : DIRECT_MAX;
+        if (sparse && (
+            !Number.isSafeInteger(logicalSize) || !Number.isSafeInteger(headSize) || !Number.isSafeInteger(tailSize)
+            || logicalSize <= 0 || logicalSize > LOGICAL_MAX
+            || headSize <= 0 || tailSize <= 0
+            || headSize + tailSize >= logicalSize
+            || headSize + tailSize > SPARSE_MAX
+        )) {
+            req.resume();
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'invalid bounded phone-video upload metadata' }));
+            return;
+        }
+        const declaredLength = Number(req.headers['content-length'] || 0);
+        if (declaredLength > MAX) {
+            req.resume();
+            res.writeHead(413, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `prepared video transfer is too large (${Math.round(declaredLength / 1048576)} MB; max ${Math.round(MAX / 1048576)} MB)` }));
+            return;
+        }
         const os = require('os');
         const tmp = path.join(os.tmpdir(), `rawup_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
-        const MAX = 1024 * 1024 * 1024;   // 1 GB — STREAMED to disk (never buffered in RAM), so big phone videos don't OOM
+        _rawActiveTempPaths.add(tmp);
+        const cleanupTmp = () => {
+            _rawActiveTempPaths.delete(tmp);
+            try { fs.unlinkSync(tmp); } catch (error) {}
+        };
         const ws = fs.createWriteStream(tmp);
+        const uploadSha256 = require('crypto').createHash('sha256');
         let size = 0, done = false;
-        const fail = (code, msg) => { if (done) return; done = true; try { ws.destroy(); } catch (e) {} try { fs.unlinkSync(tmp); } catch (e) {} if (!res.headersSent) { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: msg })); } try { req.destroy(); } catch (e) {} };
+        lastRawUpload = {
+            stage: 'receiving',
+            ts: Date.now(),
+            mode: uploadMode,
+            sparse,
+            declaredMB: declaredLength ? Math.round(declaredLength / 1048576) : null,
+            logicalMB: sparse ? Math.round(logicalSize / 1048576) : null,
+            requestId: requestId || null,
+        };
+        const fail = (code, msg) => {
+            if (done) return;
+            done = true;
+            try { ws.destroy(); } catch (e) {}
+            cleanupTmp();
+            lastRawUpload = { ...(lastRawUpload || {}), stage: 'error', finishedAt: Date.now(), error: String(msg).slice(0, 220), receivedMB: Math.round(size / 1048576) };
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+                res.end(JSON.stringify({ error: msg }));
+            }
+            // Do not destroy the socket after writing JSON. On mobile that turns a useful
+            // 4xx into the browser's opaque "Failed to fetch"; just drain the remaining body.
+            try { req.resume(); } catch (e) {}
+        };
         req.on('data', c => {
             if (done) return;
             size += c.length;
-            if (size > MAX) { fail(413, 'video too large (over 1 GB) — trim it to the first ~10 seconds and re-upload (only the first 5s is scored)'); return; }
+            if (size > MAX) { fail(413, `prepared video transfer exceeded ${Math.round(MAX / 1048576)} MB`); return; }
+            uploadSha256.update(c);
             if (!ws.write(c)) { req.pause(); ws.once('drain', () => { if (!done) req.resume(); }); }   // back-pressure so a fast upload can't buffer in RAM
         });
         req.on('error', () => fail(400, 'upload stream error — check your connection and retry'));
+        req.on('aborted', () => fail(400, 'upload was interrupted before it reached the server'));
         ws.on('error', e => fail(500, 'write failed: ' + e.message));
         req.on('end', () => {
             if (done) return;
             if (size === 0) return fail(400, 'empty upload');
+            const transferSha256 = uploadSha256.digest('hex');
             ws.end(async () => {
+                if (sparse && size !== headSize + tailSize) {
+                    return fail(400, `bounded upload was incomplete (${size} of ${headSize + tailSize} bytes)`);
+                }
+                if (sparse) {
+                    // The browser sends only [opening bytes][final metadata bytes]. Expand
+                    // that compact transfer into a sparse file at the original offsets:
+                    // ffmpeg sees a normal MP4/MOV, while the unwritten middle consumes no
+                    // disk blocks or request memory.
+                    let fd = null;
+                    try {
+                        fd = fs.openSync(tmp, 'r+');
+                        const tail = Buffer.allocUnsafe(tailSize);
+                        let read = 0;
+                        while (read < tailSize) {
+                            const count = fs.readSync(fd, tail, read, tailSize - read, headSize + read);
+                            if (!count) throw new Error(`tail read ${read}/${tailSize}`);
+                            read += count;
+                        }
+                        // Remove the packed tail before extending the file. Otherwise the
+                        // reconstruction would be [head][tail][hole][tail], corrupting the
+                        // media bytes immediately after the retained opening.
+                        fs.ftruncateSync(fd, headSize);
+                        fs.ftruncateSync(fd, logicalSize);
+                        let written = 0;
+                        while (written < tailSize) {
+                            written += fs.writeSync(fd, tail, written, tailSize - written, logicalSize - tailSize + written);
+                        }
+                    } catch (error) {
+                        if (fd != null) { try { fs.closeSync(fd); } catch (_) {} fd = null; }
+                        return fail(400, 'could not reconstruct the bounded phone video: ' + error.message);
+                    } finally {
+                        if (fd != null) { try { fs.closeSync(fd); } catch (_) {} }
+                    }
+                }
+                lastRawUpload = {
+                    ...(lastRawUpload || {}),
+                    stage: 'queued',
+                    receivedMB: Math.round(size / 1048576),
+                    logicalMB: Math.round((sparse ? logicalSize : size) / 1048576),
+                    receivedAt: Date.now(),
+                };
                 const script = path.join(__dirname, 'raw_upload.py');
                 const pyArgs = [script, '--file', tmp, '--title', title];
-                if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
+                if (durH > 0 && isFinite(durH)) {
+                    pyArgs.push(
+                        '--duration',
+                        String(Math.round(durH * 1000) / 1000)
+                    );
+                }
+                if (creatorProfile) {
+                    pyArgs.push('--creator-profile', creatorProfile);
+                }
                 const upT0 = Date.now();
                 const upRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
-                        const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
+                        lastRawUpload = { ...(lastRawUpload || {}), stage: 'scoring', scoringAt: Date.now(), cgroupBeforeMB: (rawBoxStats().cgroup || {}).currentMB || null };
+                        const py = spawnRawPython(pyArgs);
                         let out = '', err = '';
+                        let timedOut = false;
                         py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                        const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>7 min — even a cold cache warm fits this; check /api/raw/upload-health)')); }, 420000);
+                        const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 420000);
                         py.on('close', (code, signal) => {
                             clearTimeout(timer);
                             lastRawScorer = { kind: 'embed-upload', ts: Date.now(), ms: Date.now() - upT0, code, signal, stderrTail: err.trim().split('\n').slice(-4) };
+                            lastRawUpload = {
+                                ...(lastRawUpload || {}),
+                                stage: code === 0 && !signal ? 'finished' : 'scorer-error',
+                                finishedAt: Date.now(),
+                                scorerCode: code,
+                                scorerSignal: signal || null,
+                                cgroupAfterMB: (rawBoxStats().cgroup || {}).currentMB || null,
+                            };
+                            if (timedOut) return no(new Error('embedding timeout (>7 min — even a cold cache warm fits this; check /api/raw/upload-health)'));
                             const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
                             if (!line) return no(new Error('embedding produced no result — ' + (signal ? `scorer killed (${signal}${signal === 'SIGKILL' ? ', likely out of memory' : ''}) — ` : '') + (err.trim().split('\n').pop() || 'no output').slice(-160)));
                             ok(line);
                         });
                         py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
-                    }));
+                }));
                 if (String(req.headers['x-raw-async'] || '') === '1') {
-                    const jobId = quantJobSubmit('raw-embed-upload', async () => {
-                        try { return JSON.parse(await upRunner()); }
-                        finally { try { fs.unlinkSync(tmp); } catch (_) {} }
-                    });
-                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
+                    try {
+                        const scorerIdentity = rawQuantScorerIdentity(
+                            await readRawScorerContract()
+                        );
+                        const requestFingerprint = quantRequestFingerprint(
+                            'raw-embed-upload',
+                            'shorts',
+                            {
+                                transfer_sha256: transferSha256,
+                                transfer_bytes: size,
+                                extension: ext,
+                                title,
+                                duration_seconds:
+                                    durH > 0 && isFinite(durH)
+                                        ? Math.round(durH * 1000) / 1000
+                                        : null,
+                                upload_mode: uploadMode,
+                                creator_profile: creatorProfile || null,
+                                sparse,
+                                logical_bytes:
+                                    sparse ? logicalSize : size,
+                                head_bytes: sparse ? headSize : null,
+                                tail_bytes: sparse ? tailSize : null,
+                            },
+                            scorerIdentity
+                        );
+                        const racedJobId = quantJobExisting(
+                            'raw-embed-upload',
+                            'shorts',
+                            requestId,
+                            requestFingerprint
+                        );
+                        if (racedJobId) {
+                            cleanupTmp();
+                            await quantJobReady(racedJobId, 'shorts');
+                            await recordExperimentLabActivity(
+                                labScope,
+                                {
+                                    type: 'hook-upload-scored',
+                                    status: 'started',
+                                    title,
+                                    requestId: racedJobId,
+                                    detail:
+                                        'Reused canonical Shorts score job',
+                                    input: {
+                                        kind: 'video-upload',
+                                        filename: title,
+                                        durationSeconds:
+                                            durH > 0 && isFinite(durH)
+                                                ? Math.round(durH * 1000) / 1000
+                                                : null,
+                                        transferBytes: size,
+                                        logicalBytes:
+                                            sparse ? logicalSize : size,
+                                        uploadMode,
+                                        creatorProfile:
+                                            creatorProfile || null,
+                                    },
+                                    saved: false,
+                                }
+                            );
+                            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+                            res.end(JSON.stringify({
+                                ok: true,
+                                jobId: racedJobId,
+                                reused: true,
+                                requestFingerprint,
+                            }));
+                            return;
+                        }
+                        const jobId = quantJobSubmit('raw-embed-upload', async () => {
+                            try {
+                                return validateRawScoreResult(JSON.parse(await upRunner()));
+                            }
+                            finally { cleanupTmp(); }
+                        }, 'shorts', requestId, requestFingerprint);
+                        await quantJobReady(jobId, 'shorts');
+                        await recordExperimentLabActivity(
+                            labScope,
+                            {
+                                type: 'hook-upload-scored',
+                                status: 'started',
+                                title,
+                                requestId: jobId,
+                                detail:
+                                    'Uploaded video sent to canonical Shorts scorer',
+                                input: {
+                                    kind: 'video-upload',
+                                    filename: title,
+                                    durationSeconds:
+                                        durH > 0 && isFinite(durH)
+                                            ? Math.round(durH * 1000) / 1000
+                                            : null,
+                                    transferBytes: size,
+                                    logicalBytes:
+                                        sparse ? logicalSize : size,
+                                    uploadMode,
+                                    creatorProfile:
+                                        creatorProfile || null,
+                                },
+                                saved: false,
+                            }
+                        );
+                        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({
+                            ok: true,
+                            jobId,
+                            requestFingerprint,
+                        })); return;
+                    } catch (error) {
+                        cleanupTmp();
+                        lastRawUpload = {
+                            ...(lastRawUpload || {}),
+                            stage: 'error',
+                            finishedAt: Date.now(),
+                            error: String(
+                                error && error.message || error
+                            ).slice(0, 220),
+                        };
+                        if (!res.headersSent) {
+                            res.writeHead(503, {
+                                'Content-Type': 'application/json',
+                                'Cache-Control': 'no-store',
+                            });
+                            res.end(JSON.stringify({
+                                error: error.message || String(error),
+                            }));
+                        }
+                        return;
+                    }
                 }
                 try {
-                    const line = await upRunner();
-                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+                    const result = validateRawScoreResult(JSON.parse(await upRunner()));
+                    await recordExperimentLabActivity(
+                        labScope,
+                        {
+                            type: 'hook-upload-scored',
+                            status: 'complete',
+                            title,
+                            requestId:
+                                requestId
+                                || `upload:${transferSha256}`,
+                            detail:
+                                'Uploaded video scored by the canonical Shorts scorer',
+                            input: {
+                                kind: 'video-upload',
+                                filename: title,
+                                durationSeconds:
+                                    durH > 0 && isFinite(durH)
+                                        ? Math.round(durH * 1000) / 1000
+                                        : null,
+                                transferBytes: size,
+                                logicalBytes:
+                                    sparse ? logicalSize : size,
+                                uploadMode,
+                                creatorProfile:
+                                    creatorProfile || null,
+                            },
+                            ...experimentLabScoreActivityEvidence(result),
+                            saved: false,
+                        }
+                    );
+                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result));
                 } catch (e) {
                     res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
                 } finally {
-                    try { fs.unlinkSync(tmp); } catch (_) {}
+                    cleanupTmp();
                 }
             });
         });
@@ -2235,6 +8237,14 @@ const server = http.createServer(async (req, res) => {
     // RAW build-a-hook — a montage (5 frames stitched in the browser) + user-set text.
     // No ffmpeg/transcription: just embed visual/text/together and locate by neighbours.
     if ((pathname === '/api/raw/embed-montage' || pathname === '/api/raw-long/embed-montage') && req.method === 'POST') {
+        const labScope =
+            pathname === '/api/raw/embed-montage'
+                ? await experimentLabAccountScope(
+                    req,
+                    url,
+                    { write: true }
+                )
+                : null;
         let body = ''; let size = 0, tooBig = false; const MAX = 25 * 1024 * 1024;
         // Over cap: stop buffering and drain to end, then reply 413 (see /api/qrd/predict).
         req.on('data', c => {
@@ -2248,21 +8258,77 @@ const server = http.createServer(async (req, res) => {
             let j; try { j = JSON.parse(body); } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'bad json' })); return; }
             const m = (j.montage || '').toString().replace(/^data:image\/\w+;base64,/, '');
             if (!m) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'no montage' })); return; }
+            const imageBuffer = Buffer.from(m, 'base64');
+            if (pathname === '/api/raw-long/embed-montage') {
+                const title = String(j.title || j.text || 'Candidate thumbnail').slice(0, 500);
+                const idea = String(j.text || j.title || title).slice(0, 500);
+                const scoreRunner = () => longQuantScoreThumbnail(imageBuffer, title, idea, true);
+                try {
+                    if (j.async) {
+                        const requestFingerprint =
+                            quantRequestFingerprint(
+                                'raw-long-embed-image',
+                                'longform',
+                                {
+                                    image_sha256:
+                                        quantJobIdentity.sha256Buffer(
+                                            imageBuffer
+                                        ),
+                                    title,
+                                    idea,
+                                },
+                                await longQuantRequestScorerIdentity()
+                            );
+                        const jobId = quantJobSubmit(
+                            'raw-long-embed-image',
+                            scoreRunner,
+                            'longform',
+                            quantRequestId(req),
+                            requestFingerprint
+                        );
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            ok: true,
+                            jobId,
+                            requestFingerprint,
+                        }));
+                        return;
+                    }
+                    const result = await scoreRunner();
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(result));
+                } catch (e) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: e.message }));
+                }
+                return;
+            }
             const os = require('os');
             const tmp = path.join(os.tmpdir(), `rawmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
-            try { fs.writeFileSync(tmp, Buffer.from(m, 'base64')); }
+            try { fs.writeFileSync(tmp, imageBuffer); }
             catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
             const script = path.join(__dirname, 'raw_upload.py');
             const monArgs = [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)];
             const monDur = parseFloat(j.duration);
-            if (monDur > 0 && isFinite(monDur)) monArgs.push('--duration', String(Math.round(monDur)));
+            if (monDur > 0 && isFinite(monDur)) {
+                monArgs.push(
+                    '--duration',
+                    String(Math.round(monDur * 1000) / 1000)
+                );
+            }
+            const creatorProfile = safeCreatorProfile(j.creatorProfile);
+            if (creatorProfile) {
+                monArgs.push('--creator-profile', creatorProfile);
+            }
             const monRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
-                    const py = spawn(RAW_PYTHON, monArgs, { env: RAW_PY_ENV });
+                    const py = spawnRawPython(monArgs);
                     let out = '', err = '';
+                    let timedOut = false;
                     py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                    const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>5 min)')); }, 300000);
+                    const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 300000);
                     py.on('close', () => {
                         clearTimeout(timer);
+                        if (timedOut) return no(new Error('embedding timeout (>5 min)'));
                         const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
                         if (!line) return no(new Error('embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
                         ok(line);
@@ -2270,15 +8336,99 @@ const server = http.createServer(async (req, res) => {
                     py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
                 }));
             if (j.async) {
+                const requestFingerprint = quantRequestFingerprint(
+                    'raw-embed-montage',
+                    'shorts',
+                    {
+                        image_sha256:
+                            quantJobIdentity.sha256Buffer(imageBuffer),
+                        text: (j.text || '').toString().slice(0, 2000),
+                        title:
+                            (j.title || 'Built hook')
+                                .toString().slice(0, 80),
+                        duration_seconds:
+                            monDur > 0 && isFinite(monDur)
+                                ? Math.round(monDur * 1000) / 1000
+                                : null,
+                        creator_profile: creatorProfile || null,
+                    },
+                    rawQuantScorerIdentity(
+                        await readRawScorerContract()
+                    )
+                );
                 const jobId = quantJobSubmit('raw-embed-montage', async () => {
-                    try { return JSON.parse(await monRunner()); }
+                    try {
+                        return validateRawScoreResult(JSON.parse(await monRunner()));
+                    }
                     finally { try { fs.unlinkSync(tmp); } catch (_) {} }
-                });
-                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
+                }, 'shorts', quantRequestId(req), requestFingerprint);
+                await quantJobReady(jobId, 'shorts');
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'built-hook-scored',
+                        status: 'started',
+                        title:
+                            (j.title || j.text || 'Built hook')
+                                .toString().slice(0, 180),
+                        requestId: jobId,
+                        detail:
+                            'Five-frame opening sent to canonical Shorts scorer',
+                        input: {
+                            kind: 'storyboard-montage',
+                            title: (j.title || 'Built hook')
+                                .toString().slice(0, 180),
+                            text: (j.text || '').toString().slice(0, 2000),
+                            durationSeconds:
+                                monDur > 0 && isFinite(monDur)
+                                    ? Math.round(monDur * 1000) / 1000
+                                    : null,
+                            creatorProfile: creatorProfile || null,
+                            montageSha256:
+                                quantJobIdentity.sha256Buffer(imageBuffer),
+                        },
+                        saved: false,
+                    }
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({
+                    ok: true,
+                    jobId,
+                    requestFingerprint,
+                })); return;
             }
             try {
-                const line = await monRunner();
-                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+                const result = validateRawScoreResult(JSON.parse(await monRunner()));
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'built-hook-scored',
+                        status: 'complete',
+                        title:
+                            (j.title || j.text || 'Built hook')
+                                .toString().slice(0, 180),
+                        requestId:
+                            quantRequestId(req)
+                            || `montage:${Date.now()}`,
+                        detail:
+                            'Five-frame opening scored by the canonical Shorts scorer',
+                        input: {
+                            kind: 'storyboard-montage',
+                            title: (j.title || 'Built hook')
+                                .toString().slice(0, 180),
+                            text: (j.text || '').toString().slice(0, 2000),
+                            durationSeconds:
+                                monDur > 0 && isFinite(monDur)
+                                    ? Math.round(monDur * 1000) / 1000
+                                    : null,
+                            creatorProfile: creatorProfile || null,
+                            montageSha256:
+                                quantJobIdentity.sha256Buffer(imageBuffer),
+                        },
+                        ...experimentLabScoreActivityEvidence(result),
+                        saved: false,
+                    }
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
             } finally {
@@ -3884,27 +10034,46 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/longquant/videos' && req.method === 'GET') {
         try {
-            const limit = Math.min(parseInt(url.searchParams.get('limit')) || 150, 400);
-            let videos = [];
-            try {
-                const buf = await cloud.downloadFromR2('longform/db.json');
-                if (buf) {
-                    const db = JSON.parse(buf.toString('utf8'));
-                    const sort = url.searchParams.get('sort') || 'recent';
-                    let arr = Object.values(db.videos || {}).filter(v => v.stored);
-                    arr.sort(sort === 'views' ? (a, b) => (b.views || 0) - (a.views || 0)
-                        : sort === 'outlier' ? (a, b) => (b.outlier || 0) - (a.outlier || 0)
-                        : (a, b) => (b.storedAt || 0) - (a.storedAt || 0));
-                    videos = arr.slice(0, limit).map(v => ({ videoId: v.videoId, title: v.title, channel: v.channel, channelUrl: v.channelUrl,
-                        views: v.views, subs: v.subs, outlier: v.outlier != null ? v.outlier : (v.subs > 0 ? +((v.views || 0) / v.subs).toFixed(1) : null),
-                        publishedAt: v.publishedAt, uploadDate: v.uploadDate, likes: v.likes, comments: v.comments,
-                        durationSec: v.durationSec, width: v.width, height: v.height,
-                        thumb: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, url: v.url || `https://www.youtube.com/watch?v=${v.videoId}` }));
-                }
-            } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify({ videos }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            const limit = Math.min(
+                Number.parseInt(url.searchParams.get('limit'), 10)
+                    || 150,
+                longformVideoIndex.MAX_ROWS
+            );
+            const requestedSort =
+                url.searchParams.get('sort') || 'recent';
+            const sort = ['recent', 'views', 'outlier']
+                .includes(requestedSort)
+                ? requestedSort
+                : 'recent';
+            const bundle = await readLongformVideoIndex();
+            const videos = bundle.index.lists[sort].slice(0, limit);
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'private, max-age=60',
+                'ETag': `"${bundle.releaseSha256}"`,
+            });
+            res.end(JSON.stringify({
+                videos,
+                sort,
+                stored_video_count:
+                    bundle.index.stored_video_count,
+                source: bundle.index.source,
+                index_artifact_sha256:
+                    bundle.index.artifact_sha256,
+                release_sha256: bundle.releaseSha256,
+            }));
+        } catch (e) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: 'Long Quant video index is unavailable.',
+                detail: e.message,
+                source_of_truth:
+                    longformVideoIndex.RELEASE_KEY,
+            }));
+        }
         return;
     }
     if (pathname === '/api/indicators/registry' && req.method === 'GET') {
@@ -3915,23 +10084,72 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2Gz(req, res, 'raw/fusion/report.json', 300e3, { error: 'no report yet' });
         return;
     }
+    if (pathname === '/api/raw/plot' && req.method === 'GET') {
+        await serveQuantPlot(req, res, url, 'raw');
+        return;
+    }
     if (pathname === '/api/raw/map' && req.method === 'GET') {
-        // 6.6MB per channel — was an R2 download + UNCOMPRESSED send per request; now cached+gzipped (~700KB wire)
-        const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
-        await serveR2Gz(req, res, `raw/${ch}/map.json`, 300e3, { n: 0, channel: ch });
+        // Full corpus map for the explicit Raw workspace. Score cards use /api/raw/plot.
+        await serveQuantMap(req, res, url, 'raw');
         return;
     }
     if (pathname === '/api/raw/predictor-lab' && req.method === 'GET') {
-        let fallback = {
-            version: 2,
-            status: 'not_ready',
-            message: 'The leakage-safe predictor artifact has not been built yet.',
-        };
         try {
-            const localPath = path.join(__dirname, 'buildings/jarvis/predictor-lab/results.json');
-            if (fs.existsSync(localPath)) fallback = JSON.parse(fs.readFileSync(localPath, 'utf8'));
-        } catch (e) {}
-        await serveR2Gz(req, res, 'raw/predictor-lab/results.json', 300e3, fallback);
+            const release =
+                await readPredictorLabReleaseManifest();
+            const artifactSha256 =
+                release.predictor.artifactSha256;
+            await serveGzCached(
+                req,
+                res,
+                `immutable:${release.predictor.artifactKey}`,
+                Number.MAX_SAFE_INTEGER,
+                async () => {
+                    const pinned =
+                        await readPinnedPredictorArtifactBytes(
+                        release
+                    );
+                    return predictorLabUiArtifactBuffer(
+                        pinned.artifactBuffer,
+                        pinned.artifactSha256
+                    );
+                },
+                {
+                    error:
+                        'The pinned Predictor Lab release is unavailable.',
+                    source_of_truth:
+                        PREDICTOR_LAB_RELEASE_KEY,
+                },
+                503,
+                {
+                    allowStaleOnSourceError: false,
+                    surfaceSourceErrors: true,
+                    sourceErrorMessage:
+                        'The pinned Predictor Lab release is unavailable.',
+                    cacheControl: 'private, no-store',
+                    etag:
+                        `"${artifactSha256}-predictor-lab-ui-v1"`,
+                    headers: {
+                        'X-Predictor-Release-SHA256':
+                            release.sha256,
+                        'X-Artifact-SHA256':
+                            artifactSha256,
+                        'X-Artifact-View':
+                            'predictor-lab-ui-projection-v1',
+                    },
+                }
+            );
+        } catch (error) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: 'The pinned Predictor Lab release is unavailable.',
+                detail: error.message,
+                source_of_truth: PREDICTOR_LAB_RELEASE_KEY,
+            }));
+        }
         return;
     }
     if (pathname === '/api/raw/predictor-lab/status' && req.method === 'GET') {
@@ -3939,27 +10157,37 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         let embedding = { version: 1, stage: 'idle', heartbeat: 0, message: 'No Science Center embedding job is reporting progress.' };
         let metadata = { version: 1, stage: 'idle', updatedAt: 0, message: 'No saved-channel metadata job is reporting progress.' };
         try {
-            const resultPath = path.join(__dirname, 'buildings/jarvis/predictor-lab/results.json');
-            if (fs.existsSync(resultPath)) {
-                const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
-                const artifactState = result.artifactState || {};
-                analysis = {
-                    version: 2,
-                    stage: artifactState.complete ? 'complete' : 'partial',
-                    updatedAt: result.generatedAt || 0,
-                    message: artifactState.message || 'Local predictor research artifact is ready.',
-                    coverage: result.coverage || {},
-                    artifactState,
-                };
-            }
-        } catch (e) {}
-        try {
-            const [analysisBuffer, embeddingBuffer, metadataBuffer] = await Promise.all([
+            const [
+                analysisBuffer,
+                embeddingBuffer,
+                metadataBuffer,
+                release,
+            ] = await Promise.all([
                 cloud.downloadFromR2('raw/predictor-lab/status.json').catch(() => null),
                 cloud.downloadFromR2('raw/predictor-lab/embed-status.json').catch(() => null),
                 cloud.downloadFromR2('raw/predictor-lab/metadata-status.json').catch(() => null),
+                readPredictorLabReleaseManifest().catch(() => null),
             ]);
             if (analysisBuffer) analysis = JSON.parse(analysisBuffer.toString('utf8'));
+            else if (release) {
+                analysis = {
+                    version: 2,
+                    stage: 'complete',
+                    updatedAt: release.manifest.generatedAt || 0,
+                    message: (
+                        'The immutable Predictor Lab release is ready.'
+                    ),
+                    releaseSha256: release.sha256,
+                    sourceOfTruth: PREDICTOR_LAB_RELEASE_KEY,
+                };
+            }
+            if (release) {
+                analysis.releaseSha256 = release.sha256;
+                analysis.artifactSha256 =
+                    release.predictor.artifactSha256;
+                analysis.sourceOfTruth =
+                    PREDICTOR_LAB_RELEASE_KEY;
+            }
             if (embeddingBuffer) embedding = JSON.parse(embeddingBuffer.toString('utf8'));
             if (metadataBuffer) metadata = JSON.parse(metadataBuffer.toString('utf8'));
         } catch (e) {}
@@ -3975,6 +10203,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             updatedAt: Math.max(Number(analysis.updatedAt || 0), Number(embedding.heartbeat || 0), Number(metadata.updatedAt || 0)),
             message: embeddingActive ? embedding.message : metadataActive ? metadata.message : analysis.message,
             coverage: analysis.coverage || {},
+            releaseSha256:
+                analysis.releaseSha256 || null,
+            artifactSha256:
+                analysis.artifactSha256 || null,
+            sourceOfTruth:
+                analysis.sourceOfTruth
+                || PREDICTOR_LAB_RELEASE_KEY,
             analysis,
             embedding,
             metadata,
@@ -3982,17 +10217,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     // Long Quant raw embeddings (title+thumbnail), namespaced raw-long/. Built later by raw_embed_long.py.
+    if (pathname === '/api/raw-long/plot' && req.method === 'GET') {
+        await serveQuantPlot(req, res, url, 'raw-long');
+        return;
+    }
     if (pathname === '/api/raw-long/map' && req.method === 'GET') {
-        const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
-        await serveR2Gz(req, res, `raw-long/${ch}/map.json`, 300e3, { n: 0, channel: ch });
+        await serveQuantMap(req, res, url, 'raw-long');
         return;
     }
     // For long-form the "montage" input IS the thumbnail we already stored.
     const rawLongThumb = pathname.match(/^\/api\/raw-long\/montage\/([\w-]{6,16})$/);
-    if (rawLongThumb && req.method === 'GET') {
+    if (rawLongThumb && (req.method === 'GET' || req.method === 'HEAD')) {
         const vid = rawLongThumb[1];
         try {
-            if (await redirectR2Object(res, `longform/thumbs/${vid}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            if (await serveR2ObjectForRequest(req, res, `longform/thumbs/${vid}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' })) return;
+            if (req.method === 'HEAD') { res.writeHead(404); res.end(); return; }
             let buf = null;
             {
                 // owned account videos aren't in the corpus store — serve the exact input we embedded
@@ -4006,35 +10245,121 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
             if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
             else { res.writeHead(404); res.end(); }
-        } catch (e) { res.writeHead(500); res.end(); }
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_channel_montage_failed',
+            }));
+        }
         return;
     }
     // Saved Shorts channels. The server owns the durable manifest/API while the Mac relay
     // does channel discovery + scoring on a residential IP. Every video record is produced by
     // raw_upload.py, the exact scorer used by "score from link" above.
+    if (pathname === '/api/raw/saved-channel-validation' && req.method === 'GET') {
+        await serveGzCached(
+            req,
+            res,
+            'computed:raw/saved-channel-validation',
+            -1,
+            buildSavedChannelValidationBuffer,
+            {
+                version: savedChannelValidation.VERSION,
+                status: 'not_ready',
+                message: 'Tyler/Hafu leakage-controlled retrospective validation has not been built yet.',
+            },
+            503,
+            {
+                surfaceSourceErrors: true,
+                allowStaleOnSourceError: false,
+                sourceErrorMessage: 'The Tyler/Hafu validation sources are temporarily unavailable.',
+            }
+        );
+        return;
+    }
     if (pathname === '/api/raw/saved-channels' && req.method === 'GET') {
         try {
-            let index = await readSavedChannelIndex();
-            if (!index.channels.length) {
-                const keys = ((await cloud.listR2Keys(SAVED_CHANNEL_ROOT).catch(() => [])) || []).filter(key => /\/manifest\.json$/.test(key));
-                const manifests = [];
-                for (const key of keys.slice(0, 100)) {
-                    const id = key.split('/').slice(-2, -1)[0];
-                    const manifest = await readSavedChannelManifest(id);
-                    if (manifest) manifests.push(compactSavedChannel(manifest));
-                }
-                if (manifests.length) {
-                    index = { version: 1, channels: manifests.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) };
-                    await writeSavedChannelIndex(index).catch(() => {});
-                }
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const index = await readSavedChannelIndex();
+            if (index.indexMissing) {
+                throw new HttpRequestError(
+                    503,
+                    'The saved-channel navigation index has not been '
+                        + 'built. Rebuild it offline from the canonical '
+                        + 'channel manifests.',
+                    'saved_channel_index_missing'
+                );
+            }
+            let channels = index.channels || [];
+            let folders = [];
+            let workspaceSource = null;
+            if (labScope) {
+                const workspace =
+                    await experimentLabWorkspaceForScope(
+                        labScope
+                    );
+                const collection =
+                    workspace.collections.channels;
+                const references = new Map(
+                    collection.items.map(item => [
+                        item.id,
+                        item,
+                    ])
+                );
+                channels = channels
+                    .filter(channel =>
+                        references.has(channel.id)
+                    )
+                    .map(channel => ({
+                        ...channel,
+                        folder:
+                            references.get(channel.id).folderId,
+                        workspace_saved_at:
+                            references.get(channel.id).savedAt,
+                    }));
+                folders = collection.folders;
+                workspaceSource = {
+                    schema: workspace.schema,
+                    account: workspace.account,
+                    readOnly: labScope.readOnly,
+                    workspace_sha256:
+                        workspace.workspace_sha256,
+                };
             }
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify({ channels: index.channels || [], featureContract: savedChannelAnalysis.contract }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            res.end(JSON.stringify({
+                channels,
+                folders,
+                workspace: workspaceSource,
+                featureContract: savedChannelAnalysis.contract,
+                source_of_truth: {
+                    navigation_index_key: SAVED_CHANNEL_INDEX_KEY,
+                    score_authority:
+                        'each channel manifest row score_ledger',
+                    full_record_authority:
+                        `${SAVED_CHANNEL_ROOT}<channel>/video-artifacts/`
+                            + 'by-sha256/<manifest record_artifact_sha256>.json',
+                },
+            }));
+        } catch (e) {
+            throw e;
+        }
         return;
     }
     if (pathname === '/api/raw/saved-channel' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
             const channelUrl = videoAnalyzer.parseChannelUrl(String(body.url || '').trim());
             if (!channelUrl) {
@@ -4043,44 +10368,156 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             const id = savedChannelId(channelUrl);
-            let manifest = await readSavedChannelManifest(id);
-            if (!manifest) {
-                manifest = {
-                    version: 1,
-                    featureContractVersion: savedChannelAnalysis.contract.version,
+            let alreadyRunning = false;
+            let attachedExisting = false;
+            const labControlKey = labScope
+                ? experimentLabWorkspace.accountKey(
+                    labScope.account.id
+                )
+                : null;
+            const manifest =
+                await mutateSavedChannelManifest(
                     id,
-                    url: channelUrl,
-                    name: channelUrl.split('/').pop(),
-                    status: 'queued',
-                    phase: 'queued',
-                    createdAt: Date.now(),
-                    updatedAt: Date.now(),
-                    stopRequested: false,
-                    error: null,
-                    current: null,
-                    videos: [],
-                };
-            } else if (['queued', 'running', 'stopping'].includes(manifest.status)) {
+                    current => {
+                        if (
+                            current
+                            && [
+                                'queued',
+                                'running',
+                                'stopping',
+                            ].includes(current.status)
+                        ) {
+                            alreadyRunning = true;
+                            return null;
+                        }
+                        if (
+                            current
+                            && current.status === 'done'
+                            && !body.retryErrors
+                        ) {
+                            attachedExisting = true;
+                            return null;
+                        }
+                        if (
+                            current
+                            && labScope
+                            && !experimentLabCanInspectTeam(
+                                labScope.viewer
+                            )
+                            && current.experimentLabControlKey
+                                !== labControlKey
+                        ) {
+                            attachedExisting = true;
+                            return null;
+                        }
+                        const next = current || {
+                            version: 1,
+                            featureContractVersion:
+                                savedChannelAnalysis
+                                    .contract.version,
+                            id,
+                            url: channelUrl,
+                            name:
+                                channelUrl
+                                    .split('/')
+                                    .pop(),
+                            createdAt: Date.now(),
+                            videos: [],
+                            experimentLabControlKey:
+                                labControlKey,
+                        };
+                        if (
+                            !current
+                            && labControlKey
+                        ) {
+                            next.experimentLabControlKey =
+                                labControlKey;
+                        }
+                        next.url = channelUrl;
+                        next.status = 'queued';
+                        next.phase = 'queued';
+                        next.stopRequested = false;
+                        next.error = null;
+                        next.current = null;
+                        return advanceSavedChannelControl(
+                            next,
+                            'run'
+                        );
+                    }
+                );
+            if (alreadyRunning || attachedExisting) {
+                await attachExperimentLabItem(
+                    labScope,
+                    'channels',
+                    id,
+                    {
+                        type: 'channel-saved',
+                        title: manifest.name || channelUrl,
+                        detail: attachedExisting
+                            ? 'Existing canonical channel library attached'
+                            : 'Existing channel import attached',
+                    }
+                );
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ ok: true, alreadyRunning: true, channel: compactSavedChannel(manifest) }));
+                res.end(JSON.stringify({
+                    ok: true,
+                    alreadyRunning,
+                    attachedExisting,
+                    channel: {
+                        ...compactSavedChannel(manifest),
+                        workspaceControl:
+                            experimentLabCanControlSavedChannel(
+                                labScope,
+                                manifest
+                            ),
+                    },
+                }));
                 return;
-            } else {
-                manifest.status = 'queued';
-                manifest.phase = 'queued';
-                manifest.stopRequested = false;
-                manifest.error = null;
-                manifest.current = null;
             }
-            await writeSavedChannelManifest(manifest);
             await cloud.uploadToR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`, Buffer.from(JSON.stringify({ id, url: channelUrl, retryErrors: !!body.retryErrors, ts: Date.now() })), 'application/json');
+            await attachExperimentLabItem(
+                labScope,
+                'channels',
+                id,
+                {
+                    type: 'channel-saved',
+                    title: manifest.name || channelUrl,
+                    detail: 'Channel import queued',
+                }
+            );
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            res.end(JSON.stringify({
+                ok: true,
+                channel: {
+                    ...compactSavedChannel(manifest),
+                    workspaceControl:
+                        experimentLabCanControlSavedChannel(
+                            labScope,
+                            manifest
+                        ),
+                },
+            }));
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_channel_video_failed',
+            }));
+        }
         return;
     }
     const savedChannelMontage = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})\/montage\/([\w-]{11})$/);
     if (savedChannelMontage && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
+            await requireExperimentLabItem(
+                req,
+                url,
+                'channels',
+                savedChannelMontage[1],
+                { write: false }
+            );
             const key = `${SAVED_CHANNEL_ROOT}${savedChannelMontage[1]}/montages/${savedChannelMontage[2]}.jpg`;
             // The gallery fetches this route with its bearer token, then creates a local object/data
             // URL for <img>. Stream the private R2 object through this authenticated origin so an
@@ -4093,28 +10530,380 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedChannelVideo = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})\/video\/([\w-]{11})$/);
     if (savedChannelVideo && req.method === 'GET') {
         try {
-            const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${savedChannelVideo[1]}/videos/${savedChannelVideo[2]}.json`).catch(() => null);
-            res.writeHead(buffer ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=86400' });
-            res.end(buffer ? buffer.toString('utf8') : JSON.stringify({ error: 'Scored video record not found.' }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            const channelId = savedChannelVideo[1];
+            const videoId = savedChannelVideo[2];
+            await requireExperimentLabItem(
+                req,
+                url,
+                'channels',
+                channelId,
+                { write: false }
+            );
+            const manifest = await readSavedChannelManifest(channelId);
+            const manifestRow = manifest
+                && (manifest.videos || []).find(
+                    video => video && video.id === videoId
+                );
+            let recordArtifactKey = null;
+            let buffer = null;
+            if (
+                manifestRow
+                && manifestRow.status === 'done'
+                && typeof manifestRow.record_artifact_sha256 === 'string'
+            ) {
+                recordArtifactKey = savedChannelRecordArtifactKey(
+                    channelId,
+                    manifestRow.record_artifact_sha256
+                );
+                buffer = await cloud.downloadFromR2(
+                    recordArtifactKey
+                );
+            }
+            let record = null;
+            let recordConsistencyError = null;
+            if (buffer) {
+                const montageBytes = await cloud.downloadFromR2(
+                    `${SAVED_CHANNEL_ROOT}${channelId}/montages/${videoId}.jpg`
+                ).catch(() => null);
+                const storedRecord = JSON.parse(
+                    buffer.toString('utf8')
+                );
+                const bindingValidation = manifestRow
+                    ? validateSavedChannelRecordBinding(
+                        storedRecord,
+                        manifestRow
+                    )
+                    : {
+                        valid: false,
+                        errors: ['saved-channel manifest row is missing'],
+                        recordChanged: false,
+                        rowChanged: false,
+                    };
+                const exactRecordArtifactValid = !!(
+                    manifestRow
+                    && manifestRow.record_artifact_sha256
+                        === require('crypto')
+                            .createHash('sha256')
+                            .update(buffer)
+                            .digest('hex')
+                    && manifestRow.record_byte_length
+                        === buffer.length
+                );
+                if (!exactRecordArtifactValid) {
+                    bindingValidation.valid = false;
+                    bindingValidation.errors = [
+                        ...(bindingValidation.errors || []),
+                        'saved-channel full record bytes differ from the manifest artifact binding',
+                    ];
+                }
+                const evidenceValidation = manifestRow
+                    ? validateSavedChannelEvidenceState(
+                        storedRecord,
+                        manifestRow,
+                        montageBytes
+                    )
+                    : {
+                        valid: false,
+                        errors: [
+                            'saved-channel manifest evidence is missing',
+                        ],
+                    };
+                let visualForecastError = null;
+                let creatorForecastError = null;
+                let visualFitDiagnostic = null;
+                let creatorAdaptiveDiagnostic = null;
+                if (bindingValidation.valid) {
+                    try {
+                        const modelCache = await readVisualKeepModel();
+                        if (!visualKeepForecastMatchesRelease(
+                            storedRecord.visual_keep_forecast,
+                            modelCache
+                        )) {
+                            visualFitDiagnostic =
+                                await visualKeepFullFitDiagnostic(
+                                    savedChannelVideo[2],
+                                    modelCache
+                                ).catch(() => null);
+                            visualForecastError = visualFitDiagnostic
+                                ? (
+                                    'Only an in-sample full-fit diagnostic exists '
+                                    + 'for this historical video. Re-score its '
+                                    + 'actual input to persist a score-time '
+                                    + 'frozen-model prediction.'
+                                )
+                                : (
+                                    'This historical video is outside the current '
+                                    + 'frozen model fitting population; re-score it '
+                                    + 'to persist the current raw value.'
+                                );
+                        }
+                    } catch (error) {
+                        visualForecastError = (
+                            'Current frozen visual keep release could not be '
+                            + 'verified: '
+                            + String(
+                                error && error.message || error
+                            ).slice(0, 180)
+                        );
+                    }
+                    try {
+                        const creatorModelCache =
+                            await readCreatorAdaptiveKeepModel();
+                        const channelProfile =
+                            savedChannelValidation.SUPPORTED_CHANNELS
+                                .find(channel => (
+                                    channel.channelId
+                                        === savedChannelVideo[1]
+                                ));
+                        const creatorForecast = channelProfile
+                            ? await historicalCreatorAdaptiveKeepForecast(
+                                savedChannelVideo[2],
+                                creatorModelCache,
+                                channelProfile.accountId
+                            )
+                            : null;
+                        if (creatorForecast) {
+                            creatorAdaptiveDiagnostic = creatorForecast;
+                            creatorForecastError = (
+                                'A historical prequential diagnostic is available, '
+                                + 'but this research artifact is not '
+                                + 'predictor-eligible.'
+                            );
+                        } else {
+                            creatorForecastError = (
+                                'This video is outside the registered causal '
+                                + 'final-window evaluation, so no historical '
+                                + 'creator-adaptive value is attached.'
+                            );
+                        }
+                    } catch (error) {
+                        creatorForecastError = (
+                            'Current creator-adaptive keep release could not '
+                            + 'be verified: '
+                            + String(
+                                error && error.message || error
+                            ).slice(0, 180)
+                        );
+                    }
+                }
+                record = withPersistedShortsLedgerValidation(
+                    storedRecord
+                );
+                if (visualForecastError) {
+                    record.visual_keep_forecast_error =
+                        visualForecastError;
+                }
+                if (creatorForecastError) {
+                    record.creator_adaptive_keep_forecast_error =
+                        creatorForecastError;
+                }
+                record.runtime_diagnostics = {
+                    visual_keep_full_fit: visualFitDiagnostic,
+                    creator_adaptive_historical:
+                        creatorAdaptiveDiagnostic,
+                };
+                const manifestBindingValidation = manifestRow
+                    ? savedChannelManifestBinding
+                        .validateManifestRowBinding(manifestRow)
+                    : null;
+                record.manifest_row_validation =
+                    manifestBindingValidation;
+                record.evidence_state =
+                    manifestRow
+                    && manifestRow.evidence_state
+                    || null;
+                record.canonical =
+                    manifestRow
+                    && manifestRow.canonical === true;
+                record.predictor_eligible =
+                    manifestRow
+                    && manifestRow.predictor_eligible === true;
+                record.evidence_warning =
+                    manifestRow
+                    && manifestRow.evidence_warning
+                    || null;
+                record.input_binding_validation =
+                    evidenceValidation;
+                record.record_artifact_validation = {
+                    valid: exactRecordArtifactValid,
+                    recorded_sha256:
+                        manifestRow
+                        && manifestRow
+                            .record_artifact_sha256
+                        || null,
+                    actual_sha256:
+                        require('crypto')
+                            .createHash('sha256')
+                            .update(buffer)
+                            .digest('hex'),
+                    recorded_byte_length:
+                        manifestRow
+                        && manifestRow.record_byte_length
+                        || null,
+                    actual_byte_length: buffer.length,
+                    artifact_key: recordArtifactKey,
+                };
+                if (
+                    !bindingValidation.valid
+                    || !evidenceValidation.valid
+                    || (
+                        record.score_record_validation
+                        && record.score_record_validation.valid === false
+                    )
+                    || (
+                        !manifestBindingValidation
+                        || manifestBindingValidation.valid !== true
+                    )
+                ) {
+                    recordConsistencyError = [
+                        'Saved-channel detail does not match its canonical manifest row.',
+                        ...(bindingValidation.errors || []),
+                    ].join(' ');
+                }
+            }
+            res.writeHead(
+                !buffer
+                    ? (
+                        manifestRow && manifestRow.status === 'done'
+                            ? 409
+                            : 404
+                    )
+                    : recordConsistencyError ? 409 : 200,
+                {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'private, no-store',
+                }
+            );
+            res.end(record
+                ? JSON.stringify(recordConsistencyError
+                    ? {
+                        error: recordConsistencyError,
+                        score_record_validation:
+                            record.score_record_validation,
+                        score_ledger_validation:
+                            record.score_ledger_validation,
+                        manifest_row_validation:
+                            record.manifest_row_validation,
+                        record_artifact_validation:
+                            record.record_artifact_validation,
+                        input_binding_validation:
+                            record.input_binding_validation,
+                    }
+                    : record)
+                : JSON.stringify({
+                    error: (
+                        manifestRow && manifestRow.status === 'done'
+                            ? (
+                                'The manifest-bound immutable scored-video '
+                                + 'artifact is missing. Run the saved-channel '
+                                + 'record migration before serving this row.'
+                            )
+                            : 'Scored video record not found.'
+                    ),
+                    manifest_row_sha256:
+                        manifestRow
+                        && manifestRow.manifest_row_sha256
+                        || null,
+                    record_artifact_sha256:
+                        manifestRow
+                        && manifestRow.record_artifact_sha256
+                        || null,
+                    record_artifact_key: recordArtifactKey,
+                }));
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_channel_action_failed',
+            }));
+        }
         return;
     }
     const savedChannelAction = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})(?:\/(analysis|stop|resume|delete))?$/);
     if (savedChannelAction) {
         const id = savedChannelAction[1], action = savedChannelAction[2] || 'detail';
         try {
+            const labScope = await requireExperimentLabItem(
+                req,
+                url,
+                'channels',
+                id,
+                {
+                    write:
+                        action === 'stop'
+                        || action === 'resume'
+                        || action === 'delete'
+                        || (
+                            action === 'analysis'
+                            && req.method === 'POST'
+                        ),
+                }
+            );
             let manifest = await readSavedChannelManifest(id);
             if (!manifest) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Saved channel not found.' })); return; }
+            const workspaceControl =
+                experimentLabCanControlSavedChannel(
+                    labScope,
+                    manifest
+                );
             if (action === 'detail' && req.method === 'GET') {
+                const summaryOnly =
+                    url.searchParams.get('summary') === '1';
+                const analysisFingerprint =
+                    savedChannelAnalysis
+                        .savedChannelAnalysisFingerprint(manifest);
+                const manifestRevision =
+                    savedChannelManifestRevision(manifest);
+                if (summaryOnly) {
+                    res.writeHead(200, {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'private, no-store',
+                    });
+                    res.end(JSON.stringify({
+                        ...compactSavedChannel(manifest),
+                        workspaceControl,
+                        summary_only: true,
+                        analysisFingerprint,
+                        manifestRevision,
+                        source_of_truth: {
+                            manifest_key:
+                                `${SAVED_CHANNEL_ROOT}${id}/manifest.json`,
+                            score_authority:
+                                'manifest row score_ledger',
+                        },
+                    }));
+                    return;
+                }
+                const responseManifest = {
+                    ...manifest,
+                    ...savedChannelCounts(manifest),
+                    workspaceControl,
+                    videos: (manifest.videos || []).map(
+                        withSavedChannelRowValidation
+                    ),
+                };
                 res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
                 res.end(JSON.stringify({
-                    ...manifest,
+                    ...responseManifest,
                     featureContract: savedChannelAnalysis.contract,
-                    analysisFingerprint: savedChannelAnalysis.savedChannelAnalysisFingerprint(manifest),
+                    analysisFingerprint,
+                    manifestRevision,
+                    summary_only: false,
+                    source_of_truth: {
+                        manifest_key:
+                            `${SAVED_CHANNEL_ROOT}${id}/manifest.json`,
+                        score_authority:
+                            'manifest row score_ledger',
+                    },
                 }));
                 return;
             }
-            if (action === 'analysis' && req.method === 'GET') {
+            if (
+                action === 'analysis'
+                && (req.method === 'GET' || req.method === 'POST')
+            ) {
                 const fingerprint = savedChannelAnalysis.savedChannelAnalysisFingerprint(manifest);
                 const cacheKey = `${SAVED_CHANNEL_ROOT}${id}/analysis.json`;
                 const etag = `"${fingerprint}"`;
@@ -4123,7 +10912,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     'ETag': etag,
                     'Vary': 'Authorization',
                 };
-                if (req.headers['if-none-match'] === etag) {
+                if (
+                    req.method === 'GET'
+                    && req.headers['if-none-match'] === etag
+                ) {
                     res.writeHead(304, cacheHeaders);
                     res.end();
                     return;
@@ -4142,11 +10934,35 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         }
                     } catch (e) {}
                 }
+                if (!analysis && req.method === 'GET') {
+                    res.writeHead(409, {
+                        'Content-Type': 'application/json',
+                        ...cacheHeaders,
+                    });
+                    res.end(JSON.stringify({
+                        error:
+                            'The saved analysis is missing or stale. '
+                            + 'Rebuild it explicitly.',
+                        code: 'saved_channel_analysis_rebuild_required',
+                        rebuild_method: 'POST',
+                        rebuild_url:
+                            `/api/raw/saved-channel/${id}/analysis`,
+                        fingerprint,
+                    }));
+                    return;
+                }
                 if (!analysis) {
-                    analysis = savedChannelAnalysis.analyzeChannel(manifest);
+                    analysis = await analyzeSavedChannelOffThread(
+                        manifest,
+                        fingerprint
+                    );
                     analysis.fingerprint = fingerprint;
-                    persisted = await cloud.uploadToR2(cacheKey, Buffer.from(JSON.stringify(analysis)), 'application/json')
-                        .then(() => true).catch(() => false);
+                    await cloud.uploadToR2(
+                        cacheKey,
+                        Buffer.from(JSON.stringify(analysis)),
+                        'application/json'
+                    );
+                    persisted = true;
                 }
                 const response = {
                     ...analysis,
@@ -4166,34 +10982,150 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             if (action === 'stop' && req.method === 'POST') {
-                manifest.stopRequested = true;
-                manifest.status = manifest.status === 'queued' ? 'stopped' : 'stopping';
-                manifest.phase = manifest.status;
+                if (!workspaceControl) {
+                    throw new HttpRequestError(
+                        409,
+                        'This workspace reuses an existing canonical '
+                            + 'channel import. Only the workspace that '
+                            + 'started it can stop it.',
+                        'saved_channel_control_owned_elsewhere'
+                    );
+                }
+                manifest = await mutateSavedChannelManifest(
+                    id,
+                    current => {
+                        if (!current) {
+                            throw new Error(
+                                'Saved channel not found.'
+                            );
+                        }
+                        current.stopRequested = true;
+                        current.status =
+                            current.status === 'queued'
+                                ? 'stopped'
+                                : 'stopping';
+                        current.phase = current.status;
+                        if (current.status === 'stopped') {
+                            current.current = null;
+                        }
+                        return advanceSavedChannelControl(
+                            current,
+                            'stop'
+                        );
+                    }
+                );
                 if (manifest.status === 'stopped') {
-                    manifest.current = null;
                     await cloud.deleteFromR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`).catch(() => {});
                 }
-                await writeSavedChannelManifest(manifest);
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
                 return;
             }
             if (action === 'resume' && req.method === 'POST') {
-                manifest.stopRequested = false;
-                manifest.status = 'queued';
-                manifest.phase = 'queued';
-                manifest.current = null;
-                manifest.error = null;
-                manifest.resumeRequestedAt = Date.now();
-                for (const video of (manifest.videos || [])) {
-                    if (video.status === 'done') continue;
-                    video.status = 'queued'; video.error = null; video.attempts = 0;
+                if (!workspaceControl) {
+                    throw new HttpRequestError(
+                        409,
+                        'This workspace reuses an existing canonical '
+                            + 'channel library. Only the workspace that '
+                            + 'started it can resume processing.',
+                        'saved_channel_control_owned_elsewhere'
+                    );
                 }
-                await writeSavedChannelManifest(manifest);
+                manifest = await mutateSavedChannelManifest(
+                    id,
+                    current => {
+                        if (!current) {
+                            throw new Error(
+                                'Saved channel not found.'
+                            );
+                        }
+                        current.stopRequested = false;
+                        current.status = 'queued';
+                        current.phase = 'queued';
+                        current.current = null;
+                        current.error = null;
+                        current.resumeRequestedAt =
+                            Date.now();
+                        for (const video of (
+                            current.videos || []
+                        )) {
+                            const ledgerState =
+                                persistedShortsLedgerValidation(
+                                    video
+                                );
+                            const manifestBindingState =
+                                savedChannelManifestBinding
+                                    .validateManifestRowBinding(
+                                        video
+                                    );
+                            if (
+                                video.status === 'done'
+                                && ledgerState.valid === true
+                                && manifestBindingState.valid
+                                    === true
+                            ) {
+                                continue;
+                            }
+                            video.status = 'queued';
+                            video.error = null;
+                            video.attempts = 0;
+                            if (
+                                ledgerState.valid !== true
+                                || manifestBindingState.valid
+                                    !== true
+                            ) {
+                                video.ledgerRepair = {
+                                    status: 'queued',
+                                    reason:
+                                        ledgerState.valid
+                                            !== true
+                                            ? ledgerState.state
+                                                === 'legacy-missing'
+                                                ? 'canonical score ledger is missing'
+                                                : ledgerState
+                                                    .errors
+                                                    .join('; ')
+                                            : manifestBindingState
+                                                .errors
+                                                .join('; '),
+                                    queuedAt: Date.now(),
+                                };
+                            }
+                        }
+                        return advanceSavedChannelControl(
+                            current,
+                            'run'
+                        );
+                    }
+                );
                 await cloud.uploadToR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`, Buffer.from(JSON.stringify({ id, url: manifest.url, retryErrors: true, resume: true, ts: Date.now() })), 'application/json');
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
                 return;
             }
             if (action === 'delete' && req.method === 'POST') {
+                if (labScope) {
+                    await mutateExperimentLabWorkspace(
+                        labScope.account,
+                        workspace => {
+                            experimentLabWorkspace.removeItem(
+                                workspace,
+                                'channels',
+                                id
+                            );
+                            experimentLabWorkspace
+                                .markArtifactSaved(
+                                    workspace,
+                                    'channels',
+                                    id,
+                                    false
+                                );
+                        }
+                    );
+                    res.writeHead(200, {
+                        'Content-Type': 'application/json',
+                    });
+                    res.end(JSON.stringify({ ok: true }));
+                    return;
+                }
                 await cloud.deleteFromR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`).catch(() => {});
                 await cloud.deleteFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`).catch(() => {});
                 await removeSavedChannelIndex(id).catch(() => {});
@@ -4211,41 +11143,157 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // ── Saved hooks: generated ideas / scored hooks the user wants to keep (R2 raw/saved-hooks/) ──
     if ((pathname === '/api/raw/hook-save' || pathname === '/api/raw-long/hook-save') && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
-            const id = 'hk' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
-            // montage (base64 data-URL) is stored as a separate jpeg so the list stays light
-            let hasMontage = false;
-            if (typeof body.montage === 'string' && body.montage.indexOf('base64,') >= 0) {
-                try { await cloud.uploadToR2(`raw/saved-hooks/${id}.jpg`, Buffer.from(body.montage.split('base64,').pop(), 'base64'), 'image/jpeg'); hasMontage = true; } catch (e) {}
+            const scoreDomain = pathname === '/api/raw-long/hook-save'
+                ? 'longquant'
+                : 'shorts';
+            if (
+                scoreDomain === 'shorts'
+                && body.kind === 'scored'
+            ) {
+                const submittedLedgerSha256 =
+                    body.score_ledger
+                    && body.score_ledger.ledger_sha256;
+                if (
+                    !exactSha256(body.score_ledger_sha256)
+                    || body.score_ledger_sha256
+                        !== submittedLedgerSha256
+                ) {
+                    throw new Error(
+                        'saved score does not bind the ledger SHA shown '
+                        + 'on the selected score card'
+                    );
+                }
             }
-            const rec = {
+            const id = 'hk' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+            const montageBytes = decodeSavedHookMontage(body.montage);
+            const rec = canonicalSavedHookRecord({
                 id, savedAt: Date.now(),
                 kind: body.kind === 'scored' ? 'scored' : 'idea',
+                score_domain: scoreDomain,
                 source: String(body.source || '').slice(0, 20),
-                folder: (String(body.folder || '').slice(0, 40)) || null,
+                folder: labScope
+                    ? null
+                    : (
+                        String(body.folder || '').slice(0, 40)
+                        || null
+                    ),
                 title: String(body.title || 'Saved hook').slice(0, 140),
                 text: String(body.text || '').slice(0, 2000),
+                idea: String(body.idea || '').slice(0, 4000),
+                score_text:
+                    String(body.score_text || '').slice(0, 4000),
+                dur_s: Number.isFinite(Number(
+                    body.dur_s != null
+                        ? body.dur_s
+                        : body.input_manifest
+                        && body.input_manifest.duration_s
+                ))
+                    ? Number(
+                        body.dur_s != null
+                            ? body.dur_s
+                            : body.input_manifest.duration_s
+                    )
+                    : null,
                 frames: Array.isArray(body.frames) ? body.frames.slice(0, 5).map(f => String(f).slice(0, 600)) : [],
                 frame_imgs: Array.isArray(body.frame_imgs) ? body.frame_imgs.slice(0, 5).map(String) : [],
                 cohesion_mode: String(body.cohesion_mode || '').slice(0, 40),
-                hasMontage,
                 indicators: (body.indicators && typeof body.indicators === 'object') ? body.indicators : null,
-                steer: (body.steer && typeof body.steer === 'object') ? body.steer : null,
+                score_ledger: (body.score_ledger && typeof body.score_ledger === 'object') ? body.score_ledger : null,
+                long_score_ledger: (body.long_score_ledger && typeof body.long_score_ledger === 'object') ? body.long_score_ledger : null,
+                output_contract: (body.output_contract && typeof body.output_contract === 'object') ? body.output_contract : null,
+                decision_trace:
+                    body.decision_trace
+                    && typeof body.decision_trace === 'object'
+                        ? body.decision_trace
+                        : null,
+                non_authoritative_geometry:
+                    body.non_authoritative_geometry
+                    && typeof body.non_authoritative_geometry
+                        === 'object'
+                        ? body.non_authoritative_geometry
+                        : null,
+                novelty_provenance: (body.novelty_provenance && typeof body.novelty_provenance === 'object') ? body.novelty_provenance : null,
+                visual_keep_forecast: (body.visual_keep_forecast && typeof body.visual_keep_forecast === 'object') ? body.visual_keep_forecast : null,
+                creator_adaptive_keep_forecast: (body.creator_adaptive_keep_forecast && typeof body.creator_adaptive_keep_forecast === 'object') ? body.creator_adaptive_keep_forecast : null,
+                creator_adaptive_keep_forecast_error: body.creator_adaptive_keep_forecast_error == null ? null : String(body.creator_adaptive_keep_forecast_error).slice(0, 500),
                 channels: (body.channels && typeof body.channels === 'object') ? body.channels : null,
                 emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : null,
                 input_manifest: (body.input_manifest && typeof body.input_manifest === 'object') ? body.input_manifest : null,
-            };
-            await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
-            // keep the fast index in sync (compact record) so the Saved bank shows it immediately
+            }, montageBytes);
+            await writeImmutableSavedHookMedia(
+                rec.montage_ref,
+                montageBytes
+            );
+            const recordKey = `raw/saved-hooks/${id}.json`;
+            await cloud.uploadToR2(
+                recordKey,
+                Buffer.from(JSON.stringify(rec)),
+                'application/json'
+            );
             try {
-                let idx = { hooks: [] };
-                try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
-                if (!Array.isArray(idx.hooks)) idx.hooks = [];
-                const g = t => (rec.steer && (rec.steer['together_' + t] || rec.steer['visual_' + t])) || {};
-                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, folder: rec.folder, input_manifest: rec.input_manifest, keep: g('keep').pctile, m: { keep: g('keep').pctile, keep_est: g('keep').est, ret5: g('ret5').pctile, views: g('views').est, sviews: g('realviews').est, gt10M: g('gt10M').est, outlier: g('outlier').pctile } });
-                await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
-            } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
+                await updateSavedHookIndex(idx => {
+                    idx.hooks = (idx.hooks || []).filter(
+                        row => row.id !== id
+                    );
+                    idx.hooks.push(
+                        compactSavedHookRecord(rec, { scoreDomain })
+                    );
+                });
+            } catch (e) {
+                await cloud.deleteFromR2(recordKey).catch(() => {});
+                throw new Error(`saved-hook index update failed: ${e.message || e}`);
+            }
+            const savedHookActivityEvidence =
+                experimentLabScoreActivityEvidence(rec);
+            await attachExperimentLabItem(
+                labScope,
+                'hooks',
+                id,
+                {
+                    ...savedHookActivityEvidence,
+                    type: 'hook-saved',
+                    title: rec.title,
+                    requestId:
+                        String(
+                            req.headers['x-quant-request-id']
+                            || ''
+                        ) || null,
+                    detail:
+                        `${rec.kind} · ${rec.source || 'experiment'}`,
+                    input: {
+                        kind: rec.source || rec.kind,
+                        title: rec.title,
+                        hasTranscript: !!String(rec.text || '').trim(),
+                        montageSha256:
+                            rec.montage_ref
+                            && rec.montage_ref.sha256
+                            || null,
+                    },
+                    output: {
+                        ...(savedHookActivityEvidence.output || {}),
+                        kind: 'saved-hook',
+                        artifactId: id,
+                    },
+                }
+            );
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                id,
+                score_record_sha256: rec.score_record_sha256,
+                score_ledger_sha256:
+                    rec.score_ledger
+                    && rec.score_ledger.ledger_sha256
+                    || rec.long_score_ledger
+                    && rec.long_score_ledger.ledger_sha256
+                    || null,
+            }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -4254,65 +11302,388 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = (await readBody(req)) || {};
             const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
             if (!id) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no hook id"}'); return; }
+            await requireExperimentLabItem(
+                req,
+                url,
+                'hooks',
+                id,
+                { write: true }
+            );
             const key = `raw/saved-hooks/${id}.json`;
             const existing = await cloud.downloadFromR2(key).catch(() => null);
             if (!existing) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"saved hook not found"}'); return; }
-            const rec = JSON.parse(existing.toString('utf8'));
-            for (const field of ['indicators', 'steer', 'channels', 'emb_preview', 'input_manifest']) {
-                if (body[field] && typeof body[field] === 'object') rec[field] = body[field];
+            const prior = JSON.parse(existing.toString('utf8'));
+            if (!Object.prototype.hasOwnProperty.call(
+                body,
+                'expected_score_record_sha256'
+            )) {
+                res.writeHead(409, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({
+                    error: (
+                        'expected_score_record_sha256 is required for '
+                        + 'an atomic saved-hook update'
+                    ),
+                }));
+                return;
             }
-            rec.enrichedAt = Date.now();
-            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(rec)), 'application/json');
-            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}');
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            const recordedPriorSha256 =
+                prior.score_record_sha256 || null;
+            if (
+                (body.expected_score_record_sha256 || null)
+                    !== recordedPriorSha256
+            ) {
+                res.writeHead(409, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({
+                    error: (
+                        'saved hook changed before enrichment; reload '
+                        + 'before writing a new score'
+                    ),
+                }));
+                return;
+            }
+            const submittedLedgerSha256 =
+                body.score_ledger
+                && body.score_ledger.ledger_sha256;
+            if (
+                !exactSha256(body.score_ledger_sha256)
+                || body.score_ledger_sha256
+                    !== submittedLedgerSha256
+            ) {
+                throw new HttpRequestError(
+                    422,
+                    'replacement score does not bind the canonical ledger SHA '
+                        + 'returned by the current scorer',
+                    'replacement_score_ledger_mismatch'
+                );
+            }
+            const montageBytes = decodeSavedHookMontage(body.montage);
+            const rec = canonicalSavedHookRecord({
+                ...prior,
+                kind: 'scored',
+                score_domain: 'shorts',
+                text: String(
+                    body.text != null ? body.text : prior.text || ''
+                ).slice(0, 2000),
+                dur_s: Number.isFinite(Number(
+                    body.input_manifest
+                    && body.input_manifest.duration_s
+                ))
+                    ? Number(body.input_manifest.duration_s)
+                    : prior.dur_s || null,
+                indicators:
+                    body.indicators
+                    && typeof body.indicators === 'object'
+                        ? body.indicators
+                        : null,
+                score_ledger:
+                    body.score_ledger
+                    && typeof body.score_ledger === 'object'
+                        ? body.score_ledger
+                        : null,
+                novelty_provenance:
+                    body.novelty_provenance
+                    && typeof body.novelty_provenance === 'object'
+                        ? body.novelty_provenance
+                        : null,
+                visual_keep_forecast:
+                    body.visual_keep_forecast
+                    && typeof body.visual_keep_forecast === 'object'
+                        ? body.visual_keep_forecast
+                        : null,
+                creator_adaptive_keep_forecast:
+                    body.creator_adaptive_keep_forecast
+                    && typeof body.creator_adaptive_keep_forecast
+                        === 'object'
+                        ? body.creator_adaptive_keep_forecast
+                        : null,
+                creator_adaptive_keep_forecast_error:
+                    body.creator_adaptive_keep_forecast_error == null
+                        ? null
+                        : String(
+                            body.creator_adaptive_keep_forecast_error
+                        ).slice(0, 500),
+                channels:
+                    body.channels
+                    && typeof body.channels === 'object'
+                        ? body.channels
+                        : null,
+                emb_preview:
+                    body.emb_preview
+                    && typeof body.emb_preview === 'object'
+                        ? body.emb_preview
+                        : null,
+                input_manifest:
+                    body.input_manifest
+                    && typeof body.input_manifest === 'object'
+                        ? body.input_manifest
+                        : null,
+                enrichedAt: Date.now(),
+            }, montageBytes);
+            await writeImmutableSavedHookMedia(
+                rec.montage_ref,
+                montageBytes
+            );
+            await cloud.uploadToR2(
+                key,
+                Buffer.from(JSON.stringify(rec)),
+                'application/json'
+            );
+            try {
+                await updateSavedHookIndex(idx => {
+                    const compact = compactSavedHookRecord(rec, {
+                        scoreDomain: rec.score_domain,
+                    });
+                    const at = idx.hooks.findIndex(h => h.id === id);
+                    if (at >= 0) idx.hooks[at] = compact;
+                    else idx.hooks.push(compact);
+                });
+            } catch (error) {
+                await cloud.uploadToR2(
+                    key,
+                    existing,
+                    'application/json'
+                ).catch(() => {});
+                throw error;
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                score_record_sha256: rec.score_record_sha256,
+                score_ledger_sha256:
+                    rec.score_ledger.ledger_sha256,
+            }));
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_hook_enrich_failed',
+            }));
+        }
         return;
     }
     if ((pathname === '/api/raw/saved-hooks' || pathname === '/api/raw-long/saved-hooks') && req.method === 'GET') {
         try {
-            // Fast path: a prebuilt compact index (one object) — scales to thousands of saved hooks.
-            let idx = null;
-            try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
-            if (idx && Array.isArray(idx.hooks)) {
-                idx.hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-                res.end(JSON.stringify({ hooks: idx.hooks, folders: idx.folders || [], indexed: true }));
-                return;
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const storedIndex = await readSavedHookIndex();
+            if (storedIndex.indexMissing) {
+                throw new HttpRequestError(
+                    503,
+                    'The saved-hook ledger index has not been built. Run '
+                        + 'the offline saved-hook index migration.',
+                    'saved_hook_index_missing'
+                );
             }
-            // Fallback (no index yet): only the most-recent ~80 records so we never time out on a big bank.
-            let keys = []; try { keys = (await cloud.listR2Keys('raw/saved-hooks/')) || []; } catch (e) {}
-            keys = keys.filter(k => k.endsWith('.json')).sort().reverse().slice(0, 80);
-            const hooks = [];
-            for (const k of keys) { try { const b = await cloud.downloadFromR2(k); if (b) hooks.push(JSON.parse(b.toString('utf8'))); } catch (e) {} }
-            hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify({ hooks, folders: [], indexed: false }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            const idx = await ensureSavedHookIndexIntegrity(storedIndex);
+            const scoreDomain = pathname.includes('/raw-long/')
+                ? 'longquant'
+                : 'shorts';
+            let hooks = idx.hooks
+                .concat(idx.legacy_hooks || [])
+                .filter(row => row.score_domain === scoreDomain)
+                .sort((a, b) => (
+                    (b.savedAt || 0) - (a.savedAt || 0)
+                ));
+            let folders = idx.folders || [];
+            let workspaceSource = null;
+            if (labScope && scoreDomain === 'shorts') {
+                const workspace =
+                    await experimentLabWorkspaceForScope(
+                        labScope
+                    );
+                const collection =
+                    workspace.collections.hooks;
+                const references = new Map(
+                    collection.items.map(item => [
+                        item.id,
+                        item,
+                    ])
+                );
+                hooks = hooks
+                    .filter(row => references.has(row.id))
+                    .map(row => ({
+                        ...row,
+                        folder:
+                            references.get(row.id).folderId,
+                        workspace_saved_at:
+                            references.get(row.id).savedAt,
+                    }));
+                folders = collection.folders;
+                workspaceSource = {
+                    schema: workspace.schema,
+                    account: workspace.account,
+                    readOnly: labScope.readOnly,
+                    workspace_sha256:
+                        workspace.workspace_sha256,
+                };
+            }
+            sendJsonGz(req, res, {
+                hooks,
+                folders,
+                indexed: true,
+                score_domain: scoreDomain,
+                workspace: workspaceSource,
+                source_of_truth: {
+                    key: SAVED_HOOK_INDEX_KEY,
+                    schema: savedHookRuntimeIndex.INDEX_SCHEMA,
+                    sha256: idx.index_sha256,
+                },
+                integrity: {
+                    canonical: idx.hooks.length,
+                    legacy_unbound:
+                        (idx.legacy_hooks || []).length,
+                    reads_are_validation_only: true,
+                },
+            }, 200);
+        } catch (e) {
+            throw e;
+        }
         return;
     }
     // Folders for saved hooks: create a folder / move a hook into one / delete a folder. Stored in the index.
     if ((pathname === '/api/raw/folder-create' || pathname === '/api/raw/hook-move' || pathname === '/api/raw/folder-delete' || pathname === '/api/raw-long/folder-create' || pathname === '/api/raw-long/hook-move' || pathname === '/api/raw-long/folder-delete') && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
-            let idx = { hooks: [], folders: [] };
-            try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
-            if (!Array.isArray(idx.hooks)) idx.hooks = [];
-            if (!Array.isArray(idx.folders)) idx.folders = [];
             const out = { ok: true };
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            if (
+                labScope
+                && !pathname.includes('/raw-long/')
+            ) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        if (pathname === '/api/raw/folder-create') {
+                            const folder =
+                                experimentLabWorkspace
+                                    .createFolder(
+                                        workspace,
+                                        'hooks',
+                                        body.name
+                                    );
+                            out.id = folder.id;
+                            out.name = folder.name;
+                        } else if (
+                            pathname === '/api/raw/hook-move'
+                        ) {
+                            experimentLabWorkspace.moveItem(
+                                workspace,
+                                'hooks',
+                                body.id,
+                                body.folder
+                            );
+                        } else {
+                            experimentLabWorkspace.deleteFolder(
+                                workspace,
+                                'hooks',
+                                body.id
+                            );
+                        }
+                    }
+                );
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify(out));
+                return;
+            }
             if (pathname === '/api/raw/folder-create' || pathname === '/api/raw-long/folder-create') {
                 const name = String(body.name || '').slice(0, 60).trim();
                 if (!name) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no name"}'); return; }
-                let f = idx.folders.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
-                if (!f) { f = { id: 'f' + Date.now().toString(36), name }; idx.folders.push(f); }
-                out.id = f.id; out.name = f.name;
+                await updateSavedHookIndex(idx => {
+                    let f = idx.folders.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
+                    if (!f) { f = { id: 'f' + Date.now().toString(36), name }; idx.folders.push(f); }
+                    out.id = f.id; out.name = f.name;
+                });
             } else if (pathname === '/api/raw/hook-move' || pathname === '/api/raw-long/hook-move') {
                 const id = String(body.id || ''); const folder = body.folder ? String(body.folder).slice(0, 40) : null;
-                const h = idx.hooks.find(x => x.id === id); if (h) h.folder = folder;
-                try { const rb = await cloud.downloadFromR2(`raw/saved-hooks/${id}.json`); if (rb) { const rec = JSON.parse(rb.toString('utf8')); rec.folder = folder; await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json'); } } catch (e) {}
+                const recordKey = `raw/saved-hooks/${id}.json`;
+                const rb = await cloud.downloadFromR2(recordKey);
+                if (!rb) throw new Error('saved hook not found');
+                const rec = JSON.parse(rb.toString('utf8'));
+                rec.folder = folder;
+                await cloud.uploadToR2(
+                    recordKey,
+                    Buffer.from(JSON.stringify(rec)),
+                    'application/json'
+                );
+                await updateSavedHookIndex(idx => {
+                    const canonicalAt = idx.hooks.findIndex(
+                        row => row.id === id
+                    );
+                    if (canonicalAt >= 0) {
+                        idx.hooks[canonicalAt] =
+                            compactSavedHookRecord(rec, {
+                                scoreDomain:
+                                    scoreDomainForRecord(rec),
+                            });
+                    } else {
+                        const legacy = (idx.legacy_hooks || [])
+                            .find(row => row.id === id);
+                        if (legacy) legacy.folder = folder;
+                    }
+                });
             } else {  // folder-delete: drop the folder, unfile its hooks
-                const fid = String(body.id || ''); idx.folders = idx.folders.filter(x => x.id !== fid);
-                idx.hooks.forEach(h => { if (h.folder === fid) h.folder = null; });
+                const fid = String(body.id || '');
+                const before = await ensureSavedHookIndexIntegrity(
+                    await readSavedHookIndex()
+                );
+                const affected = (before.hooks || [])
+                    .filter(hook => hook && hook.folder === fid)
+                    .map(hook => hook.id);
+                for (let at = 0; at < affected.length; at += 20) {
+                    await Promise.all(affected.slice(at, at + 20).map(
+                        async hookId => {
+                            const recordKey =
+                                `raw/saved-hooks/${hookId}.json`;
+                            const buffer = await cloud.downloadFromR2(
+                                recordKey
+                            );
+                            if (!buffer) return;
+                            const record = JSON.parse(
+                                buffer.toString('utf8')
+                            );
+                            record.folder = null;
+                            await cloud.uploadToR2(
+                                recordKey,
+                                Buffer.from(JSON.stringify(record)),
+                                'application/json'
+                            );
+                        }
+                    ));
+                }
+                await updateSavedHookIndex(idx => {
+                    idx.folders = idx.folders.filter(x => x.id !== fid);
+                    idx.hooks = idx.hooks.map(row => {
+                        if (row.folder !== fid) return row;
+                        const updated = {
+                            ...row,
+                            folder: null,
+                        };
+                        updated.compact_score_sha256 =
+                            shortsScoreLedger.sha256Canonical(
+                                compactSavedHookBindingPayload(updated)
+                            );
+                        return updated;
+                    });
+                    (idx.legacy_hooks || []).forEach(row => {
+                        if (row.folder === fid) row.folder = null;
+                    });
+                });
             }
-            await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -4321,7 +11692,53 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const body = (await readBody(req)) || {};
             const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
-            if (id) { await cloud.deleteFromR2(`raw/saved-hooks/${id}.json`).catch(() => {}); await cloud.deleteFromR2(`raw/saved-hooks/${id}.jpg`).catch(() => {}); }
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            if (
+                labScope
+                && !pathname.includes('/raw-long/')
+            ) {
+                if (id) {
+                    await mutateExperimentLabWorkspace(
+                        labScope.account,
+                        workspace => {
+                            experimentLabWorkspace.removeItem(
+                                workspace,
+                                'hooks',
+                                id
+                            );
+                            experimentLabWorkspace
+                                .markArtifactSaved(
+                                    workspace,
+                                    'hooks',
+                                    id,
+                                    false
+                                );
+                        }
+                    );
+                }
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({ ok: true }));
+                return;
+            }
+            if (id) {
+                await updateSavedHookIndex(idx => {
+                    idx.hooks = idx.hooks.filter(hook => hook.id !== id);
+                    idx.legacy_hooks = (idx.legacy_hooks || [])
+                        .filter(hook => hook.id !== id);
+                });
+                await cloud.deleteFromR2(
+                    `raw/saved-hooks/${id}.json`
+                ).catch(() => {});
+                await cloud.deleteFromR2(
+                    `raw/saved-hooks/${id}.jpg`
+                ).catch(() => {});
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -4329,21 +11746,378 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedMon = pathname.match(/^\/api\/raw(?:-long)?\/saved-montage\/([a-z0-9]{1,32})$/);
     if (savedMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, {
-                cacheControl: 'public, max-age=3600',
-                expiresIn: 3600,
-            }).catch(() => false)) return;
-            res.writeHead(404); res.end();
-        } catch (e) { res.writeHead(500); res.end(); }
+            if (!pathname.includes('/raw-long/')) {
+                await requireExperimentLabItem(
+                    req,
+                    url,
+                    'hooks',
+                    savedMon[1],
+                    { write: false }
+                );
+            }
+            const storedIndex = await readSavedHookIndex();
+            if (storedIndex.indexMissing) {
+                throw new HttpRequestError(
+                    503,
+                    'The saved-hook ledger index has not been built.',
+                    'saved_hook_index_missing'
+                );
+            }
+            const index = await ensureSavedHookIndexIntegrity(
+                storedIndex
+            );
+            const evidence = savedHookIndexEvidence(
+                index,
+                savedMon[1]
+            );
+            if (!evidence) {
+                throw new HttpRequestError(
+                    404,
+                    'Saved hook is not present in the ledger index.',
+                    'saved_hook_not_indexed'
+                );
+            }
+            const recordBuffer = await cloud.downloadFromR2(
+                `raw/saved-hooks/${savedMon[1]}.json`
+            );
+            const record = recordBuffer
+                ? JSON.parse(recordBuffer.toString('utf8'))
+                : null;
+            if (!record) {
+                throw new HttpRequestError(
+                    evidence.evidenceClass === 'canonical' ? 409 : 404,
+                    evidence.evidenceClass === 'canonical'
+                        ? 'Canonical saved-hook source record is missing.'
+                        : 'Historical saved-hook source record is missing.',
+                    evidence.evidenceClass === 'canonical'
+                        ? 'saved_hook_source_missing'
+                        : 'saved_hook_not_found'
+                );
+            }
+            if (
+                evidence.evidenceClass === 'canonical'
+                && !validateCompactSavedHookSource(
+                    evidence.row,
+                    record
+                )
+            ) {
+                throw new HttpRequestError(
+                    409,
+                    'Canonical saved-hook source does not match its ledger '
+                        + 'index binding.',
+                    'saved_hook_source_binding_failed'
+                );
+            }
+            const bytes = await savedHookMontageBytes(
+                record,
+                savedMon[1],
+                { evidenceClass: evidence.evidenceClass }
+            );
+            if (!bytes) {
+                throw new HttpRequestError(
+                    evidence.evidenceClass === 'canonical' ? 409 : 404,
+                    evidence.evidenceClass === 'canonical'
+                        ? 'Canonical saved-hook media is missing.'
+                        : 'Historical saved-hook media is missing.',
+                    evidence.evidenceClass === 'canonical'
+                        ? 'saved_hook_media_missing'
+                        : 'saved_hook_media_not_found'
+                );
+            }
+            res.writeHead(200, {
+                'Content-Type': 'image/jpeg',
+                'Content-Length': bytes.length,
+                'Cache-Control':
+                    evidence.evidenceClass === 'canonical'
+                        ? 'public, max-age=31536000, immutable'
+                        : 'public, max-age=3600',
+                'X-Evidence-State':
+                    evidence.evidenceClass === 'canonical'
+                        ? 'canonical-bound'
+                        : 'legacy-unbound',
+            });
+            if (req.method === 'HEAD') res.end();
+            else res.end(bytes);
+        } catch (e) {
+            throw e;
+        }
         return;
     }
     const savedOne = pathname.match(/^\/api\/raw(?:-long)?\/saved-hook\/([a-z0-9]{1,32})$/);
     if (savedOne && req.method === 'GET') {
         try {
-            const b = await cloud.downloadFromR2(`raw/saved-hooks/${savedOne[1]}.json`);
-            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(b ? b.toString('utf8') : JSON.stringify({ error: 'not found' }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            if (!pathname.includes('/raw-long/')) {
+                await requireExperimentLabItem(
+                    req,
+                    url,
+                    'hooks',
+                    savedOne[1],
+                    { write: false }
+                );
+            }
+            const storedIndex = await readSavedHookIndex();
+            if (storedIndex.indexMissing) {
+                throw new HttpRequestError(
+                    503,
+                    'The saved-hook ledger index has not been built.',
+                    'saved_hook_index_missing'
+                );
+            }
+            const index = await ensureSavedHookIndexIntegrity(
+                storedIndex
+            );
+            const evidence = savedHookIndexEvidence(
+                index,
+                savedOne[1]
+            );
+            if (!evidence) {
+                throw new HttpRequestError(
+                    404,
+                    'Saved hook is not present in the ledger index.',
+                    'saved_hook_not_indexed'
+                );
+            }
+            const key = `raw/saved-hooks/${savedOne[1]}.json`;
+            const b = await cloud.downloadFromR2(key);
+            if (!b) {
+                throw new HttpRequestError(
+                    evidence.evidenceClass === 'canonical' ? 409 : 404,
+                    evidence.evidenceClass === 'canonical'
+                        ? 'Canonical saved-hook source record is missing.'
+                        : 'Historical saved-hook source record is missing.',
+                    evidence.evidenceClass === 'canonical'
+                        ? 'saved_hook_source_missing'
+                        : 'saved_hook_not_found'
+                );
+            }
+            const stored = JSON.parse(b.toString('utf8'));
+            const canonicalCandidate =
+                evidence.evidenceClass === 'canonical';
+            const scoreDomain = scoreDomainForRecord(stored);
+            const generatedHistoricalDisplay = canonicalCandidate
+                ? null
+                : historicalSavedHookDisplay(stored, {
+                    scoreDomain,
+                });
+            const indexedHistoricalDisplay =
+                evidence.row && evidence.row.historical_display;
+            const historicalDisplayExact = !!(
+                generatedHistoricalDisplay
+                && validateHistoricalSavedHookDisplay(
+                    indexedHistoricalDisplay
+                )
+                && indexedHistoricalDisplay.display_sha256
+                    === generatedHistoricalDisplay.display_sha256
+                && indexedHistoricalDisplay.score_ledger_sha256
+                    === generatedHistoricalDisplay
+                        .score_ledger_sha256
+            );
+            const calculatedSha256 =
+                savedHookScoreRecordSha256(stored);
+            const recordBindingValid = canonicalCandidate
+                && exactSha256(stored.score_record_sha256)
+                && stored.score_record_sha256 === calculatedSha256;
+            const compactSourceValid = canonicalCandidate
+                ? validateCompactSavedHookSource(
+                    evidence.row,
+                    stored
+                )
+                : null;
+            let inputValidation = {
+                valid: stored.kind !== 'scored',
+                errors: stored.kind === 'scored'
+                    ? ['saved score input evidence is unbound']
+                    : [],
+            };
+            let mediaBytes = null;
+            if (canonicalCandidate) {
+                try {
+                    if (stored.hasMontage || stored.montage_ref) {
+                        mediaBytes = await savedHookMontageBytes(
+                            stored,
+                            stored.id,
+                            { evidenceClass: 'canonical' }
+                        );
+                        if (!mediaBytes) {
+                            throw new Error(
+                                'canonical saved-hook media is missing'
+                            );
+                        }
+                    }
+                    if (stored.kind === 'scored') {
+                        inputValidation =
+                            scoreDomainForRecord(stored)
+                                === 'longquant'
+                                ? longScoreLedger
+                                    .validateLongInputManifest(
+                                        stored,
+                                        { imageBytes: mediaBytes }
+                                    )
+                                : shortsScoreLedger
+                                    .validateShortsInputManifest(
+                                        stored,
+                                        {
+                                            montageBytes: mediaBytes,
+                                            text: stored.text || '',
+                                            durationS:
+                                                stored.input_manifest
+                                                && stored.input_manifest
+                                                    .duration_s,
+                                            creatorProfile:
+                                                stored.input_manifest
+                                                && stored.input_manifest
+                                                    .creator_profile,
+                                        }
+                                    );
+                    }
+                } catch (error) {
+                    inputValidation = {
+                        valid: false,
+                        errors: [error.message],
+                    };
+                }
+            } else if (stored.hasMontage) {
+                mediaBytes = await savedHookMontageBytes(
+                    stored,
+                    stored.id,
+                    { evidenceClass: 'legacy' }
+                ).catch(() => null);
+            }
+            const record = withPersistedSavedHookValidation(stored);
+            if (historicalDisplayExact) {
+                record.historical_display =
+                    generatedHistoricalDisplay;
+            }
+            record.evidence_state = canonicalCandidate
+                ? (
+                    recordBindingValid
+                    && compactSourceValid
+                    && inputValidation.valid
+                        ? 'canonical_bound'
+                        : 'canonical_invalid'
+                )
+                : 'legacy_unbound_evidence';
+            record.evidence_warning = canonicalCandidate
+                ? null
+                : savedHookRecordBinding
+                    .classifyHistoricalSavedHook(stored)
+                    .reason;
+            record.source_of_truth = {
+                index_key: SAVED_HOOK_INDEX_KEY,
+                index_sha256: index.index_sha256,
+                record_key: key,
+                score_record_sha256:
+                    stored.score_record_sha256 || null,
+                evidence_class: evidence.evidenceClass,
+            };
+            record.input_binding_validation = {
+                state: canonicalCandidate
+                    ? (
+                        inputValidation.valid
+                            ? 'canonical-valid'
+                            : 'canonical-invalid'
+                    )
+                    : 'legacy-unbound',
+                valid: canonicalCandidate
+                    ? inputValidation.valid
+                    : null,
+                errors: canonicalCandidate
+                    ? inputValidation.errors || []
+                    : [],
+                media_sha256:
+                    mediaBytes
+                        ? require('crypto')
+                            .createHash('sha256')
+                            .update(mediaBytes)
+                            .digest('hex')
+                        : null,
+            };
+            record.compact_source_validation = {
+                state: canonicalCandidate
+                    ? (
+                        compactSourceValid
+                            ? 'canonical-valid'
+                            : 'canonical-invalid'
+                    )
+                    : 'legacy-unbound',
+                valid: canonicalCandidate
+                    ? compactSourceValid
+                    : null,
+                source_key: key,
+                score_record_sha256:
+                    stored.score_record_sha256 || null,
+            };
+            const scalarLedgerValid = scoreDomain === 'longquant'
+                ? !!(
+                    record.long_score_ledger_validation
+                    && record.long_score_ledger_validation.valid === true
+                )
+                : !!(
+                    record.score_ledger_validation
+                    && record.score_ledger_validation.valid === true
+                );
+            const sidecarsValid = scoreDomain === 'longquant'
+                ? !!(
+                    record.long_score_predictor_validation
+                    && record.long_score_predictor_validation.valid === true
+                )
+                : true;
+            const historicalDisplayOnly = !!(
+                stored.kind === 'scored'
+                && scoreDomain === 'shorts'
+                && historicalDisplayExact
+            );
+            record.score_display_eligible = !!(
+                stored.kind === 'scored'
+                && (
+                    scalarLedgerValid
+                    || historicalDisplayOnly
+                )
+            );
+            record.historical_display_only =
+                historicalDisplayOnly;
+            record.predictor_eligible = !!(
+                canonicalCandidate
+                && recordBindingValid
+                && compactSourceValid
+                && inputValidation.valid
+                && scalarLedgerValid
+                && sidecarsValid
+            );
+            const status = (
+                    record.evidence_state === 'canonical_invalid'
+                ) || (
+                    record.score_record_validation
+                    && record.score_record_validation.valid === false
+                    && !historicalDisplayOnly
+                ) || (
+                    record.score_ledger_validation
+                    && record.score_ledger_validation.valid === false
+                    && !historicalDisplayOnly
+                ) || (
+                    record.long_score_ledger_validation
+                    && record.long_score_ledger_validation.valid === false
+                ) || (
+                    record.compact_source_validation
+                    && record.compact_source_validation.valid === false
+                )
+                    ? 409
+                    : 200;
+            if (status === 409) {
+                record.error = (
+                    'Saved-hook scalar ledger or record binding failed '
+                    + 'canonical validation.'
+                );
+                record.code = 'saved_hook_evidence_invalid';
+            }
+            res.writeHead(status, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+            });
+            res.end(JSON.stringify(record));
+        } catch (e) {
+            throw e;
+        }
         return;
     }
     // multi-channel retention: index + per-channel tables, stored in R2 (private; other
@@ -4413,9 +12187,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lgReqStatus = pathname.match(/^\/api\/longquant\/guesses\/status\/([a-z0-9]+)$/i);
     if (lgReqStatus && req.method === 'GET') {
-        const buf = await cloud.downloadFromR2(`longform/guesses/demo/status/${lgReqStatus[1]}.json`).catch(() => null);
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(buf ? buf.toString('utf8') : '{"stage":"queued"}'); return;
+        await serveR2Gz(
+            req,
+            res,
+            `longform/guesses/demo/status/${lgReqStatus[1]}.json`,
+            1000,
+            { stage: 'queued' },
+            404,
+            {
+                surfaceSourceErrors: true,
+                sourceErrorMessage: 'Long Quant generation status storage is temporarily unavailable.',
+            }
+        );
+        return;
     }
     if (pathname === '/api/longquant/guesses/runs' && req.method === 'GET') {
         const cands = Array.from({ length: 30 }, (_, i) => 'thumb' + (i + 1));
@@ -4443,44 +12227,54 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     if (pathname === '/api/longquant/guesses/request' && req.method === 'POST') {
-        const body = await readBody(req); const title = String(body.title || '').slice(0, 200).trim();
-        if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
-        const rid = 'd' + Date.now().toString(36);
-        await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify({ title, forceTitle: title, count: 5, ts: Date.now() })), 'application/json');
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
+        try {
+            const body = await readBody(req); const title = String(body.title || '').slice(0, 200).trim();
+            if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
+            const rid = 'd' + Date.now().toString(36);
+            await lqDemoStatus(rid, { stage: 'queued', title, n: 5, done: 0, note: 'queued for the trained Long Quant models' });
+            await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify({ title, forceTitle: title, count: 5, ts: Date.now() })), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message || String(e) }));
+            return;
+        }
     }
     // ── Long Quant 🧪 Experiment: generate thumbnails with the trained model + score uploads ──
     if (pathname === '/api/longquant/exp/generate' && req.method === 'POST') {
-        const body = await readBody(req);
-        const renderExact = !!body.renderExact;
-        // exact-prompt mode carries a full image prompt (1500+ chars); idea mode stays short
-        const title = String(body.title || '').slice(0, renderExact ? 2500 : 300).trim();
-        if (renderExact && title.length < 12) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"exact-prompt mode needs the full image prompt in the text box"}'); return; }
-        const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
-        const rid = 'd' + Date.now().toString(36);
-        const invent = !title;
-        const payload = {
-            title, premise: title, idea: title, forceTitle: title, count, invent, renderExact,
-            mode: renderExact ? 'render_exact_prompt' : invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
-            instruction: invent
-                ? 'Blank request: run idea_long_r26 first, then run thumb_b10.'
-                : 'Typed request: DO NOT invent or rewrite the video idea. Use this exact title/idea as the thumbnail model input.',
-            ts: Date.now(),
-            ideaModel: LONGQUANT_IDEA_MODEL,
-            thumbModel: longQuantThumbPromptModelLabel(),
-            renderModel: LONGQUANT_RENDER_MODEL,
-            modelProvider: LONGQUANT_MODEL_PROVIDER,
-            workerVersion: LONGQUANT_WORKER_VERSION,
-            scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
-        };
         try {
+            const body = await readBody(req);
+            const renderExact = !!body.renderExact;
+            // exact-prompt mode carries a full image prompt (1500+ chars); idea mode stays short
+            const title = String(body.title || '').slice(0, renderExact ? 2500 : 300).trim();
+            if (renderExact && title.length < 12) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"exact-prompt mode needs the full image prompt in the text box"}'); return; }
+            const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
+            const rid = 'd' + Date.now().toString(36);
+            const invent = !title;
+            const payload = {
+                title, premise: title, idea: title, forceTitle: title, count, invent, renderExact,
+                mode: renderExact ? 'render_exact_prompt' : invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
+                instruction: invent
+                    ? 'Blank request: run idea_long_r26 first, then run thumb_b10.'
+                    : 'Typed request: DO NOT invent or rewrite the video idea. Use this exact title/idea as the thumbnail model input.',
+                ts: Date.now(),
+                ideaModel: LONGQUANT_IDEA_MODEL,
+                thumbModel: longQuantThumbPromptModelLabel(),
+                renderModel: LONGQUANT_RENDER_MODEL,
+                modelProvider: LONGQUANT_MODEL_PROVIDER,
+                workerVersion: LONGQUANT_WORKER_VERSION,
+                scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
+            };
             const pend = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json'));
             if (pend.length >= 4) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — Long Quant has a few generations queued, try again in a moment' })); return; }
-        } catch (e) {}
-        await lqDemoStatus(rid, { stage: 'queued', title: title || '', n: count, done: 0, note: 'queued for the trained Long Quant models' });
-        await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, rid, invent, mode: payload.mode, title, model: payload }));
+            await lqDemoStatus(rid, { stage: 'queued', title: title || '', n: count, done: 0, note: 'queued for the trained Long Quant models' });
+            await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, rid, invent, mode: payload.mode, title, model: payload }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message || String(e) }));
+        }
         return;
     }
     if (pathname === '/api/longquant/exp/scorer' && req.method === 'GET') {
@@ -4500,8 +12294,40 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"Enter the video title or idea so visual and together embeddings can both be scored"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            if (body.async) { const jobId = quantJobSubmit('score-upload', () => longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
-            const score = await longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true);
+            const imageBuffer = Buffer.from(b64, 'base64');
+            if (body.async) {
+                const requestFingerprint = quantRequestFingerprint(
+                    'score-upload',
+                    'longform',
+                    {
+                        image_sha256:
+                            quantJobIdentity.sha256Buffer(imageBuffer),
+                        title,
+                        idea,
+                    },
+                    await longQuantRequestScorerIdentity()
+                );
+                const jobId = quantJobSubmit(
+                    'score-upload',
+                    () => longQuantScoreThumbnail(
+                        imageBuffer,
+                        title,
+                        idea,
+                        true
+                    ),
+                    'longform',
+                    quantRequestId(req),
+                    requestFingerprint
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    ok: true,
+                    jobId,
+                    requestFingerprint,
+                }));
+                return;
+            }
+            const score = await longQuantScoreThumbnail(imageBuffer, title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -4705,7 +12531,25 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const editRunner = async () => {
             const score = await longQuantScoreTitleText(hookText, true);   // re-embed + re-place in the text latent space
             rec.hookText = hookText;
-            rec.score = { ...score, title: hookText };
+            rec.score_domain = 'longquant';
+            rec.score = score;
+            [
+                'pct',
+                'pctile',
+                'metrics',
+                'channels',
+                'emb_preview',
+                'nn_cos',
+                'reward',
+                'score_alias_contract',
+                'long_score_ledger',
+                'output_contract',
+                'input_manifest',
+                'decision_trace',
+                'non_authoritative_geometry',
+            ].forEach(field => {
+                delete rec[field];
+            });
             if (isFinite(endSec) && endSec > 0 && endSec < 300) {
                 rec.hookEndSec = Math.round(endSec * 100) / 100;
                 rec.hookEndPct = rec.duration_s ? Math.round(10000 * rec.hookEndSec / Number(rec.duration_s)) / 100 : rec.hookEndPct;
@@ -4713,29 +12557,98 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             rec.cutBy = 'tyler';
             rec.cutReason = 'edited by you in the Experiment tab';
             rec.ts = Date.now();
-            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(rec)), 'application/json');
-            // patch the one row in the index (cheap) instead of rebuilding all 211
+            rec.score_record_sha256 =
+                savedHookScoreRecordSha256(rec);
+            const recordHashPayload = { ...rec };
+            delete recordHashPayload.record_content_sha256;
+            rec.record_content_sha256 =
+                shortsScoreLedger.sha256Canonical(
+                    recordHashPayload
+                );
+            const persisted =
+                withPersistedLongLedgerValidation(rec);
+            if (
+                !persisted.score_record_validation
+                || persisted.score_record_validation.valid
+                    !== true
+                || !persisted.long_score_predictor_validation
+                || persisted.long_score_predictor_validation.valid
+                    !== true
+            ) {
+                throw new Error(
+                    'edited hook failed canonical Long ledger binding'
+                );
+            }
+            const recordBytes = canonicalJsonBytes(rec);
+            await cloud.uploadToR2(
+                key,
+                recordBytes,
+                'application/json'
+            );
             try {
-                const ib = await cloud.downloadFromR2('longform/hook-embeds/index.json');
-                const idx = JSON.parse(ib.toString('utf8'));
-                const rowsArr = Array.isArray(idx.rows) ? idx.rows : [];
-                const compact = {
-                    id: rec.id, title: rec.title, url: rec.url, published: rec.published,
-                    views: rec.views, keep_rate: rec.keep_rate, swiped: rec.swiped,
-                    avg_retention: rec.avg_retention, duration_s: rec.duration_s, curve: rec.curve,
-                    hookText: rec.hookText, hookEndSec: rec.hookEndSec, hookEndPct: rec.hookEndPct,
-                    transcriptSource: rec.transcriptSource, cutBy: rec.cutBy, cutReason: rec.cutReason,
-                    pctile: rec.score.pctile, metrics: rec.score.metrics, nn_cos: rec.score.nn_cos, ts: rec.ts,
-                };
-                const at = rowsArr.findIndex(r => r && r.id === id);
-                if (at >= 0) rowsArr[at] = compact; else rowsArr.push(compact);
-                rowsArr.sort((a, b) => ((b.pctile == null ? -1 : b.pctile) - (a.pctile == null ? -1 : a.pctile)));
-                idx.builtAt = Date.now();
-                await cloud.uploadToR2('longform/hook-embeds/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
-            } catch (e) { console.warn('hook edit index patch:', e.message); }
+                const compact =
+                    longHookLibraryIndex.compactRecord(
+                        rec,
+                        recordBytes
+                    );
+                if (compact.evidence_state !== 'canonical_bound') {
+                    throw new Error(
+                        compact.evidence_errors.join('; ')
+                    );
+                }
+                await updateLongHookLibraryIndex(index => {
+                    const at = index.rows.findIndex(
+                        row => row && row.id === id
+                    );
+                    if (at >= 0) index.rows[at] = compact;
+                    else index.rows.push(compact);
+                });
+            } catch (error) {
+                await cloud.uploadToR2(
+                    key,
+                    b,
+                    'application/json'
+                ).catch(() => {});
+                throw new Error(
+                    `Long hook index update failed: ${
+                        error.message || error
+                    }`
+                );
+            }
             return { ok: true, rec };
             };
-            if (body.async) { const jobId = quantJobSubmit('hook-edit', editRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) {
+                const requestFingerprint = quantRequestFingerprint(
+                    'hook-edit',
+                    'longform',
+                    {
+                        record_key: key,
+                        record_sha256: sha256Bytes(b),
+                        hook_text: hookText,
+                        hook_end_seconds:
+                            isFinite(endSec)
+                            && endSec > 0
+                            && endSec < 300
+                                ? Math.round(endSec * 100) / 100
+                                : null,
+                    },
+                    await longQuantRequestScorerIdentity()
+                );
+                const jobId = quantJobSubmit(
+                    'hook-edit',
+                    editRunner,
+                    'longform',
+                    quantRequestId(req),
+                    requestFingerprint
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    ok: true,
+                    jobId,
+                    requestFingerprint,
+                }));
+                return;
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(await editRunner()));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -4743,21 +12656,239 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/longquant/hooks/index' && req.method === 'GET') {
         await serveGzCached(req, res, 'lq:hook-embeds-index', 10e3, async () => {
-            const b = await cloud.downloadFromR2('longform/hook-embeds/index.json').catch(() => null);
-            return b ? b.toString('utf8') : '{"rows":[]}';
+            const index = await readLongHookLibraryIndex();
+            return JSON.stringify({
+                schema: index.schema,
+                version: index.version,
+                rows: index.rows.map(row => ({
+                    id: row.id,
+                    ...row.navigation,
+                    record_key: row.record_key,
+                    record_artifact_sha256:
+                        row.record_artifact_sha256,
+                    score_record_sha256:
+                        row.score_record_sha256,
+                    score_ledger_sha256:
+                        row.ledger_sha256,
+                    score_authority:
+                        row.evidence_state
+                            === 'canonical_bound'
+                            ? 'long_score_ledger'
+                            : null,
+                    score_binding_state:
+                        row.evidence_state
+                            === 'canonical_bound'
+                            ? 'hash_bound'
+                            : 'legacy_unbound',
+                    evidence_errors: row.evidence_errors,
+                })),
+                counts: index.counts,
+                recut: index.recut,
+                source_of_truth: {
+                    key: LONG_HOOK_LIBRARY_INDEX_KEY,
+                    index_sha256: index.index_sha256,
+                    schema: index.schema,
+                    detail_values_from:
+                        'record.score.long_score_ledger',
+                },
+            });
         }, {});
         return;
     }
     const lqHookVid = pathname.match(/^\/api\/longquant\/hooks\/video\/([\w-]+)$/);
     if (lqHookVid && req.method === 'GET') {
-        const b = await cloud.downloadFromR2(`longform/hook-embeds/${lqHookVid[1]}.json`).catch(() => null);
+        const index = await readLongHookLibraryIndex();
+        const indexRow = index.rows.find(
+            row => row && row.id === lqHookVid[1]
+        );
+        if (!indexRow) {
+            res.writeHead(404, {
+                'Content-Type': 'application/json',
+            });
+            res.end('{"error":"not found"}');
+            return;
+        }
+        const b = await cloud.downloadFromR2(
+            indexRow.record_key
+        ).catch(() => null);
+        let payload = b;
+        if (b) {
+            try {
+                const record = JSON.parse(b.toString('utf8'));
+                const pairValidation =
+                    longHookLibraryIndex.validateRowRecordPair(
+                        indexRow,
+                        record,
+                        b
+                    );
+                if (!pairValidation.valid) {
+                    throw new HttpRequestError(
+                        409,
+                        pairValidation.errors.join('; '),
+                        'long_hook_library_record_integrity_failed'
+                    );
+                }
+                const storedValidation =
+                    withPersistedLongLedgerValidation(
+                        record
+                    );
+                if (
+                    indexRow.evidence_state === 'canonical_bound'
+                    && storedValidation
+                        .long_score_predictor_validation
+                        .valid === true
+                ) {
+                    record.score = longQuantPublicTextScore(record.score);
+                } else {
+                    record.score = {
+                        error: (
+                            'Historical score evidence is not bound to '
+                            + 'the current Long score ledger. Re-score '
+                            + 'this hook before using it quantitatively.'
+                        ),
+                        evidence_state: 'legacy_unbound',
+                    };
+                }
+                [
+                    'pct',
+                    'pctile',
+                    'metrics',
+                    'channels',
+                    'emb_preview',
+                    'nn_cos',
+                    'reward',
+                    'score_alias_contract',
+                    'long_score_ledger',
+                    'output_contract',
+                    'input_manifest',
+                    'decision_trace',
+                    'non_authoritative_geometry',
+                ].forEach(field => {
+                    delete record[field];
+                });
+                record.score_record_validation =
+                    storedValidation
+                        .score_record_validation;
+                record.long_score_ledger_validation =
+                    storedValidation
+                        .long_score_ledger_validation;
+                record.long_score_predictor_validation =
+                    storedValidation
+                        .long_score_predictor_validation;
+                record.source_of_truth = {
+                    index_key: LONG_HOOK_LIBRARY_INDEX_KEY,
+                    index_sha256: index.index_sha256,
+                    record_key: indexRow.record_key,
+                    record_artifact_sha256:
+                        indexRow.record_artifact_sha256,
+                    score_record_sha256:
+                        indexRow.score_record_sha256,
+                    ledger_sha256:
+                        indexRow.ledger_sha256,
+                    evidence_state:
+                        indexRow.evidence_state,
+                };
+                payload = Buffer.from(JSON.stringify(record));
+            } catch (error) {
+                if (error instanceof HttpRequestError) throw error;
+                console.warn('longquant hook ledger normalization:', error.message);
+                throw new HttpRequestError(
+                    409,
+                    error.message,
+                    'long_hook_library_record_integrity_failed'
+                );
+            }
+        }
         res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(b ? b.toString('utf8') : '{"error":"not found"}');
+        res.end(payload ? payload.toString('utf8') : '{"error":"not found"}');
         return;
     }
     const quantJob = pathname.match(/^\/api\/(shortsquant|longquant)\/jobs\/(j[a-z0-9]+)$/);
     if (quantJob && req.method === 'GET') {
-        await sendQuantJobStatus(res, quantJob[2], quantJob[1] === 'shortsquant' ? 'shorts' : 'longform');
+        try {
+            const namespace =
+                quantJob[1] === 'shortsquant'
+                    ? 'shorts'
+                    : 'longform';
+            const labScope = quantJob[1] === 'shortsquant'
+                ? await requireExperimentLabActivity(
+                    req,
+                    url,
+                    quantJob[2],
+                    [
+                        'hook-scored-from-link',
+                        'hook-upload-scored',
+                        'built-hook-scored',
+                        'storyboard-generated',
+                        'storyboard-panel-generated',
+                    ],
+                    { write: false }
+                )
+                : await experimentLabAccountScope(
+                    req,
+                    url,
+                    { write: false }
+                );
+            if (labScope && namespace !== 'shorts') {
+                throw new HttpRequestError(
+                    404,
+                    'This job is not part of the Experiment Lab workspace.',
+                    'experiment_lab_run_not_found'
+                );
+            }
+            const record = await quantJobGet(
+                quantJob[2],
+                namespace
+            );
+            if (
+                labScope
+                && !labScope.readOnly
+                && record
+                && ['done', 'error'].includes(record.status)
+            ) {
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type:
+                            labScope.workspace.activity.find(
+                                activity =>
+                                    activity.requestId
+                                    === quantJob[2]
+                            ).type,
+                        status:
+                            record.status === 'done'
+                                ? 'complete'
+                                : 'failed',
+                        requestId: quantJob[2],
+                        detail:
+                            record.status === 'error'
+                                ? record.error || 'Canonical job failed'
+                                : 'Canonical job complete',
+                        saved: false,
+                        ...(record.status === 'done'
+                            ? experimentLabJobActivityEvidence(record)
+                            : {}),
+                    }
+                );
+            }
+            await sendQuantJobStatus(
+                res,
+                quantJob[2],
+                namespace,
+                record
+            );
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'quant_job_status_failed',
+            }));
+        }
         return;
     }
     if (pathname === '/api/longquant/exp/score-title' && req.method === 'POST') {
@@ -4766,7 +12897,28 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const title = String(body.title || body.idea || '').slice(0, 500).trim();
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a title to embed"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            if (body.async) { const jobId = quantJobSubmit('score-title', () => longQuantScoreTitleText(title, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) {
+                const requestFingerprint = quantRequestFingerprint(
+                    'score-title',
+                    'longform',
+                    { title },
+                    await longQuantRequestScorerIdentity()
+                );
+                const jobId = quantJobSubmit(
+                    'score-title',
+                    () => longQuantScoreTitleText(title, true),
+                    'longform',
+                    quantRequestId(req),
+                    requestFingerprint
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    ok: true,
+                    jobId,
+                    requestFingerprint,
+                }));
+                return;
+            }
             const score = await longQuantScoreTitleText(title, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
@@ -4783,7 +12935,39 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!jpg) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"image not found"}'); return; }
             const title = String(body.title || '').slice(0, 500).trim();
             const idea = String(body.idea || title).slice(0, 500).trim();
-            if (body.async) { const jobId = quantJobSubmit('score-key', () => longQuantScoreThumbnail(jpg, title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) {
+                const requestFingerprint = quantRequestFingerprint(
+                    'score-key',
+                    'longform',
+                    {
+                        object_key: key,
+                        image_sha256:
+                            quantJobIdentity.sha256Buffer(jpg),
+                        title,
+                        idea,
+                    },
+                    await longQuantRequestScorerIdentity()
+                );
+                const jobId = quantJobSubmit(
+                    'score-key',
+                    () => longQuantScoreThumbnail(
+                        jpg,
+                        title,
+                        idea,
+                        true
+                    ),
+                    'longform',
+                    quantRequestId(req),
+                    requestFingerprint
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    ok: true,
+                    jobId,
+                    requestFingerprint,
+                }));
+                return;
+            }
             const score = await longQuantScoreThumbnail(jpg, title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
@@ -4791,9 +12975,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     if (pathname === '/api/longquant/grind/start' && req.method === 'POST') {
-        const body = await readBody(req);
-        const out = await longQuantCreateGrind(body);
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid: out.rid }));
+        try {
+            const body = await readBody(req);
+            const out = await longQuantCreateGrind(body);
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid: out.rid }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message || String(e) }));
+        }
         return;
     }
     if (pathname === '/api/longquant/grind/status' && req.method === 'GET') {
@@ -4946,11 +13135,35 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         let run = null;
         try { const b = await cloud.downloadFromR2(runKey); if (b) run = JSON.parse(b.toString('utf8')); } catch (e) {}
         if (!run) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"no run with that rid"}'); return; }
-        // the stop marker persists in R2 and force-stops any rid that carries it — clear it or nothing can restart
-        await cloud.deleteFromR2(`longform/grind/stop/${rid}`).catch(() => {});
-        // workers heartbeat every 20s, so 90s of silence = genuinely not running — don't block the restart
-        const freshRunning = run.status === 'running' && (Date.now() - (Number(run.ts) || 0)) < longQuantHeartbeatFreshMs();
-        if (_lqGrindActive.has(rid) || freshRunning) {
+        let leaseState;
+        try {
+            leaseState = await queueLeaseCoordinator.inspect(
+                QUEUE_LEASE_NAMES.LONG_GRIND,
+                rid
+            );
+        } catch (error) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error:
+                    'Long grind ownership could not be verified; '
+                    + 'resume failed closed without starting a worker',
+                code: error.code,
+            }));
+            return;
+        }
+        // The R2 lease is authoritative across Render processes. A timestamp
+        // is display telemetry only and cannot authorize another consumer.
+        if (
+            _lqGrindActive.has(rid)
+            || (leaseState && leaseState.state === 'active')
+        ) {
+            // Resume is also allowed to retract a pending stop request. It
+            // never starts a second worker while the current lease is active.
+            await cloud.deleteFromR2(
+                `longform/grind/stop/${rid}`
+            ).catch(() => {});
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, already: true })); return;
         }
         const reqPayload = longQuantRequestFromRun(run, rid);
@@ -4971,21 +13184,133 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         run.hours = reqPayload.hours;
         run.stoppedAt = null;
         run.ts = Date.now();
-        await cloud.uploadToR2(runKey, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
         const wantNow = body.now !== false;
         const forceLimit = Math.max(longQuantGrindWorkerLimit(), Math.min(8, parseInt(process.env.LONGQUANT_GRIND_FORCE_WORKERS || '6', 10) || 6));
-        if (wantNow && _lqGrindActive.size < forceLimit) {
-            // full control: attach a worker immediately instead of waiting for a queue slot
-            await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
-            _lqGrindActive.add(rid);
-            (async () => {
-                try { await longQuantGrindProcess(rid, reqPayload); }
-                catch (e) { console.warn('longquant forced grind err:', e.message); }
-                finally { _lqGrindActive.delete(rid); }
-            })();
-            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, started: true, run })); return;
+        let ownership = null;
+        try {
+            ownership = await queueLeaseCoordinator.acquire(
+                QUEUE_LEASE_NAMES.LONG_GRIND,
+                rid
+            );
+        } catch (error) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error:
+                    'Long grind ownership became uncertain; '
+                    + 'resume made no queue mutation',
+                code: error.code,
+            }));
+            return;
         }
-        await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(reqPayload)), 'application/json').catch(() => {});
+        if (!ownership) {
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                rid,
+                already: true,
+            }));
+            return;
+        }
+        try {
+            // Scheduling and immediate execution share one fenced critical
+            // section, so a racing Render instance cannot overwrite progress.
+            await ownership.mutate(
+                'clear Long grind stop for resume',
+                () => cloud.deleteFromR2(
+                    `longform/grind/stop/${rid}`
+                )
+            );
+            await ownership.mutate(
+                'write resumed Long grind run',
+                queueLeaseFence => cloud.uploadToR2(
+                    runKey,
+                    Buffer.from(JSON.stringify({
+                        ...run,
+                        queue_lease_fence:
+                            queueLeaseFence,
+                    })),
+                    'application/json'
+                )
+            );
+            if (wantNow && _lqGrindActive.size < forceLimit) {
+                await ownership.mutate(
+                    'consume forced Long grind request',
+                    () => cloud.deleteFromR2(
+                        `longform/grind/requests/${rid}.json`
+                    )
+                );
+                _lqGrindActive.add(rid);
+                (async () => {
+                    try {
+                        await longQuantGrindProcess(
+                            rid,
+                            reqPayload,
+                            ownership
+                        );
+                    } catch (error) {
+                        console.warn(
+                            'longquant forced grind failed closed:',
+                            rid,
+                            error.message
+                        );
+                    } finally {
+                        const released =
+                            await ownership.release();
+                        if (!released.released) {
+                            console.warn(
+                                'longquant forced grind lease was not released cleanly:',
+                                rid,
+                                released.reason
+                            );
+                        }
+                        _lqGrindActive.delete(rid);
+                    }
+                })();
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, started: true, run })); return;
+            }
+            await ownership.mutate(
+                'publish resumed Long grind request',
+                () => cloud.uploadToR2(
+                    `longform/grind/requests/${rid}.json`,
+                    Buffer.from(JSON.stringify(reqPayload)),
+                    'application/json'
+                )
+            );
+        } catch (error) {
+            const released = await ownership.release();
+            console.warn(
+                'longquant resume failed closed:',
+                rid,
+                error.message,
+                released.reason
+            );
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error:
+                    'Long grind resume could not be durably scheduled',
+                code: error.code || 'LONGQUANT_RESUME_FAILED',
+            }));
+            return;
+        }
+        const released = await ownership.release();
+        if (!released.released) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error:
+                    'Long grind request was queued, but ownership '
+                    + 'release could not be verified',
+                code: 'QUEUE_LEASE_RELEASE_UNCERTAIN',
+            }));
+            return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, queued: !progress.started, resuming: progress.started, run })); return;
     }
     const lqGrindImg = pathname.match(/^\/api\/longquant\/grind\/img\/([a-z0-9_]+)$/i);
@@ -5003,90 +13328,351 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const body = await readBody(req);
             let jpg = null;
-            if (typeof body.image === 'string' && body.image.indexOf('base64,') >= 0) jpg = Buffer.from(body.image.split('base64,').pop(), 'base64');
-            else if (typeof body.montageKey === 'string' && /^longform\/(guesses\/[\w-]+\/montages|grind\/montages|ideas\/[\w-]+\/montages|saved-thumbs)\/[\w-]+\.jpg$/i.test(body.montageKey)) jpg = await cloud.downloadFromR2(body.montageKey).catch(() => null);
-            if (!jpg) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
-            const out = await longQuantSaveThumbRecord({ ...body, jpg });
-            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id: out.id, rec: out.rec }));
+            if (
+                typeof body.image === 'string'
+                && body.image.indexOf('base64,') >= 0
+            ) {
+                jpg = Buffer.from(
+                    body.image.split('base64,').pop(),
+                    'base64'
+                );
+            } else if (
+                typeof body.montageKey === 'string'
+                && /^longform\/(guesses\/[\w-]+\/montages|grind\/montages|ideas\/[\w-]+\/montages|saved-thumbs)\/[\w-]+\.jpg$/i.test(
+                    body.montageKey
+                )
+            ) {
+                jpg = await cloud.downloadFromR2(body.montageKey);
+            }
+            if (!jpg || jpg.length < 100) {
+                throw new Error('no image');
+            }
+            const saveRunner = async () => {
+                const out = await longQuantSaveThumbRecord({ ...body, jpg });
+                return { ok: true, id: out.id, rec: out.rec };
+            };
+            if (body.async) {
+                const requestBodyIdentity = { ...body };
+                delete requestBodyIdentity.image;
+                delete requestBodyIdentity.async;
+                const requestFingerprint = quantRequestFingerprint(
+                    'thumb-save',
+                    'longform',
+                    {
+                        image_sha256:
+                            quantJobIdentity.sha256Buffer(jpg),
+                        request_body_sha256: sha256Bytes(
+                            canonicalJsonBytes(requestBodyIdentity)
+                        ),
+                    },
+                    await longQuantRequestScorerIdentity()
+                );
+                const jobId = quantJobSubmit(
+                    'thumb-save',
+                    saveRunner,
+                    'longform',
+                    quantRequestId(req),
+                    requestFingerprint
+                );
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    ok: true,
+                    jobId,
+                    requestFingerprint,
+                }));
+                return;
+            }
+            const out = await saveRunner();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/longquant/thumbs/list' && req.method === 'GET') {
-        let b = await cloud.downloadFromR2('longform/saved-thumbs/index.json').catch(() => null);
-        if (b) {
-            try {
-                const idx = JSON.parse(b.toString('utf8'));
-                if (Array.isArray(idx.thumbs)) {
-                    const recent = idx.thumbs.slice(-120);
-                    await Promise.all(recent.map(async t => {
-                        if (t && t.id && (!(t.channels && t.emb_preview) || !t.input_manifest)) {
-                            const rb = await cloud.downloadFromR2(`longform/saved-thumbs/${t.id}.json`).catch(() => null);
-                            if (rb) {
-                                const rec = JSON.parse(rb.toString('utf8'));
-                                t.score = t.score || rec.score || null;
-                                t.metrics = t.metrics || rec.metrics || (rec.score && rec.score.metrics) || null;
-                                t.channels = t.channels || rec.channels || (rec.score && rec.score.channels) || null;
-                                t.emb_preview = t.emb_preview || rec.emb_preview || (rec.score && rec.score.emb_preview) || null;
-                                t.input_manifest = t.input_manifest || rec.input_manifest || (rec.score && rec.score.input_manifest) || null;
-                            }
-                        }
-                        if (t && t.score && !t.score.error) {
-                            t.score = longQuantPublicScore(t.score);
-                            t.pctile = t.score.pctile;
-                            t.pct100 = longQuantPct100(t.score.pctile);
-                            t.metrics = t.score.metrics;
-                            t.channels = t.score.channels || t.channels || null;
-                            t.emb_preview = t.score.emb_preview || t.emb_preview || null;
-                            t.input_manifest = t.score.input_manifest;
-                        }
-                    }));
-                    b = Buffer.from(JSON.stringify(idx));
+        try {
+            const indexBundle =
+                await readLongSavedThumbnailIndex();
+            const canonicalRows = indexBundle.index.rows;
+            const legacyRows = indexBundle.index.legacy_unbound;
+            const recentCanonical = canonicalRows.slice(-120);
+            const canonicalResults = await longQuantMapLimit(
+                recentCanonical,
+                8,
+                async row => {
+                    try {
+                        const pair =
+                            await readVerifiedLongSavedThumbnailPair(
+                                row.id,
+                                indexBundle
+                            );
+                        return longSavedThumbnailRecord
+                            .displayRecord(pair.record);
+                    } catch (error) {
+                        return {
+                            id: row.id,
+                            savedAt: row.saved_at || null,
+                            title: 'Invalid canonical saved thumbnail',
+                            prompt: '',
+                            sourceVideo: null,
+                            score: null,
+                            integrity: {
+                                valid: false,
+                                state: 'canonical_invalid',
+                                errors: [String(
+                                    error && error.message || error
+                                )],
+                            },
+                        };
+                    }
                 }
-            } catch (e) {}
+            );
+            const thumbs = canonicalResults;
+            for (const row of legacyRows.slice(-120)) {
+                if (!row || !row.id) continue;
+                thumbs.push({
+                    id: row.id,
+                    savedAt: row.savedAt || null,
+                    title: row.title || 'Legacy saved thumbnail',
+                    prompt: row.prompt || '',
+                    sourceVideo: row.sourceVideo || null,
+                    score: null,
+                    integrity: {
+                        valid: false,
+                        state: 'legacy_unbound_evidence',
+                        note: (
+                            'This historical row has not yet been '
+                            + 'cryptographically rebound to its JPEG and '
+                            + 'exact scorer input.'
+                        ),
+                    },
+                });
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({
+                schema: longSavedThumbnailRecord.INDEX_SCHEMA,
+                thumbs,
+                integrity: {
+                    canonical: thumbs.filter(
+                        row => row.integrity
+                            && row.integrity.valid === true
+                    ).length,
+                    legacy_unbound: legacyRows.length,
+                    canonical_invalid: canonicalResults.filter(
+                        row => row.integrity
+                            && row.integrity.state
+                                === 'canonical_invalid'
+                    ).length,
+                },
+                source_of_truth: {
+                    index_key: indexBundle.key,
+                    index_sha256:
+                        indexBundle.index.index_sha256,
+                    score_authority:
+                        'record.score.long_score_ledger',
+                },
+            }));
+        } catch (e) {
+            throw e;
         }
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(b ? b.toString('utf8') : '{"thumbs":[]}'); return;
+        return;
     }
     const ltDetail = pathname.match(/^\/api\/longquant\/thumbs\/detail\/([a-z0-9]{1,32})$/i);
     if (ltDetail && req.method === 'GET') {
-        let b = await cloud.downloadFromR2(`longform/saved-thumbs/${ltDetail[1]}.json`).catch(() => null);
-        if (b) {
-            try {
-                const rec = JSON.parse(b.toString('utf8'));
-                if (rec.score && !rec.score.error) {
-                    rec.score = longQuantPublicScore(rec.score);
-                    rec.pctile = rec.score.pctile;
-                    rec.pct100 = longQuantPct100(rec.score.pctile);
-                    rec.metrics = rec.score.metrics;
-                    rec.channels = rec.score.channels || rec.channels || null;
-                    rec.emb_preview = rec.score.emb_preview || rec.emb_preview || null;
-                    rec.input_manifest = rec.score.input_manifest;
-                }
-                b = Buffer.from(JSON.stringify(rec));
-            } catch (e) {}
+        try {
+            const pair = await readVerifiedLongSavedThumbnailPair(
+                ltDetail[1]
+            );
+            if (pair.legacy) {
+                res.writeHead(409, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
+                });
+                res.end(JSON.stringify({
+                    id: pair.legacy.id,
+                    title: pair.legacy.title || '',
+                    prompt: pair.legacy.prompt || '',
+                    sourceVideo: pair.legacy.sourceVideo || null,
+                    score: null,
+                    integrity: {
+                        valid: false,
+                        state: 'legacy_unbound_evidence',
+                    },
+                    error: (
+                        'Saved thumbnail evidence is historical and '
+                        + 'unbound. Re-score the exact JPEG before using '
+                        + 'it as quantitative evidence.'
+                    ),
+                    code: 'long_saved_thumbnail_legacy_unbound',
+                }));
+                return;
+            }
+            if (!pair.row) {
+                throw new HttpRequestError(
+                    404,
+                    'Saved thumbnail is not present in the ledger index.',
+                    'long_saved_thumbnail_not_indexed'
+                );
+            }
+            const display =
+                longSavedThumbnailRecord.displayRecord(pair.record);
+            display.source_of_truth = {
+                index_key: pair.key,
+                index_sha256: pair.index.index_sha256,
+                record_key: pair.row.record_key,
+                record_content_sha256:
+                    pair.row.record_content_sha256,
+                score_ledger_sha256: pair.row.ledger_sha256,
+            };
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+            });
+            res.end(JSON.stringify(display));
+        } catch (e) {
+            throw e;
         }
-        res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(b ? b.toString('utf8') : '{}'); return;
+        return;
     }
     if (pathname === '/api/longquant/thumbs/delete' && req.method === 'POST') {
         try {
-            const body = await readBody(req); const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
-            if (id) {
-                await cloud.deleteFromR2(`longform/saved-thumbs/${id}.jpg`).catch(() => {});
-                await cloud.deleteFromR2(`longform/saved-thumbs/${id}.json`).catch(() => {});
-                let idx = { thumbs: [] };
-                try { const ib = await cloud.downloadFromR2('longform/saved-thumbs/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
-                idx.thumbs = (idx.thumbs || []).filter(t => t.id !== id);
-                await cloud.uploadToR2('longform/saved-thumbs/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+            const body = await readBody(req);
+            const id = String(body.id || '')
+                .replace(/[^a-z0-9]/gi, '');
+            if (!id) {
+                res.writeHead(400, {
+                    'Content-Type': 'application/json',
+                });
+                res.end('{"error":"saved thumbnail id is required"}');
+                return;
+            }
+            let removedCanonical = null;
+            let removedLegacy = false;
+            await updateLongSavedThumbnailIndex(index => {
+                removedCanonical = index.rows.find(
+                    row => row && row.id === id
+                ) || null;
+                removedLegacy = index.legacy_unbound.some(
+                    row => row && row.id === id
+                );
+                index.rows = index.rows.filter(
+                    row => row && row.id !== id
+                );
+                index.legacy_unbound = index.legacy_unbound.filter(
+                    row => row && row.id !== id
+                );
+            });
+            if (removedCanonical) {
+                await cloud.deleteFromR2(
+                    removedCanonical.record_key
+                ).catch(() => {});
+            }
+            if (removedLegacy) {
+                await cloud.deleteFromR2(
+                    `longform/saved-thumbs/${id}.json`
+                ).catch(() => {});
+                await cloud.deleteFromR2(
+                    `longform/saved-thumbs/${id}.jpg`
+                ).catch(() => {});
             }
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}');
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    const ltMedia = pathname.match(
+        /^\/api\/longquant\/thumbs\/media\/([a-f0-9]{64})$/
+    );
+    if (ltMedia && (req.method === 'GET' || req.method === 'HEAD')) {
+        const sha256 = ltMedia[1];
+        const key =
+            `longform/saved-thumbs/media/by-sha256/${sha256}.jpg`;
+        const bytes = await cloud.downloadFromR2(key).catch(() => null);
+        if (!bytes) {
+            throw new HttpRequestError(
+                404,
+                'Saved thumbnail media is missing.',
+                'long_saved_thumbnail_media_not_found'
+            );
+        }
+        const calculated = require('crypto')
+            .createHash('sha256')
+            .update(bytes)
+            .digest('hex');
+        if (
+            calculated !== sha256
+            || bytes.length < 4
+            || bytes[0] !== 0xff
+            || bytes[1] !== 0xd8
+            || bytes[bytes.length - 2] !== 0xff
+            || bytes[bytes.length - 1] !== 0xd9
+        ) {
+            throw new HttpRequestError(
+                409,
+                'Saved thumbnail media failed its content-addressed identity.',
+                'long_saved_thumbnail_media_integrity_failed'
+            );
+        }
+        res.writeHead(200, {
+            'Content-Type': 'image/jpeg',
+            'Content-Length': bytes.length,
+            'Cache-Control':
+                'public, max-age=31536000, immutable',
+            'X-Content-SHA256': sha256,
+            'X-Evidence-State': 'canonical-bound',
+        });
+        if (req.method === 'HEAD') res.end();
+        else res.end(bytes);
+        return;
+    }
     const ltImg = pathname.match(/^\/api\/longquant\/thumbs\/img\/([a-z0-9]{1,32})$/);
     if (ltImg && (req.method === 'GET' || req.method === 'HEAD')) {
-        if (await serveR2ObjectForRequest(req, res, `longform/saved-thumbs/${ltImg[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
-        res.writeHead(404); res.end(); return;
+        try {
+            const pair = await readVerifiedLongSavedThumbnailPair(
+                ltImg[1]
+            );
+            let bytes;
+            let evidenceState;
+            let cacheControl;
+            if (pair.row) {
+                res.writeHead(308, {
+                    Location:
+                        `${longSavedThumbnailRecord.MEDIA_ROUTE_PREFIX}/`
+                        + pair.row.thumbnail_sha256,
+                    'Cache-Control':
+                        'public, max-age=31536000, immutable',
+                });
+                res.end();
+                return;
+            } else if (pair.legacy) {
+                bytes = await cloud.downloadFromR2(
+                    `longform/saved-thumbs/${ltImg[1]}.jpg`
+                );
+                evidenceState = 'legacy-unbound';
+                cacheControl = 'public, max-age=3600';
+            } else {
+                throw new HttpRequestError(
+                    404,
+                    'Saved thumbnail is not present in the ledger index.',
+                    'long_saved_thumbnail_not_indexed'
+                );
+            }
+            if (!bytes) {
+                throw new HttpRequestError(
+                    404,
+                    'Saved thumbnail media is missing.',
+                    'long_saved_thumbnail_media_not_found'
+                );
+            }
+            res.writeHead(200, {
+                'Content-Type': 'image/jpeg',
+                'Content-Length': bytes.length,
+                'Cache-Control': cacheControl,
+                'X-Evidence-State': evidenceState,
+            });
+            if (req.method === 'HEAD') res.end();
+            else res.end(bytes);
+        } catch (error) {
+            throw error;
+        }
+        return;
     }
     // ── 💡 Ideas: idea-model training runs (longform/ideas/idea<N>/) ──
     if (pathname === '/api/longquant/ideas/status' && req.method === 'GET') {
@@ -5113,9 +13699,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2Gz(req, res, `longform/ideas/${run}/index.jsonl`, 8e6, { error: 'no run' }, 404); return;
     }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
-    if (rawMon && req.method === 'GET') {
+    if (rawMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `raw/montage/${rawMon[1]}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            if (await serveR2ObjectForRequest(req, res, `raw/montage/${rawMon[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' })) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -5147,10 +13733,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     const hookMon = pathname.match(/^\/api\/hooks\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
-    if (hookMon && req.method === 'GET') {
+    if (hookMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
             const base = (hookMon[1].indexOf('grpo') === 0 || hookMon[1].indexOf('discover') === 0) ? `hooks/grpo/${hookMon[1]}/montages` : `hooks/runs/${hookMon[1]}/montages`;
-            if (await redirectR2Object(res, `${base}/${hookMon[2]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            if (await serveR2ObjectForRequest(req, res, `${base}/${hookMon[2]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=3600' })) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -5175,6 +13761,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // ── 🎯 Grind endpoints: start / stop / poll / images / full score / recent runs ──
     if (pathname === '/api/hooks/grind' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 500);
             if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write the hook/idea first — it grounds every variant' })); return; }
@@ -5184,51 +13775,291 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 if (pend.length) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'a grind is already queued' })); return; }
             } catch (e) {}
             const rid = 'gr' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+            const metric = ['keep', 'ret5', 'views', 'gt10M'].includes(body.metric)
+                ? body.metric
+                : 'keep';
+            const requestedCoordinate = String(body.coordinateId || '');
+            const coordinateId = /^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/.test(requestedCoordinate)
+                && requestedCoordinate.endsWith(`.${metric}`)
+                ? requestedCoordinate
+                : `shorts.stored.together.${metric}`;
+            const thresholdPercentile = Math.max(
+                50,
+                Math.min(99, Number.parseInt(body.threshold, 10) || 82)
+            );
+            const maxAttempts = Math.max(
+                1,
+                Math.min(150, Number.parseInt(body.maxAttempts, 10) || 80)
+            );
+            const hours = Math.min(
+                8,
+                Math.max(0.25, Number.parseFloat(body.hours) || 3)
+            );
             await cloud.uploadToR2(`hooks/grind/requests/${rid}.json`, Buffer.from(JSON.stringify({
-                premise, threshold: body.threshold, metric: body.metric, hours: body.hours, maxAttempts: body.maxAttempts, ts: Date.now() })), 'application/json');
-            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ rid }));
+                schema: 'shorts-grind-request-v2',
+                schema_version: 2,
+                premise,
+                threshold_coordinate_id: coordinateId,
+                threshold_percentile_0_100: thresholdPercentile,
+                hours,
+                max_attempts: maxAttempts,
+                creator_profile:
+                    safeCreatorProfile(body.creatorProfile) || null,
+                created_at_ms: Date.now(),
+            })), 'application/json');
+            await recordExperimentLabActivity(
+                labScope,
+                {
+                    type: 'shorts-grind',
+                    status: 'queued',
+                    title: premise,
+                    requestId: rid,
+                    detail:
+                        `${coordinateId} · target ${thresholdPercentile}th `
+                        + `· up to ${maxAttempts} attempts`,
+                    saved: false,
+                }
+            );
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                rid,
+                threshold_coordinate_id: coordinateId,
+                threshold_percentile_0_100: thresholdPercentile,
+            }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     const grindStop = pathname.match(/^\/api\/hooks\/grind\/stop\/([a-z0-9]{1,32})$/);
     if (grindStop && req.method === 'POST') {
-        await cloud.uploadToR2(`hooks/grind/stop/${grindStop[1]}`, Buffer.from('1'), 'text/plain').catch(() => {});
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+        try {
+            const labScope = await requireExperimentLabActivity(
+                req,
+                url,
+                grindStop[1],
+                ['shorts-grind'],
+                { write: true }
+            );
+            await cloud.uploadToR2(
+                `hooks/grind/stop/${grindStop[1]}`,
+                Buffer.from('1'),
+                'text/plain'
+            );
+            await recordExperimentLabActivity(
+                labScope,
+                {
+                    type: 'shorts-grind',
+                    status: 'stop-requested',
+                    title: 'Shorts grind',
+                    requestId: grindStop[1],
+                    detail: 'Stop requested',
+                    saved: false,
+                }
+            );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'shorts_grind_stop_failed',
+            }));
+        }
         return;
     }
     const grindRun = pathname.match(/^\/api\/hooks\/grind\/run\/([a-z0-9]{1,32})$/);
     if (grindRun && req.method === 'GET') {
         try {
+            const labScope = await requireExperimentLabActivity(
+                req,
+                url,
+                grindRun[1],
+                ['shorts-grind'],
+                { write: false }
+            );
             const b = await cloud.downloadFromR2(`hooks/grind/runs/${grindRun[1]}.json`);
-            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(b || JSON.stringify({ error: 'not started yet' }));
+            if (!b) {
+                res.writeHead(404, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
+                });
+                res.end(JSON.stringify({ error: 'not started yet' }));
+                return;
+            }
+            const stored = JSON.parse(b.toString('utf8'));
+            const run = shortsGrindRunForResponse(stored);
+            if (labScope && !labScope.readOnly) {
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'shorts-grind',
+                        status: run.status || 'running',
+                        title:
+                            run.premise
+                            || 'Shorts grind',
+                        requestId: grindRun[1],
+                        detail:
+                            `${run.attempt_count || 0} attempts · `
+                            + `best ${run.best_score == null ? 'unscored' : `${run.best_score}th`}`,
+                        saved: false,
+                    }
+                );
+            }
+            res.writeHead(
+                run.run_validation.valid ? 200 : 409,
+                {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
+                }
+            );
+            res.end(JSON.stringify(run));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     const grindMon = pathname.match(/^\/api\/hooks\/grind\/montage\/([\w-]{1,48})$/);
-    if (grindMon && req.method === 'GET') {
+    if (grindMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `hooks/grind/montages/${grindMon[1]}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            const runId = String(grindMon[1]).split('_')[0];
+            await requireExperimentLabActivity(
+                req,
+                url,
+                runId,
+                ['shorts-grind'],
+                { write: false }
+            );
+            if (await serveR2ObjectForRequest(req, res, `hooks/grind/montages/${grindMon[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' })) return;
             res.writeHead(404); res.end();
-        } catch (e) { res.writeHead(500); res.end(); }
+        } catch (error) {
+            res.writeHead(error.statusCode || 500);
+            res.end();
+        }
         return;
     }
     const grindScore = pathname.match(/^\/api\/hooks\/grind\/score\/([\w-]{1,48})$/);
     if (grindScore && req.method === 'GET') {
         try {
-            const b = await cloud.downloadFromR2(`hooks/grind/scores/${grindScore[1]}.json`);
-            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(b || JSON.stringify({ error: 'no score' }));
+            const runId = String(grindScore[1]).split('_')[0];
+            await requireExperimentLabActivity(
+                req,
+                url,
+                runId,
+                ['shorts-grind'],
+                { write: false }
+            );
+            const scoreKey = `hooks/grind/scores/${grindScore[1]}.json`;
+            const montageKey =
+                `hooks/grind/montages/${grindScore[1]}.jpg`;
+            const [b, montageBytes] = await Promise.all([
+                cloud.downloadFromR2(scoreKey),
+                cloud.downloadFromR2(montageKey),
+            ]);
+            if (!b || !montageBytes) {
+                res.writeHead(404, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
+                });
+                res.end(JSON.stringify({
+                    error: 'canonical score evidence is incomplete',
+                }));
+                return;
+            }
+            const score = withPersistedShortsLedgerValidation(
+                JSON.parse(b.toString('utf8'))
+            );
+            const inputValidation =
+                shortsScoreLedger.validateShortsInputManifest(
+                    score,
+                    { montageBytes }
+                );
+            const valid = (
+                score.score_record_validation
+                && score.score_record_validation.valid === true
+                && score.score_ledger_validation
+                && score.score_ledger_validation.valid === true
+                && inputValidation.valid
+            );
+            if (!valid) {
+                res.writeHead(409, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
+                });
+                res.end(JSON.stringify({
+                    error: 'saved grind score failed canonical integrity validation',
+                    code: 'grind_score_integrity_error',
+                    score_record_validation:
+                        score.score_record_validation,
+                    score_ledger_validation:
+                        score.score_ledger_validation,
+                    input_manifest_validation: inputValidation,
+                }));
+                return;
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+            });
+            res.end(JSON.stringify({
+                ...score,
+                input_manifest_validation: inputValidation,
+            }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/hooks/grind/runs' && req.method === 'GET') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const labWorkspace = labScope
+                ? await experimentLabWorkspaceForScope(
+                    labScope
+                )
+                : null;
+            const allowedRunIds = labWorkspace
+                ? new Set(
+                    labWorkspace.activity
+                        .filter(activity => (
+                            activity.type === 'shorts-grind'
+                            && activity.requestId
+                        ))
+                        .map(activity => activity.requestId)
+                )
+                : null;
             let keys = []; try { keys = ((await cloud.listR2Keys('hooks/grind/runs/')) || []).filter(k => k.endsWith('.json')); } catch (e) {}
+            if (allowedRunIds) {
+                keys = keys.filter(key => (
+                    allowedRunIds.has(
+                        key.split('/').pop().replace('.json', '')
+                    )
+                ));
+            }
             keys.sort();   // rid embeds a timestamp → lexicographic ≈ chronological
             const out = [];
             for (const k of keys.slice(-6).reverse()) {
-                try { const b = await cloud.downloadFromR2(k); const j = JSON.parse(b.toString('utf8')); out.push({ rid: j.rid, premise: j.premise, status: j.status, n: j.n, best: j.best, threshold: j.threshold, metric: j.metric, ts: j.ts }); } catch (e) {}
+                try {
+                    const b = await cloud.downloadFromR2(k);
+                    const j = shortsGrindRunForResponse(
+                        JSON.parse(b.toString('utf8'))
+                    );
+                    out.push({
+                        rid: j.rid,
+                        premise: j.premise,
+                        status: j.status,
+                        attempt_count: j.attempt_count,
+                        best_score: j.best_score,
+                        threshold_coordinate_id:
+                            j.threshold_coordinate_id,
+                        threshold_percentile_0_100:
+                            j.threshold_percentile_0_100,
+                        updated_at_ms: j.updated_at_ms,
+                        run_validation: j.run_validation,
+                    });
+                } catch (e) {}
             }
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify({ runs: out }));
@@ -5237,6 +14068,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/hooks/generate' && req.method === 'POST') {
         try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
             const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 400);
             const invent = !!body.invent || !premise;
@@ -5246,11 +14082,804 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             try { const pend = (await cloud.listR2Keys('hooks/grpo/requests/')) || []; if (pend.filter(k => k.endsWith('.json')).length >= 6) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — a few generations are already queued, try again in a moment' })); return; } } catch (e) {}
             const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
             await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, invent, ts: Date.now() })), 'application/json');
+            if (labScope) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        experimentLabWorkspace.addActivity(
+                            workspace,
+                            {
+                                type: 'hook-generated',
+                                status: 'started',
+                                title:
+                                    premise
+                                    || 'Invented Shorts hook',
+                                requestId: rid,
+                                detail:
+                                    `${count} candidate${count === 1 ? '' : 's'}`,
+                                input: {
+                                    kind: invent
+                                        ? 'automatic-invention'
+                                        : 'seeded-idea',
+                                    premise: premise || null,
+                                    candidateCount: count,
+                                },
+                                saved: false,
+                            }
+                        );
+                    }
+                );
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ rid, premise, count }));   // poll status + group/demo/<rid> for the result
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    const storyboardMediaMatch = pathname.match(
+        /^\/api\/storyboards\/media\/([a-f0-9]{64})\.(jpg|png|webp)$/
+    );
+    if (storyboardMediaMatch && req.method === 'GET') {
+        const mediaType = storyboardMediaMatch[2] === 'png'
+            ? 'image/png'
+            : storyboardMediaMatch[2] === 'webp'
+                ? 'image/webp'
+                : 'image/jpeg';
+        const sha256 = storyboardMediaMatch[1];
+        const key =
+            `${STORYBOARD_MEDIA_ROOT}${sha256}.${storyboardMediaMatch[2]}`;
+        try {
+            const stored = await cloud.getR2SmallObject(
+                key,
+                { maxBytes: STORYBOARD_MAX_MEDIA_BYTES }
+            );
+            const bytes = stored && stored.body;
+            if (!bytes || sha256Bytes(bytes) !== sha256) {
+                throw new HttpRequestError(
+                    409,
+                    'Stored storyboard media failed its content hash.',
+                    'storyboard_media_integrity'
+                );
+            }
+            const headers = {
+                'Content-Type': mediaType,
+                'Content-Length': String(bytes.length),
+                'Cache-Control':
+                    'private, max-age=31536000, immutable',
+                'ETag': `"${sha256}"`,
+            };
+            if (req.headers['if-none-match'] === headers.ETag) {
+                res.writeHead(304, headers);
+                res.end();
+            } else {
+                res.writeHead(200, headers);
+                res.end(bytes);
+            }
+        } catch (error) {
+            const missing = cloud.isMissingR2ObjectError(error);
+            const status = missing
+                ? 404
+                : error.statusCode || 503;
+            res.writeHead(status, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: missing
+                    ? 'storyboard media not found'
+                    : error.message,
+                code: missing
+                    ? 'storyboard_media_not_found'
+                    : error.code || 'storyboard_media_read_failed',
+            }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/storyboards' && req.method === 'GET') {
+        try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: false }
+            );
+            const limit = Math.max(
+                1,
+                Math.min(100, Number(url.searchParams.get('limit')) || 40)
+            );
+            const offset = Math.max(
+                0,
+                Math.floor(Number(
+                    url.searchParams.get('offset')
+                ) || 0)
+            );
+            const index = await readStoryboardIndex();
+            let rows = index.storyboards;
+            let folders = [];
+            let workspaceSource = null;
+            if (labScope) {
+                const workspace =
+                    await experimentLabWorkspaceForScope(
+                        labScope
+                    );
+                const collection =
+                    workspace.collections.storyboards;
+                const references = new Map(
+                    collection.items.map(item => [
+                        item.id,
+                        item,
+                    ])
+                );
+                rows = rows
+                    .filter(row => references.has(row.id))
+                    .map(row => ({
+                        ...row,
+                        folder:
+                            references.get(row.id).folderId,
+                        workspace_saved_at:
+                            references.get(row.id).savedAt,
+                    }));
+                folders = collection.folders;
+                workspaceSource = {
+                    schema: workspace.schema,
+                    account: workspace.account,
+                    readOnly: labScope.readOnly,
+                    workspace_sha256:
+                        workspace.workspace_sha256,
+                };
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                schema: storyboardContract.INDEX_SCHEMA,
+                storyboards: rows.slice(
+                    offset,
+                    offset + limit
+                ),
+                total: rows.length,
+                offset,
+                limit,
+                updatedAt: index.updatedAt,
+                folders,
+                workspace: workspaceSource,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_list_failed',
+            }));
+        }
+        return;
+    }
+
+    const storyboardRecordMatch = pathname.match(
+        /^\/api\/storyboards\/(sb[a-z0-9]{10,40})$/
+    );
+    if (storyboardRecordMatch && req.method === 'GET') {
+        try {
+            await requireExperimentLabItem(
+                req,
+                url,
+                'storyboards',
+                storyboardRecordMatch[1],
+                { write: false }
+            );
+            const record = await readStoryboardRecord(
+                storyboardRecordMatch[1]
+            );
+            if (!record) {
+                res.writeHead(404, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({
+                    error: 'storyboard not found',
+                    code: 'storyboard_not_found',
+                }));
+                return;
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify(storyboardClientRecord(record)));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_load_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/storyboards/montage'
+        && req.method === 'POST'
+    ) {
+        try {
+            const body = await readBody(req, 32 * 1024 * 1024);
+            if (
+                !Array.isArray(body.panels)
+                || body.panels.length !== storyboardContract.PANEL_COUNT
+            ) {
+                throw new HttpRequestError(
+                    422,
+                    'Exactly five panels are required to assemble a montage.',
+                    'storyboard_montage_panel_count'
+                );
+            }
+            const panels = [];
+            for (
+                let index = 0;
+                index < storyboardContract.PANEL_COUNT;
+                index++
+            ) {
+                panels.push({
+                    media: await readStoryboardMediaReference(
+                        body.panels[index],
+                        `frame ${index + 1}`
+                    ),
+                });
+            }
+            const montage = await canonicalStoryboardMontage(panels);
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                image: montage.media.url,
+                media: montage.media,
+                panelMediaSha256s: montage.panelMediaSha256s,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_montage_failed',
+            }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/storyboards/save' && req.method === 'POST') {
+        try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = await readBody(req, 32 * 1024 * 1024);
+            const suppliedId = String(body.id || '');
+            const id = suppliedId || storyboardId();
+            if (!storyboardContract.ID_PATTERN.test(id)) {
+                throw new HttpRequestError(
+                    400,
+                    'Storyboard id is invalid.',
+                    'storyboard_id_invalid'
+                );
+            }
+            if (suppliedId && labScope) {
+                await requireExperimentLabItem(
+                    req,
+                    url,
+                    'storyboards',
+                    suppliedId,
+                    { write: true }
+                );
+            }
+            const currentRevision = suppliedId
+                ? await readStoryboardManifestRevision(id)
+                : null;
+            if (suppliedId && !currentRevision) {
+                throw new HttpRequestError(
+                    404,
+                    'Storyboard no longer exists.',
+                    'storyboard_not_found'
+                );
+            }
+            const current = currentRevision && currentRevision.record;
+            const expectedRevision = String(body.expectedRevision || '');
+            if (
+                current
+                && (
+                    !expectedRevision
+                    || expectedRevision !== current.revision
+                )
+            ) {
+                throw new HttpRequestError(
+                    409,
+                    'This storyboard changed in another session. Reload it '
+                        + 'before saving another revision.',
+                    'storyboard_revision_conflict'
+                );
+            }
+            const panels = [];
+            for (
+                let index = 0;
+                index < storyboardContract.PANEL_COUNT;
+                index++
+            ) {
+                panels.push(await persistedStoryboardPanel(
+                    body.panels && body.panels[index],
+                    index
+                ));
+            }
+            const references = [];
+            let referenceBytes = 0;
+            const incomingReferences = Array.isArray(body.references)
+                ? body.references.slice(0, 8)
+                : [];
+            for (
+                let index = 0;
+                index < incomingReferences.length;
+                index++
+            ) {
+                const reference = await persistedStoryboardReference(
+                    incomingReferences[index],
+                    index
+                );
+                referenceBytes += Number(
+                    reference.media
+                    && reference.media.byte_length
+                    || 0
+                );
+                if (
+                    referenceBytes
+                    > STORYBOARD_MAX_REFERENCE_TOTAL_BYTES
+                ) {
+                    throw new HttpRequestError(
+                        413,
+                        'Storyboard references exceed the 24 MB combined limit.',
+                        'storyboard_reference_total_size'
+                    );
+                }
+                references.push(reference);
+            }
+            const now = Date.now();
+            const score = await canonicalStoryboardScore(
+                body.score,
+                panels,
+                body.hookText
+            );
+            const record = storyboardContract.bindDocument({
+                id,
+                parentRevision: current && current.revision || null,
+                name: body.name,
+                brief: body.brief,
+                hookText: body.hookText,
+                model: STORY_MODELS[body.model]
+                    ? body.model
+                    : 'flux-2-pro',
+                generationMode: body.generationMode,
+                selectedPanel: body.selectedPanel,
+                composite: await optionalStoryboardMedia(
+                    body.composite,
+                    'storyboard sheet'
+                ),
+                references,
+                panels,
+                score,
+                savedHookId: body.savedHookId,
+                createdAt: current && current.createdAt || now,
+                updatedAt: now,
+            });
+            const validation = storyboardContract.validateDocument(record);
+            if (!validation.valid) {
+                throw new HttpRequestError(
+                    422,
+                    'Storyboard document is invalid: '
+                        + validation.errors.join('; '),
+                    'storyboard_document_invalid'
+                );
+            }
+            await writeImmutableStoryboardRevision(record);
+            const manifestKey =
+                `${STORYBOARD_MANIFEST_ROOT}${id}.json`;
+            const manifestBytes = canonicalJsonBytes(record);
+            try {
+                await cloud.putR2SmallObjectConditional(
+                    manifestKey,
+                    manifestBytes,
+                    currentRevision
+                        ? {
+                            ifMatch: currentRevision.etag,
+                            contentType: 'application/json',
+                        }
+                        : {
+                            ifNoneMatch: '*',
+                            contentType: 'application/json',
+                        }
+                );
+            } catch (error) {
+                if (cloud.isR2PreconditionFailedError(error)) {
+                    throw new HttpRequestError(
+                        409,
+                        'This storyboard changed while it was being saved. '
+                            + 'Reload it and try again.',
+                        'storyboard_revision_conflict'
+                    );
+                }
+                throw error;
+            }
+            const verified = await readStoryboardRecord(id);
+            if (!verified || verified.revision !== record.revision) {
+                throw new Error(
+                    'storyboard manifest failed read-after-write validation'
+                );
+            }
+            let indexPending = false;
+            try {
+                await repairStoryboardIndexEntry(id);
+            } catch (error) {
+                indexPending = true;
+                await queueStoryboardIndexRepair(record).catch(
+                    markerError => {
+                        console.error(
+                            '[storyboard] index repair marker failed:',
+                            id,
+                            markerError.message || markerError
+                        );
+                    }
+                );
+                console.warn(
+                    '[storyboard] manifest committed; index repair queued:',
+                    id,
+                    error.message || error
+                );
+                setTimeout(() => {
+                    repairStoryboardIndexEntry(id).catch(repairError => {
+                        console.error(
+                            '[storyboard] index repair failed:',
+                            id,
+                            repairError.message || repairError
+                        );
+                    });
+                }, 250);
+            }
+            await attachExperimentLabItem(
+                labScope,
+                'storyboards',
+                id,
+                {
+                    type: 'storyboard-saved',
+                    title:
+                        record.name
+                        || record.hookText
+                        || 'Storyboard',
+                    requestId:
+                        String(
+                            req.headers['x-quant-request-id']
+                            || ''
+                        ) || null,
+                    detail:
+                        `${record.complete ? 'complete' : 'draft'} `
+                        + `· ${record.model}`,
+                    input: {
+                        kind: 'storyboard-workbench',
+                        brief: record.brief || null,
+                        hookText: record.hookText || null,
+                        model: record.model,
+                        generationMode: record.generationMode,
+                        panelCount: Array.isArray(record.panels)
+                            ? record.panels.length
+                            : 0,
+                    },
+                    output: {
+                        kind: 'saved-storyboard',
+                        artifactId: id,
+                        complete: record.complete,
+                        scored: !!record.score,
+                        savedHookId: record.savedHookId || null,
+                        revision: record.revision,
+                    },
+                }
+            );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                id,
+                revision: record.revision,
+                complete: record.complete,
+                indexPending,
+                scoreLedgerSha256:
+                    record.score
+                    && record.score.score_ledger.ledger_sha256
+                    || null,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_save_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/storyboards/generate'
+        && req.method === 'POST'
+    ) {
+        try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = await readBody(req, 32 * 1024 * 1024);
+            const model = STORY_MODELS[body.model]
+                ? body.model
+                : 'flux-2-pro';
+            const brief = String(body.brief || '').trim().slice(0, 8000);
+            const hookText =
+                String(body.hookText || '').trim().slice(0, 2000);
+            const panels = Array.from(
+                { length: storyboardContract.PANEL_COUNT },
+                (_, index) => String(
+                    body.panels && body.panels[index] || ''
+                ).trim().slice(0, 1800)
+            );
+            if (!brief && !hookText && !panels.some(Boolean)) {
+                throw new HttpRequestError(
+                    400,
+                    'A visual brief, spoken opening, or panel prompt is required.',
+                    'storyboard_prompt_required'
+                );
+            }
+            const refs = await storyboardGenerationReferences(
+                Array.isArray(body.refs) ? body.refs : []
+            );
+            const prompt = storyboardSheetPrompt({
+                brief,
+                hookText,
+                panels,
+                referenceDescriptions: refs.descriptions,
+            });
+            const requestFingerprint = quantRequestFingerprint(
+                'raw-storyboard-generate',
+                'shorts',
+                {
+                    model,
+                    prompt,
+                    reference_identities: refs.identities,
+                    geometry: storyboardSheetGeometry(model),
+                },
+                storyboardGenerationIdentity(
+                    model,
+                    'coherent-sheet'
+                )
+            );
+            const jobId = quantJobSubmit(
+                'raw-storyboard-generate',
+                async () => {
+                    const image = await genStoryFrame(
+                        model,
+                        prompt,
+                        refs.materialized,
+                        refs.materialized.length ? 'compose' : 'new',
+                        { aspectRatio: 'storyboard-sheet' }
+                    );
+                    const decoded = decodeStoryboardDataImage(
+                        image,
+                        'generated storyboard sheet'
+                    );
+                    const media = storyboardMediaReference(
+                        decoded.bytes,
+                        decoded
+                    );
+                    await writeImmutableStoryboardMedia(
+                        media,
+                        decoded.bytes
+                    );
+                    return {
+                        image: media.url,
+                        media,
+                        model,
+                        mode: 'coherent-sheet',
+                        panelCount: storyboardContract.PANEL_COUNT,
+                        requestFingerprint,
+                    };
+                },
+                'shorts',
+                quantRequestId(req),
+                requestFingerprint
+            );
+            await quantJobReady(jobId, 'shorts');
+            if (labScope) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        experimentLabWorkspace.addActivity(
+                            workspace,
+                            {
+                                type: 'storyboard-generated',
+                                status: 'started',
+                                title:
+                                    hookText
+                                    || brief
+                                    || 'Generated storyboard',
+                                requestId: jobId,
+                                detail:
+                                    `${model} · coherent five-panel sheet`,
+                                input: {
+                                    kind: 'storyboard-sheet',
+                                    brief: brief || null,
+                                    hookText: hookText || null,
+                                    panelPrompts: panels,
+                                    model,
+                                    referenceCount:
+                                        refs.identities.length,
+                                },
+                                saved: false,
+                            }
+                        );
+                    }
+                );
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                jobId,
+                requestFingerprint,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_generation_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/storyboards/panel'
+        && req.method === 'POST'
+    ) {
+        try {
+            const labScope = await experimentLabAccountScope(
+                req,
+                url,
+                { write: true }
+            );
+            const body = await readBody(req, 32 * 1024 * 1024);
+            const prompt =
+                String(body.prompt || '').trim().slice(0, 1800);
+            if (!prompt) {
+                throw new HttpRequestError(
+                    400,
+                    'A panel prompt or edit instruction is required.',
+                    'storyboard_panel_prompt_required'
+                );
+            }
+            const model = STORY_MODELS[body.model]
+                ? body.model
+                : 'flux-2-pro';
+            const relation = ['new', 'edit', 'compose'].includes(
+                body.relation
+            )
+                ? body.relation
+                : 'new';
+            const refs = await storyboardGenerationReferences(
+                Array.isArray(body.refs) ? body.refs : []
+            );
+            const effectiveModel = storyboardEffectiveModel(
+                model,
+                relation,
+                refs.materialized.length
+            );
+            if (relation === 'edit' && !refs.materialized.length) {
+                throw new HttpRequestError(
+                    422,
+                    'A panel edit requires the current frame as a reference.',
+                    'storyboard_panel_edit_reference'
+                );
+            }
+            const requestFingerprint = quantRequestFingerprint(
+                'raw-storyboard-panel',
+                'shorts',
+                {
+                    requested_model: model,
+                    effective_model: effectiveModel,
+                    prompt,
+                    relation,
+                    reference_identities: refs.identities,
+                    aspect_ratio: '9:16',
+                },
+                storyboardGenerationIdentity(effectiveModel, 'panel')
+            );
+            const jobId = quantJobSubmit(
+                'raw-storyboard-panel',
+                async () => {
+                    const image = await genStoryFrame(
+                        model,
+                        prompt,
+                        refs.materialized,
+                        relation,
+                        { aspectRatio: '9:16' }
+                    );
+                    const decoded = decodeStoryboardDataImage(
+                        image,
+                        'generated storyboard panel'
+                    );
+                    const media = storyboardMediaReference(
+                        decoded.bytes,
+                        decoded
+                    );
+                    await writeImmutableStoryboardMedia(
+                        media,
+                        decoded.bytes
+                    );
+                    return {
+                        image: media.url,
+                        media,
+                        model: effectiveModel,
+                        requestedModel: model,
+                        relation,
+                        requestFingerprint,
+                    };
+                },
+                'shorts',
+                quantRequestId(req),
+                requestFingerprint
+            );
+            await quantJobReady(jobId, 'shorts');
+            if (labScope) {
+                await mutateExperimentLabWorkspace(
+                    labScope.account,
+                    workspace => {
+                        experimentLabWorkspace.addActivity(
+                            workspace,
+                            {
+                                type: 'storyboard-panel-generated',
+                                status: 'started',
+                                title: prompt,
+                                requestId: jobId,
+                                detail:
+                                    `${effectiveModel} · ${relation}`,
+                                input: {
+                                    kind: 'storyboard-panel',
+                                    prompt,
+                                    requestedModel: model,
+                                    effectiveModel,
+                                    relation,
+                                    referenceCount:
+                                        refs.identities.length,
+                                },
+                                saved: false,
+                            }
+                        );
+                    }
+                );
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                jobId,
+                requestFingerprint,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_panel_failed',
+            }));
+        }
+        return;
+    }
+
     // PLAN cross-frame continuity from the raw descriptions alone (no prompt engineering, no user dial).
     // An LLM reads every frame, resolves which concrete visual entities (a person, place, object, style)
     // recur across frames, and returns — per frame — exactly which OTHER frames to use as reference
@@ -5309,18 +14938,71 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             const model = STORY_MODELS[body.model] ? body.model : 'flux-2-pro';
             const refs = Array.isArray(body.refs) ? body.refs.filter(x => typeof x === 'string' && x.startsWith('data:image')).slice(0, 8) : [];
             const relation = ['new', 'edit', 'compose'].includes(body.relation) ? body.relation : (refs.length ? 'compose' : 'new');
+            const effectiveModel = storyboardEffectiveModel(
+                model,
+                relation,
+                refs.length
+            );
             const image = await genStoryFrame(model, prompt, refs, relation);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ image, model, relation }));
+            res.end(JSON.stringify({
+                image,
+                model: effectiveModel,
+                requestedModel: model,
+                relation,
+            }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     const demoStat = pathname.match(/^\/api\/hooks\/demo\/status\/([\w-]{1,40})$/);
     if (demoStat && req.method === 'GET') {
-        let st = { stage: 'queued' };
-        try { const b = await cloud.downloadFromR2(`hooks/grpo/demo/status/${demoStat[1]}.json`); if (b) st = JSON.parse(b.toString('utf8')); } catch (e) {}
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(JSON.stringify(st));
+        try {
+            const labScope = await requireExperimentLabActivity(
+                req,
+                url,
+                demoStat[1],
+                ['hook-generated'],
+                { write: false }
+            );
+            let status = { stage: 'queued' };
+            try {
+                const b = await cloud.downloadFromR2(
+                    `hooks/grpo/demo/status/${demoStat[1]}.json`
+                );
+                if (b) status = JSON.parse(b.toString('utf8'));
+            } catch (error) {}
+            if (labScope && !labScope.readOnly) {
+                await recordExperimentLabActivity(
+                    labScope,
+                    {
+                        type: 'hook-generated',
+                        status:
+                            status.stage
+                            || status.status
+                            || 'queued',
+                        requestId: demoStat[1],
+                        detail:
+                            status.message
+                            || status.note
+                            || null,
+                        saved: false,
+                    }
+                );
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+            });
+            res.end(JSON.stringify(status));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'hook_generation_status_failed',
+            }));
+        }
         return;
     }
     if (pathname === '/api/hooks/grpo/index' && req.method === 'GET') {
@@ -5336,18 +15018,56 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     const grpoGrp = pathname.match(/^\/api\/hooks\/grpo\/group\/([a-z0-9_]{1,24})\/([\w-]{1,32})$/);
     if (grpoGrp && req.method === 'GET') {
         try {
+            if (grpoGrp[1] === 'demo') {
+                await requireExperimentLabActivity(
+                    req,
+                    url,
+                    grpoGrp[2],
+                    ['hook-generated'],
+                    { write: false }
+                );
+            }
             const b = await cloud.downloadFromR2(`hooks/grpo/${grpoGrp[1]}/groups/${grpoGrp[2]}.json`);
             res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(b ? b.toString('utf8') : JSON.stringify({ error: 'not found' }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'hook_generation_group_failed',
+            }));
+        }
         return;
     }
     const grpoMon = pathname.match(/^\/api\/hooks\/grpo\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
-    if (grpoMon && req.method === 'GET') {
+    if (grpoMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            if (grpoMon[1] === 'demo') {
+                const runId = grpoMon[2].replace(/_\d+$/, '');
+                await requireExperimentLabActivity(
+                    req,
+                    url,
+                    runId,
+                    ['hook-generated'],
+                    { write: false }
+                );
+            }
+            if (await serveR2ObjectForRequest(req, res, `hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=3600' })) return;
             res.writeHead(404); res.end();
-        } catch (e) { res.writeHead(500); res.end(); }
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code:
+                    error.code
+                    || 'hook_generation_montage_failed',
+            }));
+        }
         return;
     }
     if (pathname === '/api/library/videos' && req.method === 'GET') {
@@ -8252,73 +17972,56 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     // Save layout
     // =========================================
     if (req.method === 'POST' && pathname === '/save-layout') {
-        let body = '';
-        req.on('data', chunk => body += chunk);
-        req.on('end', async () => {
-            try {
-                const incoming = JSON.parse(body);
-                if (!cloud.isR2Ready()) {
-                    res.writeHead(503, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'R2 not available' }));
-                    return;
-                }
-
-                // Load existing layout from R2 for merge
-                let existing = {};
-                try {
-                    const r2Data = await cloud.downloadFromR2('layout/layout.json');
-                    if (r2Data) existing = JSON.parse(r2Data.toString());
-                } catch (_) { /* no existing layout, start fresh */ }
-
-                // Latest write always wins — no stale-writer rejection. The
-                // merge below still preserves a position when a client sends
-                // 0,0 (building not yet created on that client).
-                const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Experiment Lab','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Casino','Video Lab'];
-                const MISSING_DEFAULTS = {
-                    'Chocolate Bar': { x: 42, z: 12 },
-                    'Gym': { x: 15, z: 30 },
-                    'Casino': { x: 30, z: -18 },
-                };
-
-                // Merge buildings: keep R2 position when incoming is 0,0.
-                // Union of names so a building added in the client never gets
-                // silently dropped by a stale server-side list.
-                const existingBuildings = existing.buildings || {};
-                const incomingBuildings = incoming.buildings || {};
-                const merged = {};
-
-                const allNames = new Set([...BUILDING_NAMES, ...Object.keys(incomingBuildings), ...Object.keys(existingBuildings)]);
-                for (const name of allNames) {
-                    const inc = incomingBuildings[name];
-                    const ext = existingBuildings[name];
-
-                    if (inc && !(inc.x === 0 && inc.z === 0)) {
-                        // Incoming has a real (non-origin) position — use it
-                        merged[name] = inc;
-                    } else if (ext) {
-                        // Incoming is missing or at 0,0 — keep existing R2 value
-                        merged[name] = ext;
-                    } else if (MISSING_DEFAULTS[name]) {
-                        // Missing from both — use hardcoded default
-                        merged[name] = { ...MISSING_DEFAULTS[name] };
-                    }
-                    // else: not in either source and no default — omit
-                }
-
-                // Build final layout: non-building fields from incoming, merged buildings,
-                // stamped so the next save can prove it's based on this one
-                const finalLayout = { ...incoming, buildings: merged, _savedAt: new Date().toISOString(), _writer: incoming._writer || '' };
-                delete finalLayout._basedOn;
-
-                await cloud.uploadToR2('layout/layout.json', Buffer.from(JSON.stringify(finalLayout)), 'application/json');
-                console.log('Layout saved to R2 (merged)');
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ ok: true, savedAt: finalLayout._savedAt }));
-            } catch (e) {
-                res.writeHead(400);
-                res.end('Invalid JSON');
+        if (!cloud.isR2Ready()) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: 'Layout storage is temporarily unavailable.',
+                code: 'world_layout_storage_unavailable',
+            }));
+            return;
+        }
+        try {
+            const command = await readBody(req, 2 * 1024 * 1024);
+            const saved = await worldLayoutStore.save(command);
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                ...layoutRevisionMetadata(saved),
+            }));
+        } catch (error) {
+            if (error instanceof WorldLayoutConflictError) {
+                res.writeHead(409, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-store',
+                });
+                res.end(JSON.stringify({
+                    error: error.message,
+                    code: error.code,
+                    current: error.current,
+                }));
+                return;
             }
-        });
+            const statusCode = error instanceof HttpRequestError
+                ? error.statusCode
+                : error instanceof TypeError
+                    ? 400
+                    : 503;
+            console.warn('World layout save failed:', error.message);
+            res.writeHead(statusCode, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message || 'World layout could not be saved.',
+                code: error.code || 'world_layout_save_failed',
+            }));
+        }
         return;
     }
 
@@ -8723,11 +18426,12 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             return;
         }
         try {
-            const buf = await cloud.downloadFromR2('layout/layout.json');
-            // null = key doesn't exist yet (fresh start) — that's a valid empty
-            // layout, NOT an error; clients may save. 503 only on real R2 errors.
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(buf ? buf.toString('utf8') : '{}');
+            const layout = await worldLayoutStore.read();
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify(layout));
             return;
         } catch (e) {
             console.warn('R2 layout load failed:', e.message);
@@ -10822,6 +20526,39 @@ Respond ONLY as valid JSON (no markdown):
             res.end(out);
         });
     });
+}
+
+const server = http.createServer((req, res) => {
+    handleHttpRequest(req, res).catch(error => {
+        const statusCode = Number.isInteger(error && error.statusCode)
+            ? error.statusCode
+            : 500;
+        const code = String(
+            error && error.code
+            || (statusCode >= 500 ? 'server_error' : 'request_error')
+        );
+        const message = statusCode >= 500
+            ? 'The server could not complete this request.'
+            : String(error && error.message || 'Request failed.');
+        console.error(
+            `[http] ${req.method} ${req.url} failed:`,
+            error && error.stack || error
+        );
+        if (res.writableEnded || res.destroyed) return;
+        if (res.headersSent) {
+            res.destroy(error);
+            return;
+        }
+        res.writeHead(statusCode, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+        });
+        res.end(JSON.stringify({
+            ok: false,
+            error: message,
+            code,
+        }));
+    });
 });
 
 // Build or load metrics summary (single R2 file instead of 50+ individual reads)
@@ -11340,6 +21077,15 @@ const STORY_MODELS = {
     'flux-kontext-pro': { slug: 'black-forest-labs/flux-kontext-pro', field: 'input_image',  arr: false, max: 1 },   // $0.04 · instruction EDIT of ONE image (preserves the rest)
 };
 const STORY_EDITOR = 'flux-kontext-pro';   // EDIT beats always use the edit specialist — it transforms the ACTUAL prior frame
+function storyboardEffectiveModel(modelKey, relation, referenceCount) {
+    const requested = STORY_MODELS[modelKey]
+        ? modelKey
+        : 'flux-2-pro';
+    if (relation === 'edit' && referenceCount <= 1) {
+        return STORY_EDITOR;
+    }
+    return requested;
+}
 async function replicateRun(slug, input, timeoutMs = 180000) {
     const tok = process.env.REPLICATE_API_TOKEN; if (!tok) throw new Error('REPLICATE_API_TOKEN missing on server');
     const auth = { Authorization: 'Bearer ' + tok };
@@ -11360,18 +21106,63 @@ async function replicateRun(slug, input, timeoutMs = 180000) {
 }
 // relation: 'new' (text-to-image) · 'edit' (TRANSFORM one prior frame's actual pixels via Kontext) ·
 // 'compose' (carry entities from ≥2 prior frames into a new scene via a multi-reference model).
-async function genStoryFrame(modelKey, prompt, refs, relation) {
+async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
     refs = (refs || []).filter(Boolean);
-    const key = (relation === 'edit') ? STORY_EDITOR : (STORY_MODELS[modelKey] ? modelKey : 'flux-2-pro');
+    const key = storyboardEffectiveModel(
+        modelKey,
+        relation,
+        refs.length
+    );
     const M = STORY_MODELS[key];
-    const input = { prompt };
+    const input = {
+        prompt: (
+            relation === 'edit'
+            && refs.length > 1
+        ) ? [
+            'Edit REFERENCE IMAGE 1 as the base frame.',
+            'Preserve its composition and unchanged pixels as closely as possible.',
+            'Use REFERENCE IMAGES 2 onward only for identity, object, wardrobe, '
+                + 'and continuity details.',
+            prompt,
+        ].join('\n') : prompt,
+    };
     const isKontext = M.slug.includes('kontext');
-    if (!isKontext) input.aspect_ratio = '9:16';                         // EDIT inherits the source frame's geometry
+    if (!isKontext) {
+        if (options.aspectRatio === 'storyboard-sheet') {
+            const geometry = storyboardSheetGeometry(key);
+            Object.assign(input, geometry);
+            delete input.panel_aspect_ratio;
+            delete input.postprocess;
+        } else {
+            input.aspect_ratio = '9:16';
+        }
+    }                                                                    // EDIT inherits the source frame's geometry
     if (M.slug.includes('flux') || M.slug.includes('nano')) input.output_format = 'jpg';
     if (refs.length) input[M.field] = M.arr ? refs.slice(0, M.max) : refs[0];
     const out = await replicateRun(M.slug, input);
-    const buf = Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
-    return 'data:image/jpeg;base64,' + buf.toString('base64');
+    if (/^data:image\//i.test(String(out))) {
+        const decoded = decodeStoryboardDataImage(
+            out,
+            'image-model output'
+        );
+        return `data:${decoded.mediaType};base64,${
+            decoded.bytes.toString('base64')
+        }`;
+    }
+    const response = await fetchT(out, {}, 60000);
+    if (!response.ok) {
+        throw new Error(`image-model output download failed (${response.status})`);
+    }
+    const declaredBytes = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declaredBytes) && declaredBytes > 20 * 1024 * 1024) {
+        throw new Error('image-model output exceeds the 20 MB safety limit');
+    }
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length > 20 * 1024 * 1024) {
+        throw new Error('image-model output exceeds the 20 MB safety limit');
+    }
+    const type = storyboardImageType(buf);
+    return `data:${type.mediaType};base64,${buf.toString('base64')}`;
 }
 async function hookRenderFrame(prompt, modelOverride) {
     // Poll-until-terminal via replicateRun: 'Prefer: wait' alone returns 202 "starting" whenever
@@ -11418,20 +21209,58 @@ async function hookModelGenerateRetry(premise, invent, onStatus, onRetry) {
     }
     throw new Error(lastErr);
 }
-async function hookProcessRequest(rid, premise, count, invent) {
+async function hookProcessRequest(
+    rid,
+    premise,
+    count,
+    invent,
+    ownership
+) {
+    requireQueueLeaseOwnership(
+        ownership,
+        QUEUE_LEASE_NAMES.SHORTS_HOOK,
+        rid
+    );
     _hookLastGen = Date.now(); _hookLastPing = Date.now();   // a real generation IS the warmth — opens the keep-warm window
-    const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
+    const stat = (o) => ownership.mutate(
+        'write Shorts hook status',
+        queueLeaseFence => cloud.uploadToR2(
+            `hooks/grpo/demo/status/${rid}.json`,
+            Buffer.from(JSON.stringify({
+                ...o,
+                ts: Date.now(),
+                queue_lease_fence: queueLeaseFence,
+            })),
+            'application/json'
+        )
+    );
     let attempts = [];
     let err = '';
     let memN = 0;
     // STREAMING: the group file is rewritten after every frame so the UI surfaces each hook the
     // moment its idea exists, then fills its 5 frames in live. `done` flips true only at the very end.
     const warns = new Set();   // non-fatal problems — surfaced in the UI, never swallowed
-    const writeGroup = (done) => cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`,
-        Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, mem_n: memN,
-            done: !!done, streaming: true, error: (done && !attempts.length) ? err : '', warn: Array.from(warns).join(' · '),
-            model: 'idea_r7 (fine-tuned) + flux', hosted: true })),
-        'application/json').catch(() => {});
+    const writeGroup = (done) => ownership.mutate(
+        'write Shorts hook group',
+        queueLeaseFence => cloud.uploadToR2(
+            `hooks/grpo/demo/groups/${rid}.json`,
+            Buffer.from(JSON.stringify({
+                input_id: rid,
+                premise: premise || '💡 invented',
+                n: attempts.length,
+                attempts,
+                mem_n: memN,
+                done: !!done,
+                streaming: true,
+                error: (done && !attempts.length) ? err : '',
+                warn: Array.from(warns).join(' · '),
+                model: 'idea_r7 (fine-tuned) + flux',
+                hosted: true,
+                queue_lease_fence: queueLeaseFence,
+            })),
+            'application/json'
+        )
+    );
     const renders = [];   // per-hook frame-render pipelines, running while the NEXT idea generates
     try {
         // ONE idea per model call, so each hook streams into the UI the moment it exists —
@@ -11491,11 +21320,22 @@ async function hookProcessRequest(rid, premise, count, invent) {
                     try {
                         const r2 = await renderFrameRobust(a.frames[i]);   // model ladder — a hole is exceptional
                         const id = `${rid}_${a.k}_${i}`;
-                        await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, r2.buf, 'image/jpeg'); a.frame_imgs[i] = id;
+                        await ownership.mutate(
+                            'store Shorts hook frame',
+                            () => cloud.uploadToR2(
+                                `hooks/grpo/demo/montages/${id}.jpg`,
+                                r2.buf,
+                                'image/jpeg'
+                            )
+                        );
+                        a.frame_imgs[i] = id;
                         a.errs = a.errs || [];
                         if (r2.draft) a.errs.push(`frame ${i + 1}: fell through to a DRAFT (schnell) render${r2.flagged ? ' — pro & seedream both flagged it as sensitive' : ''}`);
                         else if (r2.fallback) a.errs.push(`frame ${i + 1}: ${r2.flagged ? 'flux-2-pro flagged it as sensitive (E005)' : 'flux-2-pro failed'} — rendered with ${r2.model} (full quality)`);
                     } catch (e) {                              // NEVER silent: the failure rides the group JSON to the card
+                        if (isQueueLeaseOwnershipError(e)) {
+                            throw e;
+                        }
                         const lastErr = String(e.message || e).slice(0, 160);
                         a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: FAILED after all retries — ${lastErr}`);
                         warns.add(`hook ${a.k + 1} frame ${i + 1} failed: ${lastErr.slice(0, 90)}`);
@@ -11508,10 +21348,16 @@ async function hookProcessRequest(rid, premise, count, invent) {
                 await writeGroup(false);
             })());
         }
-        await genMemSave(mem).catch(() => {});                // rejected ideas count too — never re-serve them
+        await ownership.mutate(
+            'persist Shorts hook generation memory',
+            () => genMemSave(mem)
+        );                                                    // rejected ideas count too — never re-serve them
         memN = mem.length;
         await Promise.all(renders);
-    } catch (e) { err = err || e.message; }
+    } catch (e) {
+        if (isQueueLeaseOwnershipError(e)) throw e;
+        err = err || e.message;
+    }
     await writeGroup(true);   // terminal — flips done:true so the UI stops polling
     await stat({ stage: 'done', error: attempts.length ? '' : err });
 }
@@ -11527,16 +21373,102 @@ async function hookSweepOrphans() {
             let s = null; try { s = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) { continue; }
             if (!s || s.stage === 'done') continue;
             if (s.ts && Date.now() - s.ts < 3 * 60e3) continue;   // fresh heartbeat → live on the OTHER server, leave it
-            let g = null; try { const b = await cloud.downloadFromR2(`hooks/grpo/demo/groups/${rid}.json`); if (b) g = JSON.parse(b.toString('utf8')); } catch (e) {}
-            if (g && g.done) continue;
-            const msg = 'interrupted by a server restart mid-generation — press Generate again';
-            const attempts = (g && g.attempts) || [];
-            await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({
-                input_id: rid, premise: (g && g.premise) || '', n: attempts.length, attempts, done: true, streaming: true,
-                error: attempts.length ? '' : msg, warn: attempts.length ? `only ${attempts.length} hook(s) finished — ${msg}` : '',
-                model: 'idea_r7 (fine-tuned) + flux', hosted: true })), 'application/json').catch(() => {});
-            await cloud.uploadToR2(key, Buffer.from(JSON.stringify({ stage: 'done', error: msg })), 'application/json').catch(() => {});
-            console.log('hook sweeper: resolved orphaned generation', rid);
+            let ownership = null;
+            try {
+                ownership = await queueLeaseCoordinator.acquire(
+                    QUEUE_LEASE_NAMES.SHORTS_HOOK,
+                    rid
+                );
+            } catch (error) {
+                console.warn(
+                    'hook sweeper lease acquisition failed closed:',
+                    rid,
+                    error.message
+                );
+                continue;
+            }
+            if (!ownership) continue;
+            try {
+                await ownership.checkpoint(
+                    'revalidate orphaned Shorts hook'
+                );
+                const freshStatusBuffer =
+                    await cloud.downloadFromR2(key);
+                if (!freshStatusBuffer) continue;
+                try {
+                    s = JSON.parse(
+                        freshStatusBuffer.toString('utf8')
+                    );
+                } catch (error) {
+                    continue;
+                }
+                if (
+                    !s
+                    || s.stage === 'done'
+                    || (
+                        s.ts
+                        && Date.now() - s.ts < 3 * 60e3
+                    )
+                ) {
+                    continue;
+                }
+                let g = null;
+                try {
+                    const b = await cloud.downloadFromR2(
+                        `hooks/grpo/demo/groups/${rid}.json`
+                    );
+                    if (b) {
+                        g = JSON.parse(b.toString('utf8'));
+                    }
+                } catch (error) {}
+                if (g && g.done) continue;
+                const msg = 'interrupted by a server restart mid-generation — press Generate again';
+                const attempts = (g && g.attempts) || [];
+                await ownership.mutate(
+                    'resolve orphaned Shorts hook group',
+                    queueLeaseFence => cloud.uploadToR2(
+                        `hooks/grpo/demo/groups/${rid}.json`,
+                        Buffer.from(JSON.stringify({
+                            input_id: rid,
+                            premise: (g && g.premise) || '',
+                            n: attempts.length,
+                            attempts,
+                            done: true,
+                            streaming: true,
+                            error: attempts.length ? '' : msg,
+                            warn: attempts.length
+                                ? `only ${attempts.length} hook(s) finished — ${msg}`
+                                : '',
+                            model:
+                                'idea_r7 (fine-tuned) + flux',
+                            hosted: true,
+                            queue_lease_fence:
+                                queueLeaseFence,
+                        })),
+                        'application/json'
+                    )
+                );
+                await ownership.mutate(
+                    'resolve orphaned Shorts hook status',
+                    queueLeaseFence => cloud.uploadToR2(
+                        key,
+                        Buffer.from(JSON.stringify({
+                            stage: 'done',
+                            error: msg,
+                            ts: Date.now(),
+                            queue_lease_fence:
+                                queueLeaseFence,
+                        })),
+                        'application/json'
+                    )
+                );
+                console.log(
+                    'hook sweeper: resolved orphaned generation',
+                    rid
+                );
+            } finally {
+                await ownership.release();
+            }
         }
     } catch (e) {}
 }
@@ -11549,10 +21481,89 @@ async function grindSweepOrphans() {
         for (const key of keys) {
             let j = null; try { j = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) { continue; }
             if (!j || j.status !== 'running') continue;
-            if (j.ts && Date.now() - j.ts < 4 * 60e3) continue;   // fresh → live on the other server
-            j.status = 'error'; j.error = 'interrupted by a server restart — the attempts above survived; press Grind to continue from here'; j.note = '';
-            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(j)), 'application/json').catch(() => {});
-            console.log('grind sweeper: resolved orphaned run', j.rid);
+            const updatedAt = Number(
+                j.updated_at_ms || j.ts || 0
+            );
+            if (updatedAt && Date.now() - updatedAt < 4 * 60e3) continue;   // fresh → live on the other server
+            const rid = j.rid
+                || key.split('/').pop().replace('.json', '');
+            let ownership = null;
+            try {
+                ownership = await queueLeaseCoordinator.acquire(
+                    QUEUE_LEASE_NAMES.SHORTS_GRIND,
+                    rid
+                );
+            } catch (error) {
+                console.warn(
+                    'grind sweeper lease acquisition failed closed:',
+                    rid,
+                    error.message
+                );
+                continue;
+            }
+            if (!ownership) continue;
+            try {
+                await ownership.checkpoint(
+                    'revalidate orphaned Shorts grind'
+                );
+                const freshBuffer =
+                    await cloud.downloadFromR2(key);
+                if (!freshBuffer) continue;
+                try {
+                    j = JSON.parse(freshBuffer.toString('utf8'));
+                } catch (error) {
+                    continue;
+                }
+                const freshUpdatedAt = Number(
+                    j.updated_at_ms || j.ts || 0
+                );
+                if (
+                    !j
+                    || j.status !== 'running'
+                    || (
+                        freshUpdatedAt
+                        && Date.now() - freshUpdatedAt
+                            < 4 * 60e3
+                    )
+                ) {
+                    continue;
+                }
+                await ownership.mutate(
+                    'resolve orphaned Shorts grind',
+                    queueLeaseFence => {
+                        j.status = 'error';
+                        j.error = 'interrupted by a server restart — the attempts above survived; press Grind to continue from here';
+                        j.note = '';
+                        const persisted =
+                            j.schema === 'shorts-grind-run-v2'
+                                ? bindShortsGrindRun({
+                                    ...j,
+                                    updated_at_ms:
+                                        Date.now(),
+                                    queue_lease_fence:
+                                        queueLeaseFence,
+                                })
+                                : {
+                                    ...j,
+                                    queue_lease_fence:
+                                        queueLeaseFence,
+                                };
+                        return cloud.uploadToR2(
+                            key,
+                            Buffer.from(
+                                JSON.stringify(persisted)
+                            ),
+                            'application/json'
+                        );
+                    }
+                );
+                console.log(
+                    'grind sweeper: resolved orphaned run',
+                    rid
+                );
+            } finally {
+                await ownership.release();
+            }
         }
     } catch (e) {}
 }
@@ -11567,12 +21578,64 @@ async function hookDemoQueue() {
     try {
         for (const key of keys) {
             const rid = key.split('/').pop().replace('.json', '');
-            let req = {}; try { req = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
-            await cloud.deleteFromR2(key).catch(() => {});
-            const premise = String(req.premise || '').trim();
-            const count = Math.max(1, Math.min(parseInt(req.count) || 4, 8));
-            const invent = !!req.invent || !premise;
-            try { await hookProcessRequest(rid, premise, count, invent); } catch (e) { console.warn('hook demo err:', e.message); }
+            let ownership = null;
+            try {
+                ownership = await queueLeaseCoordinator.acquire(
+                    QUEUE_LEASE_NAMES.SHORTS_HOOK,
+                    rid
+                );
+                if (!ownership) continue;
+                await ownership.checkpoint(
+                    'read Shorts hook request'
+                );
+                const requestBuffer = await cloud.downloadFromR2(key);
+                if (!requestBuffer) continue;
+                let req;
+                try {
+                    req = JSON.parse(requestBuffer.toString('utf8'));
+                } catch (error) {
+                    console.warn(
+                        'hook demo invalid queued request:',
+                        rid,
+                        error.message
+                    );
+                    continue;
+                }
+                await ownership.mutate(
+                    'consume Shorts hook request',
+                    () => cloud.deleteFromR2(key)
+                );
+                const premise = String(req.premise || '').trim();
+                const count = Math.max(
+                    1,
+                    Math.min(parseInt(req.count) || 4, 8)
+                );
+                const invent = !!req.invent || !premise;
+                await hookProcessRequest(
+                    rid,
+                    premise,
+                    count,
+                    invent,
+                    ownership
+                );
+            } catch (error) {
+                console.warn(
+                    'hook demo queue failed closed:',
+                    rid,
+                    error.message
+                );
+            } finally {
+                if (ownership) {
+                    const released = await ownership.release();
+                    if (!released.released) {
+                        console.warn(
+                            'hook demo lease was not released cleanly:',
+                            rid,
+                            released.reason
+                        );
+                    }
+                }
+            }
         }
     } finally { _hookBusy = false; }
 }
@@ -11584,68 +21647,464 @@ setInterval(() => { hookDemoQueue().catch(() => {}); }, 4000);
 // rejects variants too close to earlier attempts (before any render spend) → flux renders the 5
 // frames → ffmpeg composes the SAME 5x1 strip the corpus uses → raw_upload.py scores it on the
 // trained steer models → streamed to R2 so every attempt is visible/clickable/savable live.
+async function composeMontageFiles(framePaths, dir) {
+    const inputs = [];
+    framePaths.forEach(framePath => inputs.push('-i', framePath));
+    const out = path.join(dir, 'm.jpg');
+    const n = framePaths.length;
+    const scale = framePaths.map((_, i) => `[${i}:v]scale=320:568:force_original_aspect_ratio=increase,crop=320:568,setsar=1[s${i}]`).join(';');
+    const refs = framePaths.map((_, i) => `[s${i}]`).join('');
+    await new Promise((ok, no) => {
+        const child = spawn('ffmpeg', ['-nostdin', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${refs}hstack=inputs=${n}`, '-frames:v', '1', '-q:v', '4', out], { env: RAW_PY_ENV });
+        const timer = setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch (error) {}
+            no(new Error('ffmpeg timeout'));
+        }, 60000);
+        child.on('close', code => {
+            clearTimeout(timer);
+            code === 0 && fs.existsSync(out)
+                ? ok()
+                : no(new Error(`ffmpeg exit ${code}`));
+        });
+        child.on('error', error => {
+            clearTimeout(timer);
+            no(error);
+        });
+    });
+    return fs.readFileSync(out);
+}
+
 async function composeMontage(frameBufs) {
     const os = require('os');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grind_'));
     try {
-        const inputs = [];
-        frameBufs.forEach((b, i) => { const p = path.join(dir, `f${i}.jpg`); fs.writeFileSync(p, b); inputs.push('-i', p); });
-        const out = path.join(dir, 'm.jpg'), n = frameBufs.length;
+        const framePaths = [];
+        frameBufs.forEach((bytes, index) => {
+            const framePath = path.join(dir, `f${index}.img`);
+            fs.writeFileSync(framePath, bytes);
+            framePaths.push(framePath);
+        });
         // force EVERY tile to exactly 320x568 (cover-crop) — frames can come from different models
         // with different native sizes, and hstack hard-fails on mixed heights (ffmpeg exit 1)
-        const scale = frameBufs.map((_, i) => `[${i}:v]scale=320:568:force_original_aspect_ratio=increase,crop=320:568,setsar=1[s${i}]`).join(';');
-        const refs = frameBufs.map((_, i) => `[s${i}]`).join('');
-        await new Promise((ok, no) => {
-            const p = spawn('ffmpeg', ['-nostdin', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${refs}hstack=inputs=${n}`, '-frames:v', '1', '-q:v', '4', out], { env: RAW_PY_ENV });
-            const t = setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} no(new Error('ffmpeg timeout')); }, 60000);
-            p.on('close', c => { clearTimeout(t); c === 0 && fs.existsSync(out) ? ok() : no(new Error('ffmpeg exit ' + c)); });
-            p.on('error', e => { clearTimeout(t); no(e); });
-        });
-        return fs.readFileSync(out);
+        return await composeMontageFiles(framePaths, dir);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
-async function scoreMontage(buf, text, title) {
+async function scoreMontage(buf, text, title, creatorProfile) {
     const os = require('os');
     const tmp = path.join(os.tmpdir(), `grindmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
     fs.writeFileSync(tmp, buf);
     try {
         return await runHeavyScore(() => new Promise((ok, no) => {
-            const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)], { env: RAW_PY_ENV });
+            const args = [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)];
+            const profile = safeCreatorProfile(creatorProfile);
+            if (profile) args.push('--creator-profile', profile);
+            const py = spawnRawPython(args);
             let out = '', err2 = '';
             py.stdout.on('data', d => out += d); py.stderr.on('data', d => err2 += d);
-            const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 150000);
-            py.on('close', () => { clearTimeout(t); const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop(); if (!line) return no(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140))); try { const j = JSON.parse(line); j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); } });
+            const t = setTimeout(() => { killRawPythonTree(py); }, 150000);
+            py.on('close', () => { clearTimeout(t); const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop(); if (!line) return no(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140))); try { ok(validateRawScoreResult(JSON.parse(line))); } catch (e) { no(e); } });
             py.on('error', no);
         }));
     } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
 }
-// best-modality percentile for the metric — same preference order as the UI's steerBest
-function grindPct(score, metric) {
-    const s = (score && score.steer) || {};
-    for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${metric}`]; if (k && k.pctile != null) return Math.round(k.pctile * 10) / 10; }
-    return null;
+function grindCoordinateValue(score, coordinateId) {
+    const ledger = score && score.score_ledger;
+    const validation = shortsScoreLedger.validateScoreLedger(ledger);
+    const entry = validation.valid && Array.isArray(ledger.entries)
+        ? ledger.entries.find(candidate => (
+            candidate
+            && candidate.coordinate_id === coordinateId
+        ))
+        : null;
+    if (
+        !entry
+        || entry.available !== true
+        || entry.value == null
+        || !isFinite(Number(entry.value))
+    ) return null;
+    return {
+        score_coordinate_id: coordinateId,
+        score_source_key: entry.source_key || null,
+        score_value: Number(entry.value),
+        score_percentile_0_100: entry.percentile == null
+            || !isFinite(Number(entry.percentile))
+            ? null
+            : Math.round(Number(entry.percentile) * 10) / 10,
+        score_kind: entry.provenance
+            && entry.provenance.kind || null,
+        score_ledger_sha256: ledger.ledger_sha256,
+        score_verified: true,
+    };
 }
-async function grindProcess(rid, req0) {
+
+function shortsGrindAttemptProjectionValid(attempt, coordinateId) {
+    if (!attempt || attempt.score_verified !== true) return false;
+    const value = Number(attempt.score_value);
+    const percentile = Number(attempt.score_percentile_0_100);
+    if (
+        attempt.score_coordinate_id !== coordinateId
+        || !exactSha256(attempt.score_ledger_sha256)
+        || !Number.isFinite(value)
+        || !Number.isFinite(percentile)
+        || percentile < 0
+        || percentile > 100
+    ) return false;
+    const target = String(coordinateId || '').split('.').pop();
+    if (
+        (target === 'keep' || target === 'ret5')
+        && (value < 0 || value > 100)
+    ) return false;
+    if (target === 'gt10M' && (value < 0 || value > 1)) {
+        return false;
+    }
+    if (target === 'views' && value < 0) return false;
+    return true;
+}
+
+function shortsGrindRunHashPayload(run) {
+    const payload = { ...(run || {}) };
+    delete payload.run_sha256;
+    return payload;
+}
+
+function bindShortsGrindRun(run) {
+    const bound = {
+        ...shortsGrindRunHashPayload(run),
+        schema: 'shorts-grind-run-v2',
+        schema_version: 2,
+    };
+    bound.run_sha256 = shortsScoreLedger.sha256Canonical(bound);
+    return bound;
+}
+
+function validateShortsGrindRun(run) {
+    const errors = [];
+    if (
+        !run
+        || typeof run !== 'object'
+        || Array.isArray(run)
+    ) {
+        errors.push('grind run is missing');
+    } else {
+        if (
+            run.schema !== 'shorts-grind-run-v2'
+            || run.schema_version !== 2
+        ) {
+            errors.push('grind run schema is not canonical');
+        }
+        if (
+            !/^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/
+                .test(String(run.threshold_coordinate_id || ''))
+        ) {
+            errors.push('threshold coordinate is invalid');
+        }
+        const threshold = Number(
+            run.threshold_percentile_0_100
+        );
+        if (
+            !Number.isFinite(threshold)
+            || threshold < 0
+            || threshold > 100
+        ) {
+            errors.push(
+                'threshold percentile is outside [0, 100]'
+            );
+        }
+        if (!Array.isArray(run.attempts)) {
+            errors.push('grind attempts are missing');
+        } else {
+            run.attempts.forEach((attempt, index) => {
+                const hasAnyScore = [
+                    'score_coordinate_id',
+                    'score_ledger_sha256',
+                    'score_value',
+                    'score_percentile_0_100',
+                    'score_verified',
+                ].some(key => (
+                    Object.prototype.hasOwnProperty.call(
+                        attempt || {},
+                        key
+                    )
+                ));
+                if (
+                    hasAnyScore
+                    && !shortsGrindAttemptProjectionValid(
+                        attempt,
+                        run.threshold_coordinate_id
+                    )
+                ) {
+                    errors.push(
+                        `attempt ${index + 1} score projection is invalid`
+                    );
+                }
+                if (
+                    attempt
+                    && (
+                        Object.prototype.hasOwnProperty.call(attempt, 'pct')
+                        || Object.prototype.hasOwnProperty.call(
+                            attempt,
+                            'scoreValue'
+                        )
+                        || Object.prototype.hasOwnProperty.call(
+                            attempt,
+                            'scoreCoordinateId'
+                        )
+                        || Object.prototype.hasOwnProperty.call(
+                            attempt,
+                            'hasScore'
+                        )
+                    )
+                ) {
+                    errors.push(
+                        `attempt ${index + 1} contains a retired score alias`
+                    );
+                }
+            });
+        }
+        const calculated = shortsScoreLedger.sha256Canonical(
+            shortsGrindRunHashPayload(run)
+        );
+        if (
+            !exactSha256(run.run_sha256)
+            || run.run_sha256 !== calculated
+        ) {
+            errors.push('grind run content hash does not match');
+        }
+    }
+    return {
+        valid: errors.length === 0,
+        errors: [...new Set(errors)],
+        run_sha256:
+            errors.length === 0 ? run.run_sha256 : null,
+    };
+}
+
+function shortsGrindRunForResponse(run) {
+    const validation = validateShortsGrindRun(run);
+    const coordinateId = validation.valid
+        ? run.threshold_coordinate_id
+        : String(
+            run && (
+                run.threshold_coordinate_id
+                || run.coordinateId
+            ) || ''
+        );
+    const attempts = Array.isArray(run && run.attempts)
+        ? run.attempts.map(attempt => {
+            if (
+                validation.valid
+                && shortsGrindAttemptProjectionValid(
+                    attempt,
+                    coordinateId
+                )
+            ) return { ...attempt };
+            const unverified = { ...(attempt || {}) };
+            [
+                'pct',
+                'scoreValue',
+                'scoreCoordinateId',
+                'scoreSourceKey',
+                'hasScore',
+                'score_coordinate_id',
+                'score_ledger_sha256',
+                'score_value',
+                'score_percentile_0_100',
+                'score_kind',
+                'score_source_key',
+            ].forEach(key => delete unverified[key]);
+            unverified.score_verified = false;
+            unverified.score_evidence_state =
+                validation.valid
+                    ? 'unavailable'
+                    : 'legacy_or_invalid_unverified';
+            return unverified;
+        })
+        : [];
+    const verifiedAttempts = attempts.filter(attempt => (
+        shortsGrindAttemptProjectionValid(
+            attempt,
+            coordinateId
+        )
+    ));
+    const bestAttempt = verifiedAttempts.reduce(
+        (best, attempt) => (
+            !best
+            || Number(attempt.score_percentile_0_100)
+                > Number(best.score_percentile_0_100)
+                ? attempt
+                : best
+        ),
+        null
+    );
+    const threshold = validation.valid
+        ? Number(run.threshold_percentile_0_100)
+        : null;
+    const winner = threshold == null
+        ? null
+        : verifiedAttempts
+            .slice()
+            .sort((left, right) => Number(left.k) - Number(right.k))
+            .find(attempt => (
+                Number(attempt.score_percentile_0_100) >= threshold
+            )) || null;
+    const responseBase = { ...(run || {}) };
+    [
+        'best',
+        'threshold',
+        'coordinateId',
+        'n',
+        'metric',
+        'winner',
+        'rejected',
+        'gate',
+        'deadline',
+        'ts',
+    ].forEach(key => delete responseBase[key]);
+    return {
+        ...responseBase,
+        attempts,
+        threshold_coordinate_id:
+            validation.valid ? run.threshold_coordinate_id : null,
+        threshold_percentile_0_100:
+            validation.valid
+                ? Number(run.threshold_percentile_0_100)
+                : null,
+        attempt_count: attempts.length,
+        best_score: bestAttempt ? {
+            attempt_index: bestAttempt.k,
+            score_coordinate_id:
+                bestAttempt.score_coordinate_id,
+            score_ledger_sha256:
+                bestAttempt.score_ledger_sha256,
+            score_value: bestAttempt.score_value,
+            score_percentile_0_100:
+                bestAttempt.score_percentile_0_100,
+        } : null,
+        winner_attempt_index: winner ? winner.k : null,
+        run_validation: validation.valid
+            ? {
+                state: 'canonical-valid',
+                valid: true,
+                run_sha256: validation.run_sha256,
+                errors: [],
+            }
+            : {
+                state: run && run.schema
+                    ? 'canonical-invalid'
+                    : 'legacy-unbound',
+                valid: false,
+                run_sha256: null,
+                errors: validation.errors,
+            },
+    };
+}
+
+async function grindProcess(rid, req0, ownership) {
+    requireQueueLeaseOwnership(
+        ownership,
+        QUEUE_LEASE_NAMES.SHORTS_GRIND,
+        rid
+    );
     const premise = String(req0.premise || '').trim().slice(0, 500);
-    const metric = ['keep', 'ret5', 'views', 'gt10M'].includes(req0.metric) ? req0.metric : 'keep';
-    const threshold = Math.max(50, Math.min(99, parseInt(req0.threshold) || 82));
-    const maxAttempts = Math.max(1, Math.min(150, parseInt(req0.maxAttempts) || 80));
+    const creatorProfile = safeCreatorProfile(
+        req0.creator_profile || req0.creatorProfile
+    );
+    const legacyMetric = [
+        'keep',
+        'ret5',
+        'views',
+        'gt10M',
+    ].includes(req0.metric) ? req0.metric : 'keep';
+    const requestedCoordinate = String(
+        req0.threshold_coordinate_id || req0.coordinateId || ''
+    );
+    const coordinateId = /^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/.test(requestedCoordinate)
+        && (
+            req0.schema === 'shorts-grind-request-v2'
+            || requestedCoordinate.endsWith(`.${legacyMetric}`)
+        )
+        ? requestedCoordinate
+        : `shorts.stored.together.${legacyMetric}`;
+    const metric = coordinateId.split('.').pop();
+    const threshold = Math.max(
+        50,
+        Math.min(
+            99,
+            Number.parseInt(
+                req0.threshold_percentile_0_100
+                ?? req0.threshold,
+                10
+            ) || 82
+        )
+    );
+    const maxAttempts = Math.max(
+        1,
+        Math.min(
+            150,
+            Number.parseInt(
+                req0.max_attempts ?? req0.maxAttempts,
+                10
+            ) || 80
+        )
+    );
     const deadline = Date.now() + Math.min(8, Math.max(0.25, parseFloat(req0.hours) || 3)) * 3600e3;
-    let attempts = [], status = 'running', winner = null, err = '', note = '', rejected = 0;
+    let attempts = [], status = 'running', err = '', note = '', rejected = 0;
     // ADAPTIVE EXPLORATION: the minimum embedding distance a variant must keep from every prior
     // attempt. Starts grounded (0.12); every non-improving attempt widens it (+0.03, cap 0.30) so
     // a stuck grind is FORCED to explore farther from the pack; a new best pulls it back in.
-    const GATE0 = 0.12; let gate = GATE0, sinceBest = 0, bestPct = null;
-    const best = () => attempts.reduce((m, a) => (a.pct != null && (m == null || a.pct > m)) ? a.pct : m, null);
-    const write = () => cloud.uploadToR2(`hooks/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
-        rid, premise, metric, threshold, attempts, n: attempts.length, status, winner, error: err, note,
-        best: best(), rejected, gate: Math.round(gate * 100) / 100, deadline, ts: Date.now() })), 'application/json').catch(() => {});
+    const GATE0 = 0.12;
+    let gate = GATE0, sinceBest = 0, bestPct = null;
+    const best = () => attempts.reduce((bestValue, attempt) => (
+        shortsGrindAttemptProjectionValid(attempt, coordinateId)
+        && (
+            bestValue == null
+            || Number(attempt.score_percentile_0_100) > bestValue
+        )
+            ? Number(attempt.score_percentile_0_100)
+            : bestValue
+    ), null);
+    const write = () => ownership.mutate(
+        'write Shorts grind progress',
+        queueLeaseFence => {
+            const snapshot = bindShortsGrindRun({
+                rid,
+                premise,
+                threshold_coordinate_id: coordinateId,
+                threshold_percentile_0_100: threshold,
+                attempts,
+                status,
+                error: err,
+                note,
+                rejected_variant_count: rejected,
+                minimum_text_embedding_distance:
+                    Math.round(gate * 100) / 100,
+                deadline_at_ms: deadline,
+                updated_at_ms: Date.now(),
+                queue_lease_fence: queueLeaseFence,
+            });
+            return cloud.uploadToR2(
+                `hooks/grind/runs/${rid}.json`,
+                Buffer.from(JSON.stringify(snapshot)),
+                'application/json'
+            );
+        }
+    );
+    const checkStopped = async () => {
+        await ownership.checkpoint(
+            'check Shorts grind cancellation'
+        );
+        return cloud.existsInR2(`hooks/grind/stop/${rid}`);
+    };
     const vecs = [];      // this run's accepted variants — text-embedding differentiation
     const visPrev = [];   // 48-d pooled VISUAL embeddings of scored attempts — quantified visual variety
     let mem = []; try { mem = await genMemLoad(); } catch (e) {}
     try {
         while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
-            try { if (await cloud.existsInR2(`hooks/grind/stop/${rid}`)) { status = 'stopped'; note = 'stopped by you'; break; } } catch (e) {}
+            if (await checkStopped()) {
+                status = 'stopped';
+                note = 'stopped by you';
+                break;
+            }
             _hookLastGen = Date.now(); _hookLastPing = Date.now();   // grinding IS warmth
             // 1) a variant grounded on the user's written hook — malformed samples retried, not fatal
             let spec;
@@ -11663,7 +22122,19 @@ async function grindProcess(rid, req0) {
                 if (nov < gate && rejected < maxAttempts) { rejected++; note = `variant only ${nov} from an earlier attempt — required ≥ ${gate.toFixed(2)} (exploration widens when stuck) — regenerating (${rejected} rejected)`; await write(); continue; }
                 vecs.push(q); mem.push({ id: rid + '_' + attempts.length, t: Date.now(), p: spec.premise.slice(0, 140), v: genVecEnc(emb), s: 1 });
             }
-            const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null], frames_done: 0, status: 'rendering', nov, vnov: null, pct: null, errs: [], ts: Date.now() };
+            const a = {
+                k: attempts.length,
+                premise: spec.premise,
+                frames: spec.frames,
+                frame_imgs: [null, null, null, null, null],
+                frames_done: 0,
+                status: 'rendering',
+                nov,
+                vnov: null,
+                errs: [],
+                ts: Date.now(),
+                score_verified: false,
+            };
             attempts.push(a); note = `attempt ${a.k + 1}: rendering frames…`; await write();
             // 3) render the 5 frames — robust (3× pro + draft fallback), a missing frame is now exceptional
             const bufs = [null, null, null, null, null];
@@ -11671,10 +22142,21 @@ async function grindProcess(rid, req0) {
                 try {
                     const r2 = await renderFrameRobust(a.frames[i]);
                     bufs[i] = r2.buf; const id = `${rid}_${a.k}_${i}`;
-                    await cloud.uploadToR2(`hooks/grind/montages/${id}.jpg`, r2.buf, 'image/jpeg'); a.frame_imgs[i] = id;
+                    await ownership.mutate(
+                        'store Shorts grind frame',
+                        () => cloud.uploadToR2(
+                            `hooks/grind/montages/${id}.jpg`,
+                            r2.buf,
+                            'image/jpeg'
+                        )
+                    );
+                    a.frame_imgs[i] = id;
                     if (r2.draft) a.errs.push(`frame ${i + 1}: fell through to a DRAFT (schnell) render${r2.flagged ? ' — pro & seedream both flagged it as sensitive' : ''}`);
                     else if (r2.fallback) a.errs.push(`frame ${i + 1}: ${r2.flagged ? 'flux-2-pro flagged it as sensitive (E005)' : 'flux-2-pro failed'} — rendered with ${r2.model} (full quality)`);
-                } catch (e) { a.errs.push(`frame ${i + 1}: FAILED after all retries — ${String(e.message || e).slice(0, 120)}`); }
+                } catch (e) {
+                    if (isQueueLeaseOwnershipError(e)) throw e;
+                    a.errs.push(`frame ${i + 1}: FAILED after all retries — ${String(e.message || e).slice(0, 120)}`);
+                }
                 a.frames_done = bufs.filter(Boolean).length;
                 await write();
             }
@@ -11684,11 +22166,47 @@ async function grindProcess(rid, req0) {
                 const okBufs = bufs.filter(Boolean);
                 if (!okBufs.length) throw new Error('no frames rendered');
                 const mon = await composeMontage(okBufs);
-                await cloud.uploadToR2(`hooks/grind/montages/${rid}_${a.k}.jpg`, mon, 'image/jpeg');
-                const score = await scoreMontage(mon, premise, spec.premise);
+                await ownership.mutate(
+                    'store Shorts grind montage',
+                    () => cloud.uploadToR2(
+                        `hooks/grind/montages/${rid}_${a.k}.jpg`,
+                        mon,
+                        'image/jpeg'
+                    )
+                );
+                const score = await scoreMontage(mon, premise, spec.premise, creatorProfile);
                 delete score.montage;   // the strip is already in R2 — don't double-store 200KB of b64
-                await cloud.uploadToR2(`hooks/grind/scores/${rid}_${a.k}.json`, Buffer.from(JSON.stringify(score)), 'application/json');
-                a.pct = grindPct(score, metric); a.hasScore = a.pct != null;
+                score.score_record_sha256 =
+                    savedHookScoreRecordSha256(score);
+                const persistedValidation =
+                    withPersistedShortsLedgerValidation(score);
+                if (
+                    !persistedValidation.score_record_validation
+                    || persistedValidation.score_record_validation.valid
+                        !== true
+                    || !persistedValidation.score_ledger_validation
+                    || persistedValidation.score_ledger_validation.valid
+                        !== true
+                ) {
+                    throw new Error(
+                        'scorer output failed persisted ledger binding'
+                    );
+                }
+                await ownership.mutate(
+                    'store Shorts grind score',
+                    () => cloud.uploadToR2(
+                        `hooks/grind/scores/${rid}_${a.k}.json`,
+                        Buffer.from(JSON.stringify(score)),
+                        'application/json'
+                    )
+                );
+                const coordinateScore = grindCoordinateValue(score, coordinateId);
+                if (!coordinateScore) {
+                    throw new Error(
+                        `canonical coordinate ${coordinateId} is unavailable`
+                    );
+                }
+                Object.assign(a, coordinateScore);
                 // quantified VISUAL variety: cosine distance of this attempt's pooled visual embedding
                 // to its most-similar prior attempt — surfaced on the card, and near-duplicate LOOKS
                 // (< 0.02) count as "stuck" so the exploration gate widens even when scores wobble
@@ -11698,20 +22216,41 @@ async function grindProcess(rid, req0) {
                     a.vnov = visPrev.length ? Math.round((1 - vm) * 1000) / 1000 : null;
                     visPrev.push(vp);
                 }
-            } catch (e) { a.errs.push('score: ' + String(e.message || e).slice(0, 140)); }
+            } catch (e) {
+                if (isQueueLeaseOwnershipError(e)) throw e;
+                a.errs.push('score: ' + String(e.message || e).slice(0, 140));
+            }
             a.status = 'done';
             // drift: widen the required distance while not improving; snap back on a new best
-            if (a.pct != null) {
-                if (bestPct == null || a.pct > bestPct) { bestPct = a.pct; sinceBest = 0; gate = GATE0; }
+            if (shortsGrindAttemptProjectionValid(a, coordinateId)) {
+                const attemptPct = Number(
+                    a.score_percentile_0_100
+                );
+                if (bestPct == null || attemptPct > bestPct) { bestPct = attemptPct; sinceBest = 0; gate = GATE0; }
                 else { sinceBest++; if (a.vnov != null && a.vnov < 0.02) sinceBest++; gate = Math.min(0.30, GATE0 + 0.03 * Math.max(0, sinceBest - 1)); }
             }
-            note = a.pct != null ? `attempt ${a.k + 1} scored ${a.pct}th pctile (target ${threshold}) — best ${best()} · exploration ≥ ${gate.toFixed(2)}` : `attempt ${a.k + 1} could not be scored`;
+            note = a.score_verified === true
+                ? `attempt ${a.k + 1} scored ${a.score_percentile_0_100}th percentile (target ${threshold}) — best ${best()} · exploration ≥ ${gate.toFixed(2)}`
+                : `attempt ${a.k + 1} could not be scored`;
             await write();
-            if (a.pct != null && a.pct >= threshold) { status = 'won'; winner = a.k; note = `🎯 attempt ${a.k + 1} cleared the bar: ${a.pct} ≥ ${threshold}`; }
+            if (
+                shortsGrindAttemptProjectionValid(a, coordinateId)
+                && Number(a.score_percentile_0_100) >= threshold
+            ) {
+                status = 'won';
+                note = `attempt ${a.k + 1} cleared the bar: ${a.score_percentile_0_100} ≥ ${threshold}`;
+            }
         }
-    } catch (e) { err = err || String(e.message || e); status = 'error'; }
+    } catch (e) {
+        if (isQueueLeaseOwnershipError(e)) throw e;
+        err = err || String(e.message || e);
+        status = 'error';
+    }
     if (status === 'running') { status = Date.now() >= deadline ? 'deadline' : 'maxed'; note = status === 'deadline' ? 'time budget used up — best attempt shown' : 'attempt budget used up — best attempt shown'; }
-    await genMemSave(mem).catch(() => {});
+    await ownership.mutate(
+        'persist Shorts grind generation memory',
+        () => genMemSave(mem)
+    );
     await write();
 }
 let _grindBusy = false;
@@ -11723,14 +22262,117 @@ async function grindQueue() {
     try {
         for (const key of keys) {
             const rid = key.split('/').pop().replace('.json', '');
-            let req0 = {}; try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
-            // write the first run snapshot BEFORE deleting the request — the client sees "picked up"
-            // within one poll, and a crash right here leaves a sweepable run instead of a lost rid
-            await cloud.uploadToR2(`hooks/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
-                rid, premise: String(req0.premise || '').slice(0, 500), metric: req0.metric || 'keep', threshold: parseInt(req0.threshold) || 82,
-                attempts: [], n: 0, status: 'running', note: 'picked up — starting the model…', best: null, rejected: 0, ts: Date.now() })), 'application/json').catch(() => {});
-            await cloud.deleteFromR2(key).catch(() => {});
-            try { await grindProcess(rid, req0); } catch (e) { console.warn('grind err:', e.message); }
+            let ownership = null;
+            try {
+                ownership = await queueLeaseCoordinator.acquire(
+                    QUEUE_LEASE_NAMES.SHORTS_GRIND,
+                    rid
+                );
+                if (!ownership) continue;
+                await ownership.checkpoint(
+                    'read Shorts grind request'
+                );
+                const requestBuffer = await cloud.downloadFromR2(key);
+                if (!requestBuffer) continue;
+                let req0;
+                try {
+                    req0 = JSON.parse(requestBuffer.toString('utf8'));
+                } catch (error) {
+                    console.warn(
+                        'Shorts grind invalid queued request:',
+                        rid,
+                        error.message
+                    );
+                    continue;
+                }
+                // Persist pickup before consuming the request. The monotonic
+                // generation in this snapshot identifies the exact owner.
+                await ownership.mutate(
+                    'write Shorts grind pickup',
+                    queueLeaseFence => {
+                        const legacyMetric = [
+                            'keep',
+                            'ret5',
+                            'views',
+                            'gt10M',
+                        ].includes(req0.metric)
+                            ? req0.metric
+                            : 'keep';
+                        const requestedCoordinate = String(
+                            req0.threshold_coordinate_id
+                            || req0.coordinateId
+                            || ''
+                        );
+                        const coordinateId =
+                            /^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/
+                                .test(requestedCoordinate)
+                                ? requestedCoordinate
+                                : `shorts.stored.together.${legacyMetric}`;
+                        const threshold = Math.max(
+                            50,
+                            Math.min(
+                                99,
+                                Number.parseInt(
+                                    req0.threshold_percentile_0_100
+                                    ?? req0.threshold,
+                                    10
+                                ) || 82
+                            )
+                        );
+                        const pickedUp = bindShortsGrindRun({
+                            rid,
+                            premise: String(
+                                req0.premise || ''
+                            ).slice(0, 500),
+                            threshold_coordinate_id:
+                                coordinateId,
+                            threshold_percentile_0_100:
+                                threshold,
+                            attempts: [],
+                            status: 'running',
+                            note:
+                                'picked up — starting the model…',
+                            error: '',
+                            rejected_variant_count: 0,
+                            minimum_text_embedding_distance:
+                                0.12,
+                            deadline_at_ms: null,
+                            updated_at_ms: Date.now(),
+                            queue_lease_fence:
+                                queueLeaseFence,
+                        });
+                        return cloud.uploadToR2(
+                            `hooks/grind/runs/${rid}.json`,
+                            Buffer.from(
+                                JSON.stringify(pickedUp)
+                            ),
+                            'application/json'
+                        );
+                    }
+                );
+                await ownership.mutate(
+                    'consume Shorts grind request',
+                    () => cloud.deleteFromR2(key)
+                );
+                await grindProcess(rid, req0, ownership);
+            } catch (error) {
+                console.warn(
+                    'Shorts grind queue failed closed:',
+                    rid,
+                    error.message
+                );
+            } finally {
+                if (ownership) {
+                    const released = await ownership.release();
+                    if (!released.released) {
+                        console.warn(
+                            'Shorts grind lease was not released cleanly:',
+                            rid,
+                            released.reason
+                        );
+                    }
+                }
+            }
         }
     } finally { _grindBusy = false; }
 }
@@ -11854,7 +22496,7 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}, context =
         idea: a.idea || a.title || '',
         distSeed: a.distSeed == null ? null : a.distSeed,
         distPrior: a.distPrior == null ? null : a.distPrior,
-        bestPctile: a.pct == null ? null : a.pct,
+        bestPctile: longQuantAttemptPercentile100(a),
     })).filter(a => a.idea);
     const ring = {
         minDistanceFromAnyPrior: guide.minDistance == null ? null : Number(guide.minDistance),
@@ -11919,8 +22561,8 @@ async function longQuantRenderThumb(prompt) {
     const out = await replicateRun(model, input, 240000);
     return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
 }
-const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
-const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json').catch(() => {});
+const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json');
+const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json');
 const longQuantGrindStopped = rid => rid ? cloud.existsInR2(`longform/grind/stop/${rid}`).catch(() => false) : Promise.resolve(false);
 function longQuantStaleMs() {
     return Math.max(10 * 60e3, parseInt(process.env.LONGQUANT_GRIND_STALE_MS || String(20 * 60e3), 10));
@@ -11988,7 +22630,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
 }
 async function longQuantCreateGrind(body = {}, opts = {}) {
     const out = longQuantGrindEnvelope(body, opts);
-    await cloud.uploadToR2(`longform/grind/runs/${out.rid}.json`, Buffer.from(JSON.stringify(out.run)), 'application/json').catch(() => {});
+    await cloud.uploadToR2(`longform/grind/runs/${out.rid}.json`, Buffer.from(JSON.stringify(out.run)), 'application/json');
     await cloud.uploadToR2(`longform/grind/requests/${out.rid}.json`, Buffer.from(JSON.stringify(out.payload)), 'application/json');
     return out;
 }
@@ -12012,157 +22654,372 @@ async function longQuantWithHeartbeat(work, beat, intervalMs = 15000) {
         clearInterval(timer);
     }
 }
-const LONGQUANT_RELEVANCE_FLOOR = 0.35;
-// Exact deterministic calibration used by thumb-rl/harness_long.py over the
-// frozen raw-long visual corpus. Keep this paired with longquant_score.py.
-const LONGQUANT_DENSITY_FLOOR = 0.7598260641098022;
-const LONGQUANT_OUTPUT_CHANNELS = Object.freeze(['visual', 'together']);
-const LONGQUANT_OUTPUT_METRICS = Object.freeze(['ctrviews', 'ctr', 'ret30', 'views', 'realviews', 'gt10m']);
-function longQuantOutputContract(score) {
-    const missing = [];
-    for (const channelName of LONGQUANT_OUTPUT_CHANNELS) {
-        const channel = score && score.channels && score.channels[channelName];
-        if (!channel) {
-            missing.push(`${channelName}.embedding`);
-            continue;
-        }
-        for (const metricName of LONGQUANT_OUTPUT_METRICS) {
-            const metric = channel.metrics && channel.metrics[metricName];
-            if (!metric || metric.pctile == null || !isFinite(Number(metric.pctile))) {
-                missing.push(`${channelName}.${metricName}`);
-            }
-        }
-    }
+const LONGQUANT_OUTPUT_CHANNELS = longScoreLedger.OUTPUT_CHANNELS;
+const LONGQUANT_OUTPUT_METRICS = longScoreLedger.OUTPUT_METRICS;
+const LONGQUANT_OUTPUT_COORDINATES = longScoreLedger.OUTPUT_COORDINATES;
+const LONGQUANT_VISUAL_THRESHOLD_COORDINATE =
+    longScoreLedger.VISUAL_THRESHOLD_COORDINATE;
+function longQuantLedgerValidation(score) {
+    return longScoreLedger.validateLongScoreLedger(
+        score && score.long_score_ledger
+    );
+}
+function longQuantLedgerMetric(score, group, metric) {
+    const cell = longScoreLedger.longLedgerCell(score, group, metric);
+    if (!cell.ledgerPresent || !cell.valid || !cell.entry) return null;
     return {
-        version: 1,
-        channels: [...LONGQUANT_OUTPUT_CHANNELS],
-        channel_inputs: {
-            visual: 'thumbnail image only',
-            together: 'thumbnail image plus title or idea',
-        },
-        metrics: [...LONGQUANT_OUTPUT_METRICS],
-        expected: LONGQUANT_OUTPUT_CHANNELS.length * LONGQUANT_OUTPUT_METRICS.length,
-        complete: missing.length === 0,
-        missing,
+        est: cell.value,
+        pctile: cell.percentile,
+        kind: cell.entry.kind || null,
+        projection: cell.entry.projection || null,
+        provenance: cell.entry.provenance || null,
+        coordinate_id: cell.coordinateId,
+        ledger_sha256: cell.ledgerSha256,
     };
 }
-function longQuantPublicScore(score) {
-    if (!score || score.error) return score || null;
-    const visual = score.channels && score.channels.visual;
-    const visualMetrics = visual && visual.metrics;
-    const visualCtrViews = visualMetrics && visualMetrics.ctrviews;
-    const pctRaw = score.visual_pctile != null ? score.visual_pctile
-        : score.thumbnail_potential != null ? score.thumbnail_potential
-            : visualCtrViews && visualCtrViews.pctile != null ? visualCtrViews.pctile
-                : score.pctile;
-    const pct = longQuantPct01(pctRaw);
-    const relevance = score.relevance == null || !isFinite(Number(score.relevance)) ? null : Number(score.relevance);
-    const neighbor = visual && Array.isArray(visual.neighbors) && visual.neighbors.length ? visual.neighbors[0] : null;
-    const nnRaw = score.nn_cos != null ? score.nn_cos : visual && visual.nn_cos != null ? visual.nn_cos : neighbor && neighbor.sim;
-    const nnCos = nnRaw == null || !isFinite(Number(nnRaw)) ? null : Number(nnRaw);
-    const relevancePenalty = relevance == null ? null : Math.max(0, LONGQUANT_RELEVANCE_FLOOR - relevance) * 2;
-    const densityPenalty = nnCos == null ? null : Math.max(0, LONGQUANT_DENSITY_FLOOR - nnCos) * 1.5;
-    const computedIdeaReward = pct == null || relevancePenalty == null ? null : pct - relevancePenalty;
-    const computedThumbReward = computedIdeaReward == null || densityPenalty == null ? null : computedIdeaReward - densityPenalty;
-    const priorIdeaReward = score.idea_model_reward == null || !isFinite(Number(score.idea_model_reward)) ? null : Number(score.idea_model_reward);
-    const priorThumbRaw = score.thumbnail_model_reward != null ? score.thumbnail_model_reward : score.training_reward;
-    const priorThumbReward = priorThumbRaw == null || !isFinite(Number(priorThumbRaw)) ? null : Number(priorThumbRaw);
-    const priorReward = score.reward == null || !isFinite(Number(score.reward)) ? null : Number(score.reward);
-    const ideaReward = computedIdeaReward == null ? priorIdeaReward : computedIdeaReward;
-    const thumbReward = computedThumbReward == null ? priorThumbReward : computedThumbReward;
-    const reward = thumbReward != null ? thumbReward : priorReward != null ? priorReward : pct;
-    const inputManifest = {
-        ...(score.input_manifest && typeof score.input_manifest === 'object' ? score.input_manifest : {}),
-        embedding_model: 'gemini-embedding-2',
-        embedding_dimensions: 1536,
-        display_preference: ['visual', 'together', 'text'],
-        primary_score: 'visual image-only ctrviews percentile on the frozen generator-training ladder',
-        threshold_uses: 'visual only',
-        note: 'Transcript or channel context can guide generation upstream. The threshold score embeds only the thumbnail image. Title text is embedded separately for relevance and diagnostic text/together maps; the together embedding never changes thumbnail potential.',
-    };
+function longQuantLedgerMetrics(score, group) {
+    const metrics = {};
+    LONGQUANT_OUTPUT_METRICS.forEach(metric => {
+        metrics[metric] = longQuantLedgerMetric(score, group, metric);
+    });
+    return metrics;
+}
+function longQuantOutputContract(score) {
+    return longScoreLedger.longOutputContract(
+        score && score.long_score_ledger
+    );
+}
+function longQuantContractFailure(score, prefix, errors) {
+    const ledger = score && score.long_score_ledger;
     return {
-        ...score,
-        pctile: pct,
-        visual_pctile: pct,
-        thumbnail_potential: pct,
-        reward,
-        training_reward: thumbReward,
-        thumbnail_model_reward: thumbReward,
-        idea_model_reward: ideaReward,
-        relevance,
-        nn_cos: nnCos,
-        metrics: visualMetrics || score.metrics || null,
-        input_manifest: inputManifest,
+        error: `${prefix}: ${
+            (errors || []).join('; ') || 'contract missing'
+        }`,
+        score_contract_error: true,
+        long_score_ledger:
+            longQuantLedgerValidation(score).valid
+                ? ledger
+                : null,
         output_contract: longQuantOutputContract(score),
-        channel_roles: {
-            visual: 'primary thumbnail-only performance score and default metric maps',
-            text: 'title or idea diagnostic only',
-            together: 'title plus thumbnail packaging diagnostic only',
-        },
-        reward_trace: {
-            ...((score.reward_trace && typeof score.reward_trace === 'object') ? score.reward_trace : {}),
-            visual_pctile: pct,
-            relevance,
-            relevance_floor: LONGQUANT_RELEVANCE_FLOOR,
-            relevance_penalty: relevancePenalty,
-            density: nnCos,
-            density_floor: LONGQUANT_DENSITY_FLOOR,
-            density_penalty: densityPenalty,
-            idea_model_reward: ideaReward,
-            thumbnail_model_reward: thumbReward,
-            threshold_score: pct,
-            threshold_channel: 'visual',
-            together_used_for_threshold: false,
-        },
+    };
+}
+function longQuantCompatibilityEnvelope(
+    score,
+    prefix,
+    errors
+) {
+    const output = JSON.parse(JSON.stringify(score || {}));
+    delete output.error;
+    delete output.score_contract_error;
+    output.long_score_ledger = score.long_score_ledger;
+    output.output_contract = longQuantOutputContract(score);
+    output.compatibility_validation = {
+        valid: false,
+        display_eligible: true,
+        predictor_eligible: false,
+        ledger_sha256:
+            score.long_score_ledger.ledger_sha256,
+        errors: [...new Set(errors || [])],
+        note: (
+            `${prefix}. Exact immutable ledger scalars remain visible; `
+            + 'this wrapper is excluded from predictor decisions until '
+            + 'its sidecars validate.'
+        ),
+    };
+    return output;
+}
+function longQuantCanonicalPublicEnvelope(
+    score,
+    { requireRewardContract = true } = {}
+) {
+    if (!score) return null;
+    const ledgerValidation = longQuantLedgerValidation(score);
+    if (score.error && !ledgerValidation.valid) return score;
+    if (
+        score.schema === longSavedThumbnailRecord.SCORE_SCHEMA
+        && score.scalar_score_authority
+            === longSavedThumbnailRecord.SCORE_AUTHORITY
+    ) {
+        const validation =
+            longSavedThumbnailRecord.validateScore(score);
+        return validation.valid
+            ? JSON.parse(JSON.stringify(score))
+            : longQuantCompatibilityEnvelope(
+                score,
+                'Long Quant canonical score envelope differs',
+                validation.errors
+            );
+    }
+    if (!ledgerValidation.valid) {
+        return longQuantContractFailure(
+            score,
+            'Long Quant scorer output has no valid canonical ledger',
+            ledgerValidation.errors
+        );
+    }
+    const inputValidation =
+        longScoreLedger.validateLongInputManifest(score);
+    if (!inputValidation.valid) {
+        return longQuantCompatibilityEnvelope(
+            score,
+            'Long Quant scorer input binding differs',
+            inputValidation.errors
+        );
+    }
+    const aliasValidation =
+        longScoreLedger.validateLongScoreAliasContract(score);
+    const rewardValidation =
+        requireRewardContract
+            ? longScoreLedger.validateLongScoreRewardContract(score)
+            : { valid: true, errors: [] };
+    if (
+        !aliasValidation.valid
+        || !rewardValidation.valid
+    ) {
+        return longQuantCompatibilityEnvelope(
+            score,
+            'Long Quant producer compatibility checks failed',
+            aliasValidation.errors.concat(
+                rewardValidation.errors
+            )
+        );
+    }
+    try {
+        return longSavedThumbnailRecord.canonicalScore({
+            ...score,
+            output_contract:
+                longQuantOutputContract(score),
+        });
+    } catch (error) {
+        return longQuantCompatibilityEnvelope(
+            score,
+            'Long Quant canonical score construction failed',
+            [error.message]
+        );
+    }
+}
+function longQuantPublicScore(score) {
+    return longQuantCanonicalPublicEnvelope(score, {
+        requireRewardContract: true,
+    });
+}
+function longQuantPublicTextScore(score) {
+    return longQuantCanonicalPublicEnvelope(score, {
+        requireRewardContract: false,
+    });
+}
+function longQuantScorePredictorValidation(score) {
+    const errors = [];
+    if (!score || typeof score !== 'object' || score.error) {
+        errors.push(
+            score && score.error
+                ? String(score.error)
+                : 'Long score is missing'
+        );
+        return { valid: false, errors };
+    }
+    if (
+        score.compatibility_validation
+        && score.compatibility_validation.valid === false
+    ) {
+        errors.push(
+            ...(
+                score.compatibility_validation.errors
+                || ['Long score compatibility sidecars are invalid']
+            )
+        );
+    }
+    const scoreValidation =
+        longSavedThumbnailRecord.validateScore(score);
+    if (!scoreValidation.valid) {
+        errors.push(...scoreValidation.errors);
+    }
+    const inputValidation =
+        longScoreLedger.validateLongInputManifest(score);
+    if (!inputValidation.valid) {
+        errors.push(...inputValidation.errors);
+    }
+    return {
+        valid: errors.length === 0,
+        errors: [...new Set(errors)],
     };
 }
 async function longQuantScoreThumbnail(buf, title, idea, interactive) {
     const scoreTitle = String(title || idea || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     const scoreIdea = String(idea || scoreTitle).replace(/\s+/g, ' ').trim().slice(0, 500);
-    if (!scoreTitle) throw new Error('Video title or idea is required for the 12-output Long Quant score');
+    if (!scoreTitle) throw new Error('Video title or idea is required for the 21-coordinate Long Quant score');
     const score = longQuantPublicScore(await longQuantScoreImageBuffer(buf, scoreTitle, scoreIdea, interactive));
     if (!score) throw new Error('Long Quant scorer returned nothing');
-    // NEVER hard-fail a whole generation because a channel map lacks some metric projections
-    // (raw-long/together/map.json shipped without ctr/ret30/realviews/ctrviews and this throw
-    // killed EVERY generation and upload score at the last step). The primary visual threshold
-    // score is intact — degrade LOUDLY: keep the incomplete-contract flag + a visible warning
-    // the UI already renders (found/12 in amber), and log it server-side.
+    if (score.error) throw new Error(score.error);
     if (!score.output_contract || !score.output_contract.complete) {
-        const missing = (score.output_contract && score.output_contract.missing) || [];
-        score.scoreWarning = `score is ${12 - missing.length}/12 outputs — missing ${missing.join(', ') || 'unknown outputs'} (channel map lacks those projections)`;
-        console.warn('[longquant] incomplete 12-output score (serving anyway):', missing.join(', '));
+        const errors = (score.output_contract && score.output_contract.producer_errors) || [];
+        throw new Error(
+            `Long Quant coordinate ledger failed validation: ${
+                errors.join(', ') || 'missing or stale ledger'
+            }`
+        );
     }
-    if (score.pctile == null && score.visual_pctile == null) {
+    const predictorValidation =
+        longQuantScorePredictorValidation(score);
+    if (!predictorValidation.valid) {
+        throw new Error(
+            'Long Quant score is display-only and cannot drive ranking: '
+            + predictorValidation.errors.join('; ')
+        );
+    }
+    if (longQuantDecisionPrimaryPercentile(score) == null) {
         throw new Error('Long Quant score has no visual percentile — the primary threshold axis is required');
     }
     return score;
 }
 function longQuantNormalizeRunScores(run) {
     if (!run || typeof run !== 'object') return run;
-    run.scoreAxis = 'visual_thumbnail_only_ctrviews';
-    run.thresholdChannel = 'visual';
-    run.packagingAffectsThreshold = false;
-    for (const attempt of (Array.isArray(run.attempts) ? run.attempts : [])) {
-        for (const thumb of (attempt && Array.isArray(attempt.thumbs) ? attempt.thumbs : [])) {
-            if (!thumb || !thumb.score || thumb.score.error) continue;
-            thumb.score = longQuantPublicScore(thumb.score);
-            thumb.reward = thumb.score && thumb.score.reward != null ? thumb.score.reward : thumb.reward;
+    const clean = {
+        ...run,
+        scoreAxis: 'visual_thumbnail_only_ctrviews',
+        thresholdChannel: 'visual',
+        packagingAffectsThreshold: false,
+    };
+    for (const field of ['best', 'winner']) delete clean[field];
+    clean.attempts = (
+        Array.isArray(run.attempts) ? run.attempts : []
+    ).map(attempt => {
+        const normalized = { ...(attempt || {}) };
+        for (const field of ['pct', 'bestThumb']) {
+            delete normalized[field];
+        }
+        normalized.thumbs = (
+            attempt && Array.isArray(attempt.thumbs)
+                ? attempt.thumbs
+                : []
+        ).map(thumb => {
+            const stored = { ...(thumb || {}) };
+            for (const field of ['pct', 'reward']) {
+                delete stored[field];
+            }
+            if (
+                stored.score
+                && !stored.score.error
+            ) {
+                const candidate = { ...stored.score };
+                delete candidate.scoreWarning;
+                stored.score = longQuantPublicScore(
+                    candidate
+                );
+            }
+            return stored;
+        });
+        return normalized;
+    });
+    if (run.baseline) {
+        clean.baseline = { ...run.baseline };
+        for (const field of ['pct', 'pctile']) {
+            delete clean.baseline[field];
+        }
+        if (
+            clean.baseline.score
+            && !clean.baseline.score.error
+        ) {
+            const candidate = {
+                ...clean.baseline.score,
+            };
+            delete candidate.scoreWarning;
+            clean.baseline.score =
+                longQuantPublicScore(candidate);
         }
     }
-    if (run.baseline && run.baseline.score && !run.baseline.score.error) {
-        run.baseline.score = longQuantPublicScore(run.baseline.score);
+    if (run.autosaved) {
+        clean.autosaved = { ...run.autosaved };
+        delete clean.autosaved.pct;
     }
-    return run;
+    return clean;
 }
-function longQuantPct01(v) {
+function longQuantThumbPercentile100(thumb) {
+    return thumb && thumb.score
+        ? lqScorePct(thumb.score)
+        : null;
+}
+function longQuantAttemptPercentile100(attempt) {
+    const values = (
+        attempt && Array.isArray(attempt.thumbs)
+            ? attempt.thumbs
+            : []
+    ).map(longQuantThumbPercentile100)
+        .filter(Number.isFinite);
+    return values.length ? Math.max(...values) : null;
+}
+function longQuantRunBestPercentile100(run) {
+    const values = (
+        run && Array.isArray(run.attempts)
+            ? run.attempts
+            : []
+    ).map(longQuantAttemptPercentile100)
+        .filter(Number.isFinite);
+    return values.length ? Math.max(...values) : null;
+}
+function longQuantLedgerPercentileFraction(v) {
     if (v == null) return null;
     const n = Number(v);
-    if (!isFinite(n)) return null;
-    return n > 1 ? Math.max(0, Math.min(1, n / 100)) : Math.max(0, Math.min(1, n));
+    if (!isFinite(n) || n < 0 || n > 100) return null;
+    return n / 100;
 }
 function longQuantPct100(v) {
-    const p = longQuantPct01(v);
+    const p = Number(v);
+    if (!isFinite(p) || p < 0 || p > 1) return null;
     return p == null ? null : Math.round(p * 1000) / 10;
+}
+function longQuantPrimaryPercentile(score) {
+    const metric = longQuantLedgerMetric(
+        score,
+        'visual',
+        'ctrviews'
+    );
+    return metric && metric.pctile != null
+        ? longQuantLedgerPercentileFraction(metric.pctile)
+        : null;
+}
+function longQuantDecisionPrimaryPercentile(score) {
+    return longQuantScorePredictorValidation(score).valid
+        ? longQuantPrimaryPercentile(score)
+        : null;
+}
+function longQuantDecisionObservation(score, name) {
+    const trace = score && score.decision_trace;
+    const value = trace && trace.observations
+        && trace.observations[name];
+    return value == null || !Number.isFinite(Number(value))
+        ? null
+        : Number(value);
+}
+function longQuantDecisionReward(score) {
+    const percentile = longQuantDecisionPrimaryPercentile(score);
+    if (percentile == null) return null;
+    const trace = score && score.decision_trace;
+    if (!trace) return percentile;
+    const relevance = longQuantDecisionObservation(
+        score,
+        'topical_relevance_cosine'
+    );
+    const density = longQuantDecisionObservation(
+        score,
+        'visual_manifold_density_cosine'
+    );
+    const thresholds = trace.policy_thresholds || {};
+    const relevanceFloor = Number(
+        thresholds.topical_relevance_floor
+    );
+    const densityFloor = Number(
+        thresholds.visual_manifold_density_floor
+    );
+    const relevancePenalty = (
+        relevance == null
+        || !Number.isFinite(relevanceFloor)
+    ) ? 0 : Math.max(0, relevanceFloor - relevance) * 2;
+    const densityPenalty = (
+        density == null
+        || !Number.isFinite(densityFloor)
+    ) ? 0 : Math.max(0, densityFloor - density) * 1.5;
+    return percentile - relevancePenalty - densityPenalty;
 }
 function longQuantDisplayGrindNote(note, thumbTries, limit) {
     const tries = Number(thumbTries);
@@ -12226,11 +23083,23 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
                     : 'idle';
     const publicStatus = executionState === 'recovering' ? 'recovering' : effectiveStatus;
     const orphanedRunning = executionState === 'recovering';
+    const bestPercentile100 =
+        longQuantRunBestPercentile100(run);
+    const winningAttempt = attempts.find(attempt => {
+        const value =
+            longQuantAttemptPercentile100(attempt);
+        return value != null
+            && value >= Number(run.threshold);
+    });
+    const publicAutosaved = run.autosaved
+        ? { ...run.autosaved }
+        : null;
+    if (publicAutosaved) delete publicAutosaved.pct;
     const activeAttempt = lastAttempt ? {
         k: lastAttempt.k,
         idea: lastAttempt.idea || lastAttempt.title || '',
         status: lastAttempt.status || '',
-        pct: lastAttempt.pct == null ? null : Number(lastAttempt.pct),
+        pct: longQuantAttemptPercentile100(lastAttempt),
         thumbs: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.length : 0,
         thumbSlots: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.length : 0,
         thumbImages: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.filter(t => t && t.image).length : 0,
@@ -12252,9 +23121,11 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         note: effectiveNote,
         threshold: run.threshold,
         scoreAxis: run.scoreAxis || 'visual_thumbnail_only_ctrviews',
+        scoreCoordinateId: LONGQUANT_VISUAL_THRESHOLD_COORDINATE,
+        scorePercentileUnit: 'percentile_0_100',
         thresholdChannel: 'visual',
         packagingAffectsThreshold: false,
-        best: run.best,
+        best: bestPercentile100,
         n: thumbTries,
         maxAttempts: run.thumbTryLimit || run.maxAttempts || null,
         thumbTryLimit: run.thumbTryLimit || run.maxAttempts || null,
@@ -12270,8 +23141,14 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         batchId: run.batchId || '',
         sourceVideo: run.sourceVideo || null,
         contextChars: run.contextChars || (run.context ? String(run.context).length : 0),
-        autosaved: run.autosaved || null,
-        winner: run.winner == null ? null : run.winner,
+        autosaved: publicAutosaved,
+        winner: winningAttempt
+            ? (
+                winningAttempt.k == null
+                    ? attempts.indexOf(winningAttempt)
+                    : winningAttempt.k
+            )
+            : null,
         activeAttempt,
         attemptsStarted: thumbTries,
         attemptsFinished: finishedThumbTries,
@@ -12394,64 +23271,428 @@ function longQuantCompactSourceVideo(v) {
         channel: String(v.channel || '').slice(0, 120),
     };
 }
+async function readLongSavedThumbnailIndex() {
+    const bytes = await cloud.downloadFromR2(
+        LONG_SAVED_THUMBNAIL_INDEX_KEY
+    );
+    if (!bytes) {
+        throw new HttpRequestError(
+            503,
+            'The saved Long Quant thumbnail index has not been built. '
+                + 'Run the offline saved-thumbnail migration.',
+            'long_saved_thumbnail_index_missing'
+        );
+    }
+    let index;
+    try {
+        index = JSON.parse(bytes.toString('utf8'));
+    } catch (error) {
+        throw new HttpRequestError(
+            409,
+            'The saved Long Quant thumbnail index is invalid JSON.',
+            'long_saved_thumbnail_index_invalid'
+        );
+    }
+    const validation =
+        longSavedThumbnailRecord.validateIndex(index);
+    if (!validation.valid) {
+        throw new HttpRequestError(
+            409,
+            'The saved Long Quant thumbnail index failed integrity '
+                + `validation: ${validation.errors.join('; ')}`,
+            'long_saved_thumbnail_index_integrity_failed'
+        );
+    }
+    return {
+        index,
+        validation,
+        key: LONG_SAVED_THUMBNAIL_INDEX_KEY,
+    };
+}
+
+async function readVerifiedLongSavedThumbnailPair(
+    id,
+    suppliedIndexBundle = null
+) {
+    const indexBundle = suppliedIndexBundle
+        || await readLongSavedThumbnailIndex();
+    const row = indexBundle.index.rows.find(
+        candidate => candidate && candidate.id === id
+    );
+    const legacy = indexBundle.index.legacy_unbound.find(
+        candidate => candidate && candidate.id === id
+    );
+    if (!row) {
+        return {
+            ...indexBundle,
+            row: null,
+            legacy: legacy || null,
+            record: null,
+        };
+    }
+    const recordBytes = await cloud.downloadFromR2(row.record_key);
+    if (!recordBytes) {
+        throw new HttpRequestError(
+            409,
+            'Canonical saved thumbnail source record is missing.',
+            'long_saved_thumbnail_record_missing'
+        );
+    }
+    let record;
+    try {
+        record = JSON.parse(recordBytes.toString('utf8'));
+    } catch (error) {
+        throw new HttpRequestError(
+            409,
+            'Canonical saved thumbnail source record is invalid JSON.',
+            'long_saved_thumbnail_record_invalid'
+        );
+    }
+    const pairValidation =
+        longSavedThumbnailRecord.validateIndexRecordPair(row, record);
+    if (!pairValidation.valid) {
+        throw new HttpRequestError(
+            409,
+            'Canonical saved thumbnail does not match its ledger index: '
+                + pairValidation.errors.join('; '),
+            'long_saved_thumbnail_pair_invalid'
+        );
+    }
+    return {
+        ...indexBundle,
+        row,
+        legacy: null,
+        record,
+        recordBytes,
+        pairValidation,
+    };
+}
+
+async function readVerifiedLongSavedThumbnailMedia(pair) {
+    const bytes = await cloud.downloadFromR2(pair.record.media.key);
+    if (!bytes) {
+        throw new HttpRequestError(
+            409,
+            'Canonical saved thumbnail media is missing.',
+            'long_saved_thumbnail_media_missing'
+        );
+    }
+    const sha256 = require('crypto')
+        .createHash('sha256')
+        .update(bytes)
+        .digest('hex');
+    if (
+        sha256 !== pair.record.media.thumbnail_sha256
+        || bytes.length !== pair.record.media.byte_length
+        || pair.row.media_key !== pair.record.media.key
+        || pair.row.thumbnail_sha256 !== sha256
+    ) {
+        throw new HttpRequestError(
+            409,
+            'Canonical saved thumbnail media bytes do not match the '
+                + 'ledger-bound identity.',
+            'long_saved_thumbnail_media_invalid'
+        );
+    }
+    return bytes;
+}
+
+const longSavedThumbnailIndexCas = createR2JsonCasMutator({
+    key: LONG_SAVED_THUMBNAIL_INDEX_KEY,
+    storage: r2JsonCasStorage,
+    emptyValue: () => longSavedThumbnailRecord.bindIndex({
+        rows: [],
+        legacy_unbound: [],
+    }),
+    validate: longSavedThumbnailRecord.validateIndex,
+    bind: index => {
+        index.updated_at = Date.now();
+        return longSavedThumbnailRecord.bindIndex(index);
+    },
+    label: 'saved Long thumbnail index',
+});
+
+function updateLongSavedThumbnailIndex(mutator) {
+    return longSavedThumbnailIndexCas.mutate(async index => {
+        await mutator(index);
+        return index;
+    });
+}
+function longQuantSavedScoreInputCandidates(
+    body,
+    displayTitle,
+    context,
+    sourceVideo
+) {
+    const candidates = [];
+    const seen = new Set();
+    const add = value => {
+        if (!value || typeof value !== 'object') return;
+        const title = String(value.title || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
+        const idea = String(
+            value.idea == null ? title : value.idea
+        )
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
+        const scoreText = String(
+            value.scoreText == null ? title : value.scoreText
+        )
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
+        if (!title) return;
+        const identity = JSON.stringify([
+            title,
+            idea,
+            scoreText,
+        ]);
+        if (seen.has(identity)) return;
+        seen.add(identity);
+        candidates.push({ title, idea, scoreText });
+    };
+    add(body.scoreInput || body.score_input);
+    if (
+        body.scoreTitle != null
+        || body.scoreIdea != null
+        || body.scoreText != null
+    ) {
+        add({
+            title: body.scoreTitle || displayTitle,
+            idea: body.scoreIdea,
+            scoreText: body.scoreText,
+        });
+    }
+    const candidateIdea = String(
+        body.idea || displayTitle || ''
+    )
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+    const sourceTitle = String(
+        (sourceVideo && sourceVideo.title)
+        || displayTitle
+        || candidateIdea
+    )
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+    const contextualIdea = longQuantScoreText(
+        sourceTitle || candidateIdea,
+        candidateIdea,
+        context,
+        sourceVideo
+    );
+    add({
+        title: candidateIdea,
+        idea: contextualIdea || candidateIdea,
+        scoreText: candidateIdea,
+    });
+    add({
+        title: displayTitle,
+        idea: body.idea || displayTitle,
+        scoreText: displayTitle,
+    });
+    add({
+        title: displayTitle,
+        idea: displayTitle,
+        scoreText: displayTitle,
+    });
+    return candidates;
+}
 async function longQuantSaveThumbRecord(body = {}) {
     const jpg = body.jpg || null;
     if (!jpg) throw new Error('no image');
     const id = 'lt' + Date.now().toString(36) + Math.floor(Math.random() * 1e5).toString(36);
-    const title = String(body.title || body.idea || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+    const displayTitle = String(body.title || body.idea || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+    if (!displayTitle) {
+        throw new Error('saved thumbnail title is required');
+    }
     const prompt = String(body.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
     const context = longQuantCleanContext(body.context || body.transcript30 || (body.meta && (body.meta.context || body.meta.transcript30)) || '');
-    const scoreText = String(body.scoreText || longQuantScoreText(title, body.idea || title, context, body.sourceVideo || (body.meta && body.meta.sourceVideo)) || body.idea || context || title || '').slice(0, LONGQUANT_SCORE_TEXT_CHARS);
-    let savedScore = (body.score && typeof body.score === 'object' && !body.score.loading && !body.score.error) ? body.score : null;
-    if (savedScore) savedScore = longQuantPublicScore(savedScore);
-    if (!savedScore || !savedScore.channels || !savedScore.emb_preview || !savedScore.output_contract || !savedScore.output_contract.complete) {
-        savedScore = await longQuantScoreThumbnail(jpg, title, scoreText || title);
-    }
-    const pctile = longQuantPct01(savedScore && savedScore.pctile != null ? savedScore.pctile : body.pctile);
-    const relevance = (typeof body.relevance === 'number') ? body.relevance : (savedScore && savedScore.relevance != null ? Number(savedScore.relevance) : null);
     const sourceVideo = longQuantCompactSourceVideo(body.sourceVideo || (body.meta && body.meta.sourceVideo));
+    let savedScore = (
+        body.score
+        && typeof body.score === 'object'
+        && !body.score.loading
+    ) ? body.score : null;
+    if (!savedScore) {
+        throw new Error(
+            'saved thumbnail requires its existing canonical Long score; silent re-scoring is forbidden'
+        );
+    }
+    savedScore = longQuantPublicScore(savedScore);
+    if (!savedScore || savedScore.error) {
+        throw new Error(
+            savedScore && savedScore.error
+                ? savedScore.error
+                : 'saved thumbnail has no canonical Long Quant score'
+        );
+    }
+    const predictorValidation =
+        longQuantScorePredictorValidation(savedScore);
+    if (!predictorValidation.valid) {
+        throw new Error(
+            'saved thumbnail score is display-only and cannot be persisted '
+            + `as predictor evidence: ${
+                predictorValidation.errors.join('; ')
+            }`
+        );
+    }
+    const submittedLedgerSha =
+        String(body.score_ledger_sha256 || '');
+    const ledgerValidation =
+        longQuantLedgerValidation(savedScore);
+    if (
+        !exactSha256(submittedLedgerSha)
+        || !ledgerValidation.valid
+        || submittedLedgerSha
+            !== savedScore.long_score_ledger.ledger_sha256
+    ) {
+        throw new Error(
+            'saved thumbnail ledger SHA is missing or differs from the displayed score'
+        );
+    }
+    const matchedInput =
+        longQuantSavedScoreInputCandidates(
+            body,
+            displayTitle,
+            context,
+            sourceVideo
+        ).find(candidate => (
+            longScoreLedger.validateLongInputManifest(
+                savedScore,
+                {
+                    imageBytes: jpg,
+                    title: candidate.title,
+                    idea: candidate.idea,
+                    scoreText: candidate.scoreText,
+                }
+            ).valid
+        ));
+    if (!matchedInput) {
+        throw new Error(
+            'saved thumbnail score input differs from the submitted image/title; silent re-scoring is forbidden'
+        );
+    }
+    const title = matchedInput.title;
+    const exactInput = longScoreLedger.validateLongInputManifest(
+        savedScore,
+        {
+            imageBytes: jpg,
+            title,
+            idea: matchedInput.idea,
+            scoreText: matchedInput.scoreText,
+        }
+    );
+    if (!exactInput.valid) {
+        throw new Error(
+            `saved thumbnail score input differs: ${
+                exactInput.errors.join('; ')
+            }`
+        );
+    }
+    if (longQuantDecisionPrimaryPercentile(savedScore) == null) {
+        throw new Error(
+            'saved thumbnail has no canonical visual CTR+views percentile'
+        );
+    }
     const meta = (body.meta && typeof body.meta === 'object') ? body.meta : {};
-    const inputManifest = (body.input_manifest && typeof body.input_manifest === 'object')
-        ? body.input_manifest
-        : (savedScore && savedScore.input_manifest && typeof savedScore.input_manifest === 'object' ? savedScore.input_manifest : null);
-    const rec = {
-        id, savedAt: Date.now(), title, prompt,
-        pctile, pct100: longQuantPct100(pctile), relevance,
-        reward: savedScore && savedScore.reward != null ? Number(savedScore.reward) : pctile,
-        training_reward: savedScore && savedScore.training_reward != null ? Number(savedScore.training_reward) : null,
-        idea_model_reward: savedScore && savedScore.idea_model_reward != null ? Number(savedScore.idea_model_reward) : null,
+    const thumbnailSha256 =
+        exactInput.query.thumbnail.sha256;
+    const mediaKey =
+        `longform/saved-thumbs/media/by-sha256/${thumbnailSha256}.jpg`;
+    const rec = longSavedThumbnailRecord.bindRecord({
+        id,
+        savedAt: Date.now(),
+        title,
+        displayTitle,
+        prompt,
         source: String(body.source || meta.source || '').slice(0, 80),
-        montageKey: String(body.montageKey || '').slice(0, 260),
         score: savedScore,
-        metrics: (body.metrics && typeof body.metrics === 'object') ? body.metrics : (savedScore && savedScore.metrics) || null,
-        channels: (body.channels && typeof body.channels === 'object') ? body.channels : (savedScore && savedScore.channels) || null,
-        emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : (savedScore && savedScore.emb_preview) || null,
-        input_manifest: inputManifest,
+        media: {
+            kind: 'thumbnail-jpeg',
+            key: mediaKey,
+            thumbnail_sha256: thumbnailSha256,
+            byte_length: jpg.length,
+        },
         sourceVideo,
         batchId: String(body.batchId || meta.batchId || '').slice(0, 80),
         runRid: String(body.runRid || meta.runRid || '').slice(0, 80),
         attemptK: body.attemptK != null ? Number(body.attemptK) : (meta.attemptK != null ? Number(meta.attemptK) : null),
         thumbI: body.thumbI != null ? Number(body.thumbI) : (meta.thumbI != null ? Number(meta.thumbI) : null),
         context,
-        baseline: meta.baseline || body.baseline || null,
-        meta,
-    };
-    await cloud.uploadToR2(`longform/saved-thumbs/${id}.jpg`, jpg, 'image/jpeg');
-    await cloud.uploadToR2(`longform/saved-thumbs/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
-    let idx = { thumbs: [] };
-    try { const ib = await cloud.downloadFromR2('longform/saved-thumbs/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
-    if (!Array.isArray(idx.thumbs)) idx.thumbs = [];
-    idx.thumbs = idx.thumbs.filter(t => t && t.id !== id);
-    idx.thumbs.push({
-        id, savedAt: rec.savedAt, title: rec.title, prompt: rec.prompt, pctile: rec.pctile, pct100: rec.pct100,
-        relevance: rec.relevance, reward: rec.reward, training_reward: rec.training_reward,
-        idea_model_reward: rec.idea_model_reward, source: rec.source, score: rec.score, metrics: rec.metrics,
-        channels: rec.channels, emb_preview: rec.emb_preview, input_manifest: rec.input_manifest,
-        sourceVideo: rec.sourceVideo, batchId: rec.batchId, runRid: rec.runRid,
-        attemptK: rec.attemptK, thumbI: rec.thumbI, baseline: rec.baseline,
     });
-    await cloud.uploadToR2('longform/saved-thumbs/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
-    return { id, rec };
+    const recValidation =
+        longSavedThumbnailRecord.validateRecord(rec);
+    if (!recValidation.valid) {
+        throw new Error(
+            `saved thumbnail binding failed: ${
+                recValidation.errors.join('; ')
+            }`
+        );
+    }
+    const existingMedia = await cloud.downloadFromR2(mediaKey)
+        .catch(() => null);
+    if (
+        existingMedia
+        && (
+            existingMedia.length !== jpg.length
+            || !existingMedia.equals(jpg)
+        )
+    ) {
+        throw new Error(
+            'content-addressed Long thumbnail media collision'
+        );
+    }
+    if (!existingMedia) {
+        await cloud.uploadToR2(mediaKey, jpg, 'image/jpeg');
+        const verifiedMedia = await cloud.downloadFromR2(mediaKey);
+        if (!verifiedMedia || !verifiedMedia.equals(jpg)) {
+            throw new Error(
+                'Long thumbnail media failed read-after-write validation'
+            );
+        }
+    }
+    const recordKey = `longform/saved-thumbs/${id}.json`;
+    const recordBytes = Buffer.from(JSON.stringify(rec));
+    await cloud.uploadToR2(recordKey, recordBytes, 'application/json');
+    const verifiedRecord = await cloud.downloadFromR2(recordKey);
+    if (
+        !verifiedRecord
+        || !verifiedRecord.equals(recordBytes)
+        || !longSavedThumbnailRecord.validateRecord(
+            JSON.parse(verifiedRecord.toString('utf8'))
+        ).valid
+    ) {
+        await cloud.deleteFromR2(recordKey).catch(() => {});
+        throw new Error(
+            'Long thumbnail record failed read-after-write validation'
+        );
+    }
+    try {
+        await updateLongSavedThumbnailIndex(index => {
+            index.rows = index.rows.filter(
+                row => row && row.id !== id
+            );
+            index.rows.push(
+                longSavedThumbnailRecord.compactIndexRow(rec)
+            );
+        });
+    } catch (error) {
+        await cloud.deleteFromR2(recordKey).catch(() => {});
+        throw error;
+    }
+    return {
+        id,
+        rec: longSavedThumbnailRecord.displayRecord(rec),
+    };
 }
 async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     const n = Math.max(1, Math.min(opts.maxCount || 8, parseInt(count, 10) || 5));
@@ -12459,13 +23700,38 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     const sourceVideo = longQuantCompactSourceVideo(opts.sourceVideo);
     const scoreText = longQuantScoreText((sourceVideo && sourceVideo.title) || idea, idea, context, sourceVideo);
     const stopRid = opts.stopRid || opts.grindRid || opts.parentRid || '';
-    const checkStop = () => stopRid ? longQuantThrowIfStopped(stopRid) : Promise.resolve();
+    const queueOwnership = opts.queueOwnership || null;
+    if (queueOwnership) {
+        requireQueueLeaseOwnership(
+            queueOwnership,
+            QUEUE_LEASE_NAMES.LONG_GRIND,
+            stopRid
+        );
+    }
+    const checkStop = async () => {
+        if (queueOwnership) {
+            await queueOwnership.checkpoint(
+                'check Long thumbnail worker ownership'
+            );
+        }
+        if (stopRid) await longQuantThrowIfStopped(stopRid);
+    };
     const emitStatus = async o => {
         if (stopRid && ['rendering', 'scoring'].includes(String(o && o.stage || ''))) {
             longQuantKeepWorkerWarm().catch(() => {});
         }
         const payload = { title: idea, n, ...(o || {}) };
-        await lqDemoStatus(rid, payload);
+        if (queueOwnership) {
+            await queueOwnership.mutate(
+                'write Long thumbnail worker status',
+                queueLeaseFence => lqDemoStatus(rid, {
+                    ...payload,
+                    queue_lease_fence: queueLeaseFence,
+                })
+            );
+        } else {
+            await lqDemoStatus(rid, payload);
+        }
         if (typeof opts.onStatus === 'function') await opts.onStatus(rid, payload);
     };
     const hostedThumb = longQuantHostedModelConfigured('thumb');
@@ -12476,6 +23742,19 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         promptModel, ideaModel: LONGQUANT_IDEA_MODEL, hosted: true, workerReady: hostedThumb,
         modelProvider: LONGQUANT_MODEL_PROVIDER, workerVersion: LONGQUANT_WORKER_VERSION,
         attempts: [], done: false, streaming: true,
+    };
+    const writeGroup = async () => {
+        if (queueOwnership) {
+            await queueOwnership.mutate(
+                'write Long thumbnail worker group',
+                queueLeaseFence => lqDemoGroupWrite(rid, {
+                    ...group,
+                    queue_lease_fence: queueLeaseFence,
+                })
+            );
+            return;
+        }
+        await lqDemoGroupWrite(rid, group);
     };
     await checkStop();
     let prompts;
@@ -12488,10 +23767,10 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         group.model = `exact prompt + ${LONGQUANT_RENDER_MODEL.split('/').pop()}`;
         group.renderExact = true;
         await emitStatus({ stage: 'prompting', done: 0, note: 'exact-prompt mode: skipping the models, rendering your prompt verbatim' });
-        await lqDemoGroupWrite(rid, group);
+        await writeGroup();
     } else {
         await emitStatus({ stage: 'prompting', done: 0, note: 'trained thumb_b10 is writing thumbnail prompts on the model worker' });
-        await lqDemoGroupWrite(rid, group);
+        await writeGroup();
         await checkStop();
         prompts = await longQuantWithHeartbeat(
             () => longQuantThumbPrompts(idea, n, context, {
@@ -12505,14 +23784,14 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     await checkStop();
     group.n = prompts.length;
     await emitStatus({ stage: 'rendering', n: prompts.length, done: 0, note: 'Flux Pro is rendering thumbnails; each result is scored and embedded as it lands' });
-    await lqDemoGroupWrite(rid, group);
+    await writeGroup();
     for (let k = 0; k < prompts.length; k++) {
         await checkStop();
         const prompt = prompts[k];
         const id = `${rid}_${k}`;
         const att = { k, prompt, status: 'rendering', montage_key: `longform/guesses/demo/montages/${id}.jpg` };
         group.attempts.push(att);
-        await lqDemoGroupWrite(rid, group);
+        await writeGroup();
         try {
             await checkStop();
             const jpg = await longQuantWithHeartbeat(
@@ -12521,10 +23800,25 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
                 15000
             );
             await checkStop();
-            await cloud.uploadToR2(att.montage_key, jpg, 'image/jpeg');
+            if (queueOwnership) {
+                await queueOwnership.mutate(
+                    'store Long thumbnail worker render',
+                    () => cloud.uploadToR2(
+                        att.montage_key,
+                        jpg,
+                        'image/jpeg'
+                    )
+                );
+            } else {
+                await cloud.uploadToR2(
+                    att.montage_key,
+                    jpg,
+                    'image/jpeg'
+                );
+            }
             att.status = 'scoring';
             await emitStatus({ stage: 'scoring', n: prompts.length, done: k, note: `scoring thumbnail ${k + 1}/${prompts.length} on raw-long visual/text/together embeddings` });
-            await lqDemoGroupWrite(rid, group);
+            await writeGroup();
             await checkStop();
             const score = await longQuantWithHeartbeat(
                 () => longQuantScoreThumbnail(jpg, idea, scoreText || idea),
@@ -12533,18 +23827,20 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
             );
             await checkStop();
             att.score = score;
-            att.pctile = score && score.pctile != null ? score.pctile : null;
-            att.relevance = score && score.relevance != null ? score.relevance : null;
-            att.nn_cos = score && score.nn_cos != null ? score.nn_cos : null;
-            att.reward = score && score.reward != null ? score.reward : att.pctile;
+            att.score_input = {
+                title: idea,
+                idea: scoreText || idea,
+                scoreText: idea,
+            };
             att.status = 'done';
         } catch (e) {
+            if (isQueueLeaseOwnershipError(e)) throw e;
             if (e && e.code === 'LONGQUANT_STOPPED') {
                 att.status = 'stopped';
                 group.done = true;
                 group.streaming = false;
                 group.error = 'stopped by you';
-                await lqDemoGroupWrite(rid, group);
+                await writeGroup();
                 await emitStatus({ stage: 'stopped', n: prompts.length, done: k, note: 'stopped by you' });
                 throw e;
             }
@@ -12552,23 +23848,43 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
             att.error = String(e.message || e).slice(0, 220);
         }
         await emitStatus({ stage: 'rendering', n: prompts.length, done: k + 1, note: `generated ${k + 1}/${prompts.length} thumbnails with thumb_b10 + Flux Pro` });
-        await lqDemoGroupWrite(rid, group);
+        await writeGroup();
     }
     group.attempts.sort((a, b) => {
         const ad = a && a.status === 'done';
         const bd = b && b.status === 'done';
         if (ad !== bd) return ad ? -1 : 1;
-        return ((b.reward != null ? b.reward : b.pctile) || -1) - ((a.reward != null ? a.reward : a.pctile) || -1);
+        return (
+            (longQuantDecisionReward(b && b.score) ?? -1)
+            - (longQuantDecisionReward(a && a.score) ?? -1)
+        );
     });
     const doneAttempts = group.attempts.filter(a => a && a.status === 'done');
-    const potentialValues = doneAttempts.map(a => Number(a.pctile)).filter(Number.isFinite);
-    const rewardValues = doneAttempts.map(a => Number(a.reward)).filter(Number.isFinite);
-    group.best_pctile = potentialValues.length ? Math.max(...potentialValues) : null;
-    group.best_reward = rewardValues.length ? Math.max(...rewardValues) : null;
+    const potentialValues = doneAttempts
+        .map(a => longQuantDecisionPrimaryPercentile(a.score))
+        .filter(Number.isFinite);
+    const rewardValues = doneAttempts
+        .map(a => longQuantDecisionReward(a.score))
+        .filter(Number.isFinite);
+    const bestPctile = potentialValues.length
+        ? Math.max(...potentialValues)
+        : null;
+    const bestReward = rewardValues.length
+        ? Math.max(...rewardValues)
+        : null;
     group.done = true;
     group.error = group.attempts.some(a => a.status === 'done') ? '' : (group.attempts[0] && group.attempts[0].error) || 'no thumbnails rendered';
-    await lqDemoGroupWrite(rid, group);
-    await emitStatus({ stage: 'done', n: group.attempts.length, done: group.attempts.length, best: group.best_pctile, error: group.error || '' });
+    await writeGroup();
+    await emitStatus({
+        stage: 'done',
+        n: group.attempts.length,
+        done: group.attempts.length,
+        best: bestPctile,
+        decision_reward: bestReward,
+        score_coordinate_id:
+            LONGQUANT_VISUAL_THRESHOLD_COORDINATE,
+        error: group.error || '',
+    });
     if (group.error) throw new Error(group.error);
     return group;
 }
@@ -12603,24 +23919,51 @@ async function longQuantDemoThumbGroup(idea, count, parentRid, attemptK, onStatu
 let _lqDemoBusy = false;
 async function longQuantDemoQueue() {
     if (_lqDemoBusy || !cloud.isR2Ready()) return;
-    let keys; try { keys = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
+    const keys = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json'));
     if (!keys.length) return;
     _lqDemoBusy = true;
     try {
         for (const key of keys) {
             const rid = key.split('/').pop().replace('.json', '');
-            let req = {}; try { req = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
-            await cloud.deleteFromR2(key).catch(() => {});
+            const existingGroup = await cloud.downloadFromR2(`longform/guesses/demo/groups/${rid}.json`);
+            if (existingGroup) {
+                const existing = JSON.parse(existingGroup.toString('utf8'));
+                if (existing && existing.done) {
+                    await cloud.deleteFromR2(key);
+                    continue;
+                }
+            }
+            const requestBuffer = await cloud.downloadFromR2(key);
+            if (!requestBuffer) continue;
+            let req;
+            try {
+                req = JSON.parse(requestBuffer.toString('utf8'));
+            } catch (e) {
+                const message = `invalid queued request: ${e.message || e}`;
+                await lqDemoGroupWrite(rid, {
+                    input_id: rid,
+                    title: '',
+                    idea: '',
+                    attempts: [],
+                    n: 0,
+                    done: true,
+                    streaming: false,
+                    error: message,
+                });
+                await lqDemoStatus(rid, { stage: 'done', title: '', n: 0, done: 0, error: message });
+                await cloud.deleteFromR2(key);
+                continue;
+            }
             await longQuantProcessRequest(rid, req);
+            await cloud.deleteFromR2(key);
         }
     } finally { _lqDemoBusy = false; }
 }
-setInterval(() => { longQuantDemoQueue().catch(() => {}); }, 4000);
+setInterval(() => {
+    longQuantDemoQueue().catch(e => console.warn('longquant generation queue:', e.message || e));
+}, 4000);
 function lqScorePct(score) {
-    const visualMetric = score && score.channels && score.channels.visual && score.channels.visual.metrics && score.channels.visual.metrics.ctrviews;
-    const p = score && (score.visual_pctile != null ? score.visual_pctile
-        : score.thumbnail_potential != null ? score.thumbnail_potential
-            : visualMetric && visualMetric.pctile != null ? visualMetric.pctile : score.pctile);
+    const p = longQuantDecisionPrimaryPercentile(score);
     if (p == null) return null;
     const n = Number(p);
     return n <= 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10;
@@ -12643,16 +23986,23 @@ async function longQuantFetchYoutubeThumb(videoId, url) {
     }
     return null;
 }
-async function longQuantGrindProcess(rid, req0) {
+async function longQuantGrindProcess(rid, req0, ownership) {
+    requireQueueLeaseOwnership(
+        ownership,
+        QUEUE_LEASE_NAMES.LONG_GRIND,
+        rid
+    );
+    await ownership.checkpoint('read Long grind prior run');
     let priorRun = null;
     try {
         const priorBuf = await cloud.downloadFromR2(`longform/grind/runs/${rid}.json`);
         if (priorBuf) priorRun = JSON.parse(priorBuf.toString('utf8'));
     } catch (e) { priorRun = null; }
-    // two server instances (local dev + Render) poll the same R2 queue — if the run is already
-    // heartbeating from another worker, do NOT start a second one on top of it
-    if (priorRun && priorRun.status === 'running' && !req0.resumedByUser
-        && (Date.now() - (Number(priorRun.ts) || 0)) < longQuantOrphanMs()) return;
+    if (priorRun) {
+        priorRun = longQuantNormalizeRunScores(priorRun);
+    }
+    // The durable lease, rather than a timestamp heuristic, is the authority
+    // that proves no other Render process may consume this run.
     const seed = String(req0.idea || req0.title || '').trim().slice(0, 500);
     const context = longQuantCleanContext(req0.context || req0.transcript30 || '');
     const sourceVideo = longQuantCompactSourceVideo(req0.sourceVideo);
@@ -12668,11 +24018,27 @@ async function longQuantGrindProcess(rid, req0) {
     const deadline = Date.now() + hours * 3600e3;
     const required = ['GEMINI_API_KEY'];
     for (const k of required) if (!process.env[k]) {
-        await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({ rid, idea: seed, threshold, attempts: [], status: 'error', error: `${k} not configured`, ts: Date.now() })), 'application/json').catch(() => {});
+        await ownership.mutate(
+            'write Long grind configuration error',
+            queueLeaseFence => cloud.uploadToR2(
+                `longform/grind/runs/${rid}.json`,
+                Buffer.from(JSON.stringify({
+                    rid,
+                    idea: seed,
+                    threshold,
+                    attempts: [],
+                    status: 'error',
+                    error: `${k} not configured`,
+                    ts: Date.now(),
+                    queue_lease_fence: queueLeaseFence,
+                })),
+                'application/json'
+            )
+        );
         return;
     }
     let attempts = Array.isArray(priorRun && priorRun.attempts) ? priorRun.attempts : [];
-    let status = 'running', winner = null, err = '', note = '', best = null;
+    let status = 'running', err = '', note = '';
     let rejected = priorRun && Number.isFinite(Number(priorRun.rejected)) ? Number(priorRun.rejected) : 0;
     let baseline = priorRun && priorRun.baseline ? priorRun.baseline : null;
     let autosaved = priorRun && priorRun.autosaved ? priorRun.autosaved : null;
@@ -12691,16 +24057,9 @@ async function longQuantGrindProcess(rid, req0) {
             a.error = a.error || 'worker interrupted before this batch finished importing';
         }
     }
-    if (priorRun && Number.isFinite(Number(priorRun.best))) best = Number(priorRun.best);
-    if (best == null) {
-        for (const a of attempts) {
-            if (a && Number.isFinite(Number(a.pct)) && (best == null || Number(a.pct) > best)) best = Number(a.pct);
-            for (const t of ((a && a.thumbs) || [])) {
-                const tp = Number.isFinite(Number(t.pct)) ? Number(t.pct) : lqScorePct(t.score);
-                if (tp != null && (best == null || tp > best)) best = tp;
-            }
-        }
-    }
+    let best = longQuantRunBestPercentile100({
+        attempts,
+    });
     const thumbSlotCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
     const thumbTryCount = () => thumbSlotCount();
     const thumbFinishedCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.filter(t => t && ['done', 'error', 'stopped'].includes(t.status || '')).length : 0), 0);
@@ -12714,19 +24073,19 @@ async function longQuantGrindProcess(rid, req0) {
     let writeInFlight = null;
     const write = () => {
         const liveThumbs = thumbTryCount();
-        queuedWritePayload = Buffer.from(JSON.stringify({
+        queuedWritePayload = {
             rid, idea: seed, title: sourceTitle || seed, context, sourceVideo, source, batchId,
             contextChars: context.length,
             threshold, count, attempts, n: liveThumbs, thumbTryCount: liveThumbs, thumbTryLimit: maxAttempts,
             scoreAxis: 'visual_thumbnail_only_ctrviews', thresholdChannel: 'visual', packagingAffectsThreshold: false,
             thumbImages: thumbImageCount(), thumbFinished: thumbFinishedCount(), ideaRounds: attempts.length,
-            status, winner, error: err, note,
-            best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
+            status, error: err, note,
+            rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
             baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
             progressContract: 2, lifecycleVersion: 3,
             ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
             modelProvider: LONGQUANT_MODEL_PROVIDER, workerVersion: LONGQUANT_WORKER_VERSION,
-        }));
+        };
         // Heartbeats and progress callbacks can land together. Coalesce them and serialize
         // R2 writes so an older, slower upload can never overwrite newer progress.
         if (!writeInFlight) {
@@ -12734,7 +24093,24 @@ async function longQuantGrindProcess(rid, req0) {
                 while (queuedWritePayload) {
                     const payload = queuedWritePayload;
                     queuedWritePayload = null;
-                    await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, payload, 'application/json').catch(() => {});
+                    await ownership.mutate(
+                        'write Long grind progress',
+                        queueLeaseFence => {
+                            const stored =
+                                longQuantNormalizeRunScores({
+                                ...payload,
+                                queue_lease_fence:
+                                    queueLeaseFence,
+                                });
+                            return cloud.uploadToR2(
+                                `longform/grind/runs/${rid}.json`,
+                                Buffer.from(
+                                    JSON.stringify(stored)
+                                ),
+                                'application/json'
+                            );
+                        }
+                    );
                 }
             })().finally(() => { writeInFlight = null; });
         }
@@ -12746,12 +24122,29 @@ async function longQuantGrindProcess(rid, req0) {
         await write();
         return true;
     };
-    const checkStopped = async () => (await longQuantGrindStopped(rid)) ? markStopped() : false;
+    const checkStopped = async () => {
+        await ownership.checkpoint(
+            'check Long grind cancellation'
+        );
+        const stopped = await cloud.existsInR2(
+            `longform/grind/stop/${rid}`
+        );
+        return stopped ? markStopped() : false;
+    };
     // HEARTBEAT: a live worker must never look orphaned. Silent stages (resume re-embeds, cold
     // idea-model calls) used to let run.ts age past the orphan window, so the recovery sweeper
     // yanked runs that were still running back into the queue mid-flight. Touch the run every 20s
     // unconditionally; only a worker that has genuinely died goes quiet now.
-    const hb = setInterval(() => { if (status === 'running') write(); }, 20000);
+    const hb = setInterval(() => {
+        if (status !== 'running') return;
+        write().catch(error => {
+            console.warn(
+                'longquant progress heartbeat failed:',
+                rid,
+                error.message
+            );
+        });
+    }, 20000);
     if (await checkStopped()) { clearInterval(hb); return; }
     const resumingProgress = longQuantGrindProgress(priorRun);
     note = resumingProgress.started
@@ -12801,14 +24194,19 @@ async function longQuantGrindProcess(rid, req0) {
             const jpg = await longQuantFetchYoutubeThumb(sourceVideo.id, sourceVideo.thumbnail).catch(() => null);
             if (await checkStopped()) { clearInterval(hb); return; }
             if (jpg) {
-                await cloud.uploadToR2(`longform/grind/originals/${rid}.jpg`, jpg, 'image/jpeg').catch(() => {});
+                await ownership.mutate(
+                    'store Long grind source thumbnail',
+                    () => cloud.uploadToR2(
+                        `longform/grind/originals/${rid}.jpg`,
+                        jpg,
+                        'image/jpeg'
+                    )
+                );
                 if (await checkStopped()) { clearInterval(hb); return; }
                 const sc = await longQuantScoreThumbnail(jpg, sourceTitle || seed, scoreText || sourceTitle || seed).catch(e => ({ error: e.message }));
                 if (await checkStopped()) { clearInterval(hb); return; }
                 baseline = {
                     image: rid,
-                    pctile: sc && !sc.error ? sc.pctile : null,
-                    pct: sc && !sc.error ? lqScorePct(sc) : null,
                     score: sc && !sc.error ? sc : null,
                     error: sc && sc.error ? sc.error : '',
                 };
@@ -12869,7 +24267,7 @@ async function longQuantGrindProcess(rid, req0) {
                 await write();
             }
             if (!idea) { rejected++; continue; }
-            const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], pct: null, distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, topic: gateInfo.topic, topicFloor: gateInfo.floor, thumbStart, thumbEnd, batchCount, ts: Date.now() };
+            const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, topic: gateInfo.topic, topicFloor: gateInfo.floor, thumbStart, thumbEnd, batchCount, ts: Date.now() };
             attempts.push(a); await write();
             let group = null, reqRid = '';
             try {
@@ -12887,7 +24285,7 @@ async function longQuantGrindProcess(rid, req0) {
                         : 0;
                     while (a.thumbs.length < advertised) {
                         const i = a.thumbs.length;
-                        a.thumbs.push({ i, prompt: '', status: 'queued', pct: null, workerRid: _reqRid });
+                        a.thumbs.push({ i, prompt: '', status: 'queued', workerRid: _reqRid });
                     }
                     if (advertised) {
                         a.batchCount = advertised;
@@ -12904,10 +24302,16 @@ async function longQuantGrindProcess(rid, req0) {
                     const done = st.done != null && advertised ? usedBefore + Math.min(advertised, Number(st.done || 0)) : null;
                     note = `thumbnails ${thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: ${st.stage || 'queued'}${done != null ? ` ${done}/${maxAttempts}` : ''}${st.note ? ' — ' + st.note : ''}`;
                     await write();
-                }, { context, sourceVideo, stopRid: rid });
+                }, {
+                    context,
+                    sourceVideo,
+                    stopRid: rid,
+                    queueOwnership: ownership,
+                });
                 reqRid = out.reqRid;
                 group = out.group;
             } catch (e) {
+                if (isQueueLeaseOwnershipError(e)) throw e;
                 if (e && e.code === 'LONGQUANT_STOPPED') {
                     status = 'stopped';
                     note = 'stopped by you';
@@ -12932,7 +24336,7 @@ async function longQuantGrindProcess(rid, req0) {
             const groupAttempts = (group.attempts || []).slice(0, batchCount);
             while (a.thumbs.length < Math.min(batchCount, groupAttempts.length)) {
                 const i = a.thumbs.length;
-                a.thumbs.push({ i, prompt: '', status: 'importing', pct: null, workerRid: reqRid });
+                a.thumbs.push({ i, prompt: '', status: 'importing', workerRid: reqRid });
             }
             a.batchCount = a.thumbs.length;
             a.thumbEnd = usedBefore + a.thumbs.length;
@@ -12950,7 +24354,7 @@ async function longQuantGrindProcess(rid, req0) {
                     await write();
                     continue;
                 }
-                Object.assign(t, { i, prompt: s.prompt || '', status: 'importing', pct: null, workerRid: reqRid, sourceKey: s.montage_key || `longform/guesses/demo/montages/${reqRid}_${s.k != null ? s.k : i}.jpg` });
+                Object.assign(t, { i, prompt: s.prompt || '', status: 'importing', workerRid: reqRid, sourceKey: s.montage_key || `longform/guesses/demo/montages/${reqRid}_${s.k != null ? s.k : i}.jpg` });
                 await write();
                 try {
                     if (s.status && s.status !== 'done') {
@@ -12963,15 +24367,53 @@ async function longQuantGrindProcess(rid, req0) {
                     const jpg = await cloud.downloadFromR2(t.sourceKey).catch(() => null);
                     if (!jpg) throw new Error('generated image file not found in R2');
                     if (await checkStopped()) { t.status = 'stopped'; await write(); break; }
-                    await cloud.uploadToR2(`longform/grind/montages/${imgId}.jpg`, jpg, 'image/jpeg');
+                    await ownership.mutate(
+                        'store Long grind thumbnail',
+                        () => cloud.uploadToR2(
+                            `longform/grind/montages/${imgId}.jpg`,
+                            jpg,
+                            'image/jpeg'
+                        )
+                    );
                     t.image = imgId;
+                    const canonicalScore = longQuantPublicScore(
+                        s.score && typeof s.score === 'object'
+                            ? s.score
+                            : null
+                    );
+                    if (!canonicalScore || canonicalScore.error) {
+                        throw new Error(
+                            canonicalScore && canonicalScore.error
+                                ? canonicalScore.error
+                                : 'thumbnail worker returned no canonical Long Quant ledger'
+                        );
+                    }
+                    const predictorValidation =
+                        longQuantScorePredictorValidation(
+                            canonicalScore
+                        );
+                    if (!predictorValidation.valid) {
+                        throw new Error(
+                            'thumbnail worker score is display-only and '
+                            + `cannot enter the grind: ${
+                                predictorValidation.errors.join('; ')
+                            }`
+                        );
+                    }
+                    t.score = canonicalScore;
+                    t.score_input = s.score_input || {
+                        title: idea,
+                        idea: scoreText || idea,
+                        scoreText: idea,
+                    };
+                    if (longQuantThumbPercentile100(t) == null) {
+                        throw new Error(
+                            'thumbnail worker score lacks canonical visual CTR+views percentile'
+                        );
+                    }
                     t.status = 'done';
-                    t.pct = lqScorePct({ pctile: s.pctile });
-                    t.score = s.score && typeof s.score === 'object'
-                        ? { ...s.score, pctile: s.score.pctile != null ? s.score.pctile : s.pctile, relevance: s.score.relevance != null ? s.score.relevance : s.relevance, nn_cos: s.score.nn_cos != null ? s.score.nn_cos : s.nn_cos, reward: s.score.reward != null ? s.score.reward : s.reward }
-                        : { pctile: s.pctile, relevance: s.relevance, nn_cos: s.nn_cos, reward: s.reward, caption: s.caption || null };
-                    if (t.pct != null && (a.pct == null || t.pct > a.pct)) { a.pct = t.pct; a.bestThumb = i; }
                 } catch (e) {
+                    if (isQueueLeaseOwnershipError(e)) throw e;
                     t.status = 'error'; t.error = String(e.message || e).slice(0, 160);
                 }
                 await write();
@@ -12982,20 +24424,34 @@ async function longQuantGrindProcess(rid, req0) {
                 break;
             }
             a.status = 'done';
-            const improved = a.pct != null && (best == null || a.pct > best);
-            if (improved) { best = a.pct; sinceBest = 0; }
+            const attemptPercentile100 =
+                longQuantAttemptPercentile100(a);
+            const improved = attemptPercentile100 != null
+                && (
+                    best == null
+                    || attemptPercentile100 > best
+                );
+            if (improved) {
+                best = attemptPercentile100;
+                sinceBest = 0;
+            }
             else sinceBest++;
-            const won = a.pct != null && a.pct >= threshold;
+            const won = attemptPercentile100 != null
+                && attemptPercentile100 >= threshold;
             if (!won) {
                 const miss = best == null ? 1 : Math.max(0, (threshold - best) / Math.max(1, threshold));
                 const step = (0.012 + 0.075 * miss) * (1 + 0.15 * sinceBest);
                 gate += step;
             }
-            note = a.pct != null ? `thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: best scored ${a.pct}th (target ${threshold}) — next distance ≥ ${gate.toFixed(2)}` : `thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: finished without a score — next distance ≥ ${gate.toFixed(2)}`;
+            note = attemptPercentile100 != null ? `thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: best scored ${attemptPercentile100}th (target ${threshold}) — next distance ≥ ${gate.toFixed(2)}` : `thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: finished without a score — next distance ≥ ${gate.toFixed(2)}`;
             await write();
-            if (won) { status = 'won'; winner = a.k; note = `threshold cleared: thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts} hit ${a.pct}th`; break; }
+            if (won) { status = 'won'; note = `threshold cleared: thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts} hit ${attemptPercentile100}th`; break; }
         }
     } catch (e) {
+        if (isQueueLeaseOwnershipError(e)) {
+            clearInterval(hb);
+            throw e;
+        }
         if (e && e.code === 'LONGQUANT_STOPPED') { status = 'stopped'; note = 'stopped by you'; }
         else { err = String(e.message || e).slice(0, 220); status = 'error'; }
     }
@@ -13009,7 +24465,9 @@ async function longQuantGrindProcess(rid, req0) {
             for (const a of attempts) {
                 for (const t of (a.thumbs || [])) {
                     if (!t.image || t.status !== 'done') continue;
-                    const pct = t.pct != null ? Number(t.pct) : lqScorePct(t.score);
+                    const pct =
+                        longQuantThumbPercentile100(t);
+                    if (!Number.isFinite(pct)) continue;
                     if (!bestHit || pct > bestHit.pct) { bestHit = { ...t, pct }; bestAttempt = a; }
                 }
             }
@@ -13017,20 +24475,79 @@ async function longQuantGrindProcess(rid, req0) {
                 const key = `longform/grind/montages/${bestHit.image}.jpg`;
                 const jpg = await cloud.downloadFromR2(key).catch(() => null);
                 if (jpg) {
-                    const out = await longQuantSaveThumbRecord({
-                        jpg, title: sourceTitle || bestAttempt.idea || seed, idea: bestAttempt.idea || seed,
-                        prompt: bestHit.prompt || '', pctile: bestHit.pct / 100,
-                        relevance: bestHit.score && bestHit.score.relevance != null ? Number(bestHit.score.relevance) : null,
-                        montageKey: key, source: source || 'channel-grind',
-                        score: bestHit.score || null, context, transcript30: context,
-                        sourceVideo, batchId, runRid: rid, attemptK: bestAttempt.k, thumbI: bestHit.i,
-                        meta: { source, sourceVideo, batchId, runRid: rid, attemptK: bestAttempt.k, thumbI: bestHit.i, context, baseline },
-                    });
-                    autosaved = { id: out.id, pct: bestHit.pct, title: out.rec.title, sourceVideoId: sourceVideo && sourceVideo.id };
+                    const out = await ownership.mutate(
+                        'auto-save Long grind winner',
+                        () => longQuantSaveThumbRecord({
+                            jpg, title: sourceTitle || bestAttempt.idea || seed, idea: bestAttempt.idea || seed,
+                            prompt: bestHit.prompt || '',
+                            relevance: longQuantDecisionObservation(
+                                bestHit.score,
+                                'topical_relevance_cosine'
+                            ),
+                            montageKey: key, source: source || 'channel-grind',
+                            score: bestHit.score || null, context, transcript30: context,
+                            scoreInput: bestHit.score_input || {
+                                title: bestAttempt.idea || seed,
+                                idea: scoreText
+                                    || bestAttempt.idea
+                                    || seed,
+                                scoreText:
+                                    bestAttempt.idea || seed,
+                            },
+                            score_ledger_sha256:
+                                bestHit.score
+                                && bestHit.score.long_score_ledger
+                                && bestHit.score.long_score_ledger
+                                    .ledger_sha256,
+                            sourceVideo, batchId, runRid: rid, attemptK: bestAttempt.k, thumbI: bestHit.i,
+                            meta: {
+                                source,
+                                batchId,
+                                runRid: rid,
+                                attemptK:
+                                    bestAttempt.k,
+                                thumbI: bestHit.i,
+                            },
+                        })
+                    );
+                    autosaved = {
+                        id: out.id,
+                        title: out.rec.title,
+                        sourceVideoId:
+                            sourceVideo && sourceVideo.id,
+                        canonical_binding: {
+                            schema:
+                                'long-grind-autosave-binding-v1',
+                            ledger_sha256:
+                                bestHit.score
+                                && bestHit.score
+                                    .long_score_ledger
+                                && bestHit.score
+                                    .long_score_ledger
+                                    .ledger_sha256,
+                            image: bestHit.image,
+                            attempt_index:
+                                attempts.indexOf(bestAttempt),
+                            thumb_index:
+                                bestAttempt.thumbs.indexOf(
+                                    bestAttempt.thumbs.find(
+                                        thumb => (
+                                            thumb
+                                            && thumb.image
+                                                === bestHit.image
+                                        )
+                                    )
+                                ),
+                        },
+                    };
                     note = `${note || status} — best thumbnail auto-saved to Long Quant saved hooks`;
                 }
             }
         } catch (e) {
+            if (isQueueLeaseOwnershipError(e)) {
+                clearInterval(hb);
+                throw e;
+            }
             autosaved = { error: String(e.message || e).slice(0, 180) };
         }
     }
@@ -13096,7 +24613,7 @@ async function longQuantRecoverStaleGrinds() {
         if (recovered >= 25) break;
         const rid = key.split('/').pop().replace('.json', '');
         if (!rid || _lqGrindActive.has(rid)) continue;
-        const hasRequest = reqIds.has(rid);
+        let hasRequest = reqIds.has(rid);
         let existingReq = null;
         if (hasRequest) {
             try {
@@ -13117,56 +24634,183 @@ async function longQuantRecoverStaleGrinds() {
             || (run.status === 'running' && age > Math.min(staleMs, orphanMs))
             || (progress.started && run.status !== 'running');
         if (!shouldRecover) continue;
-        if (await longQuantGrindStopped(rid)) {
-            run.status = 'stopped'; run.note = 'stopped by you'; run.ts = now;
-            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
-            await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
+        let ownership = null;
+        try {
+            ownership = await queueLeaseCoordinator.acquire(
+                QUEUE_LEASE_NAMES.LONG_GRIND,
+                rid
+            );
+        } catch (error) {
+            console.warn(
+                'longquant recovery lease acquisition failed closed:',
+                rid,
+                error.message
+            );
             continue;
         }
-        const thumbTries = progress.thumbTries;
-        const req = longQuantRequestFromRun(run, rid);
-        req.resume = progress.started;
-        if (thumbTries >= req.maxAttempts) {
-            run.status = 'maxed';
-            run.note = `maxed at ${thumbTries}/${req.maxAttempts} thumbnails without clearing ${req.threshold}th`;
-            run.n = thumbTries;
-            run.thumbTryCount = thumbTries;
-            run.thumbTryLimit = req.maxAttempts;
-            run.ts = now;
-            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
-            await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
-            continue;
-        }
-        const waitingStatus = progress.started ? 'recovering' : 'queued';
-        const waitingNote = progress.started
-            ? `worker interrupted — resuming from ${thumbTries}/${req.maxAttempts} thumbnails before new queue items`
-            : 'queued — waiting for its first worker';
-        let changed = false;
-        if (run.status !== waitingStatus) {
-            run.status = waitingStatus;
-            run.note = waitingNote;
-            run.ts = now;
-            changed = true;
-        }
-        run.maxAttempts = req.maxAttempts;
-        run.thumbTryLimit = req.maxAttempts;
-        run.hours = req.hours;
-        run.autosaveBest = req.autosaveBest;
-        run.lifecycleVersion = 3;
-        if (hasRequest) {
-            if (changed) {
-                await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
-                recovered++;
+        if (!ownership) continue;
+        try {
+            // The preliminary reads above avoid leasing every healthy run.
+            // Re-read all mutable state after acquisition before repairing it.
+            await ownership.checkpoint(
+                'revalidate stale Long grind'
+            );
+            const freshBuffer = await cloud.downloadFromR2(key);
+            if (!freshBuffer) continue;
+            try {
+                run = JSON.parse(freshBuffer.toString('utf8'));
+            } catch (error) {
+                continue;
             }
-            continue;
+            if (!run || longQuantTerminalStatus(run.status)) {
+                continue;
+            }
+            const freshNow = Date.now();
+            const freshProgress = longQuantGrindProgress(run);
+            const freshAge =
+                freshNow - (Number(run.ts) || 0);
+            const stillRecoverable =
+                run.status === 'queued'
+                || run.status === 'recovering'
+                || (
+                    run.status === 'running'
+                    && freshAge > Math.min(staleMs, orphanMs)
+                )
+                || (
+                    freshProgress.started
+                    && run.status !== 'running'
+                );
+            if (!stillRecoverable) continue;
+
+            const requestKey =
+                `longform/grind/requests/${rid}.json`;
+            const requestBuffer =
+                await cloud.downloadFromR2(requestKey);
+            hasRequest = !!requestBuffer;
+            if (hasRequest) {
+                try {
+                    existingReq = JSON.parse(
+                        requestBuffer.toString('utf8')
+                    );
+                } catch (error) {
+                    existingReq = null;
+                }
+                if (
+                    !existingReq
+                    || (
+                        existingReq.resume !== true
+                        && !freshProgress.started
+                    )
+                ) {
+                    continue;
+                }
+            }
+            const writeRun = nextRun => ownership.mutate(
+                'write recovered Long grind run',
+                queueLeaseFence => cloud.uploadToR2(
+                    key,
+                    Buffer.from(JSON.stringify({
+                        ...nextRun,
+                        queue_lease_fence:
+                            queueLeaseFence,
+                    })),
+                    'application/json'
+                )
+            );
+            await ownership.checkpoint(
+                'check Long grind stop before recovery'
+            );
+            const stopped = await cloud.existsInR2(
+                `longform/grind/stop/${rid}`
+            );
+            if (stopped) {
+                run.status = 'stopped';
+                run.note = 'stopped by you';
+                run.ts = freshNow;
+                await writeRun(run);
+                if (hasRequest) {
+                    await ownership.mutate(
+                        'remove stopped Long grind request',
+                        () => cloud.deleteFromR2(requestKey)
+                    );
+                }
+                continue;
+            }
+
+            const thumbTries = freshProgress.thumbTries;
+            const req = longQuantRequestFromRun(run, rid);
+            req.resume = freshProgress.started;
+            if (thumbTries >= req.maxAttempts) {
+                run.status = 'maxed';
+                run.note = `maxed at ${thumbTries}/${req.maxAttempts} thumbnails without clearing ${req.threshold}th`;
+                run.n = thumbTries;
+                run.thumbTryCount = thumbTries;
+                run.thumbTryLimit = req.maxAttempts;
+                run.ts = freshNow;
+                await writeRun(run);
+                if (hasRequest) {
+                    await ownership.mutate(
+                        'remove maxed Long grind request',
+                        () => cloud.deleteFromR2(requestKey)
+                    );
+                }
+                continue;
+            }
+            const waitingStatus = freshProgress.started
+                ? 'recovering'
+                : 'queued';
+            const waitingNote = freshProgress.started
+                ? `worker interrupted — resuming from ${thumbTries}/${req.maxAttempts} thumbnails before new queue items`
+                : 'queued — waiting for its first worker';
+            let changed = false;
+            if (run.status !== waitingStatus) {
+                run.status = waitingStatus;
+                run.note = waitingNote;
+                run.ts = freshNow;
+                changed = true;
+            }
+            run.maxAttempts = req.maxAttempts;
+            run.thumbTryLimit = req.maxAttempts;
+            run.hours = req.hours;
+            run.autosaveBest = req.autosaveBest;
+            run.lifecycleVersion = 3;
+            if (hasRequest) {
+                if (changed) {
+                    await writeRun(run);
+                    recovered++;
+                }
+                continue;
+            }
+            run.note = waitingNote;
+            run.ts = freshNow;
+            req.lifecycleVersion = 3;
+            await writeRun(run);
+            await ownership.mutate(
+                'publish recovered Long grind request',
+                () => cloud.uploadToR2(
+                    requestKey,
+                    Buffer.from(JSON.stringify(req)),
+                    'application/json'
+                )
+            );
+            reqIds.add(rid);
+            recovered++;
+        } catch (error) {
+            console.warn(
+                'longquant recovery failed closed:',
+                rid,
+                error.message
+            );
+        } finally {
+            const released = await ownership.release();
+            if (!released.released) {
+                console.warn(
+                    'longquant recovery lease was not released cleanly:',
+                    rid,
+                    released.reason
+                );
+            }
         }
-        run.note = waitingNote;
-        run.ts = now;
-        req.lifecycleVersion = 3;
-        await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
-        await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(req)), 'application/json').catch(() => {});
-        reqIds.add(rid);
-        recovered++;
     }
     if (recovered) console.log(`[longquant] recovered ${recovered} stale grind run(s)`);
 }
@@ -13188,24 +24832,117 @@ async function longQuantGrindQueue() {
     candidates.sort((a, b) => (a.priority - b.priority) || a.key.localeCompare(b.key));
     for (const item of candidates) {
         if (_lqGrindActive.size >= limit) break;
-        const { key, rid, req0 } = item;
+        const { key, rid } = item;
         if (!rid || _lqGrindActive.has(rid)) continue;
+        let ownership = null;
+        try {
+            ownership = await queueLeaseCoordinator.acquire(
+                QUEUE_LEASE_NAMES.LONG_GRIND,
+                rid
+            );
+        } catch (error) {
+            console.warn(
+                'longquant queue lease acquisition failed closed:',
+                rid,
+                error.message
+            );
+            continue;
+        }
+        if (!ownership) continue;
         _lqGrindActive.add(rid);
         (async () => {
             try {
-            if (await longQuantGrindStopped(rid)) {
-                await cloud.deleteFromR2(key).catch(() => {});
-                let run = { rid, attempts: [], status: 'stopped', note: 'stopped by you', ts: Date.now() };
+                await ownership.checkpoint(
+                    'read Long grind request'
+                );
+                const requestBuffer =
+                    await cloud.downloadFromR2(key);
+                if (!requestBuffer) return;
+                let req0;
                 try {
-                    const b = await cloud.downloadFromR2(`longform/grind/runs/${rid}.json`);
-                    if (b) run = { ...run, ...JSON.parse(b.toString('utf8')), status: 'stopped', note: 'stopped by you', ts: Date.now() };
-                } catch (e) {}
-                await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
-                return;
-            }
-            await cloud.deleteFromR2(key).catch(() => {});
-            try { await longQuantGrindProcess(rid, req0); } catch (e) { console.warn('longquant grind err:', e.message); }
+                    req0 = JSON.parse(
+                        requestBuffer.toString('utf8')
+                    );
+                } catch (error) {
+                    console.warn(
+                        'longquant invalid queued request:',
+                        rid,
+                        error.message
+                    );
+                    return;
+                }
+                await ownership.checkpoint(
+                    'check queued Long grind cancellation'
+                );
+                const stopped = await cloud.existsInR2(
+                    `longform/grind/stop/${rid}`
+                );
+                if (stopped) {
+                    await ownership.mutate(
+                        'consume stopped Long grind request',
+                        () => cloud.deleteFromR2(key)
+                    );
+                    let run = {
+                        rid,
+                        attempts: [],
+                        status: 'stopped',
+                        note: 'stopped by you',
+                        ts: Date.now(),
+                    };
+                    try {
+                        const b = await cloud.downloadFromR2(
+                            `longform/grind/runs/${rid}.json`
+                        );
+                        if (b) {
+                            run = {
+                                ...run,
+                                ...JSON.parse(
+                                    b.toString('utf8')
+                                ),
+                                status: 'stopped',
+                                note: 'stopped by you',
+                                ts: Date.now(),
+                            };
+                        }
+                    } catch (error) {}
+                    await ownership.mutate(
+                        'write stopped Long grind run',
+                        queueLeaseFence => cloud.uploadToR2(
+                            `longform/grind/runs/${rid}.json`,
+                            Buffer.from(JSON.stringify({
+                                ...run,
+                                queue_lease_fence:
+                                    queueLeaseFence,
+                            })),
+                            'application/json'
+                        )
+                    );
+                    return;
+                }
+                await ownership.mutate(
+                    'consume Long grind request',
+                    () => cloud.deleteFromR2(key)
+                );
+                await longQuantGrindProcess(
+                    rid,
+                    req0,
+                    ownership
+                );
+            } catch (error) {
+                console.warn(
+                    'longquant grind worker failed closed:',
+                    rid,
+                    error.message
+                );
             } finally {
+                const released = await ownership.release();
+                if (!released.released) {
+                    console.warn(
+                        'longquant grind lease was not released cleanly:',
+                        rid,
+                        released.reason
+                    );
+                }
                 _lqGrindActive.delete(rid);
             }
         })().catch(e => {
@@ -13215,6 +24952,40 @@ async function longQuantGrindQueue() {
     }
 }
 setInterval(() => { longQuantGrindQueue().catch(() => {}); }, 5000);
+
+// Phone video probes are bounded in bytes, but a slow cellular uplink can
+// legitimately take more than Node's five-minute default request timeout.
+// The client has its own ten-minute abort and the route enforces a 72 MB cap.
+server.requestTimeout = Math.max(5 * 60e3, parseInt(process.env.SERVER_REQUEST_TIMEOUT_MS || String(12 * 60e3), 10));
+server.headersTimeout = Math.max(65000, parseInt(process.env.SERVER_HEADERS_TIMEOUT_MS || '65000', 10));
+function stopServer(signal) {
+    if (_serverStopping) return;
+    _serverStopping = true;
+    // Reject queued scorers before terminating the active tree. Otherwise the
+    // limiter would start the next memory-heavy process as the first one exits.
+    for (const limiter of _limiters.values()) {
+        for (const waiter of limiter.waiters.splice(0)) waiter();
+    }
+    for (const child of _rawScoreChildren) killRawPythonTree(child, 'SIGTERM');
+    let serverClosed = false;
+    server.close(() => { serverClosed = true; });
+    const settled = setInterval(() => {
+        const active = Array.from(_limiters.values()).reduce((sum, limiter) => sum + limiter.active, 0);
+        if (!serverClosed || _rawScoreChildren.size || active) return;
+        clearInterval(settled);
+        // Leave a short window for the async job's final R2 status write.
+        setTimeout(() => process.exit(0), 1000).unref();
+    }, 100);
+    const force = setTimeout(() => {
+        clearInterval(settled);
+        for (const child of _rawScoreChildren) killRawPythonTree(child, 'SIGKILL');
+        process.exit(0);
+    }, 8000);
+    force.unref();
+    console.log(`[shutdown] ${signal}: stopped accepting requests; terminating ${_rawScoreChildren.size} raw scorer process group(s)`);
+}
+process.once('SIGTERM', () => stopServer('SIGTERM'));
+process.once('SIGINT', () => stopServer('SIGINT'));
 
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();

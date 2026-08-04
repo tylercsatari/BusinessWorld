@@ -1,6 +1,6 @@
 {
   "schema": "jarvis-multiplicity-aware-promotion-ledger-v2",
-  "generatedAt": "2026-08-03T23:43:24.302Z",
+  "generatedAt": "2026-08-04T00:35:35.039Z",
   "alpha": 0.05,
   "governingContract": "principles-lab/DISCOVERY_CONTRACT.md",
   "observationIdentity": "platform + format + video_id + outcome_snapshot + representation_contract",
@@ -2410,7 +2410,7 @@
     {
       "path": "retention-study/retention_study.json",
       "bytes": 77840,
-      "modifiedAt": "2026-06-21T17:18:57.397Z",
+      "modifiedAt": "2026-08-04T00:34:01.084Z",
       "sha256": "8ad741540794979a06da5c633928f1983cdb5599959c749845cd504fcaf1e648"
     },
     {
@@ -2422,13 +2422,13 @@
     {
       "path": "indicator-registry.json",
       "bytes": 96034965,
-      "modifiedAt": "2026-05-14T21:52:00.160Z",
+      "modifiedAt": "2026-08-04T00:34:01.683Z",
       "sha256": "46afd3342106dc9de4d3683105c692dc98d4e0c78d546387f46e4a492e236e39"
     },
     {
       "path": "indicators_compact.json",
       "bytes": 4887185,
-      "modifiedAt": "2026-05-14T15:56:00.653Z",
+      "modifiedAt": "2026-08-04T00:34:01.769Z",
       "sha256": "3f14867b6e4a2bb23f792a650bdb4242db03ba18e96364c552a351394352f005"
     },
     {
@@ -2440,13 +2440,13 @@
     {
       "path": "derived_experiments_compact.json",
       "bytes": 85532845,
-      "modifiedAt": "2026-05-14T15:56:01.190Z",
+      "modifiedAt": "2026-08-04T00:34:02.366Z",
       "sha256": "190f1444e6eb15d8505ad4d08383120242e3114148031c48ce101090028941ee"
     },
     {
       "path": "graph_compact.json",
       "bytes": 6813975,
-      "modifiedAt": "2026-04-27T16:07:27.991Z",
+      "modifiedAt": "2026-08-04T00:34:02.441Z",
       "sha256": "0d67bb16a56fe31b2f0931a63e7d317af05d0cf4242bf8ee4e3b56071824d6ee"
     },
     {
@@ -2458,13 +2458,13 @@
     {
       "path": "predictor-lab/channel-free-signal.json",
       "bytes": 8276,
-      "modifiedAt": "2026-08-03T23:41:15.066Z",
+      "modifiedAt": "2026-08-04T00:14:18.242Z",
       "sha256": "1165299b5f7797dff6653baac9b976f6b241459b26e244b09c3dd5bf00b1959c"
     },
     {
       "path": "predictor-lab/channel-free-scores.json",
       "bytes": 103938,
-      "modifiedAt": "2026-08-03T23:41:15.069Z",
+      "modifiedAt": "2026-08-04T00:14:18.242Z",
       "sha256": "61608c7ea5fed5edcb9aa73d9d32fcb57f29e17302c1b87f7726ec415e511184"
     },
     {
@@ -2482,79 +2482,79 @@
     {
       "path": "principles-lab/quant/panel-summary.json",
       "bytes": 12606,
-      "modifiedAt": "2026-07-26T17:51:17.599Z",
+      "modifiedAt": "2026-08-04T00:14:18.359Z",
       "sha256": "8df576975277792d08292696e8abb6e29727756a85a6b5f2658e8e1e26c373e7"
     },
     {
       "path": "principles-lab/quant/snapshot-manifest.json",
       "bytes": 9129,
-      "modifiedAt": "2026-07-26T17:22:28.738Z",
+      "modifiedAt": "2026-08-04T00:14:18.362Z",
       "sha256": "9d91cc8b79c7dc050120b55b25676fced7fedb31609e60265ea8b0b4d02bd7c2"
     },
     {
       "path": "principles-lab/quant/snapshot-integrity.json",
       "bytes": 4637,
-      "modifiedAt": "2026-07-26T18:24:14.996Z",
+      "modifiedAt": "2026-08-04T00:14:18.362Z",
       "sha256": "c58472d2d5320dfa2fe0346747c939eb056cbbd624fc9122f1cdf43c7a6b4a7d"
     },
     {
       "path": "principles-lab/quant/reconstructed-geometry-summary.json",
       "bytes": 6402,
-      "modifiedAt": "2026-07-26T17:49:44.555Z",
+      "modifiedAt": "2026-08-04T00:14:18.361Z",
       "sha256": "b4a14b5a9f39f6c90e9a116ecd0ccedde17b8d3a9ace4af5ea7772b62f44a618"
     },
     {
       "path": "principles-lab/quant/semantic-family-summary.json",
       "bytes": 2281,
-      "modifiedAt": "2026-07-26T17:30:43.008Z",
+      "modifiedAt": "2026-08-04T00:14:18.361Z",
       "sha256": "9699d1755a72e6a2b22c942c9e6d601eae20027d305125368f65de9b1cb5372f"
     },
     {
       "path": "principles-lab/quant/cluster-invariance.json",
       "bytes": 520806,
-      "modifiedAt": "2026-07-26T17:42:31.916Z",
+      "modifiedAt": "2026-08-04T00:14:18.356Z",
       "sha256": "3ad8df3f651b64d48decbafd4ab96b02a96a4231accddfb8853663b65b2e4637"
     },
     {
       "path": "principles-lab/quant/ESTIMAND_SPEC.md",
       "bytes": 44253,
-      "modifiedAt": "2026-07-26T17:08:03.952Z",
+      "modifiedAt": "2026-08-04T00:14:18.352Z",
       "sha256": "6b726376c20507de7b917d86540abc41ba5237844cd9f7929a61768733dad566"
     },
     {
       "path": "principles-lab/quant/opportunity-adjustment.json",
       "bytes": 5440,
-      "modifiedAt": "2026-07-26T17:51:26.729Z",
+      "modifiedAt": "2026-08-04T00:14:18.359Z",
       "sha256": "c97e7f9a1ad7e86f57d8f213704eb2b9ed2b6d0fed05b9d10586ed3b692b33bc"
     },
     {
       "path": "principles-lab/quant/cluster-outcomes-adjusted.json",
       "bytes": 36964,
-      "modifiedAt": "2026-07-26T17:51:41.330Z",
+      "modifiedAt": "2026-08-04T00:14:18.357Z",
       "sha256": "5b9ccf542c97c9f5bd7d738b65553f445dbde6043875af36fe845816f114251f"
     },
     {
       "path": "principles-lab/quant/nested-outcome-validation.json",
       "bytes": 85021,
-      "modifiedAt": "2026-07-26T17:53:18.615Z",
+      "modifiedAt": "2026-08-04T00:14:18.359Z",
       "sha256": "39a153e1e546c0b44b0ad3790f5ae2a0baa68bfbf05b919c7a714840e2cffb42"
     },
     {
       "path": "principles-lab/quant/raw-embedding-validation.json",
       "bytes": 77279,
-      "modifiedAt": "2026-07-26T17:52:13.194Z",
+      "modifiedAt": "2026-08-04T00:14:18.361Z",
       "sha256": "28a5bfdf536c8c805d419cb711eed26b22c44e7eef832fb26518a820c2416699"
     },
     {
       "path": "principles-lab/quant/within-creator-delta-validation.json",
       "bytes": 184459,
-      "modifiedAt": "2026-07-26T18:06:28.910Z",
+      "modifiedAt": "2026-08-04T00:14:18.362Z",
       "sha256": "959789e7118cc59c8f8257bf3810d76d2b860cf64fe41c66cc8ab8306db67942"
     },
     {
       "path": "principles-lab/quant/baseline-sensitivity-validation.json",
       "bytes": 36330,
-      "modifiedAt": "2026-07-26T18:04:12.536Z",
+      "modifiedAt": "2026-08-04T00:14:18.352Z",
       "sha256": "0618fbe522c6044d15365fccc70918b8492188c2630ece40624e8c761ed107c0"
     }
   ]

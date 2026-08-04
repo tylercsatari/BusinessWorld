@@ -23,6 +23,12 @@ from PIL import Image
 import boto3
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+from shorts_score_ledger import (
+    feature_bundle_from_ledger,
+    feature_coordinate_id,
+)
+
 ENV = {}
 for l in (ROOT / '.env').read_text().splitlines():
     if '=' in l and not l.strip().startswith('#'):
@@ -35,6 +41,18 @@ RUN = os.environ.get('RUN', 'discover7')
 KEEP_MIN = float(os.environ.get('KEEP_MIN', '80'))
 VIEWS_MIN = float(os.environ.get('VIEWS_MIN', '5000000'))
 NOV_FLOOR = float(os.environ.get('NOV_FLOOR', '0.14'))
+TOGETHER_KEEP_COORDINATE = feature_coordinate_id(
+    {'key': 'together.keep'}
+)
+VISUAL_KEEP_COORDINATE = feature_coordinate_id(
+    {'key': 'visual.keep'}
+)
+TOGETHER_VIEWS_COORDINATE = feature_coordinate_id(
+    {'key': 'together.views'}
+)
+VISUAL_VIEWS_COORDINATE = feature_coordinate_id(
+    {'key': 'visual.views'}
+)
 PY = '/Users/tylercsatari/miniforge3/bin/python3'
 HERE = Path(__file__).resolve().parent
 RAW_UPLOAD = ROOT / 'raw_upload.py'
@@ -195,9 +213,21 @@ def score(montage_bytes, text, tries=4):
                                      capture_output=True, text=True, timeout=150, env=env)
                 if out.stdout.strip().startswith('{'):
                     j = json.loads(out.stdout)
-                    st = j.get('steer') or {}
-                    tk = (st.get('together_keep') or {}).get('est'); vk = (st.get('visual_keep') or {}).get('est')
-                    if isinstance(tk, (int, float)) or isinstance(vk, (int, float)):   # a REAL numeric score
+                    try:
+                        feature_bundle_from_ledger(
+                            j.get('score_ledger')
+                        )
+                        tk, _ = ledger_value(
+                            j,
+                            TOGETHER_KEEP_COORDINATE,
+                        )
+                        vk, _ = ledger_value(
+                            j,
+                            VISUAL_KEEP_COORDINATE,
+                        )
+                    except ValueError:
+                        tk = vk = None
+                    if isinstance(tk, (int, float)) or isinstance(vk, (int, float)):
                         return j
                 time.sleep(3 + 3 * t)   # back off (likely Gemini rate limit)
         return {'error': 'no usable steer after %d tries' % tries}
@@ -213,12 +243,25 @@ def embed_text(t):
     return v / (np.linalg.norm(v) + 1e-9)
 
 
-def gate(steer):
-    # canonical channel = "together" (the full hook: frames + text). Fall back to visual
-    # only when together is absent (e.g. a silent/text-less read).
-    est = lambda k: (steer.get(k) or {}).get('est')
-    keep = est('together_keep');  keep = est('visual_keep') if keep is None else keep
-    views = est('together_views'); views = est('visual_views') if views is None else views
+def ledger_value(score, coordinate_id):
+    ledger = score.get('score_ledger') or {}
+    feature_bundle_from_ledger(ledger)
+    for entry in ledger.get('entries') or []:
+        if (
+            entry.get('coordinate_id') == coordinate_id
+            and entry.get('available') is True
+        ):
+            return entry.get('value'), entry.get('percentile')
+    return None, None
+
+
+def gate(score):
+    keep, _ = ledger_value(score, TOGETHER_KEEP_COORDINATE)
+    if keep is None:
+        keep, _ = ledger_value(score, VISUAL_KEEP_COORDINATE)
+    views, _ = ledger_value(score, TOGETHER_VIEWS_COORDINATE)
+    if views is None:
+        views, _ = ledger_value(score, VISUAL_VIEWS_COORDINATE)
     ok = (keep is not None and keep >= KEEP_MIN) or (views is not None and views >= VIEWS_MIN)
     return ok, keep, views
 
@@ -268,11 +311,13 @@ def save_hook(premise, spec, montage_bytes, sc, kept, keep, views):
         idx = _state['idx']; _state['idx'] += 1
     gid = 'h%05d' % idx; hid = '%s_0' % gid
     s3.put_object(Bucket=BUCKET, Key='hooks/grpo/%s/montages/%s.jpg' % (RUN, hid), Body=montage_bytes, ContentType='image/jpeg')
-    steer = sc.get('steer') or {}
     nbrs = (sc.get('channels', {}).get('visual') or {}).get('neighbors') or []
     nbr = [[n.get('id'), n.get('sim')] for n in nbrs if n.get('id')]   # Guesses tab places hooks via nbr
     x, y = place_xy(nbrs)
-    pct = ((steer.get('together_keep') or steer.get('visual_keep') or {}).get('pctile') or 0) / 100.0
+    _, pct = ledger_value(sc, TOGETHER_KEEP_COORDINATE)
+    if pct is None:
+        _, pct = ledger_value(sc, VISUAL_KEEP_COORDINATE)
+    pct = (pct or 0) / 100.0
     row = {'id': hid, 'input_id': gid, 'k': 0, 'premise': premise, 'brief': premise, 'x': x, 'y': y, 'nbr': nbr,
            'pctile': pct, 'keep_pred': keep, 'views_pred': views, 'kept': kept,
            'cohesion_mode': spec.get('cohesion_mode', ''), 'frames': spec.get('frames', []),
@@ -287,7 +332,10 @@ def save_hook(premise, spec, montage_bytes, sc, kept, keep, views):
         rec = {'id': sid, 'savedAt': int(time.time() * 1000), 'kind': 'scored', 'source': 'r7_harvest',
                'title': premise[:140], 'text': premise, 'frames': spec.get('frames', []), 'frame_imgs': [],
                'cohesion_mode': spec.get('cohesion_mode', ''), 'hasMontage': True,
-               'indicators': sc.get('indicators'), 'steer': steer}
+               'indicators': sc.get('indicators'), 'steer': sc.get('steer'),
+               'features': sc.get('features'),
+               'score_ledger': sc.get('score_ledger'),
+               'novelty_provenance': sc.get('novelty_provenance')}
         s3.put_object(Bucket=BUCKET, Key='raw/saved-hooks/%s.json' % sid, Body=json.dumps(rec).encode(), ContentType='application/json')
 
 
@@ -309,7 +357,7 @@ def render_score_save(prem, spec, novelty=False):
         mon = montage(imgs)
         sc = score(mon, prem)
         if sc.get('error'): return 'fail'
-        kept, keep, views = gate(sc.get('steer') or {})     # gate takes the STEER dict, not the whole score object
+        kept, keep, views = gate(sc)
         save_hook(prem, spec, mon, sc, kept, keep, views)
     except Exception as ex:
         print('  render/score err:', str(ex)[:120], flush=True); return 'fail'

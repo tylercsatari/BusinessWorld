@@ -1985,3 +1985,192 @@
     border-top: 1px solid var(--j-border);
     margin: 28px 0;
 }
+
+/* Shared Shorts Experiment analysis queue. The Lab surface only changes its skin. */
+.score-analysis-queue {
+    margin-top: 12px;
+    overflow: hidden;
+    border: 1px solid #233453;
+    border-radius: 8px;
+    background: #0d1728;
+}
+
+.score-analysis-queue-head {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 11px;
+    border-bottom: 1px solid #233453;
+}
+
+.score-analysis-queue-head > div {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.score-analysis-queue-head small {
+    color: #22d3ee;
+    font-size: 8px;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.score-analysis-queue-head b {
+    color: #f1f5f9;
+    font-size: 12px;
+}
+
+.score-analysis-queue-head span {
+    color: #73839c;
+    font-size: 9px;
+}
+
+.score-analysis-queue-head button {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid #344663;
+    border-radius: 6px;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+}
+
+.score-analysis-queue-head button:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+.score-analysis-queue-list {
+    display: grid;
+}
+
+.score-analysis-queue-row {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 38px;
+    border-bottom: 1px solid #1c2b44;
+    background: transparent;
+}
+
+.score-analysis-queue-row:last-child {
+    border-bottom: 0;
+}
+
+.score-analysis-queue-row[data-selected="true"] {
+    box-shadow: inset 3px 0 0 var(--score-queue-accent);
+    background: #121f34;
+}
+
+.score-analysis-queue-row > [data-rawupmark] {
+    min-width: 0;
+    min-height: 54px;
+    display: grid;
+    grid-template-columns: minmax(118px, auto) minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 11px;
+    padding: 8px 11px;
+    border: 0;
+    background: transparent;
+    color: #f1f5f9;
+    text-align: left;
+    cursor: pointer;
+}
+
+.score-analysis-queue-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--score-queue-accent);
+    font-size: 9px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.score-analysis-queue-state i {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--score-queue-accent);
+}
+
+.score-analysis-queue-row[data-score-queue-state="queued"] i,
+.score-analysis-queue-row[data-score-queue-state="loading"] i,
+.score-analysis-queue-row[data-score-queue-state="waiting"] i,
+.score-analysis-queue-row[data-score-queue-state="scoring"] i,
+.score-analysis-queue-row[data-score-queue-state="processing"] i {
+    animation: score-analysis-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes score-analysis-pulse {
+    50% { opacity: .25; transform: scale(.75); }
+}
+
+.score-analysis-queue-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.score-analysis-queue-copy b,
+.score-analysis-queue-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.score-analysis-queue-copy b {
+    font-size: 11px;
+}
+
+.score-analysis-queue-copy small {
+    color: #73839c;
+    font-size: 8px;
+}
+
+.score-analysis-queue-toggle {
+    color: #73839c;
+    font-size: 13px;
+}
+
+.score-analysis-queue-remove {
+    min-width: 38px;
+    min-height: 38px;
+    align-self: center;
+    border: 0;
+    border-left: 1px solid #1c2b44;
+    background: transparent;
+    color: #73839c;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.score-analysis-queue-remove:hover {
+    color: #fb7185;
+}
+
+@media (max-width: 600px) {
+    .score-analysis-queue-head {
+        align-items: flex-start;
+    }
+
+    .score-analysis-queue-head > div {
+        display: grid;
+        gap: 2px;
+    }
+
+    .score-analysis-queue-row > [data-rawupmark] {
+        grid-template-columns: minmax(0, 1fr) 16px;
+        gap: 5px 8px;
+    }
+
+    .score-analysis-queue-state {
+        grid-column: 1 / -1;
+    }
+}
