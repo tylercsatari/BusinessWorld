@@ -4121,6 +4121,13 @@ async function writeImmutableStoryboardRevision(record) {
     }
 }
 
+const STORYBOARD_REFERENCE_ROLES = new Set([
+    'target-frame',
+    'sequence-sheet',
+    'storyboard-frame',
+    'external-source',
+]);
+
 async function storyboardGenerationReferences(refs) {
     const materialized = [];
     const identities = [];
@@ -4144,6 +4151,21 @@ async function storyboardGenerationReferences(refs) {
             && panelIndex >= 0
             && panelIndex < storyboardContract.PANEL_COUNT
         )))].sort((left, right) => left - right);
+        const sourcePanels = [...new Set((
+            specification && Array.isArray(specification.sourcePanels)
+                ? specification.sourcePanels
+                : []
+        ).map(Number).filter(panelIndex => (
+            Number.isInteger(panelIndex)
+            && panelIndex >= 0
+            && panelIndex < storyboardContract.PANEL_COUNT
+        )))].sort((left, right) => left - right);
+        const requestedRole = String(
+            specification && specification.role || ''
+        ).trim();
+        const role = STORYBOARD_REFERENCE_ROLES.has(requestedRole)
+            ? requestedRole
+            : 'external-source';
         const global = !specification || specification.global !== false;
         const name = String(
             specification && specification.name
@@ -4194,18 +4216,31 @@ async function storyboardGenerationReferences(refs) {
             byte_length: bytes.length,
             media_type: type.mediaType,
             name,
+            role,
             global,
             panels,
+            source_panels: sourcePanels,
         });
-        descriptions.push(
-            `REFERENCE IMAGE ${index + 1} (${name}) applies to ${
+        const sourceLabel = sourcePanels.length
+            ? sourcePanels.map(panelIndex => `frame ${panelIndex + 1}`).join(', ')
+            : 'no prior storyboard frame';
+        const roleDescription = role === 'target-frame'
+            ? `is the CURRENT EDIT TARGET (${sourceLabel}). Modify this image only as requested and preserve every unmentioned visual detail.`
+            : role === 'sequence-sheet'
+                ? 'is the CANONICAL FIVE-FRAME SEQUENCE. Read its five equal columns from left to right as frames 1 through 5 and use it as the primary identity, object, location, wardrobe, lighting, and style record.'
+                : role === 'storyboard-frame'
+                    ? `is an ESTABLISHED CHRONOLOGICAL FRAME (${sourceLabel}). Use it as continuity evidence; do not redesign recurring people, objects, or locations.`
+                    : 'is an OPTIONAL EXTERNAL SOURCE IMAGE. Use it only to establish a newly introduced person, object, place, or requested visual style.';
+        descriptions.push([
+            `REFERENCE IMAGE ${index + 1} (${name}) ${roleDescription}`,
+            `Its requested output scope is ${
                 global || !panels.length
                     ? 'all five panels'
                     : panels.map(panelIndex => (
                         `panel ${panelIndex + 1}`
                     )).join(', ')
             }.`
-        );
+        ].join(' '));
         materialized.push(
             `data:${type.mediaType};base64,${bytes.toString('base64')}`
         );
@@ -4498,7 +4533,7 @@ function storyboardGenerationIdentity(modelKey, mode) {
         mode,
         prompt_template: mode === 'coherent-sheet'
             ? 'five-panel-coherent-sheet-v2'
-            : 'single-panel-generation-v1',
+            : 'single-panel-automatic-continuity-v2',
         geometry: mode === 'coherent-sheet'
             ? storyboardSheetGeometry(resolvedKey)
             : panelSize
@@ -4551,6 +4586,39 @@ function storyboardSheetPrompt({
             : '',
         ...referenceDescriptions,
         ...panelLines,
+    ].filter(Boolean).join('\n');
+}
+
+function storyboardPanelPrompt({
+    instruction,
+    relation,
+    targetPanel,
+    brief,
+    panels,
+    referenceDescriptions = [],
+}) {
+    const panelNumber = targetPanel + 1;
+    const sequenceLines = panels.map((panelPrompt, index) => (
+        `FRAME ${index + 1}${index === targetPanel ? ' (OUTPUT TARGET)' : ''}: ${
+            String(panelPrompt || '').trim() || 'No separate text instruction.'
+        }`
+    ));
+    return [
+        `Create exactly ONE vertical 9:16 image for storyboard frame ${panelNumber}.`,
+        relation === 'edit'
+            ? 'This is an edit. REFERENCE IMAGE 1 is the current target frame. Preserve its composition and every unmentioned detail; make only the requested change.'
+            : 'This is a new frame within an established five-frame sequence.',
+        'Continuity is automatic and mandatory. Treat the canonical sequence and established frame references as visual facts, not optional inspiration.',
+        'Keep recurring people exactly recognizable: same face, body, hair, wardrobe, and accessories. Keep recurring objects identical in shape, construction, material, color, scale, markings, and damage state. Preserve the established location, time, lighting logic, lens language, and photographic style unless the instruction explicitly changes one of them.',
+        'Resolve words such as this, that, it, they, the same, the machine, the object, or the person from the established visual sequence and the chronological frame plan. Never replace a referenced entity with a newly invented substitute.',
+        'Use preceding frames as the viewer context for this moment and following frames as continuity constraints. Preserve chronology and cause-and-effect.',
+        'Reference images are evidence only. Do not create a collage, contact sheet, split screen, border, caption, label, text, watermark, or multiple panels. Return one clean frame.',
+        brief ? `OVERALL SCENE: ${brief}` : '',
+        'CHRONOLOGICAL FIVE-FRAME PLAN:',
+        ...sequenceLines,
+        'AUTOMATIC IMAGE CONTEXT:',
+        ...referenceDescriptions,
+        `REQUEST FOR FRAME ${panelNumber}: ${instruction}`,
     ].filter(Boolean).join('\n');
 }
 
@@ -15216,9 +15284,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 { write: true }
             );
             const body = await readBody(req, 32 * 1024 * 1024);
-            const prompt =
+            const instruction =
                 String(body.prompt || '').trim().slice(0, 1800);
-            if (!prompt) {
+            if (!instruction) {
                 throw new HttpRequestError(
                     400,
                     'A panel prompt or edit instruction is required.',
@@ -15236,6 +15304,27 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const refs = await storyboardGenerationReferences(
                 Array.isArray(body.refs) ? body.refs : []
             );
+            const requestedTargetPanel = Number(body.targetPanel);
+            const targetPanel = Number.isInteger(requestedTargetPanel)
+                && requestedTargetPanel >= 0
+                && requestedTargetPanel < storyboardContract.PANEL_COUNT
+                ? requestedTargetPanel
+                : 0;
+            const brief = String(body.brief || '').trim().slice(0, 8000);
+            const panels = Array.from(
+                { length: storyboardContract.PANEL_COUNT },
+                (_, index) => String(
+                    body.panels && body.panels[index] || ''
+                ).trim().slice(0, 1800)
+            );
+            const prompt = storyboardPanelPrompt({
+                instruction,
+                relation,
+                targetPanel,
+                brief,
+                panels,
+                referenceDescriptions: refs.descriptions,
+            });
             const effectiveModel = storyboardEffectiveModel(
                 model,
                 relation,
@@ -15293,6 +15382,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         provider,
                         requestedModel: model,
                         relation,
+                        continuityPolicy: 'automatic-continuity-v2',
+                        targetPanel,
+                        referenceRoles: refs.identities.map(
+                            reference => reference.role
+                        ),
                         requestFingerprint,
                     };
                 },
@@ -15305,17 +15399,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 await recordExperimentLabActivity(labScope, {
                     type: 'storyboard-panel-generated',
                     status: 'started',
-                    title: prompt,
+                    title: instruction,
                     requestId: jobId,
                     detail:
                         `${provider} · ${effectiveModel} · ${relation}`,
                     input: {
                         kind: 'storyboard-panel',
-                        prompt,
+                        prompt: instruction,
                         requestedModel: model,
                         effectiveModel,
                         provider,
                         relation,
+                        targetPanel,
+                        continuityPolicy: 'automatic-continuity-v2',
                         referenceCount:
                             refs.identities.length,
                     },

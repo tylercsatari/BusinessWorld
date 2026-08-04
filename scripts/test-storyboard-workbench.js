@@ -82,8 +82,8 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=9')
-            && indexSource.indexOf('storyboard-workbench.js?v=9')
+        indexSource.includes('storyboard-workbench.js?v=10')
+            && indexSource.indexOf('storyboard-workbench.js?v=10')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -114,6 +114,22 @@ async function main() {
         serverSource.includes('panel 1 occupies 0-20%')
             && serverSource.includes('panel 5 80-100%'),
         'the model prompt must lock all five equal panel boundaries'
+    );
+    assert(
+        serverSource.includes('function storyboardPanelPrompt')
+            && serverSource.includes('Continuity is automatic and mandatory')
+            && serverSource.includes('Resolve words such as this, that, it')
+            && serverSource.includes('CHRONOLOGICAL FIVE-FRAME PLAN:'),
+        'single-frame generation must resolve references from the automatic '
+            + 'five-frame continuity contract'
+    );
+    assert(
+        serverSource.includes("'target-frame'")
+            && serverSource.includes("'sequence-sheet'")
+            && serverSource.includes("'storyboard-frame'")
+            && serverSource.includes("'external-source'")
+            && serverSource.includes('source_panels: sourcePanels'),
+        'every image sent to a frame edit must retain its explicit context role'
     );
     assert(
         serverSource.includes("sheet_aspect_ratio: '45:16'")
@@ -751,6 +767,18 @@ async function main() {
             source: current.panels[0].source,
             revisions: current.panels[0].revisions.length,
             refs: window.__calls.panel[0].refs.length,
+            referenceRoles: window.__calls.panel[0].refs.map(
+                reference => reference.role
+            ),
+            referenceScopes: window.__calls.panel[0].refs.map(
+                reference => ({
+                    global: reference.global,
+                    panels: reference.panels,
+                })
+            ),
+            targetPanel: window.__calls.panel[0].targetPanel,
+            brief: window.__calls.panel[0].brief,
+            panels: window.__calls.panel[0].panels,
             context: window.__calls.panel[0].context,
             sourcePanels: current.panels[0].sourcePanels,
         };
@@ -764,8 +792,35 @@ async function main() {
         'frame edits must deterministically fill the context budget with the '
             + 'base, live sheet, neighbors, uploads, and remaining frames'
     );
+    assert.deepStrictEqual(edit.referenceRoles, [
+        'target-frame',
+        'sequence-sheet',
+        'storyboard-frame',
+        'external-source',
+        'external-source',
+        'storyboard-frame',
+        'storyboard-frame',
+        'storyboard-frame',
+    ]);
+    assert(
+        edit.referenceScopes.every(reference => (
+            reference.global === false
+            && JSON.stringify(reference.panels) === '[0]'
+        )),
+        'every automatic reference must be scoped to the selected output frame'
+    );
+    assert.strictEqual(edit.targetPanel, 0);
+    assert.strictEqual(
+        edit.brief,
+        'A spill-proof machine is tested across five escalating scenes.'
+    );
+    assert.strictEqual(
+        edit.panels.length,
+        5,
+        'every panel request must carry the full chronological frame plan'
+    );
     assert.deepStrictEqual(edit.context, {
-        policy: 'automatic-continuity-v1',
+        policy: 'automatic-continuity-v2',
         sourcePanels: [0, 1, 2, 3, 4],
         includesSequence: true,
     });
@@ -933,9 +988,9 @@ async function main() {
         'saved storyboards must restore the canonical whole-panel artifact'
     );
     assert.strictEqual(
-        await page.locator('[data-sb-auto-context]').count(),
-        8,
-        'saved storyboards must reconstruct the same automatic context plan'
+        await page.locator('[data-sb-auto-continuity]').count(),
+        1,
+        'saved storyboards must expose one automatic continuity status, not selectors'
     );
     const scoreCallsBeforeMove = await page.evaluate(() => (
         window.__calls.score.length

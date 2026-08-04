@@ -381,17 +381,17 @@
                     <img src="${imageSource(ref.image)}" alt="${esc(ref.name || 'Reference')}">
                     <div class="sb-reference-copy">
                         <strong>${esc(ref.name || 'Reference')}</strong>
-                        <span>Used automatically where context fits</span>
+                        <span>Introduces a new person, object, place, or style</span>
                     </div>
                     <button type="button" class="sb-icon-button" data-sb-ref-delete="${esc(ref.id)}" title="Remove reference" aria-label="Remove reference">&times;</button>
                 </div>`;
             }).join('');
             return `<div class="sb-reference-section">
                 <div class="sb-section-head">
-                    <span>References</span>
-                    <button type="button" data-sb-add-reference title="Upload reference images">+ Add</button>
+                    <span>Optional source images</span>
+                    <button type="button" data-sb-add-reference title="Add a new person, object, place, or style">+ Add</button>
                 </div>
-                <div class="sb-reference-list">${rows || '<span class="sb-muted">No references</span>'}</div>
+                <div class="sb-reference-list">${rows || '<span class="sb-muted">Not needed for continuity between frames</span>'}</div>
             </div>`;
         }
 
@@ -425,13 +425,15 @@
             });
             return `<div class="sb-frame-context">
                 <div class="sb-section-head">
-                    <span>Automatic continuity</span>
-                    <small>${plan.entries.length}/${plan.limit} model images</small>
+                    <span>Continuity</span>
+                    <small>Automatic</small>
                 </div>
-                <div class="sb-context-list" aria-label="Image context selected automatically">${plan.entries.map(entry => (
-                    `<span data-sb-auto-context="${esc(entry.kind)}">${esc(entry.label)}</span>`
-                )).join('') || '<span>Context will appear as frames are added</span>'}</div>
-                <div class="sb-context-summary">The current frame stays primary. The live panel, nearest frames, and uploaded references are added automatically in a fixed order.</div>
+                <div class="sb-context-summary" data-sb-auto-continuity>
+                    ${plan.entries.length
+                        ? `Frame ${panelIndex + 1} automatically sees the current frame, the complete five-frame sequence, and every established subject and object.`
+                        : 'As frames are created, the full sequence is carried forward automatically.'}
+                    No reference selection is required.
+                </div>
             </div>`;
         }
 
@@ -1095,24 +1097,35 @@
             const limit = modelReferenceLimit(current);
             const entries = [];
             const seen = new Set();
-            const add = (image, label, kind, sourcePanel) => {
+            const add = (image, name, role, sourcePanels) => {
                 if (!image || seen.has(image) || entries.length >= limit) {
                     return;
                 }
                 seen.add(image);
-                entries.push({ image, label, kind, sourcePanel });
+                entries.push({
+                    image,
+                    name,
+                    role,
+                    sourcePanels: (sourcePanels || []).filter(index => (
+                        Number.isInteger(index)
+                        && index >= 0
+                        && index < PANEL_COUNT
+                    )),
+                    global: false,
+                    panels: [panelIndex],
+                });
             };
             add(
                 options.baseImage,
-                `Frame ${panelIndex + 1} (edit base)`,
-                'base',
-                panelIndex
+                `Current frame ${panelIndex + 1} - edit target`,
+                'target-frame',
+                [panelIndex]
             );
             add(
                 options.sequenceImage,
-                'Live five-frame panel',
-                'sequence',
-                null
+                'Canonical five-frame sequence, left to right',
+                'sequence-sheet',
+                Array.from({ length: PANEL_COUNT }, (_, index) => index)
             );
             const byDistance = Array.from(
                 { length: PANEL_COUNT },
@@ -1126,30 +1139,30 @@
                 Math.abs(index - panelIndex) === 1
             )).forEach(index => add(
                 current.panels[index].image,
-                `Frame ${index + 1} (neighbor)`,
-                'panel',
-                index
+                `Chronological neighbor - frame ${index + 1}`,
+                'storyboard-frame',
+                [index]
             ));
             current.references.forEach((reference, index) => add(
                 reference.image,
-                reference.name || `Uploaded reference ${index + 1}`,
-                'reference',
-                null
+                reference.name || `Optional source image ${index + 1}`,
+                'external-source',
+                []
             ));
             byDistance.filter(index => (
                 Math.abs(index - panelIndex) !== 1
             )).forEach(index => add(
                 current.panels[index].image,
-                `Frame ${index + 1}`,
-                'panel',
-                index
+                `Established frame ${index + 1}`,
+                'storyboard-frame',
+                [index]
             ));
             return {
                 entries,
-                refs: entries.map(entry => entry.image),
-                sourcePanels: entries
-                    .map(entry => entry.sourcePanel)
-                    .filter(index => Number.isInteger(index)),
+                refs: entries,
+                sourcePanels: [...new Set(entries.flatMap(
+                    entry => entry.sourcePanels
+                ))].sort((left, right) => left - right),
                 limit,
             };
         }
@@ -1310,11 +1323,14 @@
                         : prompt,
                     refs: context.refs,
                     relation,
+                    targetPanel: index,
+                    brief: current.brief,
+                    panels: current.panels.map(entry => entry.prompt),
                     context: {
-                        policy: 'automatic-continuity-v1',
+                        policy: 'automatic-continuity-v2',
                         sourcePanels: context.sourcePanels,
                         includesSequence: context.entries.some(
-                            entry => entry.kind === 'sequence'
+                            entry => entry.role === 'sequence-sheet'
                         ),
                     },
                 });
