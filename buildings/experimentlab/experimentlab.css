@@ -425,6 +425,57 @@
     border-collapse: collapse;
 }
 
+/* The scorer is shared with Jarvis, but its evidence should speak the Lab's
+   visual language. These classes keep the transcript readable in every state
+   without changing the canonical score renderer or its data contract. */
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript,
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript-editor {
+    margin-bottom: 8px !important;
+    padding: 12px 13px !important;
+    border: 1px solid var(--lab-line) !important;
+    border-radius: 12px !important;
+    background: var(--lab-paper-soft) !important;
+    color: var(--lab-ink) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025) !important;
+}
+
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript {
+    font-size: 12px !important;
+    font-style: normal !important;
+    line-height: 1.55 !important;
+}
+
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript.is-silent {
+    color: var(--lab-secondary) !important;
+    background: #fafafc !important;
+}
+
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript-source {
+    display: inline-block;
+    margin-left: 3px;
+    color: var(--lab-tertiary) !important;
+    font-size: 9px !important;
+    font-style: normal !important;
+}
+
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript-editor {
+    border-color: rgba(173, 105, 0, 0.28) !important;
+    background: #fffaf2 !important;
+}
+
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript-editor textarea,
+.experiment-lab-panel .shorts-experiment-surface .score-input-title-editor input {
+    border-color: var(--lab-line-strong) !important;
+    background: var(--lab-paper) !important;
+    color: var(--lab-ink) !important;
+}
+
+.experiment-lab-panel .shorts-experiment-surface .score-input-transcript-actions {
+    align-items: center;
+    gap: 8px !important;
+    margin-top: 8px !important;
+}
+
 /* Owner inspection presents workspace activity as evidence, not an audit-log ID. */
 .experiment-lab-panel .lab-team-activity-section,
 .experiment-lab-panel .lab-team-operation-detail,

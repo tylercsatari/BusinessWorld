@@ -2586,6 +2586,102 @@ window.fetch=function(url,options){
             ),
             'the full result must label the complete analysis explicitly'
         );
+        const scoreTranscript = automaticScoreAnalysis.locator(
+            '.score-input-transcript'
+        );
+        await scoreTranscript.waitFor();
+        assert.deepStrictEqual(
+            await scoreTranscript.evaluate(element => {
+                const style = getComputedStyle(element);
+                return {
+                    background: style.backgroundColor,
+                    border: style.borderTopColor,
+                    color: style.color,
+                    fontStyle: style.fontStyle,
+                };
+            }),
+            {
+                background: 'rgb(247, 247, 250)',
+                border: 'rgb(222, 222, 229)',
+                color: 'rgb(29, 29, 31)',
+                fontStyle: 'normal',
+            },
+            'the Experiment Lab transcript must use the light paper theme, '
+                + 'not the shared Jarvis navy presentation'
+        );
+        await automaticScoreAnalysis.locator(
+            '[data-rawtransedit]'
+        ).click();
+        const transcriptEditor = page.locator(
+            '[data-canonical-score-analysis] '
+                + '.score-input-transcript-editor'
+        );
+        await transcriptEditor.waitFor();
+        assert.deepStrictEqual(
+            await transcriptEditor.evaluate(element => {
+                const panelStyle = getComputedStyle(element);
+                const inputStyle = getComputedStyle(
+                    element.querySelector('textarea')
+                );
+                return {
+                    panelBackground: panelStyle.backgroundColor,
+                    panelColor: panelStyle.color,
+                    inputBackground: inputStyle.backgroundColor,
+                    inputColor: inputStyle.color,
+                };
+            }),
+            {
+                panelBackground: 'rgb(255, 250, 242)',
+                panelColor: 'rgb(29, 29, 31)',
+                inputBackground: 'rgb(255, 255, 255)',
+                inputColor: 'rgb(29, 29, 31)',
+            },
+            'editing a transcript must remain in the Experiment Lab visual '
+                + 'system instead of reverting to dark Jarvis controls'
+        );
+        await transcriptEditor.locator('[data-rawtranscancel]').click();
+        await page.locator(
+            '[data-canonical-score-analysis] [data-rawtitleedit]'
+        ).click();
+        const scoreTitleInput = page.locator(
+            '[data-canonical-score-analysis] '
+                + '.score-input-title-editor [data-rawtitletext]'
+        );
+        await scoreTitleInput.waitFor();
+        assert.deepStrictEqual(
+            await scoreTitleInput.evaluate(element => {
+                const style = getComputedStyle(element);
+                return {
+                    background: style.backgroundColor,
+                    color: style.color,
+                };
+            }),
+            {
+                background: 'rgb(255, 255, 255)',
+                color: 'rgb(29, 29, 31)',
+            },
+            'the score title editor must use the same light form controls'
+        );
+        await page.locator(
+            '[data-canonical-score-analysis] [data-rawtitlecancel]'
+        ).click();
+        assert.deepStrictEqual(
+            await page.locator(
+                '[data-canonical-score-analysis]'
+            ).locator('div, textarea, input').evaluateAll(elements => (
+                elements.map(element => ({
+                    tag: element.tagName.toLowerCase(),
+                    className: element.className,
+                    background: getComputedStyle(element).backgroundColor,
+                })).filter(item => (
+                    item.background === 'rgb(15, 23, 42)'
+                    || item.background === 'rgb(30, 41, 59)'
+                ))
+            )),
+            [],
+            'the complete Experiment Lab score must not contain Jarvis navy '
+                + 'panel or form backgrounds'
+        );
         assert.strictEqual(
             await page.evaluate(() => (
                 window.__labAutoSavedScore

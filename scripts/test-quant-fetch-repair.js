@@ -200,10 +200,10 @@ assert(activeLongScores === 0, `opening Long Quant detail surfaces must never cr
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
 includes(index, 'jarvis-upload-utils.js?v=canonical-source-v2', 'upload canonicalization bundle cache key must be bumped');
-includes(index, 'jarvis-retention.js?v=channel-free-score-v1', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=channel-free-score-v2', 'Shorts bundle cache key must be bumped');
 includes(index, 'storyboard-workbench.js?v=4', 'the advanced storyboard workbench bundle must load before Shorts');
 includes(index, 'experimentlab-ui.js?v=7', 'Experiment Lab score handoff bundle must be cache-busted');
-includes(index, 'experimentlab.css?v=9', 'Experiment Lab score presentation styles must be cache-busted');
+includes(index, 'experimentlab.css?v=10', 'Experiment Lab score presentation styles must be cache-busted');
 includes(index, 'storyboard-workbench.css?v=3', 'the advanced storyboard workbench styles must be cache-busted');
 includes(index, 'jarvis-longquant.js?v=immutable-score-card-v2', 'Long Quant bundle cache key must be bumped');
 
