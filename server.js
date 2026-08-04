@@ -867,6 +867,23 @@ async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallback
     if ((req.headers['accept-encoding'] || '').includes('gzip')) { res.writeHead(200, { ...hdr, 'Content-Encoding': 'gzip' }); res.end(e.gz); }
     else { res.writeHead(200, hdr); res.end(await _gunzipP(e.gz)); }
 }
+// Pre-compute an expensive gz-cached payload into _gzCache (same envelope as
+// serveGzCached) so the first real request is served from memory instantly.
+async function primeGzCache(cacheKey, fill) {
+    if (_gzCache.get(cacheKey)) return 'already-cached';
+    let buf = await fill();
+    if (!buf) return 'empty';
+    if (typeof buf === 'string') buf = Buffer.from(buf, 'utf8');
+    const gz = await _gzipP(buf);
+    gzCacheSet(cacheKey, {
+        t: Date.now(),
+        gz,
+        bytes: gz.length,
+        etag: '"' + require('crypto').createHash('md5').update(buf).digest('hex') + '"',
+    });
+    return `primed ${gz.length} gz bytes`;
+}
+
 const serveR2Gz = (req, res, r2key, ttlMs, fallback, fallbackStatus, options) =>
     serveGzCached(req, res, r2key, ttlMs, () => cloud.downloadFromR2(r2key), fallback, fallbackStatus, options);
 const gzCacheInvalidate = key => {
@@ -5855,6 +5872,26 @@ async function buildSavedChannelValidationBuffer() {
     );
 }
 
+async function savedChannelValidationCacheKey() {
+    try {
+        const release = await readPredictorLabReleaseManifest();
+        const sha = release && (release.sha256 || (release.manifest && release.manifest.sha256));
+        if (sha) return `computed:raw/saved-channel-validation:${sha}`;
+    } catch (error) { /* the builder below surfaces the real source error */ }
+    return 'computed:raw/saved-channel-validation:release-unknown';
+}
+
+// Warm the validation payload shortly after boot so the first Experiment Lab
+// visit is served from memory instead of waiting on the full rebuild.
+setTimeout(() => {
+    (async () => {
+        const key = await savedChannelValidationCacheKey();
+        const outcome = await primeGzCache(key, buildSavedChannelValidationBuffer);
+        console.log(`[saved-channel-validation] warmup: ${outcome}`);
+    })().catch(error => console.warn('[saved-channel-validation] warmup skipped:', error.message || error));
+}, 7000);
+
+
 async function buildFreshSavedChannelValidationBuffer(
     bundle
 ) {
@@ -10260,11 +10297,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // does channel discovery + scoring on a residential IP. Every video record is produced by
     // raw_upload.py, the exact scorer used by "score from link" above.
     if (pathname === '/api/raw/saved-channel-validation' && req.method === 'GET') {
+        // Freshness is enforced by KEYING the cache on the atomic release pointer
+        // sha (one tiny R2 read) instead of rebuilding the full 632x93 validation
+        // (~1 min) on every request. A new release changes the key and rebuilds
+        // immediately; an unchanged release serves the cached buffer.
+        const validationCacheKey = await savedChannelValidationCacheKey();
         await serveGzCached(
             req,
             res,
-            'computed:raw/saved-channel-validation',
-            -1,
+            validationCacheKey,
+            6 * 3600e3,
             buildSavedChannelValidationBuffer,
             {
                 version: savedChannelValidation.VERSION,

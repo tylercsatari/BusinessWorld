@@ -2413,6 +2413,41 @@ function buildCanonicalLineageCatalog(runtime) {
     const calibrations = clone(registries.calibrations);
     const artifacts = clone(registries.artifacts);
     const visualizations = clone(registries.visualizationMaps);
+    // Channel-free lineage entries are registered at runtime rather than in the
+    // contract document: the predictor-lab atomic release pointer pins the exact
+    // contract-file sha256, so editing the document would fail closed until a new
+    // model release is cut. These additions never enter the canonical contract
+    // identity or the stored-score coordinate universe.
+    representations['representation.shorts.concat.gemini4608.v1'] = {
+        domain: 'shorts', modality: 'concat',
+        rawInputSetIds: ['input.shorts.first5-montage.v1', 'input.shorts.first5-transcript.v1', 'input.shorts.first5-montage-transcript.v1'],
+        model: 'gemini-embedding-2 (three modality vectors concatenated)',
+        dimensions: 4608,
+        scoringNormalization: 'each 1536-D modality embedding is L2-normalized independently, then concatenated visual+text+together',
+        artifactId: 'artifact.repo.shorts.channel-free-scores.v1',
+    };
+    datasets['dataset.shorts.channel-free-private-keep.v1'] = {
+        domain: 'shorts', role: 'channel-free pooled research fit',
+        representationPopulation: 'The 584 private keep-labeled videos across all four owned accounts with visual, text, and together embeddings present.',
+        labelInputSetId: 'input.shorts.private-outcomes.v1',
+        targets: ['keep'],
+        selectionRule: 'Pooled across accounts with NO account feature, offset, or centering; every displayed value is an out-of-fold prediction whose fold excluded the evaluated video.',
+        identityHashSource: 'predictor-lab/channel-free-scores.json:identityHash',
+    };
+    algorithms['algorithm.shorts.channel-free-pooled-ridge.v1'] = {
+        domain: 'shorts', kind: 'direct_embedding_axis',
+        estimator: 'sklearn.linear_model.Ridge',
+        parameters: { alphaGrid: [1, 10, 100, 1000, 10000], alphaSelection: 'inner 4-fold MAE on training folds only', oof: '5 shuffle seeds x 5 folds; displayed value is the seed-mean OOF prediction' },
+        fit: 'One pooled direction per signal over normalized embeddings to raw keep; zero creator information.',
+        scalarFormula: 'oof_prediction = clip(normalized_embedding @ coefficient + intercept, 0, 100)',
+        sourceCode: ['buildings/jarvis/predictor-lab/run_channel_free_signal.py'],
+    };
+    artifacts['artifact.repo.shorts.channel-free-scores.v1'] = {
+        domain: 'shorts', path: 'buildings/jarvis/predictor-lab/channel-free-scores.json',
+        contains: ['video IDs', 'per-video held-out OOF keep predictions for visual/text/together/concat', 'runId', 'identityHash', 'validated summary metrics'],
+        runtimeRevisionRequired: false,
+        repoCommitted: true,
+    };
     const runtimeManifest = name => runtime.runtimeManifests
         && runtime.runtimeManifests[name] || null;
     const runtimeManifestValue = name => {
