@@ -5881,6 +5881,21 @@ async function savedChannelValidationCacheKey() {
     return 'computed:raw/saved-channel-validation:release-unknown';
 }
 
+if (process.env.PUBLISH_SAVED_CHANNEL_VALIDATION) {
+    (async () => {
+        const t0 = Date.now();
+        try {
+            const buffer = await buildSavedChannelValidationBuffer();
+            const parsed = JSON.parse(buffer.toString('utf8'));
+            console.log(`[publish-validation] OK version=${parsed.version} fingerprint=${String(parsed.sourceFingerprint).slice(0, 16)} persisted=${parsed.artifact && parsed.artifact.persisted} bytes=${buffer.length} in ${Date.now() - t0}ms`);
+            process.exit(parsed.artifact && parsed.artifact.persisted ? 0 : 2);
+        } catch (error) {
+            console.error('[publish-validation] FAILED:', error && error.message || error);
+            process.exit(1);
+        }
+    })();
+}
+
 // Warm the validation payload shortly after boot so the first Experiment Lab
 // visit is served from memory instead of waiting on the full rebuild.
 setTimeout(() => {
@@ -6043,6 +6058,14 @@ async function buildFreshSavedChannelValidationBuffer(
         'local:quant-coordinate-governance.json',
         quantCoordinateGovernanceBytes
     );
+    try {
+        sourceBuffers.set(
+            'local:predictor-lab/channel-free-scores.json',
+            require('fs').readFileSync(
+                path.join(__dirname, 'buildings/jarvis/predictor-lab/channel-free-scores.json')
+            )
+        );
+    } catch (error) { /* optional artifact; absent = not fingerprinted */ }
     const fingerprintHash = require('crypto').createHash('sha256');
     for (const [name, buffer] of [...sourceBuffers.entries()].sort(([left], [right]) => left.localeCompare(right))) {
         fingerprintHash.update(name);
@@ -6066,6 +6089,15 @@ async function buildFreshSavedChannelValidationBuffer(
                 return Buffer.from(JSON.stringify(cached));
             }
         } catch (e) {}
+    }
+    if (process.env.RENDER && !process.env.ALLOW_INPROCESS_VALIDATION_BUILD) {
+        // The full 632x93 build peaks ~666MB RSS and OOMs small instances. The web
+        // process serves the R2-persisted artifact only; rebuild + publish happen on
+        // a workstation: PUBLISH_SAVED_CHANNEL_VALIDATION=1 node server.js
+        throw new Error(
+            'The persisted validation artifact is out of date for the current sources. '
+            + 'Publish a fresh one from a workstation (PUBLISH_SAVED_CHANNEL_VALIDATION=1 node server.js).'
+        );
     }
     const validation = savedChannelValidation.buildValidation({
         channels,
