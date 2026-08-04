@@ -281,6 +281,68 @@
             restoreUi(snapshot);
         }
 
+        function saveButtonLabel(current) {
+            if (current.saveState === 'saving') return 'Saving...';
+            if (current.saveState === 'saved' && !current.dirty) {
+                return 'Saved';
+            }
+            return current.serverId ? 'Save revision' : 'Save';
+        }
+
+        function saveStateLabel(current) {
+            if (current.saveState === 'saving') {
+                return 'Saving quietly in the background';
+            }
+            if (current.saveState === 'error') {
+                return current.saveError || 'Background save failed';
+            }
+            if (current.serverId && !current.dirty) {
+                return `Saved in ${folderName(current.folderId)}`;
+            }
+            return 'Changes save automatically';
+        }
+
+        function syncPersistenceUi(current) {
+            if (!host || !host.isConnected || candidate() !== current) {
+                return;
+            }
+            const saveButton = host.querySelector('[data-sb-save]');
+            if (saveButton) {
+                saveButton.textContent = saveButtonLabel(current);
+                saveButton.disabled = (
+                    !hasPersistableContent(current)
+                    || state.busy
+                    || current.saveState === 'saving'
+                );
+            }
+            const saveState = host.querySelector('[data-sb-save-state]');
+            if (saveState) {
+                saveState.textContent = saveStateLabel(current);
+                saveState.classList.toggle(
+                    'is-error',
+                    current.saveState === 'error'
+                );
+                if (current.saveState === 'error') {
+                    saveState.setAttribute('role', 'alert');
+                } else {
+                    saveState.removeAttribute('role');
+                }
+            }
+        }
+
+        function syncSavedPicker() {
+            if (!host || !host.isConnected) return;
+            const currentPicker = host.querySelector('.sb-saved-picker');
+            if (
+                !currentPicker
+                || currentPicker.contains(document.activeElement)
+            ) return;
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = renderSavedPicker();
+            const nextPicker = wrapper.firstElementChild;
+            if (nextPicker) currentPicker.replaceWith(nextPicker);
+        }
+
         function imageSource(value) {
             return value ? esc(String(value)) : '';
         }
@@ -502,7 +564,7 @@
                 <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
                 ${state.candidates.length > 1 ? `<button type="button" data-sb-batch-score ${state.busy || !state.candidates.some(needsScore) ? 'disabled' : ''}>Score all ready</button>` : ''}
                 ${current.score ? '<button type="button" data-sb-open-score>Open embeddings</button>' : ''}
-                <button type="button" data-sb-save ${hasPersistableContent(current) && !state.busy && current.saveState !== 'saving' ? '' : 'disabled'}>${current.saveState === 'saving' ? 'Saving...' : current.saveState === 'saved' && !current.dirty ? 'Saved' : current.serverId ? 'Save revision' : 'Save'}</button>
+                <button type="button" data-sb-save ${hasPersistableContent(current) && !state.busy && current.saveState !== 'saving' ? '' : 'disabled'}>${saveButtonLabel(current)}</button>
             </div>`;
         }
 
@@ -698,13 +760,7 @@
                 <button type="button" data-sb-folder-new>${state.folderEditorOpen ? 'Cancel' : 'New folder'}</button>
                 ${selectedFolder ? `<button type="button" data-sb-folder-delete title="Delete ${esc(folderName(selectedFolder))}">Delete folder</button>` : ''}
                 ${state.folderEditorOpen ? `<div class="sb-folder-create"><input type="text" data-sb-folder-name data-sb-focus="folder-name" value="${esc(state.folderName)}" maxlength="120" placeholder="Folder name" aria-label="New folder name"><button type="button" class="is-primary" data-sb-folder-create>Create</button></div>` : ''}
-                <span class="sb-save-state ${current.saveState === 'error' ? 'is-error' : ''}">${current.saveState === 'saving'
-                    ? 'Saving to your private workspace...'
-                    : current.saveState === 'error'
-                        ? esc(current.saveError || 'Save failed')
-                        : current.serverId
-                            ? `Saved in ${esc(folderName(current.folderId))}`
-                            : 'Generated work saves automatically'}</span>
+                <span class="sb-save-state ${current.saveState === 'error' ? 'is-error' : ''}" data-sb-save-state>${esc(saveStateLabel(current))}</span>
             </div>`;
         }
 
@@ -1155,10 +1211,7 @@
             state.busy = false;
             state.busyCandidateId = null;
             paint();
-            await autoPersistCandidate(
-                current,
-                'Five generated frames saved to your workspace.'
-            );
+            autoPersistCandidate(current);
         }
 
         function drawStrokes(context, strokes) {
@@ -1283,10 +1336,7 @@
             state.busy = false;
             state.busyCandidateId = null;
             paint();
-            await autoPersistCandidate(
-                current,
-                `Frame ${index + 1} and its revision history were saved.`
-            );
+            autoPersistCandidate(current);
         }
 
         async function applySketch() {
@@ -1308,10 +1358,7 @@
                 await rebuildComposite(current);
                 state.status = `Sketch applied to frame ${current.selectedPanel + 1}.`;
                 paint();
-                await autoPersistCandidate(
-                    current,
-                    `Frame ${current.selectedPanel + 1} and its sketch were saved.`
-                );
+                autoPersistCandidate(current);
             } catch (error) {
                 fail(error);
             }
@@ -1402,23 +1449,13 @@
                 await scoreOne(current);
                 state.status = `${current.name} scored on ${scoreEntries(current).length} ledger coordinates.`;
                 if (autoPersistScore) {
-                    state.status = `${current.name} scored. Saving its complete analysis...`;
-                    paint();
-                    try {
-                        await persistCandidate(current, {
-                            refreshSaved: false,
-                        });
-                        try {
-                            await persistScoreArtifact(current);
-                        } catch (linkError) {
-                            state.error = `The scored storyboard is saved, but its Saved Hooks link failed: ${String((linkError && linkError.message) || linkError)}`.slice(0, 500);
-                            reportError(state.error);
-                        }
-                        state.status = `${current.name} scored and saved on ${scoreEntries(current).length} ledger coordinates.`;
-                    } catch (saveError) {
-                        state.error = `The score is complete and open below, but its saved copy failed: ${String((saveError && saveError.message) || saveError)}`.slice(0, 500);
-                        reportError(state.error);
-                    }
+                    persistScoredCandidate(current, {
+                        score: current.score,
+                        title: current.name,
+                        text: current.hookText,
+                        montage: current.score.montageDataUrl,
+                        folder: current.folderId,
+                    });
                 }
             } catch (error) {
                 fail(error);
@@ -1461,22 +1498,18 @@
                     await scoreOne(current);
                     lastScored = current;
                     if (autoPersistScore) {
-                        state.status = `Batch ${index + 1}/${queue.length}: saving ${current.name}`;
-                        paint();
-                        await persistCandidate(current, {
-                            refreshSaved: false,
+                        persistScoredCandidate(current, {
+                            score: current.score,
+                            title: current.name,
+                            text: current.hookText,
+                            montage: current.score.montageDataUrl,
+                            folder: current.folderId,
                         });
-                        try {
-                            await persistScoreArtifact(current);
-                        } catch (linkError) {
-                            current.scoreError = `Score saved; Saved Hooks link failed: ${String(linkError && linkError.message || linkError)}`;
-                        }
                     }
                 } catch (error) {
                     current.scoreError = String((error && error.message) || error);
                 }
             }
-            if (autoPersistScore) await loadSaved(true);
             state.busy = false;
             state.busyCandidateId = null;
             const scoredCount = queue.filter(item => item.score).length;
@@ -1555,8 +1588,7 @@
             );
         }
 
-        async function persistCandidateOnce(current, persistOptions) {
-            persistOptions = persistOptions || {};
+        async function persistCandidateOnce(current) {
             const saveVersion = Number(current.mutationVersion) || 0;
             const savedSnapshot = {
                 id: current.serverId,
@@ -1576,6 +1608,7 @@
             };
             current.saveState = 'saving';
             current.saveError = '';
+            syncPersistenceUi(current);
             const response = await requestJson('/api/storyboards/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1590,9 +1623,7 @@
             current.saveState = current.dirty ? 'idle' : 'saved';
             current.saveError = '';
             updateSavedSummary(current, response, savedSnapshot);
-            if (persistOptions.refreshSaved !== false) {
-                Promise.resolve().then(() => loadSaved(true));
-            }
+            syncPersistenceUi(current);
             return response;
         }
 
@@ -1603,12 +1634,12 @@
             saveTimers.delete(current.id);
         }
 
-        function persistCandidate(current, persistOptions) {
+        function persistCandidate(current) {
             cancelScheduledSave(current);
             const previous = saveQueues.get(current.id)
                 || Promise.resolve();
             const queued = previous.catch(() => {}).then(() => (
-                persistCandidateOnce(current, persistOptions)
+                persistCandidateOnce(current)
             ));
             saveQueues.set(current.id, queued);
             queued.finally(() => {
@@ -1621,6 +1652,7 @@
                 current.saveError = String(
                     error && error.message || error
                 ).slice(0, 300);
+                syncPersistenceUi(current);
                 throw error;
             });
         }
@@ -1630,56 +1662,63 @@
             cancelScheduledSave(current);
             const timer = window.setTimeout(() => {
                 saveTimers.delete(current.id);
-                autoPersistCandidate(
-                    current,
-                    `${current.name} changes saved automatically.`
-                );
+                autoPersistCandidate(current);
             }, 650);
             saveTimers.set(current.id, timer);
         }
 
-        async function persistScoreArtifact(current) {
+        async function persistScoreArtifact(current, artifact) {
+            const score = artifact && artifact.score || current && current.score;
             if (
                 !current
-                || !current.score
-                || current.savedHookId
+                || !score
+                || score.savedId
+                || current.score === score && current.savedHookId
                 || !saveScore
-            ) return current && current.savedHookId || null;
-            const saved = await saveScore(current.score, {
-                title: current.name,
-                text: current.hookText,
-                montage: current.score.montageDataUrl,
-                folder: current.folderId,
+            ) return score && score.savedId || current && current.savedHookId || null;
+            const saved = await saveScore(score, {
+                title: artifact && artifact.title || current.name,
+                text: artifact && artifact.text !== undefined
+                    ? artifact.text
+                    : current.hookText,
+                montage: artifact && artifact.montage
+                    || score.montageDataUrl,
+                folder: artifact && artifact.folder !== undefined
+                    ? artifact.folder
+                    : current.folderId,
             });
-            current.savedHookId = saved && saved.id || null;
-            current.score.savedId = current.savedHookId;
-            current.score._labAutoSaved = autoPersistScore;
-            if (current.savedHookId) {
-                await persistCandidate(current, {
-                    refreshSaved: false,
-                });
+            const savedHookId = saved && saved.id || null;
+            score.savedId = savedHookId;
+            score._labAutoSaved = autoPersistScore;
+            if (current.score === score) {
+                current.savedHookId = savedHookId;
             }
-            return current.savedHookId;
+            if (savedHookId && current.score === score) {
+                await persistCandidate(current);
+            }
+            return savedHookId;
         }
 
-        async function autoPersistCandidate(current, message) {
+        function persistScoredCandidate(current, artifact) {
+            persistCandidate(current).then(() => (
+                persistScoreArtifact(current, artifact)
+            )).catch(error => {
+                current.saveState = 'error';
+                current.saveError = `Background save failed: ${String(
+                    error && error.message || error
+                )}`.slice(0, 300);
+                syncPersistenceUi(current);
+                reportError(current.saveError);
+            });
+        }
+
+        async function autoPersistCandidate(current) {
             if (!autoPersistDrafts || !hasPersistableContent(current)) {
                 return null;
             }
             try {
-                const response = await persistCandidate(current, {
-                    refreshSaved: false,
-                });
-                if (candidate() === current) {
-                    state.status = message || `${current.name} saved automatically.`;
-                    paint();
-                }
-                return response;
+                return await persistCandidate(current);
             } catch (error) {
-                if (candidate() === current) {
-                    state.error = `Automatic save failed: ${String(error && error.message || error)}`.slice(0, 500);
-                    paint();
-                }
                 reportError(error);
                 return null;
             }
@@ -1694,30 +1733,21 @@
                 || !hasPersistableContent(current)
             ) return;
             if (current.serverId && !current.dirty) {
-                state.status = `${current.name} is already saved.`;
-                paint();
+                syncPersistenceUi(current);
                 return;
             }
-            state.error = '';
-            state.status = `Saving ${current.name}...`;
-            paint();
             try {
-                const response = await persistCandidate(current);
-                state.status = current.dirty
-                    ? `${current.name} saved; newer edits still need saving.`
-                    : response.indexPending
-                        ? `${current.name} saved; the library index is repairing in the background.`
-                        : `${current.name} saved.`;
+                await persistCandidate(current);
             } catch (error) {
-                fail(error);
+                reportError(error);
                 return;
             }
-            paint();
             if (current.score && !current.savedHookId) {
                 persistScoreArtifact(current).catch(error => {
-                    state.error = `The storyboard is saved, but its Saved Hooks link failed: ${String(error && error.message || error)}`.slice(0, 500);
-                    reportError(state.error);
-                    paint();
+                    current.saveState = 'error';
+                    current.saveError = `Saved Hooks link failed: ${String(error && error.message || error)}`.slice(0, 300);
+                    syncPersistenceUi(current);
+                    reportError(current.saveError);
                 });
             }
         }
@@ -1883,11 +1913,13 @@
             } catch (error) {
                 state.error = String((error && error.message) || error);
                 state.savedLoaded = true;
+                reportError(error);
             }
             state.savedLoading = false;
-            paint();
             if (resumeId) {
                 window.setTimeout(() => loadStoryboard(resumeId), 0);
+            } else {
+                syncSavedPicker();
             }
         }
 
@@ -1899,12 +1931,11 @@
             current.folderId = nextFolder;
             if (!current.serverId) {
                 touchCandidate(current);
-                state.status = `This storyboard will save in ${folderName(nextFolder)}.`;
-                paint();
+                syncPersistenceUi(current);
                 return;
             }
             current.saveState = 'saving';
-            paint();
+            syncPersistenceUi(current);
             try {
                 await requestJson('/api/experimentlab/item/move', {
                     method: 'POST',
@@ -1923,14 +1954,17 @@
                     summary.folderId = nextFolder;
                     summary.folder = nextFolder;
                 }
-                state.status = `${current.name} moved to ${folderName(nextFolder)}.`;
             } catch (error) {
                 current.folderId = previousFolder;
                 current.saveState = 'error';
                 current.saveError = String(error && error.message || error);
-                state.error = current.saveError;
+                const folderSelect = host && host.querySelector(
+                    '[data-sb-current-folder]'
+                );
+                if (folderSelect) folderSelect.value = previousFolder || '';
+                reportError(current.saveError);
             }
-            paint();
+            syncPersistenceUi(current);
         }
 
         async function createStoryboardFolder() {
@@ -2063,10 +2097,7 @@
                 await rebuildComposite(current);
                 state.status = `Frame ${current.selectedPanel + 1} uploaded.`;
                 paint();
-                await autoPersistCandidate(
-                    current,
-                    `Uploaded frame ${current.selectedPanel + 1} saved.`
-                );
+                autoPersistCandidate(current);
             } catch (error) {
                 fail(error);
             }
@@ -2176,13 +2207,10 @@
             state.error = importError;
             paint();
             for (const imported of importedCandidates) {
-                await autoPersistCandidate(
-                    imported,
-                    `${imported.name} imported and saved.`
-                );
+                autoPersistCandidate(imported);
             }
             state.busy = false;
-            state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported. Saved to your workspace; review the optional transcript, then score.`;
+            state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported. Review the optional transcript, then score.`;
             paint();
         }
 

@@ -2072,6 +2072,7 @@ window.__labTargetRequests=[];
 window.__labAutoSavedScore=null;
 window.__autoSavedHookId=null;
 window.__labFolderRequests=[];
+window.__labStoryboardSaves=[];
 window.fetch=function(url,options){
     const p=new URL(url,location.href).pathname;
     window.__fetchCounts[p]=(window.__fetchCounts[p]||0)+1;
@@ -2186,7 +2187,7 @@ window.fetch=function(url,options){
                 errors:[]
             }
         };
-        return Promise.resolve(new Response(JSON.stringify({
+        const response=new Response(JSON.stringify({
             ok:true,
             id:savedId,
             score_record_sha256:historicalUpgradeScore.score_record_sha256,
@@ -2195,7 +2196,27 @@ window.fetch=function(url,options){
         }),{
             status:200,
             headers:{'Content-Type':'application/json'}
-        }));
+        });
+        return savedPayload.source==='youtube'
+            ? new Promise(resolve=>setTimeout(()=>resolve(response),180))
+            : Promise.resolve(response);
+    }
+    if(
+        p==='/api/storyboards/save'
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        const payload=JSON.parse(options.body||'{}');
+        window.__labStoryboardSaves.push(payload);
+        return new Promise(resolve=>setTimeout(()=>resolve(
+            new Response(JSON.stringify({
+                ok:true,
+                id:payload.id||'sbautosave001',
+                revision:(Number(payload.expectedRevision)||0)+1
+            }),{
+                status:200,
+                headers:{'Content-Type':'application/json'}
+            })
+        ),120));
     }
     if(
         p==='/api/raw/folder-create'
@@ -2672,12 +2693,25 @@ window.fetch=function(url,options){
             '[data-canonical-score-analysis]'
         );
         await automaticScoreAnalysis.waitFor();
+        await page.evaluate(() => {
+            window.__automaticScoreNode = document.querySelector(
+                '[data-canonical-score-analysis]'
+            );
+        });
         await page.waitForFunction(() => (
             window.__labAutoSavedScore
             && document.querySelector(
                 '[data-canonical-score-analysis]'
             )
         ));
+        assert.strictEqual(
+            await page.evaluate(() => document.querySelector(
+                '[data-canonical-score-analysis]'
+            ) === window.__automaticScoreNode),
+            true,
+            'background saved-hook persistence must not replace the open '
+                + 'score analysis'
+        );
         assert.strictEqual(
             await page.locator(
                 '.experiment-lab-tab[data-lab-view="score"]'
@@ -2972,6 +3006,43 @@ window.fetch=function(url,options){
             1,
             'the integrated storyboard must expose the canonical Shorts '
                 + 'score action'
+        );
+        const storyboardBrief = integratedStoryboard.locator(
+            '[data-sb-brief]'
+        );
+        await page.evaluate(() => {
+            window.__labStoryboardNode = document.querySelector(
+                '#shorts-storyboard-workbench'
+            );
+            window.__labStoryboardBriefNode = document.querySelector(
+                '#shorts-storyboard-workbench [data-sb-brief]'
+            );
+        });
+        await storyboardBrief.fill(
+            'Keep this exact editor open while persistence runs.'
+        );
+        await page.waitForFunction(() => (
+            window.__labStoryboardSaves.length > 0
+        ));
+        await page.waitForTimeout(250);
+        assert.deepStrictEqual(
+            await page.evaluate(() => ({
+                sameWorkbench: document.querySelector(
+                    '#shorts-storyboard-workbench'
+                ) === window.__labStoryboardNode,
+                sameInput: document.querySelector(
+                    '#shorts-storyboard-workbench [data-sb-brief]'
+                ) === window.__labStoryboardBriefNode,
+                stillFocused: document.activeElement
+                    === window.__labStoryboardBriefNode,
+            })),
+            {
+                sameWorkbench: true,
+                sameInput: true,
+                stillFocused: true,
+            },
+            'Experiment Lab persistence must not rerender the shared '
+                + 'workbench or take focus'
         );
         assert.deepStrictEqual(
             await integratedStoryboard.locator(

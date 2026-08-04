@@ -4295,12 +4295,10 @@ const JarvisRetention = (function () {
             return;
         }
         presentCanonicalScore(openedScore, { closeBuilder: true });
-        try {
-            await persistExperimentLabScore(openedScore);
-        } catch (saveError) {
-            st.rawUpErr = `The grind score is open, but its private saved copy failed: ${fetchFail(saveError)}`;
-        }
-        refreshRawUploadPanel();
+        persistExperimentLabScoreInBackground(
+            openedScore,
+            'The grind score is open, but its private saved copy failed'
+        );
     }
     async function grindSave(k) {
         const rid = st.grindRid; if (!rid) return;
@@ -6626,7 +6624,7 @@ const JarvisRetention = (function () {
                     if (
                         isExperimentLabSurface()
                         && url === '/api/storyboards/save'
-                    ) refreshExperimentLabContext();
+                    ) refreshExperimentLabContext({ render: false });
                     return result;
                 },
                 runJob: (url, body) => rtJob(url, {
@@ -6984,7 +6982,7 @@ const JarvisRetention = (function () {
             upload._labSavedAt = Date.now();
             SAVED = null;
             if (options.refreshContext !== false) {
-                refreshExperimentLabContext();
+                refreshExperimentLabContext({ render: false });
             }
             return response.id;
         })();
@@ -6999,6 +6997,12 @@ const JarvisRetention = (function () {
         } finally {
             upload._labAutoSavePromise = null;
         }
+    }
+    function persistExperimentLabScoreInBackground(upload, failureMessage) {
+        persistExperimentLabScore(upload).catch(saveError => {
+            st.rawUpErr = `${failureMessage}: ${fetchFail(saveError)}`;
+            if (root && root.isConnected) refreshRawUploadPanel();
+        });
     }
     async function scoreStoryboardCandidate(input) {
         const result = await rtJob('/api/raw/embed-montage', {
@@ -7092,7 +7096,7 @@ const JarvisRetention = (function () {
         score._labAutoSaved = isExperimentLabSurface();
         score._labSaveState = 'saved';
         SAVED = null;
-        refreshExperimentLabContext();
+        refreshExperimentLabContext({ render: false });
         return response;
     }
     function openRawVideoPicker() {
@@ -7397,12 +7401,10 @@ const JarvisRetention = (function () {
             return;
         }
         presentCanonicalScore(completedScore, { closeBuilder: true });
-        try {
-            await persistExperimentLabScore(completedScore);
-        } catch (saveError) {
-            st.rawUpErr = `The corrected score is open, but its private saved copy failed: ${fetchFail(saveError)}`;
-        }
-        refreshRawUploadPanel();
+        persistExperimentLabScoreInBackground(
+            completedScore,
+            'The corrected score is open, but its private saved copy failed'
+        );
     }
     // EVERY channel × EVERY steered output, labelled — the long-quant-style full grid.
     // 5 outputs × visual always + text/together when a transcript exists = up to 15 (+ novelty set).
@@ -7459,12 +7461,10 @@ const JarvisRetention = (function () {
             return;
         }
         presentCanonicalScore(completedScore, { closeBuilder: true });
-        try {
-            await persistExperimentLabScore(completedScore);
-        } catch (saveError) {
-            st.rawUpErr = `The YouTube score is complete, but its private saved copy failed: ${fetchFail(saveError)}`;
-        }
-        refreshRawUploadPanel();
+        persistExperimentLabScoreInBackground(
+            completedScore,
+            'The YouTube score is complete, but its private saved copy failed'
+        );
     }
     async function openCoordinateLedger(coordinateId) {
         if (!coordinateId) return;
@@ -8207,15 +8207,10 @@ const JarvisRetention = (function () {
                     st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
                     completedScores.push(j);
                     if (isExperimentLabSurface()) {
-                        try {
-                            await persistExperimentLabScore(j, {
-                                refreshContext: false,
-                            });
-                        } catch (saveError) {
-                            batchErrors.push(
-                                `${file.name || 'Video'} scored, but its private saved copy failed: ${fetchFail(saveError)}`
-                            );
-                        }
+                        persistExperimentLabScoreInBackground(
+                            j,
+                            `${file.name || 'Video'} scored, but its private saved copy failed`
+                        );
                     }
                 }
             } catch (e) {
@@ -8231,7 +8226,7 @@ const JarvisRetention = (function () {
             : null;
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         if (completedScores.length && isExperimentLabSurface()) {
-            refreshExperimentLabContext();
+            refreshExperimentLabContext({ render: false });
         }
         const openedScore = completedScores[completedScores.length - 1];
         if (openedScore) {
@@ -8302,12 +8297,10 @@ const JarvisRetention = (function () {
             return;
         }
         presentCanonicalScore(completedScore, { closeBuilder: true });
-        try {
-            await persistExperimentLabScore(completedScore);
-        } catch (saveError) {
-            st.rawUpErr = `The generated hook score is complete, but its private saved copy failed: ${fetchFail(saveError)}`;
-        }
-        refreshRawUploadPanel();
+        persistExperimentLabScoreInBackground(
+            completedScore,
+            'The generated hook score is complete, but its private saved copy failed'
+        );
     }
     async function saveHook(payload) {
         try {
@@ -13880,20 +13873,21 @@ const JarvisRetention = (function () {
         return context;
     }
 
-    function refreshExperimentLabContext() {
+    function refreshExperimentLabContext(options) {
         if (!isExperimentLabSurface()) return;
+        const shouldRender = !options || options.render !== false;
         loadExperimentLabContext()
             .then(context => {
                 LAB_CONTEXT = context;
                 st.labContextError = null;
                 publishExperimentLabContext();
-                if (root && root.isConnected) {
+                if (shouldRender && root && root.isConnected) {
                     rtgUpdateExp();
                 }
             })
             .catch(error => {
                 st.labContextError = fetchFail(error);
-                if (root && root.isConnected) {
+                if (shouldRender && root && root.isConnected) {
                     rtgUpdateExp();
                 }
             });

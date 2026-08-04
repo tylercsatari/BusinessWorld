@@ -82,8 +82,8 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=8')
-            && indexSource.indexOf('storyboard-workbench.js?v=8')
+        indexSource.includes('storyboard-workbench.js?v=9')
+            && indexSource.indexOf('storyboard-workbench.js?v=9')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -178,6 +178,8 @@ async function main() {
         let candidateSequence = 0;
         let generationGate = null;
         let releaseGeneration = null;
+        let saveGate = null;
+        let releaseSave = null;
 
         function color(index) {
             return ['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#8b5cf6'][
@@ -288,6 +290,7 @@ async function main() {
                 };
             }
             if (url === '/api/storyboards/save') {
+                if (saveGate) await saveGate;
                 const payload = JSON.parse(options.body || '{}');
                 const id = payload.id || `sbfixture${String(++candidateSequence).padStart(4, '0')}`;
                 const record = {
@@ -429,6 +432,16 @@ async function main() {
             if (releaseGeneration) releaseGeneration();
             generationGate = null;
             releaseGeneration = null;
+        };
+        window.__holdSave = () => {
+            saveGate = new Promise(resolve => {
+                releaseSave = resolve;
+            });
+        };
+        window.__releaseSave = () => {
+            if (releaseSave) releaseSave();
+            saveGate = null;
+            releaseSave = null;
         };
         window.__queueStrips = async count => {
             const files = [];
@@ -819,6 +832,7 @@ async function main() {
     const storyboardSavesBeforeScore = await page.evaluate(() => (
         window.__calls.saveStoryboard.length
     ));
+    await page.evaluate(() => window.__holdSave());
     await page.click('[data-sb-score-current]');
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
@@ -839,6 +853,17 @@ async function main() {
         true,
         'a completed score must open its canonical analysis automatically'
     );
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.saveScore.length),
+        0,
+        'the score analysis must open before background persistence finishes'
+    );
+    await page.evaluate(() => window.__releaseSave());
+    await page.waitForFunction(() => (
+        window.__calls.saveScore.length === 1
+        && window.__workbench.getState().candidates[0]
+            .savedHookId === 'saved-hook-1'
+    ));
     assert.deepStrictEqual(
         await page.evaluate(before => ({
             savedHooks: window.__calls.saveScore.length,
@@ -866,9 +891,6 @@ async function main() {
         window.__calls.saveStoryboard.length
     ));
     await page.click('[data-sb-save]');
-    await page.waitForFunction(() => (
-        /already saved/i.test(window.__workbench.getState().status)
-    ));
     assert.strictEqual(
         await page.evaluate(() => window.__calls.saveStoryboard.length),
         savesBeforeNoop,
@@ -1040,6 +1062,11 @@ async function main() {
         saves: window.__calls.saveStoryboard.length,
         scores: window.__calls.score.length,
     }));
+    await page.evaluate(() => {
+        window.__autosaveFocusNode = document.querySelector(
+            '[data-sb-name]'
+        );
+    });
     await page.fill(
         '[data-sb-name]',
         'Typed changes persist without a save click'
@@ -1056,6 +1083,16 @@ async function main() {
         await page.evaluate(() => window.__calls.score.length),
         autosaveBefore.scores,
         'debounced text persistence must never invoke the embed scorer'
+    );
+    assert.deepStrictEqual(
+        await page.evaluate(() => ({
+            sameNode: document.querySelector('[data-sb-name]')
+                === window.__autosaveFocusNode,
+            stillFocused: document.activeElement
+                === window.__autosaveFocusNode,
+        })),
+        { sameNode: true, stillFocused: true },
+        'background persistence must not rebuild the editor or take focus'
     );
 
     await page.screenshot({
