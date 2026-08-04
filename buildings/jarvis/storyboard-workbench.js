@@ -417,11 +417,38 @@
             </header>`;
         }
 
+        function renderTranscriptReview(current) {
+            const transcript = current.hookText.trim();
+            const wordCount = transcript
+                ? transcript.split(/\s+/).filter(Boolean).length
+                : 0;
+            return `<section class="sb-workflow-section sb-transcript-review" data-sb-section="transcript" data-sb-transcript-review>
+                ${renderWorkflowHeader(
+                    2,
+                    'Transcript',
+                    'Optional spoken words',
+                    wordCount
+                        ? `${wordCount} word${wordCount === 1 ? '' : 's'}`
+                        : 'Visual only'
+                )}
+                <div class="sb-workflow-section-body sb-transcript-review-body">
+                    <label class="sb-transcript-field">
+                        <span>Spoken transcript (optional)</span>
+                        <textarea rows="4" data-sb-hook-text data-sb-focus="hook-text" placeholder="Type exactly what is spoken, or leave blank for visual only.">${esc(current.hookText || '')}</textarea>
+                    </label>
+                </div>
+            </section>`;
+        }
+
         function renderScoreBar(current, placement) {
             const complete = completeFrames(current);
             const frameCount = current.panels.filter(
                 entry => entry.image
             ).length;
+            const transcript = current.hookText.trim();
+            const transcriptWords = transcript
+                ? transcript.split(/\s+/).filter(Boolean).length
+                : 0;
             const primaryAttribute = placement === 'top'
                 ? 'data-sb-score-current'
                 : 'data-sb-score-bottom';
@@ -433,7 +460,13 @@
             return `<div class="sb-score-dock" data-sb-score-dock="top">
                 <div class="sb-score-summary">
                     <strong>${current.score ? 'Opening scored' : complete ? 'Ready to score' : `${frameCount}/${PANEL_COUNT} frames ready`}</strong>
-                    <span>${scoreLedgerSha(current) ? `Ledger ${esc(scoreLedgerSha(current).slice(0, 12))}...` : 'One canonical 21-coordinate score'}</span>
+                    <span>${scoreLedgerSha(current)
+                        ? `Ledger ${esc(scoreLedgerSha(current).slice(0, 12))}...`
+                        : complete
+                            ? transcriptWords
+                                ? `${transcriptWords} spoken word${transcriptWords === 1 ? '' : 's'} + five frames`
+                                : 'Five frames · visual only'
+                            : 'One canonical 21-coordinate score'}</span>
                 </div>
                 <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
                 ${state.candidates.length > 1 ? `<button type="button" data-sb-batch-score ${state.busy || !state.candidates.some(needsScore) ? 'disabled' : ''}>Score all ready</button>` : ''}
@@ -540,15 +573,15 @@
             const frameCount = current.panels.filter(
                 entry => entry.image
             ).length;
+            const complete = completeFrames(current);
             return `<div class="sb-compose">
                 ${renderCandidateQueue()}
-                ${renderScoreBar(current, 'top')}
                 <div class="sb-start-grid">
                     <section class="sb-workflow-section sb-upload-route" data-sb-section="upload">
                         ${renderWorkflowHeader('A', 'Upload a finished strip', 'Use an opening you already made', `${frameCount}/${PANEL_COUNT} frames`)}
                         <div class="sb-workflow-section-body sb-upload-route-body">
                             <button type="button" class="is-primary" data-sb-upload-strips ${state.busy ? 'disabled' : ''}>Choose finished strip(s)</button>
-                            <span>One or many five-frame images; each is split and scored independently.</span>
+                            <span>One or many five-frame images; each is split for review before scoring.</span>
                         </div>
                     </section>
                     <div class="sb-route-or" aria-hidden="true">or</div>
@@ -556,15 +589,15 @@
                         ${renderWorkflowHeader('B', 'Build with AI', 'One coherent sheet, split into five frames', current.brief.trim() || current.hookText.trim() ? 'Direction added' : 'Ready for a brief')}
                         <div class="sb-workflow-section-body sb-ai-route-body">
                             ${renderBuildProgress(current)}
-                            <div class="sb-brief-grid">
+                            <div class="sb-brief-grid${complete ? ' is-single' : ''}">
                                 <label>
                                     <span>Visual brief</span>
                                     <textarea rows="3" data-sb-brief data-sb-focus="brief" placeholder="What happens across the opening?">${esc(current.brief || '')}</textarea>
                                 </label>
-                                <label>
+                                ${complete ? '' : `<label>
                                     <span>Spoken opening</span>
                                     <textarea rows="3" data-sb-hook-text data-sb-focus="hook-text" placeholder="What is said in the opening?">${esc(current.hookText || '')}</textarea>
-                                </label>
+                                </label>`}
                             </div>
                             <div class="sb-generation-bar">
                                 <label class="sb-model-picker"><span>Image model</span><select data-sb-model>${MODEL_OPTIONS.map(([value, label]) => `<option value="${value}" ${current.model === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
@@ -573,8 +606,10 @@
                         </div>
                     </section>
                 </div>
+                ${complete ? renderTranscriptReview(current) : ''}
+                ${renderScoreBar(current, 'top')}
                 <section id="sb-workflow-refine" class="sb-workflow-section" data-sb-section="refine" tabindex="-1">
-                    ${renderWorkflowHeader(2, 'Preview and refine', 'Select a frame, edit it, or leave it as generated', `Frame ${current.selectedPanel + 1} of ${PANEL_COUNT}`)}
+                    ${renderWorkflowHeader(complete ? 3 : 2, 'Preview and refine', 'Select a frame, edit it, or leave it as generated', `Frame ${current.selectedPanel + 1} of ${PANEL_COUNT}`)}
                     <div class="sb-workflow-section-body">
                         ${renderPanelRail(current)}
                         ${renderSelectedPanel(current)}
@@ -946,7 +981,7 @@
             state.error = '';
             try {
                 await generateComposite(current);
-                state.status = 'Five frames are ready.';
+                state.status = 'Five frames are ready. Review the optional transcript, then score.';
             } catch (error) {
                 fail(error);
                 return;
@@ -1625,7 +1660,6 @@
             state.error = '';
             let importedCount = 0;
             let processedCount = 0;
-            const importedIds = [];
             const failures = [];
             for (
                 let index = 0;
@@ -1655,7 +1689,6 @@
                     ) state.candidates[0] = imported;
                     else state.candidates.push(imported);
                     state.selectedCandidateId = imported.id;
-                    importedIds.push(imported.id);
                     importedCount++;
                 } catch (error) {
                     failures.push(
@@ -1664,7 +1697,7 @@
                 }
             }
             state.busy = false;
-            state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported from ${incoming.length} selected.`;
+            state.status = `${importedCount} storyboard${importedCount === 1 ? '' : 's'} imported. Review the optional transcript, then score.`;
             const overflow = incoming.length - processedCount;
             const importError = [
                 ...failures,
@@ -1674,13 +1707,6 @@
             ].filter(Boolean).join(' | ');
             state.error = importError;
             paint();
-            if (importedIds.length) {
-                await scoreBatch(importedIds);
-                if (importError) {
-                    state.error = importError;
-                    paint();
-                }
-            }
         }
 
         function cloneCandidate(source) {

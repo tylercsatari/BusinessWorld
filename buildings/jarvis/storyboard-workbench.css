@@ -407,6 +407,25 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.sb-brief-grid.is-single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.sb-transcript-review-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.sb-transcript-field {
+    margin: 0;
+    min-width: 0;
+}
+
+.sb-transcript-field textarea {
+    min-height: 92px;
+    resize: vertical;
+}
+
 .sb-generation-bar {
     align-items: center;
     display: flex;

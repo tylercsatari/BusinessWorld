@@ -82,7 +82,7 @@ async function main() {
         );
     }
     assert(
-        indexSource.indexOf('storyboard-workbench.js?v=4')
+        indexSource.indexOf('storyboard-workbench.js?v=5')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -488,6 +488,11 @@ async function main() {
         return !state.busy
             && state.candidates[0].panels.every(panel => !!panel.image);
     });
+    assert.strictEqual(
+        await page.locator('[data-sb-transcript-review]').count(),
+        1,
+        'AI-built openings must pause at the shared transcript review'
+    );
     const coherent = await page.evaluate(() => {
         const state = window.__workbench.getState();
         return {
@@ -743,7 +748,7 @@ async function main() {
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
         && window.__workbench.getState().candidates.length === 4
-        && window.__calls.score.length === 3
+        && window.__calls.score.length === 1
     ));
     assert.strictEqual(
         await page.locator('.sb-candidate-card').count(),
@@ -752,14 +757,47 @@ async function main() {
     );
     assert.strictEqual(
         await page.locator('.sb-candidate-copy small.is-done').count(),
-        3,
-        'each ready imported strip must be scored independently'
+        1,
+        'imported strips must not score before an explicit action'
     );
     assert.strictEqual(
         await page.locator('.sb-candidate-metrics > span').count(),
-        9,
-        'each scored candidate must expose the same keep, five-second, '
-            + 'and views summary for immediate comparison'
+        3,
+        'only the previously scored candidate may expose score metrics'
+    );
+    assert.strictEqual(
+        await page.locator('[data-sb-transcript-review]').count(),
+        1,
+        'finished-strip imports must open the shared transcript review'
+    );
+    await page.fill(
+        '[data-sb-transcript-review] [data-sb-hook-text]',
+        'Manual transcript supplied after the finished strip was uploaded.'
+    );
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.score.length),
+        1,
+        'editing the transcript must not trigger scoring'
+    );
+    await page.click('[data-sb-score-current]');
+    await page.waitForFunction(() => (
+        !window.__workbench.getState().busy
+        && window.__calls.score.length === 2
+    ));
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.score.at(-1).text),
+        'Manual transcript supplied after the finished strip was uploaded.',
+        'the explicit score action must include the reviewed transcript'
+    );
+    assert.strictEqual(
+        await page.locator('.sb-candidate-copy small.is-done').count(),
+        2,
+        'the selected strip must become scored only after the explicit action'
+    );
+    assert.strictEqual(
+        await page.locator('.sb-candidate-metrics > span').count(),
+        6,
+        'explicitly scored candidates must expose the canonical summaries'
     );
 
     const beforeOverflow = await page.evaluate(() => (
@@ -782,7 +820,21 @@ async function main() {
     }), beforeOverflow);
     assert(overflow.retained, 'batch import must never evict existing work');
     assert.match(overflow.error, /did not fit/);
-    assert.match(overflow.status, /^Batch complete: 8\/8 scored/);
+    assert.match(overflow.status, /^8 storyboards imported\./);
+    assert.strictEqual(
+        await page.evaluate(() => window.__calls.score.length),
+        2,
+        'bulk imports must also wait for an explicit score action'
+    );
+    await page.click('[data-sb-batch-score]');
+    await page.waitForFunction(() => (
+        !window.__workbench.getState().busy
+        && window.__calls.score.length === 11
+    ));
+    assert.match(
+        await page.evaluate(() => window.__workbench.getState().status),
+        /^Batch complete: 9\/9 scored/
+    );
 
     await page.screenshot({
         path: path.join(CACHE, 'desktop.png'),
@@ -831,7 +883,7 @@ async function main() {
     console.log(JSON.stringify({
         ok: true,
         coherentGenerationCalls: coherent.generateCalls,
-        canonicalScoreCalls: reopen.scoreCalls + 2,
+        canonicalScoreCalls: 11,
         batchCandidates: 12,
         savedReopenRescored: false,
         mobile,
