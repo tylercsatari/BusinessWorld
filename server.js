@@ -4309,6 +4309,8 @@ function storyboardSheetGeometry(modelKey) {
             aspect_ratio: 'custom',
             width: 1440,
             height: 512,
+            sheet_aspect_ratio: '45:16',
+            panel_count: storyboardContract.PANEL_COUNT,
             panel_aspect_ratio: '9:16',
             postprocess: 'five-equal-columns',
         };
@@ -4318,14 +4320,18 @@ function storyboardSheetGeometry(modelKey) {
             size: 'custom',
             width: 2880,
             height: 1024,
+            sheet_aspect_ratio: '45:16',
+            panel_count: storyboardContract.PANEL_COUNT,
             panel_aspect_ratio: '9:16',
             postprocess: 'five-equal-columns',
         };
     }
     return {
         aspect_ratio: '21:9',
+        sheet_aspect_ratio: '45:16',
+        panel_count: storyboardContract.PANEL_COUNT,
         panel_aspect_ratio: '9:16',
-        postprocess: 'five-equal-columns-center-crop',
+        postprocess: 'normalize-to-1440x512-then-five-equal-columns',
     };
 }
 
@@ -4338,7 +4344,7 @@ function storyboardGenerationIdentity(modelKey, mode) {
         model_slug: model.slug,
         mode,
         prompt_template: mode === 'coherent-sheet'
-            ? 'five-panel-coherent-sheet-v1'
+            ? 'five-panel-coherent-sheet-v2'
             : 'single-panel-generation-v1',
         geometry: mode === 'coherent-sheet'
             ? storyboardSheetGeometry(modelKey)
@@ -4364,13 +4370,18 @@ function storyboardSheetPrompt({
         }`
     ));
     return [
-        'Create one single edge-to-edge photographic storyboard sheet.',
-        'The sheet must contain exactly five equal vertical panels arranged '
-            + 'left to right in chronological order.',
+        'Create ONE single edge-to-edge photographic storyboard sheet on a '
+            + '45:16 canvas. This is one image, not five image outputs.',
+        'Divide the canvas into EXACTLY FIVE contiguous equal-width columns: '
+            + 'panel 1 occupies 0-20%, panel 2 20-40%, panel 3 40-60%, '
+            + 'panel 4 60-80%, and panel 5 80-100% of the canvas width.',
+        'Every column is a complete vertical 9:16 image. Arrange the five '
+            + 'columns left to right in chronological order with no gutter, '
+            + 'overlap, inset, or unequal spacing.',
         'Maintain the exact same people, faces, wardrobe, objects, location, '
             + 'lighting logic, and visual style whenever they recur.',
-        'Each panel must be a complete 9:16 composition within its fifth of '
-            + 'the sheet. Use clean edge-to-edge panel boundaries.',
+        'Keep every subject inside its own column. Never let one composition '
+            + 'span, merge, or bleed across a panel boundary.',
         'Do not add captions, words, letters, numbers, watermarks, borders, '
             + 'gaps, frames, contact-sheet labels, or UI.',
         `OVERALL OPENING: ${opening}`,
@@ -15028,6 +15039,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         model,
                         mode: 'coherent-sheet',
                         panelCount: storyboardContract.PANEL_COUNT,
+                        geometry: storyboardSheetGeometry(model),
                         requestFingerprint,
                     };
                 },
@@ -21456,6 +21468,8 @@ async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
         if (options.aspectRatio === 'storyboard-sheet') {
             const geometry = storyboardSheetGeometry(key);
             Object.assign(input, geometry);
+            delete input.sheet_aspect_ratio;
+            delete input.panel_count;
             delete input.panel_aspect_ratio;
             delete input.postprocess;
         } else {

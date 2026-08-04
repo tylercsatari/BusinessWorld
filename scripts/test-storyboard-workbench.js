@@ -82,8 +82,8 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=6')
-            && indexSource.indexOf('storyboard-workbench.js?v=6')
+        indexSource.includes('storyboard-workbench.js?v=7')
+            && indexSource.indexOf('storyboard-workbench.js?v=7')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the storyboard module must load before the Shorts integration'
     );
@@ -98,6 +98,18 @@ async function main() {
     assert(
         serverSource.includes("{ aspectRatio: 'storyboard-sheet' }"),
         'coherent generation must request the five-panel geometry contract'
+    );
+    assert(
+        serverSource.includes('panel 1 occupies 0-20%')
+            && serverSource.includes('panel 5 80-100%'),
+        'the model prompt must lock all five equal panel boundaries'
+    );
+    assert(
+        serverSource.includes("sheet_aspect_ratio: '45:16'")
+            && serverSource.includes(
+                "postprocess: 'normalize-to-1440x512-then-five-equal-columns'"
+            ),
+        'every model path must declare the canonical 45:16 postprocess'
     );
 
     fs.mkdirSync(CACHE, { recursive: true });
@@ -500,6 +512,11 @@ async function main() {
         0,
         'the workbench must not expose fake Compose/Compare or generation modes'
     );
+    assert.strictEqual(
+        await page.locator('[data-sb-hook-text]').count(),
+        0,
+        'spoken text must come after the visual panel exists'
+    );
 
     await page.click('[data-sb-folder-new]');
     await page.fill('[data-sb-folder-name]', 'Launch concepts');
@@ -515,8 +532,8 @@ async function main() {
     );
 
     await page.fill(
-        '[data-sb-hook-text]',
-        'This machine makes it impossible to spill.'
+        '[data-sb-brief]',
+        'A spill-proof machine is tested across five escalating scenes.'
     );
     await page.evaluate(() => window.__queueReferences(2));
     await page.click('[data-sb-add-reference]');
@@ -524,9 +541,6 @@ async function main() {
         window.__workbench.getState().candidates[0]
             .references.length === 2
     ));
-    await page.click('[data-sb-panel="2"]');
-    await page.locator('[data-sb-ref-scope]').first().click();
-    await page.click('[data-sb-panel="0"]');
     await page.evaluate(() => window.__holdGeneration());
     await page.click('[data-sb-generate-all]');
     await page.waitForFunction(() => (
@@ -573,12 +587,22 @@ async function main() {
     assert.strictEqual(coherent.payload.panels.length, 5);
     assert.strictEqual(
         coherent.payload.brief,
-        '',
-        'a spoken opening alone must be enough to generate the visuals'
+        'A spill-proof machine is tested across five escalating scenes.'
     );
     assert.strictEqual(
         coherent.payload.hookText,
-        'This machine makes it impossible to spill.'
+        '',
+        'spoken text must not silently steer whole-panel generation'
+    );
+    assert.deepStrictEqual(
+        coherent.payload.layout,
+        {
+            panelCount: 5,
+            panelAspectRatio: '9:16',
+            sheetAspectRatio: '45:16',
+            direction: 'left-to-right',
+        },
+        'the client must send the same geometry contract enforced by the server'
     );
     assert.strictEqual(
         await page.evaluate(() => window.__calls.score.length),
@@ -603,10 +627,48 @@ async function main() {
             panels: reference.panels,
         })),
         [
-            { global: false, panels: [2] },
+            { global: true, panels: [] },
             { global: true, panels: [] },
         ],
-        'coherent generation must preserve reference-to-panel scope'
+        'uploaded references must be available automatically to the whole panel'
+    );
+    assert.strictEqual(
+        await page.locator('[data-sb-whole-panel]').count(),
+        1,
+        'the canonical generated sheet must stay visible before frame edits'
+    );
+    const geometry = await page.evaluate(async () => {
+        const current = window.__workbench.getState().candidates[0];
+        const dimensions = source => new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve([image.width, image.height]);
+            image.onerror = reject;
+            image.src = source;
+        });
+        return {
+            sheet: await dimensions(current.composite),
+            frames: await Promise.all(
+                current.panels.map(panel => dimensions(panel.image))
+            ),
+        };
+    });
+    assert.deepStrictEqual(geometry.sheet, [1440, 512]);
+    assert(
+        geometry.frames.every(size => (
+            size[0] === 320 && size[1] === 569
+        )),
+        'the canonical sheet must split into five fixed 9:16 frame artifacts'
+    );
+    assert.strictEqual(
+        await page.locator(
+            '[data-sb-context-panel], [data-sb-ref-scope]'
+        ).count(),
+        0,
+        'continuity must never require manual image selection'
+    );
+    await page.fill(
+        '[data-sb-hook-text]',
+        'This machine makes it impossible to spill.'
     );
 
     const canvas = page.locator('[data-sb-draw-canvas]');
@@ -634,7 +696,6 @@ async function main() {
         '[data-sb-edit-prompt]',
         'Make the liquid bright blue and preserve the same machine.'
     );
-    await page.click('[data-sb-context-panel="4"]');
     await page.click('[data-sb-generate-panel]');
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
@@ -647,6 +708,7 @@ async function main() {
             source: current.panels[0].source,
             revisions: current.panels[0].revisions.length,
             refs: window.__calls.panel[0].refs.length,
+            context: window.__calls.panel[0].context,
             sourcePanels: current.panels[0].sourcePanels,
         };
     });
@@ -655,13 +717,18 @@ async function main() {
     assert(edit.revisions >= 2);
     assert.strictEqual(
         edit.refs,
-        5,
-        'the edit must receive exactly the base, three selected frames, '
-            + 'and one scoped upload'
+        8,
+        'FLUX edits must deterministically fill the context budget with the '
+            + 'base, live sheet, neighbors, uploads, and remaining frames'
     );
+    assert.deepStrictEqual(edit.context, {
+        policy: 'automatic-continuity-v1',
+        sourcePanels: [0, 1, 2, 3, 4],
+        includesSequence: true,
+    });
     assert.deepStrictEqual(
         edit.sourcePanels,
-        [0, 1, 2, 3],
+        [0, 1, 2, 3, 4],
         'frame lineage must identify the exact storyboard context sent'
     );
 
@@ -803,15 +870,20 @@ async function main() {
     const reopen = await page.evaluate(() => ({
         scoreCalls: window.__calls.score.length,
         hasMontage: window.__calls.open[2].hasMontage,
-        contextPanels: window.__workbench.getState().candidates[0]
-            .panels[0].contextPanels,
+        hasComposite: !!window.__workbench.getState().candidates[0]
+            .composite,
     }));
     assert.strictEqual(reopen.scoreCalls, 1, 'saved reopen must not rescore');
     assert.strictEqual(reopen.hasMontage, true);
-    assert.deepStrictEqual(
-        reopen.contextPanels,
-        [1, 2, 3],
-        'saved storyboards must restore explicit frame context choices'
+    assert.strictEqual(
+        reopen.hasComposite,
+        true,
+        'saved storyboards must restore the canonical whole-panel artifact'
+    );
+    assert.strictEqual(
+        await page.locator('[data-sb-auto-context]').count(),
+        8,
+        'saved storyboards must reconstruct the same automatic context plan'
     );
     const scoreCallsBeforeMove = await page.evaluate(() => (
         window.__calls.score.length

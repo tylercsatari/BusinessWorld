@@ -4,8 +4,16 @@
     const PANEL_COUNT = 5;
     const FRAME_WIDTH = 320;
     const FRAME_HEIGHT = 569;
+    const SHEET_WIDTH = 1440;
+    const SHEET_HEIGHT = 512;
     const MAX_CANDIDATES = 12;
     const MAX_REFERENCES = 8;
+    const MODEL_REFERENCE_LIMITS = {
+        'flux-2-pro': 8,
+        'seedream-4': 8,
+        'nano-banana': 6,
+        'nano-banana-pro': 8,
+    };
     const MODEL_OPTIONS = [
         ['flux-2-pro', 'FLUX.2 Pro'],
         ['seedream-4', 'Seedream 4'],
@@ -58,10 +66,6 @@
                 source: 'empty',
                 relation: 'new',
                 sourcePanels: [],
-                contextPanels: Array.from(
-                    { length: PANEL_COUNT },
-                    (_, panelIndex) => panelIndex
-                ).filter(panelIndex => panelIndex !== index),
                 revisions: [],
                 futureRevisions: [],
                 strokes: [],
@@ -293,16 +297,26 @@
             }</div>`;
         }
 
+        function renderWholePanel(current) {
+            if (!current.composite) return '';
+            return `<figure class="sb-whole-panel" data-sb-whole-panel>
+                <div class="sb-whole-panel-image">
+                    <img src="${imageSource(current.composite)}" alt="Five-frame storyboard panel">
+                    <div class="sb-whole-panel-grid">${current.panels.map((entry, index) => (
+                        `<button type="button" data-sb-panel="${index}" aria-label="Open frame ${index + 1}" title="Open frame ${index + 1}"><span>${index + 1}</span></button>`
+                    )).join('')}</div>
+                </div>
+                <figcaption><strong>Whole panel</strong><span>5 equal 9:16 frames · 45:16 source sheet</span></figcaption>
+            </figure>`;
+        }
+
         function renderReferences(current) {
-            const selected = current.selectedPanel;
             const rows = current.references.map(ref => {
-                const scoped = Array.isArray(ref.panels) && ref.panels.includes(selected);
-                const scopeLabel = ref.global ? 'All frames' : scoped ? `Frame ${selected + 1}` : 'Other frame';
                 return `<div class="sb-reference">
                     <img src="${imageSource(ref.image)}" alt="${esc(ref.name || 'Reference')}">
                     <div class="sb-reference-copy">
                         <strong>${esc(ref.name || 'Reference')}</strong>
-                        <button type="button" data-sb-ref-scope="${esc(ref.id)}">${scopeLabel}</button>
+                        <span>Used automatically where context fits</span>
                     </div>
                     <button type="button" class="sb-icon-button" data-sb-ref-delete="${esc(ref.id)}" title="Remove reference" aria-label="Remove reference">&times;</button>
                 </div>`;
@@ -336,35 +350,23 @@
             </div>`;
         }
 
-        function renderFrameContext(current, panelIndex) {
+        function renderAutomaticContext(current, panelIndex) {
             const selected = current.panels[panelIndex];
-            const configured = new Set(
-                contextPanelIndexes(current, panelIndex)
-            );
-            const exactInputs = uniqueReferences([
-                selected.image,
-                ...continuityReferences(current, panelIndex),
-                ...activeReferences(current, panelIndex),
-            ]);
-            const overLimit = exactInputs.length > MAX_REFERENCES;
+            const plan = automaticContextPlan(current, panelIndex, {
+                baseImage: selected.image,
+                sequenceImage: completeFrames(current)
+                    ? '__automatic_live_five_frame_panel__'
+                    : current.composite,
+            });
             return `<div class="sb-frame-context">
                 <div class="sb-section-head">
-                    <span>Frame context</span>
-                    <small class="${overLimit ? 'is-error' : ''}">${exactInputs.length}/${MAX_REFERENCES} model images</small>
+                    <span>Automatic continuity</span>
+                    <small>${plan.entries.length}/${plan.limit} model images</small>
                 </div>
-                <div class="sb-context-grid" aria-label="Other storyboard frames sent to the image model">${current.panels.map((entry, index) => {
-                    if (index === panelIndex) return '';
-                    const active = configured.has(index);
-                    return `<button type="button" class="sb-context-frame${active ? ' is-active' : ''}" data-sb-context-panel="${index}" aria-pressed="${active}" ${entry.image ? '' : 'disabled'} title="${active ? 'Remove' : 'Add'} frame ${index + 1} as image context">
-                        ${entry.image
-                            ? `<img src="${imageSource(entry.image)}" alt="Frame ${index + 1}">`
-                            : '<span class="sb-context-empty"></span>'}
-                        <span>Frame ${index + 1}</span>
-                    </button>`;
-                }).join('')}</div>
-                <div class="sb-context-summary${overLimit ? ' is-error' : ''}">${overLimit
-                    ? `Deselect ${exactInputs.length - MAX_REFERENCES} image${exactInputs.length - MAX_REFERENCES === 1 ? '' : 's'} before generating.`
-                    : 'Selected frames and scoped references are sent with this edit.'}</div>
+                <div class="sb-context-list" aria-label="Image context selected automatically">${plan.entries.map(entry => (
+                    `<span data-sb-auto-context="${esc(entry.kind)}">${esc(entry.label)}</span>`
+                )).join('') || '<span>Context will appear as frames are added</span>'}</div>
+                <div class="sb-context-summary">The current frame stays primary. The live panel, nearest frames, and uploaded references are added automatically in a fixed order.</div>
             </div>`;
         }
 
@@ -395,7 +397,7 @@
                         <span>Edit instruction</span>
                         <textarea rows="2" data-sb-edit-prompt data-sb-focus="edit-prompt" placeholder="Change only what should be different">${esc(current.editPrompt || '')}</textarea>
                     </label>
-                    ${renderFrameContext(current, index)}
+                    ${renderAutomaticContext(current, index)}
                     <div class="sb-inspector-actions">
                         <button type="button" class="is-primary" data-sb-generate-panel ${state.busy ? 'disabled' : ''}>${selected.image ? 'Edit selected' : 'Generate selected'}</button>
                         <button type="button" data-sb-restore-panel="previous" ${selected.revisions.length ? '' : 'disabled'}>Previous</button>
@@ -416,7 +418,6 @@
             ).length;
             const hasBrief = !!(
                 current.brief.trim()
-                || current.hookText.trim()
                 || current.panels.some(entry => entry.prompt.trim())
             );
             const refined = current.panels.some(entry => (
@@ -424,8 +425,8 @@
                 || ['panel-edit', 'annotated-frame'].includes(entry.source)
             ));
             const steps = [
-                ['Brief', hasBrief ? 'Ready' : 'Add direction', hasBrief],
-                ['Generate', `${frameCount}/${PANEL_COUNT} frames`, frameCount === PANEL_COUNT],
+                ['Scene', hasBrief ? 'Ready' : 'Describe it', hasBrief],
+                ['Whole panel', `${frameCount}/${PANEL_COUNT} frames`, frameCount === PANEL_COUNT],
                 ['Refine', refined ? 'Edited' : 'Optional', refined],
             ];
             return `<div class="sb-workflow" aria-label="AI build path" data-sb-manual-progress>${steps.map((step, index) => (
@@ -451,8 +452,8 @@
                 : 0;
             return `<section class="sb-workflow-section sb-transcript-review" data-sb-section="transcript" data-sb-transcript-review>
                 ${renderWorkflowHeader(
-                    2,
-                    'Transcript',
+                    3,
+                    'Add spoken text',
                     'Optional spoken words',
                     wordCount
                         ? `${wordCount} word${wordCount === 1 ? '' : 's'}`
@@ -613,36 +614,33 @@
                     </section>
                     <div class="sb-route-or" aria-hidden="true">or</div>
                     <section class="sb-workflow-section sb-ai-route" data-sb-section="build">
-                        ${renderWorkflowHeader('B', 'Build with AI', 'One coherent sheet, split into five frames', current.brief.trim() || current.hookText.trim() ? 'Direction added' : 'Ready for a brief')}
+                        ${renderWorkflowHeader('B', 'Generate a whole panel', 'One 45:16 image, split into five 9:16 frames', current.brief.trim() ? 'Scene ready' : 'Ready for a scene')}
                         <div class="sb-workflow-section-body sb-ai-route-body">
                             ${renderBuildProgress(current)}
-                            <div class="sb-brief-grid${complete ? ' is-single' : ''}">
+                            <div class="sb-brief-grid is-single">
                                 <label>
-                                    <span>Visual brief</span>
-                                    <textarea rows="3" data-sb-brief data-sb-focus="brief" placeholder="What happens across the opening?">${esc(current.brief || '')}</textarea>
+                                    <span>Describe the scene</span>
+                                    <textarea rows="3" data-sb-brief data-sb-focus="brief" placeholder="What should happen from frame 1 through frame 5?">${esc(current.brief || '')}</textarea>
                                 </label>
-                                ${complete ? '' : `<label>
-                                    <span>Spoken opening</span>
-                                    <textarea rows="3" data-sb-hook-text data-sb-focus="hook-text" placeholder="What is said in the opening?">${esc(current.hookText || '')}</textarea>
-                                </label>`}
                             </div>
                             <div class="sb-generation-bar">
                                 <label class="sb-model-picker"><span>Image model</span><select data-sb-model>${MODEL_OPTIONS.map(([value, label]) => `<option value="${value}" ${current.model === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
-                                <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate five frames</button>
+                                <span class="sb-geometry-lock" title="Five contiguous equal-width columns">5 × 9:16 · 45:16</span>
+                                <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate 5-frame panel</button>
                             </div>
                         </div>
                     </section>
                 </div>
-                ${complete ? renderTranscriptReview(current) : ''}
-                ${renderScoreBar(current, 'top')}
                 <section id="sb-workflow-refine" class="sb-workflow-section" data-sb-section="refine" tabindex="-1">
-                    ${renderWorkflowHeader(complete ? 3 : 2, 'Preview and refine', 'Select a frame, edit it, or leave it as generated', `Frame ${current.selectedPanel + 1} of ${PANEL_COUNT}`)}
+                    ${renderWorkflowHeader(2, 'Review and refine', 'The whole panel is already split; edits keep continuity automatically', `Frame ${current.selectedPanel + 1} of ${PANEL_COUNT}`)}
                     <div class="sb-workflow-section-body">
+                        ${renderWholePanel(current)}
                         ${renderPanelRail(current)}
                         ${renderSelectedPanel(current)}
                     </div>
                 </section>
-                ${renderScoreBar(current, 'bottom')}
+                ${complete ? renderTranscriptReview(current) : ''}
+                ${renderScoreBar(current, 'top')}
             </div>`;
         }
 
@@ -859,11 +857,49 @@
             return canvas.toDataURL('image/jpeg', 0.88);
         }
 
+        async function normalizeStoryboardSheet(source, strict) {
+            const image = await loadImage(source);
+            const ratio = image.width / Math.max(1, image.height);
+            if (strict && ratio < 2.1) {
+                throw new Error(
+                    'The image model did not return a horizontal five-frame '
+                        + 'panel. Generate the whole panel again.'
+                );
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = SHEET_WIDTH;
+            canvas.height = SHEET_HEIGHT;
+            const context = canvas.getContext('2d');
+            const scale = Math.max(
+                SHEET_WIDTH / image.width,
+                SHEET_HEIGHT / image.height
+            );
+            const width = image.width * scale;
+            const height = image.height * scale;
+            context.drawImage(
+                image,
+                (SHEET_WIDTH - width) / 2,
+                (SHEET_HEIGHT - height) / 2,
+                width,
+                height
+            );
+            return canvas.toDataURL('image/jpeg', 0.9);
+        }
+
         async function splitStrip(source) {
             const image = await loadImage(source);
             const horizontal = image.width >= image.height;
-            const sourceWidth = horizontal ? image.width / PANEL_COUNT : image.width;
-            const sourceHeight = horizontal ? image.height : image.height / PANEL_COUNT;
+            let splitImage = image;
+            if (horizontal) {
+                const normalized = await normalizeStoryboardSheet(source);
+                splitImage = await loadImage(normalized);
+            }
+            const sourceWidth = horizontal
+                ? SHEET_WIDTH / PANEL_COUNT
+                : splitImage.width;
+            const sourceHeight = horizontal
+                ? SHEET_HEIGHT
+                : splitImage.height / PANEL_COUNT;
             const frames = [];
             for (let index = 0; index < PANEL_COUNT; index++) {
                 const canvas = document.createElement('canvas');
@@ -876,7 +912,7 @@
                 const drawWidth = sourceWidth * scale;
                 const drawHeight = sourceHeight * scale;
                 context.drawImage(
-                    image,
+                    splitImage,
                     horizontal ? index * sourceWidth : 0,
                     horizontal ? 0 : index * sourceHeight,
                     sourceWidth,
@@ -889,6 +925,20 @@
                 frames.push(canvas.toDataURL('image/jpeg', 0.88));
             }
             return frames;
+        }
+
+        async function rebuildComposite(current) {
+            if (
+                !completeFrames(current)
+                || typeof composeFrames !== 'function'
+            ) {
+                current.composite = null;
+                return;
+            }
+            const combined = await composeFrames(
+                current.panels.map(entry => entry.image)
+            );
+            current.composite = await normalizeStoryboardSheet(combined);
         }
 
         function panelRevision(target) {
@@ -954,13 +1004,6 @@
             paint();
         }
 
-        function activeReferences(current, panelIndex) {
-            return current.references
-                .filter(ref => ref.global || (ref.panels || []).includes(panelIndex))
-                .map(ref => ref.image)
-                .filter(Boolean);
-        }
-
         function compositeReferences(current) {
             const seen = new Set();
             return current.references
@@ -975,43 +1018,81 @@
                 .map(reference => ({
                     image: reference.image,
                     name: reference.name,
-                    global: reference.global !== false,
-                    panels: Array.isArray(reference.panels)
-                        ? reference.panels.slice()
-                        : [],
+                    global: true,
+                    panels: [],
                 }));
         }
 
-        function contextPanelIndexes(current, panelIndex) {
-            const selected = current.panels[panelIndex];
-            const configured = Array.isArray(selected.contextPanels)
-                ? selected.contextPanels
-                : Array.from(
-                    { length: PANEL_COUNT },
-                    (_, index) => index
-                ).filter(index => index !== panelIndex);
-            return [...new Set(configured.map(Number))]
-                .filter(index => (
-                    Number.isInteger(index)
-                    && index >= 0
-                    && index < PANEL_COUNT
-                    && index !== panelIndex
-                ))
-                .sort((left, right) => (
-                    Math.abs(left - panelIndex)
-                    - Math.abs(right - panelIndex)
-                    || left - right
-                ));
+        function modelReferenceLimit(current) {
+            return Math.min(
+                MAX_REFERENCES,
+                MODEL_REFERENCE_LIMITS[current.model]
+                    || MAX_REFERENCES
+            );
         }
 
-        function continuityReferences(current, panelIndex) {
-            return contextPanelIndexes(current, panelIndex)
-                .map(index => current.panels[index].image)
-                .filter(Boolean);
-        }
-
-        function uniqueReferences(values) {
-            return [...new Set((values || []).filter(Boolean))];
+        function automaticContextPlan(current, panelIndex, options) {
+            options = options || {};
+            const limit = modelReferenceLimit(current);
+            const entries = [];
+            const seen = new Set();
+            const add = (image, label, kind, sourcePanel) => {
+                if (!image || seen.has(image) || entries.length >= limit) {
+                    return;
+                }
+                seen.add(image);
+                entries.push({ image, label, kind, sourcePanel });
+            };
+            add(
+                options.baseImage,
+                `Frame ${panelIndex + 1} (edit base)`,
+                'base',
+                panelIndex
+            );
+            add(
+                options.sequenceImage,
+                'Live five-frame panel',
+                'sequence',
+                null
+            );
+            const byDistance = Array.from(
+                { length: PANEL_COUNT },
+                (_, index) => index
+            ).filter(index => index !== panelIndex).sort((left, right) => (
+                Math.abs(left - panelIndex)
+                - Math.abs(right - panelIndex)
+                || left - right
+            ));
+            byDistance.filter(index => (
+                Math.abs(index - panelIndex) === 1
+            )).forEach(index => add(
+                current.panels[index].image,
+                `Frame ${index + 1} (neighbor)`,
+                'panel',
+                index
+            ));
+            current.references.forEach((reference, index) => add(
+                reference.image,
+                reference.name || `Uploaded reference ${index + 1}`,
+                'reference',
+                null
+            ));
+            byDistance.filter(index => (
+                Math.abs(index - panelIndex) !== 1
+            )).forEach(index => add(
+                current.panels[index].image,
+                `Frame ${index + 1}`,
+                'panel',
+                index
+            ));
+            return {
+                entries,
+                refs: entries.map(entry => entry.image),
+                sourcePanels: entries
+                    .map(entry => entry.sourcePanel)
+                    .filter(index => Number.isInteger(index)),
+                limit,
+            };
         }
 
         async function generateComposite(current) {
@@ -1021,18 +1102,28 @@
                 async: true,
                 model: current.model,
                 brief: current.brief,
-                hookText: current.hookText,
+                hookText: '',
                 panels: current.panels.map(entry => entry.prompt),
                 refs: compositeReferences(current),
+                layout: {
+                    panelCount: PANEL_COUNT,
+                    panelAspectRatio: '9:16',
+                    sheetAspectRatio: '45:16',
+                    direction: 'left-to-right',
+                },
             });
             if (!result || !result.image) throw new Error('The image model returned no storyboard sheet.');
-            const frames = await splitStrip(result.image);
+            const sheet = await normalizeStoryboardSheet(
+                result.image,
+                true
+            );
+            const frames = await splitStrip(sheet);
             frames.forEach((image, index) => setPanelImage(current, index, image, {
                 source: 'coherent-sheet',
                 relation: 'composite',
                 prompt: current.panels[index].prompt,
             }));
-            current.composite = result.image;
+            current.composite = sheet;
         }
 
         async function generateAll() {
@@ -1040,11 +1131,10 @@
             if (!current || state.busy) return;
             if (
                 !current.brief.trim()
-                && !current.hookText.trim()
                 && !current.panels.some(entry => entry.prompt.trim())
             ) {
                 fail(
-                    'Add a visual brief, spoken opening, or at least one '
+                    'Describe the scene or add at least one '
                         + 'frame prompt first.'
                 );
                 return;
@@ -1054,7 +1144,7 @@
             state.error = '';
             try {
                 await generateComposite(current);
-                state.status = 'Five frames are ready. Review the optional transcript, then score.';
+                state.status = 'The five-frame panel is ready. Refine any frame, add optional spoken text, then score.';
             } catch (error) {
                 fail(error);
                 return;
@@ -1125,25 +1215,6 @@
                 fail('Add a frame prompt or edit instruction first.');
                 return;
             }
-            const contextIndexes = contextPanelIndexes(current, index)
-                .filter(panelIndex => current.panels[panelIndex].image);
-            const contextualImages = contextIndexes.map(
-                panelIndex => current.panels[panelIndex].image
-            );
-            const externalImages = activeReferences(current, index);
-            const selectedInputs = uniqueReferences([
-                selected.image,
-                ...contextualImages,
-                ...externalImages,
-            ]);
-            if (selectedInputs.length > MAX_REFERENCES) {
-                fail(
-                    `This edit has ${selectedInputs.length} selected image inputs, `
-                        + `but ${current.model} accepts ${MAX_REFERENCES}. `
-                        + 'Deselect another frame or change an uploaded reference scope.'
-                );
-                return;
-            }
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
@@ -1152,38 +1223,54 @@
                 : `Generating frame ${index + 1}...`;
             paint();
             try {
-                let refs = uniqueReferences([
-                    ...contextualImages,
-                    ...externalImages,
-                ]);
-                let relation = refs.length ? 'compose' : 'new';
+                const sequenceImage = completeFrames(current)
+                    && typeof composeFrames === 'function'
+                    ? await normalizeStoryboardSheet(
+                        await composeFrames(
+                            current.panels.map(entry => entry.image)
+                        )
+                    )
+                    : current.composite;
+                let baseImage = null;
                 if (selected.image) {
-                    const base = selected.strokes.length
+                    baseImage = selected.strokes.length
                         ? await annotatedFrame(current, index, true)
                         : selected.image;
-                    refs = uniqueReferences([base].concat(refs));
-                    relation = 'edit';
                 }
+                const context = automaticContextPlan(current, index, {
+                    baseImage,
+                    sequenceImage,
+                });
+                const relation = selected.image
+                    ? 'edit'
+                    : context.refs.length
+                        ? 'compose'
+                        : 'new';
                 const result = await runJob('/api/storyboards/panel', {
                     async: true,
                     model: current.model,
                     prompt: selected.image && selected.strokes.length
                         ? `${prompt}. Follow the drawn markup as an edit guide, then remove all markup from the finished image.`
                         : prompt,
-                    refs,
+                    refs: context.refs,
                     relation,
+                    context: {
+                        policy: 'automatic-continuity-v1',
+                        sourcePanels: context.sourcePanels,
+                        includesSequence: context.entries.some(
+                            entry => entry.kind === 'sequence'
+                        ),
+                    },
                 });
                 if (!result || !result.image) throw new Error('The image model returned no frame.');
                 const normalized = await normalizeImage(result.image, FRAME_WIDTH, FRAME_HEIGHT, 'cover');
                 setPanelImage(current, index, normalized, {
                     source: selected.image ? 'panel-edit' : 'panel-generation',
                     relation,
-                    sourcePanels: [
-                        ...(selected.image ? [index] : []),
-                        ...contextIndexes,
-                    ],
+                    sourcePanels: context.sourcePanels,
                     prompt: selected.prompt,
                 });
+                await rebuildComposite(current);
                 current.editPrompt = '';
                 state.status = `Frame ${index + 1} is ready.`;
             } catch (error) {
@@ -1215,6 +1302,7 @@
                     relation: selected.image ? 'edit' : 'new',
                     sourcePanels: selected.image ? [current.selectedPanel] : [],
                 });
+                await rebuildComposite(current);
                 state.status = `Sketch applied to frame ${current.selectedPanel + 1}.`;
                 paint();
                 await autoPersistCandidate(
@@ -1672,16 +1760,6 @@
                 return {
                     ...defaults,
                     ...stored,
-                    contextPanels: Array.isArray(stored.contextPanels)
-                        ? stored.contextPanels
-                            .map(Number)
-                            .filter(panelIndex => (
-                                Number.isInteger(panelIndex)
-                                && panelIndex >= 0
-                                && panelIndex < PANEL_COUNT
-                                && panelIndex !== index
-                            ))
-                        : defaults.contextPanels,
                     strokes: Array.isArray(stored.strokes) ? stored.strokes : [],
                     revisions: Array.isArray(stored.revisions) ? stored.revisions : [],
                     futureRevisions: [],
@@ -1977,6 +2055,7 @@
                     source: 'upload',
                     relation: 'new',
                 });
+                await rebuildComposite(current);
                 state.status = `Frame ${current.selectedPanel + 1} uploaded.`;
                 paint();
                 await autoPersistCandidate(
@@ -2065,6 +2144,7 @@
                         source: 'strip-upload',
                         relation: 'composite',
                     }));
+                    await rebuildComposite(imported);
                     imported.dirty = true;
                     if (
                         state.candidates.length === 1
@@ -2167,7 +2247,7 @@
                 selected.prompt =
                     targetRevision.prompt || selected.prompt;
                 selected.strokes = [];
-                current.composite = null;
+                await rebuildComposite(current);
                 invalidateScore(current);
                 state.status = `Frame ${current.selectedPanel + 1} ${direction === 'next' ? 'advanced' : 'restored'}.`;
             } catch (error) {
@@ -2314,24 +2394,6 @@
                 paint();
                 return true;
             }
-            if (button.hasAttribute('data-sb-context-panel')) {
-                const current = candidate();
-                const currentPanel = current.panels[current.selectedPanel];
-                const contextIndex = Number(
-                    button.getAttribute('data-sb-context-panel')
-                );
-                const selected = new Set(
-                    contextPanelIndexes(current, current.selectedPanel)
-                );
-                if (selected.has(contextIndex)) selected.delete(contextIndex);
-                else selected.add(contextIndex);
-                currentPanel.contextPanels = [...selected].sort(
-                    (left, right) => left - right
-                );
-                touchCandidate(current);
-                paint();
-                return true;
-            }
             if (button.hasAttribute('data-sb-generate-all')) {
                 generateAll();
                 return true;
@@ -2369,24 +2431,6 @@
                 candidate().references = candidate().references.filter(ref => ref.id !== id);
                 touchCandidate(candidate());
                 paint();
-                return true;
-            }
-            if (button.hasAttribute('data-sb-ref-scope')) {
-                const current = candidate();
-                const ref = current.references.find(item => item.id === button.getAttribute('data-sb-ref-scope'));
-                if (ref) {
-                    if (ref.global) {
-                        ref.global = false;
-                        ref.panels = [current.selectedPanel];
-                    } else if ((ref.panels || []).includes(current.selectedPanel)) {
-                        ref.global = true;
-                        ref.panels = [];
-                    } else {
-                        ref.panels = [...new Set((ref.panels || []).concat(current.selectedPanel))];
-                    }
-                    touchCandidate(current);
-                    paint();
-                }
                 return true;
             }
             if (button.hasAttribute('data-sb-clear-panel')) {
