@@ -11,6 +11,7 @@
     "test:quant-migrations": "node scripts/test-migrate-saved-hook-runtime-index.js && node scripts/test-migrate-saved-channel-score-ledgers.js && node scripts/test-migrate-long-saved-thumbnails.js",
     "test:quant-storage": "node scripts/test-r2-stream-download.js && node scripts/test-r2-conditional-small-object.js && node scripts/test-r2-json-cas.js && node scripts/test-r2-lease.js && node scripts/test-saved-channel-index.js && node scripts/test-saved-channel-index-static.js && python3 scripts/test-saved-channel-index-python.py",
     "test:storyboard": "node scripts/test-storyboard-contract.js && node scripts/test-openai-image-provider.js && node scripts/test-storyboard-workbench.js",
+    "test:workshop": "node scripts/test-workshop-posted.js",
     "test:quant-contracts": "npm run test:quant-ledgers && npm run test:quant-provenance && npm run test:quant-runtime && npm run test:quant-methodology && npm run test:quant-analysis && npm run test:quant-migrations && npm run test:quant-storage && node scripts/test-longquant-channel-graphs.js && python3 scripts/test-saved-channel-worker.py && node scripts/audit-quant-ledger-integrity.js"
   },
   "dependencies": {

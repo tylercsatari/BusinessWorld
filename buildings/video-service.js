@@ -180,7 +180,14 @@ const VideoService = (() => {
         // --- Status transitions ---
         // Pull a posted video back into the pipeline
         async requeue(id) {
-            return this.update(id, { status: 'pipeline' });
+            const video = this.getById(id);
+            if (!video) return null;
+            const stageState = { ...(video.stageState || {}) };
+            // A posted record has the terminal stage marked done. Requeueing only
+            // the status would leave the graph complete, so the video would still
+            // have no active frontier and appear to vanish from the pipeline.
+            delete stageState.post;
+            return this.update(id, { status: 'pipeline', stageState, postedDate: '' });
         },
 
         // --- Video Analysis ---

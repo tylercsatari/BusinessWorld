@@ -1,12 +1,9 @@
 /**
  * Workshop UI — the deterministic video pipeline.
  * Replaces the old Incubator → Workshop two-step with one pipeline that
- * mirrors the flowchart from the Library DAG note. Tabs:
- *   Pipeline  — the live flowchart board; videos sit at their current stages
- *   Videos    — every video in the pipeline, filterable (stage/type/project/sponsor/blocked/deadline)
- *   Projects  — build projects + their components (e.g. Doc Ock Suit → Claw)
- *   Orders    — everything to buy: needed → ordered → received
- *   Inventory — the Component Library: props/footage/sets, ready or in progress
+ * mirrors the flowchart from the Library DAG note. Primary views:
+ *   Pipeline — the live flowchart board; videos sit at their current stages
+ *   Posted   — completed videos, preserved outside the active pipeline
  *
  * Queue an idea from the Library and it enters at Video Ideation; mark stages
  * done and it flows through the graph; mark Posting done and it hatches into
@@ -27,6 +24,7 @@ const WorkshopUI = (() => {
     const canDeleteNow = () => (typeof window.canDelete !== 'function') || window.canDelete();
     const blockDelete = () => { alert('Your profile doesn\'t have delete access. Ask the owner to enable it.'); return false; };
     let activeTab = 'pipeline';
+    let postedSearch = '';
     let selectedVideo = null;
     let selectedStageId = null;
     let _scopedStagePicked = false;  // one-time auto-focus for single-node workers
@@ -217,6 +215,14 @@ const WorkshopUI = (() => {
 
     function pipelineVideos() {
         return VideoService.getPipeline();
+    }
+
+    function postedVideos() {
+        return VideoService.getAll().filter(isVideoPosted).sort((a, b) => {
+            const bt = Date.parse(b.postedDate || b.updatedAt || b.createdAt || '') || 0;
+            const at = Date.parse(a.postedDate || a.updatedAt || a.createdAt || '') || 0;
+            return bt - at;
+        });
     }
 
     function getAssignedPeople(video) {
@@ -534,9 +540,9 @@ const WorkshopUI = (() => {
                         <button class="wsp-header-btn" id="wsp-queue-idea-btn" title="Queue an idea from the Library">📚 Queue Idea</button>
                         <button class="wsp-header-btn primary" id="wsp-new-video-btn">＋ New Video</button>
                     </div>
-                    <!-- Workshop IS the pipeline now — Projects/Orders/Storage Room tabs removed. -->
-                    <div class="wsp-tabs" style="display:none;">
-                        <button class="wsp-tab active" data-tab="pipeline">Pipeline <span class="wsp-tab-count" data-tabcount="pipeline"></span></button>
+                    <div class="wsp-tabs" role="tablist" aria-label="Workshop views">
+                        <button class="wsp-tab active" type="button" role="tab" aria-selected="true" data-tab="pipeline">Pipeline <span class="wsp-tab-count" data-tabcount="pipeline"></span></button>
+                        <button class="wsp-tab" type="button" role="tab" aria-selected="false" data-tab="posted">Posted <span class="wsp-tab-count" data-tabcount="posted"></span></button>
                     </div>
                     <div class="wsp-tab-body" id="wsp-tab-body">
                         <div class="workshop-empty">Loading pipeline…</div>
@@ -671,7 +677,11 @@ const WorkshopUI = (() => {
 
     function switchTab(tab) {
         activeTab = tab;
-        container.querySelectorAll('.wsp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        container.querySelectorAll('.wsp-tab').forEach(b => {
+            const active = b.dataset.tab === tab;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', String(active));
+        });
         renderTab();
     }
 
@@ -679,7 +689,13 @@ const WorkshopUI = (() => {
         const el = document.getElementById('wsp-tab-body');
         if (!el) return;
         updateCount();
+        const canCreate = activeTab === 'pipeline' && stageWritable('ideate');
+        ['wsp-queue-idea-btn', 'wsp-new-video-btn'].forEach(id => {
+            const button = document.getElementById(id);
+            if (button) button.hidden = !canCreate;
+        });
         if (activeTab === 'pipeline') renderPipelineTab(el);
+        else if (activeTab === 'posted') renderPostedTab(el);
         else if (activeTab === 'projects') renderProjectsTab(el);
         else if (activeTab === 'orders') renderOrdersTab(el);
         else if (activeTab === 'inventory') renderInventoryTab(el);
@@ -688,11 +704,13 @@ const WorkshopUI = (() => {
     function updateCount() {
         // Restricted accounts: count only the videos they can actually see.
         const myVideos = filteredVideos().length;
+        const posted = postedVideos().length;
         const el = document.getElementById('wsp-count');
-        if (el) el.textContent = `${myVideos} in pipeline`;
+        if (el) el.textContent = activeTab === 'posted' ? `${posted} posted` : `${myVideos} in pipeline`;
         // Live counts on every tab so the numbers are visible without clicking in
         const counts = {
             pipeline: myVideos,
+            posted,
             projects: SVC().projects.getAll().filter(p => p.status !== 'archived').length,
             orders: SVC().orders.getAll().filter(o => o.status !== 'received').length,
             inventory: SVC().inventory.getAll().length
@@ -701,6 +719,160 @@ const WorkshopUI = (() => {
             const n = counts[el2.dataset.tabcount];
             el2.textContent = n || '';
             el2.style.display = n ? '' : 'none';
+        });
+    }
+
+    // ============ POSTED ARCHIVE ============
+
+    function postedDateLabel(v) {
+        const raw = v && (v.postedDate || v.updatedAt || v.createdAt);
+        const date = raw ? new Date(raw) : null;
+        if (!date || Number.isNaN(date.getTime())) return 'Posted';
+        return `Posted ${date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`;
+    }
+
+    function postedVideoUrl(v) {
+        if (v && v.youtubeVideoId) return `https://www.youtube.com/watch?v=${encodeURIComponent(v.youtubeVideoId)}`;
+        const first = String(v && v.links || '').split(/[\s,]+/).find(value => /^https?:\/\//i.test(value));
+        return first || '';
+    }
+
+    function renderPostedTab(el) {
+        const list = postedVideos();
+        const canManage = isOwnerUser();
+        el.innerHTML = `<section class="wsp-posted-view">
+            <div class="wsp-posted-head">
+                <div>
+                    <h3>Posted videos</h3>
+                    <p>Completed videos live here with their full Workshop record. They no longer occupy an active pipeline stage.</p>
+                </div>
+                ${canManage ? `<button class="wsp-header-btn primary" id="wsp-add-posted">＋ Add from pipeline</button>` : ''}
+            </div>
+            <div class="wsp-posted-tools">
+                <label class="wsp-posted-search"><span>Search</span><input id="wsp-posted-search" type="search" value="${escAttr(postedSearch)}" placeholder="Video or project" autocomplete="off"></label>
+                <span class="wsp-posted-total">${list.length} video${list.length === 1 ? '' : 's'}</span>
+            </div>
+            <div class="wsp-posted-list" id="wsp-posted-list">
+                ${list.length ? list.map(v => {
+                    const url = postedVideoUrl(v);
+                    const searchable = `${v.name || ''} ${v.project || ''}`.toLowerCase();
+                    return `<article class="wsp-posted-card" data-posted-card data-search="${escAttr(searchable)}">
+                        <button class="wsp-posted-card-main" type="button" data-posted-open="${escAttr(v.id)}">
+                            <span class="wsp-posted-icon">${icon('post')}</span>
+                            <span class="wsp-posted-copy">
+                                <strong>${escHtml(v.name || 'Untitled video')}</strong>
+                                <span>${v.project ? escHtml(v.project) : 'No project'} · ${escHtml(postedDateLabel(v))}</span>
+                                ${v.hook ? `<small>${escHtml(v.hook)}</small>` : ''}
+                            </span>
+                        </button>
+                        <div class="wsp-posted-actions">
+                            ${url ? `<a class="wsp-mini-btn" href="${escAttr(url)}" target="_blank" rel="noopener">View video</a>` : ''}
+                            ${canManage ? `<button class="wsp-mini-btn" type="button" data-posted-restore="${escAttr(v.id)}">Return to pipeline</button>` : ''}
+                        </div>
+                    </article>`;
+                }).join('') : '<div class="workshop-empty">No posted videos yet. Add videos that are already live to clear them from the active pipeline.</div>'}
+                <div class="workshop-empty wsp-posted-no-results" id="wsp-posted-no-results" hidden>No posted videos match that search.</div>
+            </div>
+        </section>`;
+
+        const applySearch = () => {
+            const query = postedSearch.trim().toLowerCase();
+            let visible = 0;
+            el.querySelectorAll('[data-posted-card]').forEach(card => {
+                const show = !query || String(card.dataset.search || '').includes(query);
+                card.hidden = !show;
+                if (show) visible++;
+            });
+            const empty = el.querySelector('#wsp-posted-no-results');
+            if (empty) empty.hidden = visible > 0 || list.length === 0;
+        };
+        const search = el.querySelector('#wsp-posted-search');
+        if (search) search.addEventListener('input', () => { postedSearch = search.value; applySearch(); });
+        applySearch();
+        el.querySelector('#wsp-add-posted')?.addEventListener('click', showPostedPicker);
+        el.querySelectorAll('[data-posted-open]').forEach(button => button.addEventListener('click', () => openDetail(button.dataset.postedOpen)));
+        el.querySelectorAll('[data-posted-restore]').forEach(button => button.addEventListener('click', () => restoreVideoToPipeline(VideoService.getById(button.dataset.postedRestore))));
+    }
+
+    function showPostedPicker() {
+        const overlay = document.getElementById('wsp-picker-overlay');
+        const listEl = document.getElementById('wsp-picker-list');
+        const title = document.getElementById('wsp-picker-title');
+        if (!overlay || !listEl || !title) return;
+        const candidates = pipelineVideos().slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        const selected = new Set();
+        title.textContent = 'Add already-posted videos';
+        listEl.innerHTML = candidates.length ? `<div class="wsp-posted-picker">
+            <p>Choose any videos that are already live. This preserves their records and removes them from every active pipeline stage.</p>
+            <div class="wsp-posted-picker-tools">
+                <input id="wsp-posted-picker-search" type="search" placeholder="Find a video or project" autocomplete="off">
+                <button class="wsp-mini-btn" id="wsp-posted-select-visible" type="button">Select visible</button>
+            </div>
+            <div class="wsp-posted-picker-list" id="wsp-posted-picker-list">
+                ${candidates.map(v => `<label class="wsp-posted-picker-row" data-pick-search="${escAttr(`${v.name || ''} ${v.project || ''}`.toLowerCase())}">
+                    <input type="checkbox" value="${escAttr(v.id)}">
+                    <span><strong>${escHtml(v.name || 'Untitled video')}</strong><small>${v.project ? escHtml(v.project) : 'No project'}</small></span>
+                </label>`).join('')}
+            </div>
+            <div class="wsp-posted-picker-foot">
+                <span id="wsp-posted-selected-count">0 selected</span>
+                <button class="wsp-header-btn primary" id="wsp-posted-confirm" type="button" disabled>Move to Posted</button>
+            </div>
+        </div>` : '<div class="workshop-empty">The active pipeline is empty.</div>';
+        overlay.style.display = 'flex';
+        if (!candidates.length) return;
+
+        const rows = [...listEl.querySelectorAll('.wsp-posted-picker-row')];
+        const confirmButton = listEl.querySelector('#wsp-posted-confirm');
+        const count = listEl.querySelector('#wsp-posted-selected-count');
+        const refreshCount = () => {
+            count.textContent = `${selected.size} selected`;
+            confirmButton.disabled = selected.size === 0;
+        };
+        rows.forEach(row => row.querySelector('input').addEventListener('change', event => {
+            if (event.target.checked) selected.add(event.target.value); else selected.delete(event.target.value);
+            refreshCount();
+        }));
+        const pickerSearch = listEl.querySelector('#wsp-posted-picker-search');
+        pickerSearch.addEventListener('input', () => {
+            const query = pickerSearch.value.trim().toLowerCase();
+            rows.forEach(row => { row.hidden = !!query && !String(row.dataset.pickSearch || '').includes(query); });
+        });
+        listEl.querySelector('#wsp-posted-select-visible').addEventListener('click', () => {
+            const visible = rows.filter(row => !row.hidden);
+            const shouldSelect = visible.some(row => !row.querySelector('input').checked);
+            visible.forEach(row => {
+                const checkbox = row.querySelector('input');
+                checkbox.checked = shouldSelect;
+                if (shouldSelect) selected.add(checkbox.value); else selected.delete(checkbox.value);
+            });
+            refreshCount();
+        });
+        confirmButton.addEventListener('click', async () => {
+            const ids = [...selected];
+            confirmButton.disabled = true;
+            confirmButton.textContent = `Moving 0/${ids.length}…`;
+            let moved = 0;
+            const failures = [];
+            for (const id of ids) {
+                const video = VideoService.getById(id);
+                if (!video) continue;
+                try {
+                    await postVideoRecord(video, { ...(video.stageState || {}), post: 'done' }, { silent: true });
+                    moved++;
+                    confirmButton.textContent = `Moving ${moved}/${ids.length}…`;
+                } catch (error) {
+                    failures.push(video.name || id);
+                }
+            }
+            hidePicker();
+            if (moved) {
+                if (typeof spawnPostedCreatures === 'function') spawnPostedCreatures(true);
+                window.dispatchEvent(new CustomEvent('video-posted'));
+                toast(`${moved} video${moved === 1 ? '' : 's'} moved to Posted`);
+            }
+            switchTab('posted');
+            if (failures.length) alert(`Could not move ${failures.length} video${failures.length === 1 ? '' : 's'}:\n\n${failures.join('\n')}`);
         });
     }
 
@@ -1891,13 +2063,14 @@ const WorkshopUI = (() => {
 
     // Posting is the deterministic end of the pipeline: hatch into the Pen,
     // flip produced inventory to ready.
-    async function postVideoRecord(v, stageState) {
+    async function postVideoRecord(v, stageState, options = {}) {
         await VideoService.update(v.id, {
             stageState: stageState || { ...(v.stageState || {}), post: 'done' },
             status: 'posted',
             postedDate: v.postedDate || new Date().toISOString()
         });
         await SVC().markProducedInventoryReady(v).catch(() => {});
+        if (options.silent) return;
         if (typeof spawnPostedCreatures === 'function') spawnPostedCreatures(true);
         window.dispatchEvent(new CustomEvent('video-posted'));
         const panel = container && container.querySelector('.workshop-panel');
@@ -2868,6 +3041,7 @@ const WorkshopUI = (() => {
         if (!el || !selectedVideo) return;
         const v = VideoService.getById(selectedVideo.id) || selectedVideo;
         selectedVideo = v;
+        const posted = isVideoPosted(v);
 
         el.innerHTML = `
             <div class="workshop-detail-toolbar">
@@ -2876,6 +3050,8 @@ const WorkshopUI = (() => {
                     Back
                 </button>
                 <div class="workshop-detail-actions">
+                    ${posted && isOwnerUser() ? '<button class="workshop-action-btn back-to-incubator-btn" id="workshop-return-pipeline">Return to pipeline</button>' : ''}
+                    ${!posted && isOwnerUser() ? '<button class="workshop-action-btn post-btn" id="workshop-mark-posted">Move to Posted</button>' : ''}
                     <button class="workshop-action-btn danger-btn" id="workshop-delete">Delete</button>
                 </div>
             </div>
@@ -2890,6 +3066,8 @@ const WorkshopUI = (() => {
 
         document.getElementById('workshop-back-btn').addEventListener('click', () => saveAndBack());
         document.getElementById('workshop-delete').addEventListener('click', () => deleteVideoAction(selectedVideo));
+        document.getElementById('workshop-mark-posted')?.addEventListener('click', () => markExistingVideoPosted(v));
+        document.getElementById('workshop-return-pipeline')?.addEventListener('click', () => restoreVideoToPipeline(v));
 
         bindDetailFields(v);
         // Detail context: bind comp-status + order rows here (the stage panel
@@ -5766,6 +5944,35 @@ const WorkshopUI = (() => {
         }
     }
 
+    async function markExistingVideoPosted(v) {
+        if (!v || !isOwnerUser()) return;
+        if (!confirm(`Move "${v.name || 'Untitled video'}" to Posted?\n\nIts full Workshop record will be preserved and it will leave the active pipeline.`)) return;
+        try {
+            await saveFieldsFor(v, true);
+            const fresh = VideoService.getById(v.id) || v;
+            await postVideoRecord(fresh, { ...(fresh.stageState || {}), post: 'done' });
+            switchTab('posted');
+            closeEditorContext();
+        } catch (error) {
+            console.warn('Workshop: mark posted failed', error);
+            alert('Failed to move the video to Posted. Check connection.');
+        }
+    }
+
+    async function restoreVideoToPipeline(v) {
+        if (!v || !isOwnerUser()) return;
+        if (!confirm(`Return "${v.name || 'Untitled video'}" to the active pipeline?\n\nIt will resume from its existing stage history.`)) return;
+        try {
+            await VideoService.requeue(v.id);
+            switchTab('pipeline');
+            toast(`"${v.name || 'Video'}" returned to the pipeline`);
+            closeEditorContext();
+        } catch (error) {
+            console.warn('Workshop: restore failed', error);
+            alert('Failed to return the video to the pipeline. Check connection.');
+        }
+    }
+
     async function backToLibraryAction(v) {
         if (!v) return;
         if (!confirm('Move this back to the Library as an idea? The pipeline entry will be removed (the idea and script are kept).')) return;
@@ -5810,7 +6017,11 @@ const WorkshopUI = (() => {
             container = bodyEl;
             activeTab = (opts && opts.tab) || 'pipeline';
             render();
-            container.querySelectorAll('.wsp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+            container.querySelectorAll('.wsp-tab').forEach(b => {
+                const active = b.dataset.tab === activeTab;
+                b.classList.toggle('active', active);
+                b.setAttribute('aria-selected', String(active));
+            });
             // A render that throws must NOT leave the pipeline stuck on
             // "Loading…" — surface the error in the tab body so it's visible
             // (and recoverable) instead of an infinite spinner.
@@ -5854,6 +6065,7 @@ const WorkshopUI = (() => {
             selectedProjectId = null;
             currentPage = 'list';
             activeTab = 'pipeline';
+            postedSearch = '';
             fSearch = fType = fProject = fSponsor = fAssignee = fFlag = '';
             showTypes = { video: true, component: true, task: true, order: true, inventory: true };
         }
