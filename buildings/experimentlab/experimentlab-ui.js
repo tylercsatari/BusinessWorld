@@ -345,11 +345,30 @@ const ExperimentLabUI = (() => {
             : {};
         let label = 'Ready';
         let busy = false;
+        const queue = Array.isArray(state.rawUploads)
+            ? state.rawUploads
+            : [];
+        const activeQueue = queue.filter(item => item && [
+            'queued',
+            'loading',
+            'waiting',
+            'scoring',
+            'processing',
+        ].includes(item._scoreQueueStatus || (
+            item.score_ledger ? 'ready' : 'processing'
+        ))).length;
         if (workspace.querySelector('[data-grindstop]') || state.grindStarting) {
             label = 'Grinding';
             busy = true;
         } else if (state.rawUploading || state.rawYtBusy) {
-            label = 'Scoring';
+            label = activeQueue > 1
+                ? `${activeQueue} analyses active`
+                : 'Scoring';
+            busy = true;
+        } else if (activeQueue || state.savedDetailLoading) {
+            label = activeQueue > 1
+                ? `${activeQueue} analyses queued`
+                : 'Loading analysis';
             busy = true;
         } else if (state.expGenBusy || state.rawGenBusy) {
             label = 'Generating';

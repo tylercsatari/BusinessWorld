@@ -779,6 +779,22 @@ async function main() {
         const historicalSavedHookKeep =
             historicalSavedHookRow.historical_display
                 .m_identity.keep;
+        const queuedSavedHookId = 'hkqueueddisplay';
+        const queuedSavedHookRecord = JSON.parse(
+            JSON.stringify(historicalSavedHookRecord)
+        );
+        queuedSavedHookRecord.id = queuedSavedHookId;
+        queuedSavedHookRecord.title =
+            'Second persisted analysis in queue';
+        queuedSavedHookRecord.savedAt = Date.now() - 1000;
+        const queuedSavedHookRow =
+            savedHookRuntimeIndex.legacyRow(
+                queuedSavedHookRecord
+            );
+        assert(
+            queuedSavedHookRow.historical_display,
+            'second queue fixture must contain a valid historical display'
+        );
         const historicalUpgradeScore = JSON.parse(
             JSON.stringify(videos[0].__record)
         );
@@ -1636,10 +1652,19 @@ async function main() {
             '/api/retention/channels': { channels: [], active: 'tyler' },
             '/api/indicators/registry': { indicators: [], meta: { targets: [] } },
             '/api/raw/saved-hooks': {
-                hooks: [historicalSavedHookRow],
+                hooks: [historicalSavedHookRow, queuedSavedHookRow],
             },
             [`/api/raw/saved-hook/${historicalSavedHookId}`]: {
                 ...historicalSavedHookRecord,
+                score_record_validation: {
+                    state: 'unverified-legacy',
+                    valid: null,
+                    recorded_sha256: null,
+                    calculated_sha256: null,
+                },
+            },
+            [`/api/raw/saved-hook/${queuedSavedHookId}`]: {
+                ...queuedSavedHookRecord,
                 score_record_validation: {
                     state: 'unverified-legacy',
                     valid: null,
@@ -1936,6 +1961,7 @@ window.__labReplies=replies;
 const teamReplies=${JSON.stringify(teamReplies)};
 const teamAccountId=${JSON.stringify(teamAccountId)};
 const historicalSavedHookId=${JSON.stringify(historicalSavedHookId)};
+const queuedSavedHookId=${JSON.stringify(queuedSavedHookId)};
 const historicalUpgradeScore=${JSON.stringify(historicalUpgradeScore)};
 window.__historicalTamperFixtures=${
     JSON.stringify(historicalTamperFixtures)
@@ -2077,12 +2103,13 @@ window.fetch=function(url,options){
             JSON.stringify(replies[p]),
             {status:200,headers}
         );
-        if(p==='${
-            `/api/raw/saved-hook/${historicalSavedHookId}`
-        }'){
+        if([
+            '${`/api/raw/saved-hook/${historicalSavedHookId}`}',
+            '${`/api/raw/saved-hook/${queuedSavedHookId}`}'
+        ].includes(p)){
             return new Promise(resolve=>setTimeout(
                 ()=>resolve(response()),
-                120
+                800
             ));
         }
         return Promise.resolve(response());
@@ -2673,6 +2700,49 @@ window.fetch=function(url,options){
         );
         await historicalSavedHookCard.click();
         await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
+        const queuedSavedHookCard = page.locator(
+            `[data-savedopen="${queuedSavedHookId}"]`
+        );
+        await queuedSavedHookCard.waitFor();
+        await queuedSavedHookCard.click();
+        const analysisQueue = page.locator(
+            '[data-score-analysis-queue]'
+        );
+        await analysisQueue.waitFor();
+        const selfQueueRows = analysisQueue.locator(
+            '[data-score-queue-id^="self:"]'
+        );
+        await page.waitForFunction(({ firstId, secondId }) => (
+            !!document.querySelector(
+                `[data-score-queue-id="self:${firstId}"]`
+            )
+            && !!document.querySelector(
+                `[data-score-queue-id="self:${secondId}"]`
+            )
+        ), {
+            firstId: historicalSavedHookId,
+            secondId: queuedSavedHookId,
+        });
+        const initialQueueStates = await selfQueueRows.evaluateAll(
+            nodes => nodes.map(node => (
+                node.getAttribute('data-score-queue-state')
+            ))
+        );
+        assert(
+            initialQueueStates.includes('loading')
+                && initialQueueStates.includes('queued'),
+            'back-to-back saved-video clicks must show one active load and '
+                + `one queued analysis: ${JSON.stringify(initialQueueStates)}`
+        );
+        assert(
+            !(await page.locator('#rtg-exppanel').innerText()).includes(
+                'Another hook is already being prepared or scored'
+            ),
+            'saved-video analysis must queue instead of rejecting the second click'
+        );
+        await page.locator(
             '[data-saved-detail-state="loading"]'
         ).waitFor({ state: 'attached' });
         const historicalLoadingText =
@@ -2685,6 +2755,62 @@ window.fetch=function(url,options){
             'opening persisted history must not masquerade as a live '
                 + 'extraction or embedding job'
         );
+        await page.waitForFunction(({ firstId, secondId }) => (
+            document.querySelector(
+                `[data-score-queue-id="self:${firstId}"]`
+            )?.getAttribute('data-score-queue-state') === 'ready'
+            && document.querySelector(
+                `[data-score-queue-id="self:${secondId}"]`
+            )?.getAttribute('data-score-queue-state') === 'ready'
+        ), {
+            firstId: historicalSavedHookId,
+            secondId: queuedSavedHookId,
+        });
+        const historicalQueueRow = page.locator(
+            `[data-score-queue-id="self:${historicalSavedHookId}"]`
+        );
+        const queuedQueueRow = page.locator(
+            `[data-score-queue-id="self:${queuedSavedHookId}"]`
+        );
+        assert.strictEqual(
+            await historicalQueueRow.count(),
+            1,
+            'the first completed analysis must remain in the queue'
+        );
+        assert.strictEqual(
+            await queuedQueueRow.count(),
+            1,
+            'the second completed analysis must remain in the queue'
+        );
+        if (process.env.EXPERIMENT_LAB_QUEUE_DESKTOP_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_QUEUE_DESKTOP_SCREENSHOT
+            ), { recursive: true });
+            await analysisQueue.scrollIntoViewIfNeeded();
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_QUEUE_DESKTOP_SCREENSHOT,
+                fullPage: false,
+            });
+        }
+        if (process.env.EXPERIMENT_LAB_QUEUE_MOBILE_SCREENSHOT) {
+            const queueDesktopViewport = page.viewportSize();
+            await page.setViewportSize({ width: 390, height: 844 });
+            await analysisQueue.scrollIntoViewIfNeeded();
+            assert.strictEqual(
+                await page.evaluate(() => document.documentElement.scrollWidth),
+                390,
+                'the multi-analysis queue must not overflow the phone viewport'
+            );
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_QUEUE_MOBILE_SCREENSHOT
+            ), { recursive: true });
+            await page.screenshot({
+                path: process.env.EXPERIMENT_LAB_QUEUE_MOBILE_SCREENSHOT,
+                fullPage: false,
+            });
+            await page.setViewportSize(queueDesktopViewport);
+        }
+        await historicalQueueRow.locator('[data-rawupmark]').click();
         await page.locator(
             '[data-saved-detail-state="historical-read-only"]'
         ).waitFor({ state: 'attached' });
@@ -2762,6 +2888,27 @@ window.fetch=function(url,options){
             'historical display-only evidence must not expose edit or '
                 + 're-embedding controls'
         );
+        await historicalQueueRow.locator('[data-rawupmark]').click();
+        assert.strictEqual(
+            await page.locator(
+                '[data-canonical-score-analysis]'
+            ).count(),
+            0,
+            'clicking the expanded queue row must collapse its analysis'
+        );
+        await queuedQueueRow.locator('[data-rawupmark]').click();
+        await page.locator(
+            '[data-canonical-score-analysis]'
+        ).waitFor();
+        assert(
+            (await page.locator(
+                '[data-canonical-score-analysis]'
+            ).innerText()).includes(
+                queuedSavedHookRecord.title
+            ),
+            'selecting the second row must expand its own canonical analysis'
+        );
+        await historicalQueueRow.locator('[data-rawupmark]').click();
         const renderedHistoricalCoordinates = await page.locator(
             `[data-embedding-asset="saved:${historicalSavedHookId}"]`
                 + '[data-coordinate-display-only="true"]'

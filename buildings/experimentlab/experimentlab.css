@@ -1625,3 +1625,208 @@
     scroll-margin-top: 16px;
     outline: none;
 }
+
+.experiment-lab-panel .score-analysis-queue {
+    margin-top: 16px;
+    overflow: hidden;
+    border: 1px solid var(--lab-line);
+    border-radius: 16px;
+    background: var(--lab-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025), 0 8px 24px rgba(0, 0, 0, 0.035);
+}
+
+.experiment-lab-panel .score-analysis-queue-head {
+    min-height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--lab-line);
+    background: var(--lab-paper-soft);
+}
+
+.experiment-lab-panel .score-analysis-queue-head > div {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.experiment-lab-panel .score-analysis-queue-head small {
+    color: var(--lab-blue);
+    font-size: 9px;
+    font-weight: 760;
+    text-transform: uppercase;
+}
+
+.experiment-lab-panel .score-analysis-queue-head b {
+    color: var(--lab-ink);
+    font-size: 13px;
+}
+
+.experiment-lab-panel .score-analysis-queue-head span {
+    color: var(--lab-tertiary);
+    font-size: 10px;
+}
+
+.experiment-lab-panel .score-analysis-queue-head button {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 0 11px;
+    border-color: var(--lab-line-strong);
+    border-radius: 9px !important;
+    background: var(--lab-paper);
+    color: var(--lab-secondary);
+    cursor: pointer;
+}
+
+.experiment-lab-panel .score-analysis-queue-head button:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+.experiment-lab-panel .score-analysis-queue-list {
+    display: grid;
+}
+
+.experiment-lab-panel .score-analysis-queue-row {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    border-bottom: 1px solid var(--lab-line);
+    background: transparent;
+}
+
+.experiment-lab-panel .score-analysis-queue-row:last-child {
+    border-bottom: 0;
+}
+
+.experiment-lab-panel .score-analysis-queue-row:hover,
+.experiment-lab-panel .score-analysis-queue-row[data-selected="true"] {
+    background: #f7faff;
+}
+
+.experiment-lab-panel .score-analysis-queue-row[data-selected="true"] {
+    box-shadow: inset 3px 0 0 var(--score-queue-accent);
+}
+
+.experiment-lab-panel .score-analysis-queue-row > [data-rawupmark] {
+    min-width: 0;
+    min-height: 60px;
+    display: grid;
+    grid-template-columns: minmax(132px, auto) minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 13px;
+    border: 0;
+    background: transparent;
+    color: var(--lab-ink);
+    text-align: left;
+    cursor: pointer;
+}
+
+.experiment-lab-panel .score-analysis-queue-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--score-queue-accent);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.experiment-lab-panel .score-analysis-queue-state i {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--score-queue-accent);
+}
+
+.experiment-lab-panel .score-analysis-queue-row[data-score-queue-state="queued"] i,
+.experiment-lab-panel .score-analysis-queue-row[data-score-queue-state="loading"] i,
+.experiment-lab-panel .score-analysis-queue-row[data-score-queue-state="waiting"] i,
+.experiment-lab-panel .score-analysis-queue-row[data-score-queue-state="scoring"] i,
+.experiment-lab-panel .score-analysis-queue-row[data-score-queue-state="processing"] i {
+    animation: experiment-lab-pulse 1.2s ease-in-out infinite;
+}
+
+.experiment-lab-panel .score-analysis-queue-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.experiment-lab-panel .score-analysis-queue-copy b {
+    overflow: hidden;
+    color: var(--lab-ink);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.experiment-lab-panel .score-analysis-queue-copy small {
+    overflow: hidden;
+    color: var(--lab-tertiary);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.experiment-lab-panel .score-analysis-queue-toggle {
+    color: var(--lab-tertiary);
+    font-size: 13px;
+}
+
+.experiment-lab-panel .score-analysis-queue-remove {
+    min-width: 44px;
+    min-height: 44px;
+    align-self: stretch;
+    border: 0;
+    border-left: 1px solid var(--lab-line);
+    background: transparent;
+    color: var(--lab-tertiary);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.experiment-lab-panel .score-analysis-queue-remove:hover {
+    background: #fff4f4;
+    color: var(--lab-red);
+}
+
+@media (max-width: 760px) {
+    .experiment-lab-panel .score-analysis-queue {
+        margin-top: 12px;
+        border-radius: 14px;
+    }
+
+    .experiment-lab-panel .score-analysis-queue-head {
+        min-height: 54px;
+        align-items: flex-start;
+        padding: 9px 11px;
+    }
+
+    .experiment-lab-panel .score-analysis-queue-head > div {
+        display: grid;
+        gap: 2px;
+    }
+
+    .experiment-lab-panel .score-analysis-queue-row > [data-rawupmark] {
+        min-height: 66px;
+        grid-template-columns: minmax(0, 1fr) 16px;
+        gap: 5px 8px;
+        padding: 9px 10px;
+    }
+
+    .experiment-lab-panel .score-analysis-queue-state {
+        grid-column: 1 / -1;
+    }
+
+    .experiment-lab-panel .score-analysis-queue-copy small {
+        white-space: normal;
+        line-height: 1.35;
+    }
+}

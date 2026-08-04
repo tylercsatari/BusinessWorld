@@ -33,6 +33,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
+    let SAVED_OPEN_DRAIN = null;
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
@@ -4401,15 +4402,7 @@ const JarvisRetention = (function () {
                     ? `Uploading ${st.rawUpQueue.transferMB} MB opening…`
                     : UPSTAGES[Math.min(st.rawUpStage || 0, 4)]);
         const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${upLabel}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
-        const uploadBatchStart = Math.max(0, uploads.length - 12);
-        const uploadBatchRail = uploads.length > 1
-            ? `<div data-raw-score-batch style="display:flex;gap:6px;overflow-x:auto;padding:9px 1px 2px;margin-top:9px;border-top:1px solid ${C.border};scrollbar-width:thin">${uploads.slice(uploadBatchStart).map((upload, localIndex) => {
-                const index = uploadBatchStart + localIndex;
-                const selected = st.rawUpSel === index;
-                const scored = !!(upload && upload.score_ledger);
-                return `<button type="button" data-rawupmark="${index}" style="flex:0 0 auto;max-width:210px;cursor:pointer;border:1px solid ${selected ? CY : C.border};background:${selected ? CY + '18' : C.card};color:${selected ? CY : C.dim};border-radius:7px;padding:6px 9px;text-align:left"><span style="display:block;font-size:10px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${index + 1}. ${esc(upload && upload.title || 'Scored opening')}</span><span style="display:block;font-size:8px;margin-top:2px;color:${scored ? C.green : C.mute}">${scored ? 'scored independently' : 'processing result'}</span></button>`;
-            }).join('')}</div>`
-            : '';
+        const uploadBatchRail = renderScoreAnalysisQueue(uploads);
         const builder = st.rawBuildMode
             ? `<div style="margin-top:10px">${renderStoryboardWorkbench()}</div>`
             : '';
@@ -4420,12 +4413,18 @@ const JarvisRetention = (function () {
         const scorableKind = d => d.kind === 'content' || d.kind === 'novelty';
         const val = EXPREG.indicators.filter(d => d.validated && scorableKind(d));
         const up = selectedRawScoreUpload();
+        const selectedQueueItem = selectedRawScoreQueueItem();
         const keyOf = d => d.kind === 'content' ? `${d.name}__${d.target}` : d.name;
         const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
         if (!up) {
             const byT = {}; val.forEach(d => { (byT[d.target] = byT[d.target] || []).push(d); });
+            const waiting = selectedQueueItem
+                ? renderSelectedQueuePlaceholder(selectedQueueItem)
+                : uploads.length
+                    ? cardc(`<div style="font-size:11px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">All analyses are collapsed.</b> Select any queue row to expand its complete canonical score.</div>`, 12)
+                    : '';
             return experimentRegion('create', head)
-                + experimentRegion('score', controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12))
+                + experimentRegion('score', controls + waiting + (!uploads.length ? cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12) : ''))
                 + experimentRegion('library', savedBank());
         }
         scoreContractEnsure();
@@ -6641,7 +6640,6 @@ const JarvisRetention = (function () {
             st.rawUploading
             || st.rawYtBusy
             || st.rawReembedBusy
-            || st.savedDetailLoading
             || st.savedRescoreId
             || st.genScoringK != null
         );
@@ -6660,6 +6658,10 @@ const JarvisRetention = (function () {
         );
     }
     function selectedRawScoreUpload() {
+        const selected = selectedRawScoreQueueItem();
+        return rawUploadIsDisplayable(selected) ? selected : null;
+    }
+    function selectedRawScoreQueueItem() {
         const uploads = st.rawUploads || [];
         if (st.rawUpSel === null || st.rawUpSel === false) return null;
         const selectedIndex = Number(st.rawUpSel);
@@ -6667,11 +6669,81 @@ const JarvisRetention = (function () {
             !Number.isInteger(selectedIndex)
             || selectedIndex < 0
             || selectedIndex >= uploads.length
-        ) {
-            return null;
-        }
-        const selected = uploads[selectedIndex];
-        return rawUploadIsDisplayable(selected) ? selected : null;
+        ) return null;
+        return uploads[selectedIndex] || null;
+    }
+    function scoreQueueState(upload) {
+        if (!upload) return 'empty';
+        if (upload._scoreQueueStatus) return upload._scoreQueueStatus;
+        if (rawUploadIsDisplayable(upload)) return 'ready';
+        if (upload._scoreQueueError) return 'error';
+        return 'processing';
+    }
+    function scoreQueueStateLabel(upload) {
+        const state = scoreQueueState(upload);
+        if (state === 'queued') return 'Queued';
+        if (state === 'loading') return 'Loading saved ledger';
+        if (state === 'waiting') return 'Waiting for scorer';
+        if (state === 'scoring') return 'Scoring 21 coordinates';
+        if (state === 'ready') return 'Ready';
+        if (state === 'error') return 'Error';
+        return 'Processing';
+    }
+    function scoreQueueStateColor(upload) {
+        const state = scoreQueueState(upload);
+        if (state === 'ready') return C.green;
+        if (state === 'error') return C.red;
+        if (state === 'queued' || state === 'waiting') return C.amber;
+        return C.cyan;
+    }
+    function scoreQueueCoordinateSummary(upload) {
+        const ledger = upload && upload.score_ledger;
+        const entries = ledger && Array.isArray(ledger.entries)
+            ? ledger.entries
+            : [];
+        if (!entries.length) return upload && upload._scoreQueueDetail || '';
+        const available = entries.filter(
+            entry => entry && entry.available === true
+        ).length;
+        return `${available}/${entries.length} coordinates · 2 keep forecasts`;
+    }
+    function renderScoreAnalysisQueue(uploads) {
+        if (!uploads.length) return '';
+        const counts = uploads.reduce((summary, upload) => {
+            const state = scoreQueueState(upload);
+            summary[state] = (summary[state] || 0) + 1;
+            return summary;
+        }, {});
+        const active = (counts.queued || 0)
+            + (counts.loading || 0)
+            + (counts.waiting || 0)
+            + (counts.scoring || 0)
+            + (counts.processing || 0);
+        const rows = uploads.map((upload, index) => {
+            const selected = Number(st.rawUpSel) === index;
+            const state = scoreQueueState(upload);
+            const color = scoreQueueStateColor(upload);
+            const detail = state === 'error'
+                ? upload._scoreQueueError || 'This analysis failed.'
+                : scoreQueueCoordinateSummary(upload)
+                    || (selected ? 'Expanded below' : 'Select to inspect');
+            return `<div class="score-analysis-queue-row" data-score-queue-state="${esc(state)}" data-score-queue-id="${esc(upload._scoreQueueId || `result:${index}`)}" data-saved-id="${esc(upload.savedId || '')}" data-selected="${selected ? 'true' : 'false'}" style="--score-queue-accent:${color}"><button type="button" data-rawupmark="${index}" aria-expanded="${selected ? 'true' : 'false'}"><span class="score-analysis-queue-state"><i></i>${esc(scoreQueueStateLabel(upload))}</span><span class="score-analysis-queue-copy"><b>${esc(upload.title || upload.filename || `Opening ${index + 1}`)}</b><small>${esc(detail)}</small></span><span class="score-analysis-queue-toggle" aria-hidden="true">${selected ? '▾' : '▸'}</span></button><button type="button" data-rawupdel="${index}" class="score-analysis-queue-remove" title="Remove this analysis from the queue" aria-label="Remove ${esc(upload.title || `opening ${index + 1}`)} from the queue">×</button></div>`;
+        }).join('');
+        return `<section class="score-analysis-queue" data-score-analysis-queue aria-label="Opening analysis queue"><div class="score-analysis-queue-head"><div><small>Analysis queue</small><b>${uploads.length} opening${uploads.length === 1 ? '' : 's'}</b><span role="status" aria-live="polite">${counts.ready || 0} ready${active ? ` · ${active} active` : ''}${counts.error ? ` · ${counts.error} error${counts.error === 1 ? '' : 's'}` : ''}</span></div><button type="button" data-scorequeuecollapse ${st.rawUpSel == null ? 'disabled' : ''} title="Collapse the expanded analysis">Collapse</button></div><div class="score-analysis-queue-list">${rows}</div></section>`;
+    }
+    function renderSelectedQueuePlaceholder(upload) {
+        if (!upload) return '';
+        const state = scoreQueueState(upload);
+        const color = scoreQueueStateColor(upload);
+        const message = state === 'error'
+            ? upload._scoreQueueError || 'This analysis failed.'
+            : upload._scoreQueueDetail
+                || (state === 'queued'
+                    ? 'This opening is queued behind the active analysis.'
+                    : state === 'waiting'
+                        ? 'The saved media is ready and will score when the active scorer is free.'
+                        : 'Loading the saved input and validating its persisted score ledger.');
+        return cardc(`<div data-score-queue-placeholder="${esc(state)}" style="display:flex;gap:11px;align-items:flex-start"><span style="width:10px;height:10px;margin-top:3px;border-radius:50%;background:${color};flex:0 0 auto"></span><div><div style="font-size:12px;font-weight:850;color:${C.text}">${esc(scoreQueueStateLabel(upload))} · ${esc(upload.title || 'Saved opening')}</div><div style="font-size:9px;color:${state === 'error' ? C.red : C.dim};line-height:1.5;margin-top:3px">${esc(message)}</div></div></div>`, 12);
     }
     function publishExperimentLabScoreReady(upload) {
         if (
@@ -7722,10 +7794,66 @@ const JarvisRetention = (function () {
         const xpg = e.target.closest('[data-expgo]'); if (xpg) { const [ch, pj] = xpg.getAttribute('data-expgo').split(':'); st.sec = 'raw'; st.rawChan = ch; st.rawProj = pj; st.rawColor = pj === 'hi10m' ? 'views' : 'cluster'; render(); return; }
         if (e.target.closest('[data-rawupload]')) { openRawVideoPicker(); return; }
         if (e.target.closest('[data-rawupshow]')) { st.rawUpShow = !st.rawUpShow; rtgUpdateRaw(); return; }
-        const updel = e.target.closest('[data-rawupdel]'); if (updel) { const i = +updel.getAttribute('data-rawupdel'); st.rawUploads.splice(i, 1); st.rawUpSel = null; rtgUpdateRaw(); return; }
-        const upmk = e.target.closest('[data-rawupmark]'); if (upmk) { const i = +upmk.getAttribute('data-rawupmark'); st.rawUpSel = (st.rawUpSel === i ? null : i); st.rawSel = null; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawupclose]')) { st.rawUpSel = null; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
+        const updel = e.target.closest('[data-rawupdel]');
+        if (updel) {
+            const i = +updel.getAttribute('data-rawupdel');
+            const uploads = st.rawUploads || [];
+            const removed = uploads[i];
+            if (removed) removed._scoreQueueCancelled = true;
+            uploads.splice(i, 1);
+            const selected = Number(st.rawUpSel);
+            if (!Number.isInteger(selected) || selected === i) {
+                st.rawUpSel = null;
+            } else if (selected > i) {
+                st.rawUpSel = selected - 1;
+            }
+            const next = selectedRawScoreQueueItem();
+            st.savedSel = next && next.savedId || null;
+            st.rawSel = null;
+            syncSavedScoreQueueState();
+            refreshRawUploadPanel();
+            return;
+        }
+        const upmk = e.target.closest('[data-rawupmark]');
+        if (upmk) {
+            const i = +upmk.getAttribute('data-rawupmark');
+            st.rawUpSel = Number(st.rawUpSel) === i ? null : i;
+            const selected = selectedRawScoreQueueItem();
+            st.savedSel = selected && selected.savedId || null;
+            st.savedDetailErr = selected
+                && scoreQueueState(selected) === 'error'
+                ? selected._scoreQueueError || null
+                : null;
+            st.rawSel = null;
+            refreshRawUploadPanel();
+            if (selected && scoreQueueState(selected) === 'ready') {
+                publishExperimentLabScoreReady(selected);
+            }
+            return;
+        }
+        if (
+            e.target.closest('[data-rawupclose]')
+            || e.target.closest('[data-scorequeuecollapse]')
+        ) {
+            st.rawUpSel = null;
+            st.savedSel = null;
+            st.savedDetailErr = null;
+            refreshRawUploadPanel();
+            return;
+        }
+        if (e.target.closest('[data-rawupclear]')) {
+            (st.rawUploads || []).forEach(upload => {
+                if (upload) upload._scoreQueueCancelled = true;
+            });
+            st.rawUploads = [];
+            st.rawUpSel = null;
+            st.savedSel = null;
+            st.savedDetailErr = null;
+            st.rawUpErr = null;
+            syncSavedScoreQueueState();
+            refreshRawUploadPanel();
+            return;
+        }
         const bm = e.target.closest('[data-rawbuildmode]'); if (bm) { st.rawBuildMode = bm.getAttribute('data-rawbuildmode') === '1'; st.rawUpErr = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
             fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; }).catch(() => {}),
@@ -8204,7 +8332,7 @@ const JarvisRetention = (function () {
             );
             return;
         }
-        const detailCacheKey = id;
+        const detailCacheKey = savedScoreQueueKey(id, null);
         let stored = SAVEDDETAIL[detailCacheKey];
         let tick = null;
         let upgraded = false;
@@ -8319,240 +8447,445 @@ const JarvisRetention = (function () {
         }
         delete SAVEDDETAIL[detailCacheKey];
         SAVED = null;
+        const ownQueueKey = savedScoreQueueKey(id, null);
         st.rawUploads = (st.rawUploads || []).filter(row => !(
-            row
-            && row.source === 'saved'
-            && String(row.savedId || '') === id
+            row && row._scoreQueueId === ownQueueKey
         ));
         st.rawUpSel = null;
         await openSaved(id);
     }
-    // Opening a saved hook is read-only. A persisted score keeps the exact
-    // scorer revision that produced it; an unscored idea may be scored for
-    // display, but that transient result is never written over saved evidence.
-    async function openSaved(id, options) {
-        if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before opening this saved hook.'); return; }
-        st.savedSel = id;
-        st.savedDetailLoading = true;
-        st.savedDetailErr = null;
-        rtgUpdateExp();
-        try {
-            const creatorProfile = selectedCreatorProfile();
-            const indexRow = savedHookIndexRow(id);
-            const indexFingerprint = savedHookEvidenceFingerprint(indexRow);
-            const detailCacheKey =
-                options && options._labAccount
-                    ? `${options._labAccount}:${id}`
-                    : id;
-            let stored = SAVEDDETAIL[detailCacheKey];
-            if (
-                !stored
-                || stored.indexFingerprint !== indexFingerprint
-            ) {
-                const rec = await rtFetchJson('/api/raw/saved-hook/' + id, {
-                        cache: 'no-store',
-                        ...(options && options._labAccount
-                            ? {
-                                _labAccount:
-                                    options._labAccount,
-                            }
-                            : {}),
-                    }, 4);
-                stored = SAVEDDETAIL[detailCacheKey] = {
-                    rec,
-                    montage: null,
-                    reconstructed: false,
-                    indexFingerprint,
-                };
-                const cachedIds = Object.keys(SAVEDDETAIL);
-                while (cachedIds.length > 8) delete SAVEDDETAIL[cachedIds.shift()];
-            }
-            const rec = stored.rec || {};
-            if (
-                !rec.historical_display
-                && indexRow
-                && indexRow.historical_display
-            ) {
-                rec.historical_display =
-                    indexRow.historical_display;
-            }
-            const persistedLedgerState = shortsLedgerState(rec);
-            if (persistedLedgerState.valid) {
-                const live = await currentScorerContract(true);
-                const current = savedHookScoreIsCurrent(
-                    rec,
-                    live,
-                    creatorProfile
+    function savedScoreQueueKey(id, options) {
+        const account = options && options._labAccount
+            ? String(options._labAccount)
+            : 'self';
+        return `${account}:${String(id)}`;
+    }
+    function savedScoreQueueIndexRow(id, options) {
+        if (options && options._labAccount) {
+            const team = LAB_TEAM_DATA[options._labAccount];
+            const hooks = team && team.hooks && team.hooks.hooks || [];
+            return hooks.find(row => String(row.id) === String(id)) || null;
+        }
+        return savedHookIndexRow(id);
+    }
+    function savedScoreQueueTitle(id, options) {
+        const row = savedScoreQueueIndexRow(id, options);
+        return row && row.title || 'Saved opening';
+    }
+    function syncSavedScoreQueueState() {
+        const queue = st.rawUploads || [];
+        st.savedDetailLoading = queue.some(upload => [
+            'queued',
+            'loading',
+            'waiting',
+            'scoring',
+        ].includes(scoreQueueState(upload)));
+        const selected = selectedRawScoreQueueItem();
+        st.savedDetailErr = selected
+            && scoreQueueState(selected) === 'error'
+            ? selected._scoreQueueError || 'This analysis failed.'
+            : null;
+    }
+    function updateSavedScoreQueueEntry(key, changes) {
+        const queue = st.rawUploads || [];
+        const index = queue.findIndex(
+            upload => upload && upload._scoreQueueId === key
+        );
+        if (index < 0) return null;
+        Object.assign(queue[index], changes || {});
+        syncSavedScoreQueueState();
+        if (root && root.isConnected) rtgUpdateExp();
+        return queue[index];
+    }
+    function waitForSavedScoreQueue(key, requestGeneration) {
+        return new Promise(resolve => {
+            const check = () => {
+                if (requestGeneration !== mountGeneration) {
+                    resolve(null);
+                    return;
+                }
+                const item = (st.rawUploads || []).find(
+                    upload => upload && upload._scoreQueueId === key
                 );
-                const warning = rec.evidence_state
-                    === 'legacy_unbound_evidence'
+                if (!item) {
+                    resolve(null);
+                    return;
+                }
+                const state = scoreQueueState(item);
+                if (state === 'ready') {
+                    resolve(item);
+                    return;
+                }
+                if (state === 'error') {
+                    resolve(null);
+                    return;
+                }
+                window.setTimeout(check, 50);
+            };
+            check();
+        });
+    }
+    async function waitForSavedScorerSlot(entry, requestGeneration) {
+        while (rawScoreBusy()) {
+            if (
+                requestGeneration !== mountGeneration
+                || !(st.rawUploads || []).includes(entry)
+            ) return false;
+            entry._scoreQueueStatus = 'waiting';
+            entry._scoreQueueDetail =
+                'Waiting for the active scorer before processing this unscored saved idea.';
+            syncSavedScoreQueueState();
+            rtgUpdateExp();
+            await new Promise(resolve => window.setTimeout(resolve, 250));
+        }
+        return true;
+    }
+    async function resolveSavedScoreQueueEntry(entry, requestGeneration) {
+        const id = entry.savedId;
+        const options = entry._scoreQueueOptions || {};
+        const creatorProfile = selectedCreatorProfile();
+        const indexRow = savedScoreQueueIndexRow(id, options);
+        const indexFingerprint = savedHookEvidenceFingerprint(indexRow);
+        const detailCacheKey = savedScoreQueueKey(id, options);
+        let stored = SAVEDDETAIL[detailCacheKey];
+        if (
+            !stored
+            || stored.indexFingerprint !== indexFingerprint
+        ) {
+            const rec = await rtFetchJson('/api/raw/saved-hook/' + id, {
+                cache: 'no-store',
+                ...(options._labAccount
+                    ? { _labAccount: options._labAccount }
+                    : {}),
+            }, 4, requestGeneration);
+            stored = SAVEDDETAIL[detailCacheKey] = {
+                rec,
+                montage: null,
+                reconstructed: false,
+                indexFingerprint,
+            };
+            const cachedIds = Object.keys(SAVEDDETAIL);
+            while (cachedIds.length > 16) {
+                delete SAVEDDETAIL[cachedIds.shift()];
+            }
+        }
+        const rec = stored.rec || {};
+        if (
+            !rec.historical_display
+            && indexRow
+            && indexRow.historical_display
+        ) rec.historical_display = indexRow.historical_display;
+        const persistedLedgerState = shortsLedgerState(rec);
+        if (persistedLedgerState.valid) {
+            const live = await currentScorerContract(true);
+            const current = savedHookScoreIsCurrent(
+                rec,
+                live,
+                creatorProfile
+            );
+            const warning = rec.evidence_state
+                === 'legacy_unbound_evidence'
+                ? (
+                    'Historical display evidence: the score ledger was '
+                    + 'not jointly bound to these exact JPEG bytes and '
+                    + 'text, so it is not predictor-eligible.'
+                )
+                : rec.predictor_eligible === false
                     ? (
-                        'Historical display evidence: the score ledger was '
-                        + 'not jointly bound to these exact JPEG bytes and '
-                        + 'text, so it is not predictor-eligible.'
+                        'The exact persisted score ledger is shown, but '
+                        + 'its media, input, or output-sidecar binding is '
+                        + 'not predictor-eligible. It is excluded from '
+                        + 'training, ranking, and saving decisions.'
                     )
-                    : rec.predictor_eligible === false
+                : !live
+                    ? (
+                        'The live scorer contract could not be loaded. '
+                        + 'The exact persisted score is shown without '
+                        + 'claiming current-revision parity.'
+                    )
+                    : !current
                         ? (
-                            'The exact persisted score ledger is shown, but '
-                            + 'its media, input, or output-sidecar binding is '
-                            + 'not predictor-eligible. It is excluded from '
-                            + 'training, ranking, and saving decisions.'
+                            'This is the exact persisted historical '
+                            + 'score from its recorded scorer revision; '
+                            + 'it was not silently recalculated.'
                         )
-                    : !live
-                        ? (
-                            'The live scorer contract could not be loaded. '
-                            + 'The exact persisted score is shown without '
-                            + 'claiming current-revision parity.'
-                        )
-                        : !current
-                            ? (
-                                'This is the exact persisted historical '
-                                + 'score from its recorded scorer revision; '
-                                + 'it was not silently recalculated.'
-                            )
-                            : null;
-                const result = savedHookResult(
-                    rec,
-                    id,
-                    warning,
-                    rec.evidence_state
-                        === 'legacy_unbound_evidence',
-                    options
-                        && options.readOnlyInspection,
-                    options
-                        && options._labAccount
+                        : null;
+            return savedHookResult(
+                rec,
+                id,
+                warning,
+                rec.evidence_state === 'legacy_unbound_evidence',
+                options.readOnlyInspection,
+                options._labAccount
+            );
+        }
+        const historicalState = shortsHistoricalDisplayLedgerState(
+            rec,
+            persistedLedgerState
+        );
+        if (historicalState.valid) {
+            return savedHookResult(
+                rec,
+                id,
+                (
+                    'Historical display-only evidence. These are the exact '
+                    + `persisted values from ledger ${historicalState.ledgerSha256}; `
+                    + 'they were not recalculated. The original JPEG and '
+                    + 'text were not jointly bound, so this record remains '
+                    + 'excluded from prediction, training, ranking, '
+                    + 'thresholds, and saving.'
+                ),
+                true,
+                options.readOnlyInspection,
+                options._labAccount
+            );
+        }
+        if (
+            persistedLedgerState.present
+            || rec.kind === 'scored'
+            || rec.score_display_eligible === true
+            || rec.score_ledger_sha256
+            || rec.score_record_sha256
+        ) {
+            throw new Error(
+                'This saved score has invalid persisted ledger '
+                + `evidence (${[].concat(
+                    persistedLedgerState.errors || [],
+                    historicalState.errors || []
+                ).join('; ') || 'score display validation failed'}). `
+                + 'It was not silently recalculated.'
+            );
+        }
+        if (options.readOnlyInspection) {
+            throw new Error(
+                'This saved idea has no persisted score ledger. Owner '
+                + 'inspection never recalculates another account’s work.'
+            );
+        }
+        let montage = stored.montage;
+        if (!montage && rec.hasMontage) {
+            try {
+                montage = await urlToDataUrl(
+                    '/api/raw/saved-montage/' + id
                 );
-                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
-                st.rawUploads.push(result);
-                st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            } else {
-                const historicalState =
-                    shortsHistoricalDisplayLedgerState(
-                        rec,
-                        persistedLedgerState
-                    );
-                if (historicalState.valid) {
-                    const warning = (
-                        'Historical display-only evidence. These are the '
-                        + 'exact persisted values from ledger '
-                        + `${historicalState.ledgerSha256}; they were not `
-                        + 'recalculated. The original JPEG and text were '
-                        + 'not jointly bound, so this record remains '
-                        + 'excluded from prediction, training, ranking, '
-                        + 'thresholds, and saving.'
-                    );
-                    const result = savedHookResult(
-                        rec,
-                        id,
-                        warning,
-                        true,
-                        options
-                            && options.readOnlyInspection,
-                        options
-                            && options._labAccount
-                    );
-                    st.rawUploads = (st.rawUploads || []).filter(
-                        row => !(row && row.source === 'saved')
-                    );
-                    st.rawUploads.push(result);
-                    st.rawUpSel = st.rawUploads.length - 1;
-                    st.rawSel = null;
-                } else if (
-                    persistedLedgerState.present
-                    || rec.kind === 'scored'
-                    || rec.score_display_eligible === true
-                    || rec.score_ledger_sha256
-                    || rec.score_record_sha256
-                ) {
-                    throw new Error(
-                        'This saved score has invalid persisted ledger '
-                        + `evidence (${[].concat(
-                            persistedLedgerState.errors || [],
-                            historicalState.errors || []
-                        ).join('; ') || 'score display validation failed'}). `
-                        + 'It was not silently recalculated.'
-                    );
-                } else {
-                if (options && options.readOnlyInspection) {
-                    throw new Error(
-                        'This saved idea has no persisted score ledger. '
-                        + 'Owner inspection never recalculates another '
-                        + 'account’s work.'
-                    );
-                }
-                let montage = stored.montage;
-                if (!montage && rec.hasMontage) {
-                    try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
-                }
-                let reconstructed = false;
-                if (!montage) {
-                    try {
-                        montage = await montageFromFrameIds(rec.frame_imgs || []);
-                        reconstructed = true;
-                    } catch (e) {}
-                }
-                if (!montage) {
-                    throw new Error(
-                        'This unscored saved idea has no durable montage to score.'
-                    );
-                }
-                stored.montage = montage; stored.reconstructed = reconstructed;
-                st.rawUploading = true;
-                st.rawUpErr = null;
-                st.rawUpStage = 1;
+            } catch (error) {}
+        }
+        let reconstructed = false;
+        if (!montage) {
+            try {
+                montage = await montageFromFrameIds(rec.frame_imgs || []);
+                reconstructed = true;
+            } catch (error) {}
+        }
+        if (!montage) {
+            throw new Error(
+                'This unscored saved idea has no durable montage to score.'
+            );
+        }
+        stored.montage = montage;
+        stored.reconstructed = reconstructed;
+        if (!await waitForSavedScorerSlot(entry, requestGeneration)) {
+            return null;
+        }
+        entry._scoreQueueStatus = 'scoring';
+        entry._scoreQueueDetail =
+            'Embedding the saved montage and scoring every canonical coordinate.';
+        st.rawUploading = true;
+        st.rawUpErr = null;
+        st.rawUpStage = 1;
+        syncSavedScoreQueueState();
+        rtgUpdateExp();
+        const tick = window.setInterval(() => {
+            if (st.rawUpStage < 4) {
+                st.rawUpStage += 1;
                 rtgUpdateExp();
-                const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
-                let j;
-                try {
-                    j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), duration: rec.input_manifest && rec.input_manifest.duration_s || null, creatorProfile, async: true }) });
-                } finally {
-                    window.clearInterval(tick);
-                    st.rawUploading = false;
-                    st.rawUpStage = 0;
-                }
-                j.source = 'saved';
-                j.savedId = id;
-                j.genFrames = rec.frames || [];
-                j.montageDataUrl = j.montage
-                    ? 'data:image/jpeg;base64,' + j.montage
-                    : montage;
-                j._uploadWarning = (
-                    'This is a new transient score for an unscored '
-                    + 'saved idea. The original record was not changed; '
-                    + 'use Save this hook to create a ledger-bound score.'
-                );
-                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
-                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-                }
             }
-        } catch (e) {
-            st.savedDetailErr = fetchFail(e);
+        }, 1200);
+        let result;
+        try {
+            result = await rtJob('/api/raw/embed-montage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    montage,
+                    text: rec.text || rec.title || '',
+                    title: (rec.title || 'Saved hook').slice(0, 40),
+                    duration: rec.input_manifest
+                        && rec.input_manifest.duration_s || null,
+                    creatorProfile,
+                    async: true,
+                }),
+            });
+        } finally {
+            window.clearInterval(tick);
             st.rawUploading = false;
             st.rawUpStage = 0;
         }
-        st.savedDetailLoading = false;
+        if (!result) return null;
+        result.source = 'saved';
+        result.savedId = id;
+        result.genFrames = rec.frames || [];
+        result.montageDataUrl = result.montage
+            ? 'data:image/jpeg;base64,' + result.montage
+            : montage;
+        result._uploadWarning = (
+            'This is a new transient score for an unscored '
+            + 'saved idea. '
+            + 'The original record was not changed; use Save this hook to '
+            + 'create a ledger-bound score.'
+        );
+        return result;
+    }
+    function drainSavedScoreQueue() {
+        if (SAVED_OPEN_DRAIN) return SAVED_OPEN_DRAIN;
+        const requestGeneration = mountGeneration;
+        SAVED_OPEN_DRAIN = (async () => {
+            while (requestGeneration === mountGeneration) {
+                const entry = (st.rawUploads || []).find(upload => (
+                    upload
+                    && upload._scoreQueueStatus === 'queued'
+                    && upload.source === 'saved-queue'
+                ));
+                if (!entry) break;
+                entry._scoreQueueStatus = 'loading';
+                entry._scoreQueueDetail =
+                    'Loading the saved input and validating its persisted ledger.';
+                syncSavedScoreQueueState();
+                rtgUpdateExp();
+                try {
+                    const result = await resolveSavedScoreQueueEntry(
+                        entry,
+                        requestGeneration
+                    );
+                    const index = (st.rawUploads || []).findIndex(
+                        upload => upload
+                            && upload._scoreQueueId === entry._scoreQueueId
+                    );
+                    if (index < 0 || !result) continue;
+                    const completed = {
+                        ...result,
+                        _scoreQueueId: entry._scoreQueueId,
+                        _scoreQueueStatus: 'ready',
+                        _scoreQueueCreatedAt: entry._scoreQueueCreatedAt,
+                        _scoreQueueCompletedAt: Date.now(),
+                        _scoreQueueOptions: entry._scoreQueueOptions,
+                    };
+                    st.rawUploads.splice(index, 1, completed);
+                    if (Number(st.rawUpSel) === index) {
+                        st.savedSel = completed.savedId || null;
+                        st.rawSel = null;
+                        publishExperimentLabScoreReady(completed);
+                    }
+                } catch (error) {
+                    updateSavedScoreQueueEntry(entry._scoreQueueId, {
+                        _scoreQueueStatus: 'error',
+                        _scoreQueueError: fetchFail(error),
+                        _scoreQueueDetail: fetchFail(error),
+                    });
+                }
+                syncSavedScoreQueueState();
+                rtgUpdateExp();
+            }
+        })().finally(() => {
+            SAVED_OPEN_DRAIN = null;
+            syncSavedScoreQueueState();
+            if (root && root.isConnected) rtgUpdateExp();
+            if ((st.rawUploads || []).some(upload => (
+                upload
+                && upload.source === 'saved-queue'
+                && upload._scoreQueueStatus === 'queued'
+            ))) drainSavedScoreQueue();
+        });
+        return SAVED_OPEN_DRAIN;
+    }
+    // Saved openings share the same canonical renderer as live scores. The
+    // queue only coordinates loading and preserves each independent result.
+    async function openSaved(id, options) {
+        if (!id) return null;
+        const requestGeneration = mountGeneration;
+        const safeOptions = {
+            readOnlyInspection: !!(
+                options && options.readOnlyInspection
+            ),
+            _labAccount: options && options._labAccount
+                ? String(options._labAccount)
+                : null,
+        };
+        const key = savedScoreQueueKey(id, safeOptions);
+        const uploads = st.rawUploads || (st.rawUploads = []);
+        let index = uploads.findIndex(
+            upload => upload && upload._scoreQueueId === key
+        );
+        if (index < 0) {
+            uploads.push({
+                source: 'saved-queue',
+                savedId: id,
+                title: savedScoreQueueTitle(id, safeOptions),
+                _scoreQueueId: key,
+                _scoreQueueStatus: 'queued',
+                _scoreQueueDetail: 'Waiting to load this saved opening.',
+                _scoreQueueCreatedAt: Date.now(),
+                _scoreQueueOptions: safeOptions,
+            });
+            index = uploads.length - 1;
+        } else if (scoreQueueState(uploads[index]) === 'error') {
+            Object.assign(uploads[index], {
+                _scoreQueueStatus: 'queued',
+                _scoreQueueError: null,
+                _scoreQueueDetail: 'Retrying this saved opening.',
+            });
+        }
+        st.rawUpSel = index;
+        st.rawSel = null;
+        st.savedSel = id;
+        st.savedDetailErr = null;
+        syncSavedScoreQueueState();
         rtgUpdateExp();
-        window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+        if (scoreQueueState(uploads[index]) === 'ready') {
+            publishExperimentLabScoreReady(uploads[index]);
+            return uploads[index];
+        }
+        drainSavedScoreQueue();
+        const result = await waitForSavedScoreQueue(
+            key,
+            requestGeneration
+        );
+        if (result && Number(st.rawUpSel) === (
+            st.rawUploads || []
+        ).indexOf(result)) {
+            window.setTimeout(() => {
+                const element = window.document.getElementById('exp-scoreout');
+                if (element) element.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                });
+            }, 120);
+        }
+        return result;
     }
     function savedDetail() {
-        if (!st.savedSel) return '';
+        const queued = selectedRawScoreQueueItem();
+        if (!st.savedSel && !(queued && queued.savedId)) return '';
         const selected = selectedRawScoreUpload();
         const historical = selected
             && selected._historicalDisplayOnly === true;
         const inspection = selected
             && selected._inspectionReadOnly === true;
-        const detailState = st.savedDetailLoading
+        const queueState = scoreQueueState(queued);
+        const detailState = [
+            'queued', 'loading', 'waiting', 'scoring', 'processing',
+        ].includes(queueState)
             ? 'loading'
-            : st.savedDetailErr
+            : queueState === 'error'
                 ? 'error'
                 : inspection
                     ? 'team-read-only'
                     : historical
                         ? 'historical-read-only'
                         : selected ? 'canonical' : 'empty';
-        const msg = st.savedDetailLoading
-            ? 'Loading this saved hook and validating its exact persisted score ledger…'
-            : st.savedDetailErr
+        const msg = detailState === 'loading'
+            ? `${scoreQueueStateLabel(queued)}. ${queued && queued._scoreQueueDetail || 'Preparing this saved opening.'}`
+            : detailState === 'error'
                 ? 'This saved hook was not opened. Its stored score was not recalculated.'
                 : inspection && historical
                     ? 'Exact historical persisted team-workspace display loaded read-only. No value was recalculated, no edit can write into this account, and this legacy evidence is excluded from the predictor.'
@@ -8563,25 +8896,16 @@ const JarvisRetention = (function () {
                 : selected
                     ? 'Exact persisted score loaded. Every scalar above comes from this card’s canonical ledger.'
                     : 'No canonical score is selected for this saved hook.';
-        return `<div data-saved-detail-state="${detailState}" style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>${st.savedDetailErr ? `<div data-saved-detail-error style="font-size:9px;color:${C.red};margin:-5px 0 10px;line-height:1.45">${esc(st.savedDetailErr)}</div>` : ''}`;
+        const queueError = queued && queued._scoreQueueError;
+        return `<div data-saved-detail-state="${detailState}" style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${esc(msg)}</span><span data-savedclose title="Collapse this analysis" style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>${queueError ? `<div data-saved-detail-error style="font-size:9px;color:${C.red};margin:-5px 0 10px;line-height:1.45">${esc(queueError)}</div>` : ''}`;
     }
     function closeSavedDetail() {
-        const uploads = st.rawUploads || [];
-        const selectedIndex = Number(st.rawUpSel);
-        const selected = Number.isInteger(selectedIndex)
-            ? uploads[selectedIndex]
-            : null;
-        st.rawUploads = uploads.filter(
-            row => !(row && row.source === 'saved')
-        );
-        if (selected && selected.source === 'saved') {
-            st.rawUpSel = null;
-        }
+        st.rawUpSel = null;
         st.savedSel = null;
-        st.savedDetailLoading = false;
         st.savedDetailErr = null;
         st.rawTitleEdit = null;
         st.rawTransEdit = null;
+        syncSavedScoreQueueState();
         rtgUpdateExp();
     }
     function scheduleSavedChannelPoll() {
@@ -12782,13 +13106,16 @@ const JarvisRetention = (function () {
         if (row.artifactKind === 'hooks' && row.artifactId) {
             st.labTeamActivityLoading = true;
             rtgUpdateExp();
-            await openSaved(row.artifactId, {
+            const opened = await openSaved(row.artifactId, {
                 _labAccount: st.labTeamAccount,
                 readOnlyInspection: true,
             });
             st.labTeamActivityLoading = false;
-            const opened = selectedRawScoreUpload();
-            if (opened) presentCanonicalScore(opened, { closeBuilder: true });
+            if (opened) {
+                const openedIndex = (st.rawUploads || []).indexOf(opened);
+                if (openedIndex >= 0) st.rawUpSel = openedIndex;
+                presentCanonicalScore(opened, { closeBuilder: true });
+            }
             else {
                 st.labTeamActivityError = st.savedDetailErr
                     || 'The saved work has no displayable canonical score.';
@@ -13232,6 +13559,9 @@ const JarvisRetention = (function () {
         st.expGenStage = null;
         st.grindRid = null;
         st.grindBusy = false;
+        SAVED_OPEN_DRAIN = null;
+        st.savedDetailLoading = false;
+        st.savedDetailErr = null;
         st.rawUploads = [];
         st.rawUpSel = null;
         st.rawSel = null;
