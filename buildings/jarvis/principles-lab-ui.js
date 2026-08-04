@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const ARTIFACT_URL = './buildings/jarvis/principles-lab/artifact.json?v=3';
+    const ARTIFACT_URL = './buildings/jarvis/principles-lab/artifact.json?v=4';
     const VIEWS = [
         ['audit', 'Quant audit'],
         ['discoveries', 'Discoveries'],
@@ -1067,11 +1067,42 @@
                         </div>
                     </div>
                 </div>
+                ${renderChannelFreeSignal(findings.channelFreeKeepDirection)}
                 <div class="pla-promotion-rule">
                     <b>Promotion rule</b>
                     <p>${esc(findings.wholeProgramVerdict || '')}</p>
                 </div>
             </section>`;
+    }
+
+    function renderChannelFreeSignal(row) {
+        if (!row) return '';
+        const candidates = row.candidates || [];
+        return `
+            <div class="pla-quant-chart-grid" style="margin-top:14px">
+                <div style="grid-column:1/-1">
+                    <div class="pla-mini-head"><div><span class="pla-section-label">Channel-free hook signal</span><h4>One identical direction for every channel — raw stayed-to-watch, no creator information</h4></div>${chip(words(row.promotionCeiling), 'amber')}</div>
+                    <div class="pla-table-scroll">
+                        <table class="pla-data-table">
+                            <thead><tr><th>Signal</th><th>OOF MAE (5×5)</th><th>ρ</th><th>R²</th><th>Unseen-account ρ (LOAO)</th><th></th></tr></thead>
+                            <tbody>${candidates.map(candidate => `
+                                <tr>
+                                    <td>${esc(candidate.signal)}</td>
+                                    <td>${fmt(candidate.oofMAE, 3)} ± ${fmt(candidate.oofMAEsd, 3)}</td>
+                                    <td>${signed(candidate.oofSpearman, 3)}</td>
+                                    <td>${fmt(candidate.oofR2, 3)}</td>
+                                    <td>${esc(Object.entries(candidate.unseenAccountSpearman || {}).map(([account, value]) => `${account} ${value == null ? '—' : signed(value, 2)}`).join(' · '))}</td>
+                                    <td>${candidate.selected ? chip('selected', 'green') : ''}</td>
+                                </tr>
+                            `).join('')}</tbody>
+                        </table>
+                    </div>
+                    <div class="pla-sensitivity-verdict" style="margin-top:8px">
+                        <div>${chip('not promoted', 'red')}</div>
+                        <p>n ${fmt(row.n, 0)} · baseline global-mean MAE ${fmt(row.baselineGlobalMeanMAE, 3)} · ${esc(row.unseenSourceHoldout || '')} ${esc(row.blocker || '')}</p>
+                    </div>
+                </div>
+            </div>`;
     }
 
     function renderQuantDefinitions(audit) {
@@ -1768,6 +1799,13 @@
                     `).join('')}
                 </div>
                 <p class="pla-boundary">This is a frozen cross-source retention proxy. It is not yet a causal promise-quality score, and its weak log-views transfer is exactly why retention and distribution must remain separate factors.</p>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Channel-free hook signal</span><h3>One identical direction for every channel — no creator information</h3></div>
+                    ${chip('retrospective rank-signal candidate', 'amber')}
+                </div>
+                ${renderChannelFreeSignal(data.quantAudit?.promotion?.findings?.channelFreeKeepDirection) || '<p class="pla-boundary">channel-free-signal artifact not present in this build.</p>'}
             </section>
             <section class="pla-section">
                 <div class="pla-section-head">

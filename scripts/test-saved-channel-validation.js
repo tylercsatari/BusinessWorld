@@ -973,7 +973,7 @@ assert.strictEqual(result.rows.length, 48);
 assert.strictEqual(result.validationRows.length, 632);
 assert(result.validationRows.every(row => (
     row.scoreLedger
-    && row.scoreLedger.values.length === 89
+    && row.scoreLedger.values.length === 93
 )));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindVideoHeldOut')));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindAccountHeldOut')));
@@ -1234,11 +1234,11 @@ assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 12);
 assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 0);
 assert.strictEqual(result.coordinateRegistry.totals.shortsCompatibilityAliases, 18);
 assert.strictEqual(result.coordinateRegistry.totals.shortsRetiredCoordinates, 7);
-assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 89);
+assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 93);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindColumns, 51);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindUniquePredictions, 51);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindAliasColumns, 0);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 26);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 30);
 assert.strictEqual(result.coordinateRegistry.totals.shortsOutcomeColumns, 12);
 assert.deepStrictEqual(result.coordinateRegistry.classification.blind, {
     columns: 51,
@@ -1247,10 +1247,10 @@ assert.deepStrictEqual(result.coordinateRegistry.classification.blind, {
     families: ['creatorExcludedPublic', 'videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
     meaning: 'Coordinates currently eligible for leakage-controlled predictor ranking. Every active blind column is one unique scalar prediction; compatibility aliases are outside the active ledger.',
 });
-assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 26);
+assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 30);
 assert.strictEqual(result.coordinateRegistry.classification.outcomes.columns, 12);
 assert.strictEqual(result.coordinateRegistry.totals.longStoredOutputs, 21);
-assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 89);
+assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 93);
 assert.strictEqual(result.coordinateRegistry.compatibility.activeColumnsContainAliases, false);
 assert.strictEqual(result.coordinateRegistry.compatibility.activeColumnsContainRetired, false);
 assert.strictEqual(result.coordinateRegistry.aliases.length, 18);
@@ -1280,7 +1280,7 @@ assert.strictEqual(
 assert.deepStrictEqual(result.ledgerAudit.visualKeepProtocolParityMismatches, []);
 
 const expectedValueClassCounts = {
-    direct_embedding_axis: 36,
+    direct_embedding_axis: 40,
     embedding_derived_transform: 12,
     combined_forecast: 29,
     observed_outcome: 12,
@@ -1290,9 +1290,9 @@ const actualValueClassCounts = result.coordinateRegistry.columns.reduce((counts,
     return counts;
 }, {});
 assert.deepStrictEqual(actualValueClassCounts, expectedValueClassCounts);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDirectEmbeddingAxes, 36);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisColumns, 36);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDistinctDirectEmbeddingAxes, 36);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDirectEmbeddingAxes, 40);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisColumns, 40);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDistinctDirectEmbeddingAxes, 40);
 assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisAliasColumns, 0);
 assert.strictEqual(result.coordinateRegistry.totals.shortsEmbeddingDerivedTransforms, 12);
 assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 29);
@@ -1474,7 +1474,7 @@ assert(
     && result.coordinateRegistry.lineageAudit.passed === true,
     JSON.stringify(result.coordinateRegistry.lineageAudit),
 );
-assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 89);
+assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 93);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unclassifiedColumns.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.incompleteLineages.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unresolvedReferences.length, 0);
@@ -1889,7 +1889,7 @@ outcomeKeys.forEach(outcomeKey => {
         matrixRow.outcome.qValueDuplicateRowsRemoved > 0,
         'derived swipe and keep must share one feed-decision hypothesis family'
     );
-    assert.strictEqual(matrixRow.coordinates.length, 89);
+    assert.strictEqual(matrixRow.coordinates.length, 93);
     assert.deepStrictEqual(
         matrixRow.coordinates.map(entry => entry.coordinateId),
         canonicalCoordinateIds,
@@ -2026,7 +2026,7 @@ outcomeKeys.forEach(outcomeKey => {
 assert.match(result.validationContract.videoHeldOut, /does not fit a second chart-only calibration/i);
 assert.match(result.validationContract.accountHeldOut, /does not fit a second chart-only calibration/i);
 assert.match(result.validationContract.glossary.outcomeNotPredictor, /excluded/i);
-assert.match(result.validationContract.glossary.qValue, /full eligible 89-coordinate by 13-outcome/i);
+assert.match(result.validationContract.glossary.qValue, /full eligible 93-coordinate by 13-outcome/i);
 assert.match(result.validationContract.glossary.predictionRange, /narrow ratio/i);
 assert.match(result.validationContract.glossary.plotModes, /no fold assignment, fit, or recalibration/i);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(result.scopes.pooled, 'outcomeMatrix'), false);

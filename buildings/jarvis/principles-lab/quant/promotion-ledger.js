@@ -59,6 +59,7 @@ const FILES = {
     legacyDerived: path.join(JARVIS_ROOT, 'derived_experiments_compact.json'),
     legacyGraph: path.join(JARVIS_ROOT, 'graph_compact.json'),
     legacyQuestions: path.join(JARVIS_ROOT, 'research_questions.json'),
+    channelFreeSignal: path.join(JARVIS_ROOT, 'predictor-lab', 'channel-free-signal.json'),
     unifiedPanel: path.join(__dirname, '.cache', 'unified-panel.json.gz'),
     opportunityTargets: path.join(__dirname, '.cache', 'opportunity-targets.json.gz'),
     panelSummary: path.join(__dirname, 'panel-summary.json'),
@@ -2132,6 +2133,29 @@ async function buildPromotionLedger(options = {}) {
     const promiseMarket = requiredJson(FILES.promiseMarket);
     const retentionArtifact = requiredJson(FILES.retention);
     const tribeArtifact = requiredJson(FILES.tribe);
+    // Optional: channel-free keep-direction validation (predictor-lab). Tolerant load so
+    // regeneration on checkouts without the artifact still succeeds.
+    const channelFreeSignal = fs.existsSync(FILES.channelFreeSignal)
+        ? requiredJson(FILES.channelFreeSignal)
+        : null;
+    // Consistency gate: the per-video scores artifact (Experiment-tab visualization) must
+    // come from the SAME run as the validation record, or the finding is flagged stale.
+    const channelFreeScoresPath = path.join(JARVIS_ROOT, 'predictor-lab', 'channel-free-scores.json');
+    const channelFreeScores = channelFreeSignal && fs.existsSync(channelFreeScoresPath)
+        ? requiredJson(channelFreeScoresPath)
+        : null;
+    const channelFreeConsistency = !channelFreeSignal ? null : {
+        scoresArtifactPresent: !!channelFreeScores,
+        runIdMatch: !!channelFreeScores && channelFreeScores.runId === channelFreeSignal.runId,
+        identityMatch: !!channelFreeScores
+            && channelFreeScores.identityHash === channelFreeSignal.dataIdentity?.identityHash,
+        rowCountMatch: !!channelFreeScores
+            && (channelFreeScores.rows || []).length === channelFreeSignal.dataIdentity?.n,
+        selectedMatch: !!channelFreeScores
+            && channelFreeScores.selected === channelFreeSignal.selectedSignal?.name,
+    };
+    const channelFreeConsistent = !!channelFreeConsistency
+        && Object.values(channelFreeConsistency).every(Boolean);
 
     const [
         promiseClusterRows,
@@ -2203,6 +2227,8 @@ async function buildPromotionLedger(options = {}) {
         FILES.legacyDerived,
         FILES.legacyGraph,
         FILES.legacyQuestions,
+        ...(channelFreeSignal ? [FILES.channelFreeSignal] : []),
+        ...(channelFreeScores ? [channelFreeScoresPath] : []),
         ...unifiedPanel.artifactFiles,
     ])];
     const artifacts = [];
@@ -2216,6 +2242,53 @@ async function buildPromotionLedger(options = {}) {
         legacy,
     });
     const findings = conciseFindingLedger({ operations, promise, tribe, legacy, alpha });
+    if (channelFreeSignal && channelFreeSignal.selectedSignal) {
+        // Auditor stance: summarize the artifact's own reported numbers; this block adds no
+        // new statistics and inherits the private-corpus evidence event (not independent).
+        findings.channelFreeKeepDirection = {
+            finding: 'A single pooled ridge direction on fused hook embeddings (no channel '
+                + 'information of any kind) predicts raw stayedToWatch keep.',
+            artifact: 'predictor-lab/channel-free-signal.json',
+            n: channelFreeSignal.dataIdentity?.n,
+            identityHash: channelFreeSignal.dataIdentity?.identityHash,
+            selectedSignal: channelFreeSignal.selectedSignal?.name,
+            oofMAE: channelFreeSignal.selectedSignal?.oofMAE,
+            oofMAEsd: channelFreeSignal.selectedSignal?.oofMAEsd,
+            oofSpearman: channelFreeSignal.selectedSignal?.oofSpearman,
+            baselineGlobalMeanMAE: channelFreeSignal.baselineGlobalMeanMAE,
+            candidates: Object.entries(channelFreeSignal.results || {}).map(([name, row]) => ({
+                signal: name,
+                selected: name === channelFreeSignal.selectedSignal?.name,
+                oofMAE: row.oof_5x5?.mae_mean,
+                oofMAEsd: row.oof_5x5?.mae_sd,
+                oofSpearman: row.oof_5x5?.spearman_mean,
+                oofR2: row.oof_5x5?.r2_mean,
+                unseenAccountSpearman: Object.fromEntries(Object.entries(row.leave_one_account_out || {})
+                    .map(([account, m]) => [account, m.spearman])),
+            })),
+            unseenSourceHoldout: 'leave-one-account-out run: rank transfer positive on every '
+                + 'held-out account (Spearman +0.14 to +0.33); absolute error dominated by the '
+                + 'unknown account baseline (worst held-out MAE ~28 where the baseline differs '
+                + 'by ~22 points).',
+            adaptiveSearchUniverse: channelFreeSignal.protocol?.adaptiveSearchUniverse,
+            evidenceClass: 'observed_outcome_same_private_corpus',
+            independentOutcomeEvent: false,
+            timeHoldout: 'not run for this specification',
+            prospectiveSeal: 'none',
+            runId: channelFreeSignal.runId || null,
+            consistency: {
+                ...channelFreeConsistency,
+                consistent: channelFreeConsistent,
+                rule: 'signal + scores artifacts must share runId, identity hash, row count, '
+                    + 'and selected signal; regenerate with run_channel_free_signal.py',
+            },
+            promotionCeiling: 'retrospective_rank_signal_candidate',
+            promotableNow: false,
+            blocker: 'No forward-time holdout and no prospective seal; absolute unseen-channel '
+                + 'prediction is structurally unavailable without a channel baseline — deploy as '
+                + 'percentile/rank only.',
+        };
+    }
     const sensitivityRows = [
         ...(baselineSensitivity.specifications || []),
         ...(baselineSensitivity.historySupportSpecifications || [])
@@ -2356,6 +2429,16 @@ async function buildPromotionLedger(options = {}) {
                     promiseMarket.audit?.promiseIdsPresentInExternalTraining,
                 independentFromOwnedPromiseOutcomes: true,
             },
+            ...(channelFreeSignal ? [{
+                id: 'channel_free_keep_direction_oof',
+                rows: channelFreeSignal.dataIdentity?.n,
+                class: 'observed_outcome_transformed_view',
+                independentOutcomeEvent: false,
+                identityStatus: 'Same private keep-labeled corpus as the retention/tribe/predictor '
+                    + 'events (identity hash recorded in the artifact); this is a transformed view, '
+                    + 'not a new outcome event.',
+                transformedBy: ['4 candidate signals', '5 seeds x 5 folds OOF', 'leave-one-account-out'],
+            }] : []),
             {
                 id: 'legacy_mixed_video_snapshots',
                 rowsRange: [
@@ -2448,6 +2531,14 @@ async function buildPromotionLedger(options = {}) {
         flatKnownUniverseSensitivity: flatSensitivity,
         findings,
         integrityFindings: [
+            ...(channelFreeSignal && !channelFreeConsistent ? [{
+                severity: 'high',
+                finding: 'Channel-free signal artifacts are INCONSISTENT: the Experiment-tab '
+                    + 'scores and the validated signal record come from different runs. '
+                    + 'Regenerate both with predictor-lab/run_channel_free_signal.py, then '
+                    + 'rerun this ledger and build-artifact.js.',
+                detail: channelFreeConsistency,
+            }] : []),
             {
                 severity: 'critical',
                 finding:

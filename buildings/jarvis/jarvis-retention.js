@@ -10659,6 +10659,12 @@ const JarvisRetention = (function () {
                 summary: 'Every video from this creator was removed upstream before this exact ledger value was fitted.',
                 claim: 'Tests transfer to a creator the fitted private axis did not see. This is stricter, but creator-level certainty is limited by the number of accounts.',
             },
+            channelFree: {
+                label: 'Channel-free signal',
+                color: C.green,
+                summary: 'One pooled direction fitted with zero creator information — no offsets, no per-account refits, no centering. The value is the per-video held-out OOF prediction.',
+                claim: 'The portable "good hook in general" signal: ranking transfers to unseen creators; absolute keep does not. Governed as a rank-first research diagnostic (ledger finding channelFreeKeepDirection).',
+            },
             creatorExcludedPublic: {
                 label: 'Creator-excluded public axis',
                 color: C.cyan,

@@ -18,8 +18,26 @@ const {
     validateManifestRowBinding,
 } = require('./saved-channel-manifest-binding');
 
-const VERSION = 15;
+const VERSION = 16;
 const LEDGER_VERSION = coordinateGovernance.ledgerVersion;
+
+// ── Channel-free keep signals (ledger finding: channelFreeKeepDirection) ──
+// Per-video held-out OOF scores from predictor-lab/run_channel_free_signal.py:
+// one pooled direction per signal, fitted with zero creator information.
+// Tolerant load — without the artifact the four channelFree coordinates simply
+// report no value; nothing else in the registry depends on it.
+const CHANNEL_FREE_SIGNALS = ['visual', 'text', 'together', 'concat'];
+let CHANNEL_FREE_SCORES = null;
+try {
+    CHANNEL_FREE_SCORES = require('./predictor-lab/channel-free-scores.json');
+} catch (error) {
+    CHANNEL_FREE_SCORES = null;
+}
+const CHANNEL_FREE_BY_ID = new Map(
+    ((CHANNEL_FREE_SCORES && CHANNEL_FREE_SCORES.rows) || []).map(row => [String(row.id), row])
+);
+const CHANNEL_FREE_RUN_ID = (CHANNEL_FREE_SCORES && CHANNEL_FREE_SCORES.runId) || null;
+const CHANNEL_FREE_SUMMARY = (CHANNEL_FREE_SCORES && CHANNEL_FREE_SCORES.summary) || {};
 const VISUAL_KEEP_COORDINATE_ID =
     coordinateGovernance.coordinates.visualKeepForecast.id;
 const VISUAL_KEEP_PROTOCOL_COORDINATES = Object.freeze(Object.fromEntries(
@@ -2464,6 +2482,12 @@ function buildCanonicalLineageCatalog(runtime) {
         label: 'Shared creator-excluded public axis',
         fitDatasetId: 'dataset.shorts.creator-excluded-public.v1',
         selectionRule: 'Fit one public views, outlier, or over-10M axis per modality after excluding every private row, saved row, and validation-creator row. The resulting scalar has one canonical ledger address regardless of which downstream validation protocol consumes it.',
+    };
+    families['family.shorts.channel-free.pooled-keep.v1'] = {
+        id: 'family.shorts.channel-free.pooled-keep.v1',
+        label: 'Channel-free pooled keep signal',
+        fitDatasetId: 'dataset.shorts.channel-free-private-keep.v1',
+        selectionRule: 'Four candidate signals (visual, text, together, concat) evaluated in one declared selection pass by minimum mean OOF MAE; the pooled fit uses no account feature, offset, or centering, and every displayed value is a held-out OOF prediction. Rank-first: absolute keep does not transfer to unseen creators.',
     };
     families['family.long.outlier-neighbor.v1'] = {
         id: 'family.long.outlier-neighbor.v1',
@@ -5039,6 +5063,58 @@ function buildCoordinateRegistry(options = {}) {
             };
         }
     );
+    const channelFree = CHANNEL_FREE_SIGNALS.map(signalKey => ({
+        id: `shorts.channel-free.${signalKey}.keep`,
+        family: 'channelFree',
+        protocol: 'pooled_no_creator_information',
+        group: signalKey === 'concat' ? 'combined' : signalKey,
+        key: `cfs.${signalKey}`,
+        target: 'keep',
+        label: `Channel-free ${signalKey === 'concat' ? 'concat (selected)' : signalKey} · Keep rate`,
+        unit: 'percent',
+        storageUnit: 'blind_model_coordinate',
+        sourceKey: `cfs.${signalKey}`,
+        percentileAvailable: false,
+        status: 'research_diagnostic',
+        predictorEligible: false,
+        validationStatus: 'research_only_retrospective_holdout',
+        valueClass: 'direct_embedding_axis',
+        lineageId: `lineage.shorts.channel-free.${signalKey}.keep`,
+        lineage: {
+            rawInputIds: signalKey === 'concat'
+                ? [
+                    'input.shorts.first5-montage.v1',
+                    'input.shorts.first5-transcript.v1',
+                    'input.shorts.first5-montage-transcript.v1',
+                ]
+                : groupInputIds(signalKey),
+            representationId: signalKey === 'concat'
+                ? 'representation.shorts.concat.gemini4608.v1'
+                : groupRepresentationId(signalKey),
+            fitDatasetId: 'dataset.shorts.channel-free-private-keep.v1',
+            fitDataset: [{
+                id: 'dataset.shorts.channel-free-private-keep.v1',
+                role: 'Pooled 584-video private keep fit with zero creator information; the evaluated video is excluded by its OOF fold.',
+            }],
+            targetField: 'keep',
+            algorithmId: 'algorithm.shorts.channel-free-pooled-ridge.v1',
+            scalarProjection: 'Normalized embedding enters a pooled Ridge direction (alpha by inner training-fold MAE); the displayed value is the seed-mean out-of-fold prediction clipped to [0, 100].',
+            calibrationId: 'calibration.identity-target-units.v1',
+            artifactId: 'artifact.repo.shorts.channel-free-scores.v1',
+            sourceCode: ['buildings/jarvis/predictor-lab/run_channel_free_signal.py'],
+            usesEmbedding: true,
+            validationProtocolId: 'family.shorts.channel-free.pooled-keep.v1',
+            visualizationId: 'map.runtime.none.v1',
+            runId: CHANNEL_FREE_RUN_ID,
+            ledgerFinding: 'channelFreeKeepDirection',
+            validatedSummary: CHANNEL_FREE_SUMMARY[signalKey] || null,
+            reproducibility: { status: 'repo-committed-artifact', runner: 'predictor-lab/run_channel_free_signal.py' },
+        },
+        description: 'One pooled direction fitted with ZERO creator information (no offsets, '
+            + 'per-account refits, or centering). The stored value is the per-video held-out '
+            + 'OOF prediction — the model never saw this video. Rank transfers to unseen '
+            + 'creators; absolute keep does not (deploy as percentile/rank).',
+    }));
     const columns = [
         ...observed,
         ...stored,
@@ -5048,6 +5124,7 @@ function buildCoordinateRegistry(options = {}) {
         ...creatorExcludedPublic,
         ...direct,
         ...forecasts,
+        ...channelFree,
     ];
     const familyMeta = [
         ['observed', 'Observed outcomes', 'Measured truth; never an embedding.'],
@@ -5060,6 +5137,7 @@ function buildCoordinateRegistry(options = {}) {
         ['accountHeldout', 'Account-held-out private scores', 'Six private keep/ret5 axes plus three realistic-views transforms rebuilt without the evaluated account.'],
         ['videoForecast', 'Video-held-out combined forecasts', 'Twelve stored outcomes forecast from nine creator-excluded public axes; swipe is a display transform of keep.'],
         ['accountForecast', 'Account-held-out combined forecasts', 'Twelve stored account-transfer outcomes; swipe is a display transform of keep.'],
+        ['channelFree', 'Channel-free keep signals', 'Four pooled directions (visual, text, together, concat) fitted with zero creator information; values are per-video held-out OOF predictions. Rank-first research diagnostics — ledger finding channelFreeKeepDirection.'],
     ].map(([key, label, description]) => ({
         key,
         label,
@@ -5543,6 +5621,11 @@ function ledgerValue(row, column) {
         const definition = contract.features.find(feature => feature.key === column.key);
         return featureDisplayValue(row, definition, column.family === 'videoHeldout' ? 'video' : 'account');
     }
+    if (column.family === 'channelFree') {
+        const scored = CHANNEL_FREE_BY_ID.get(String(row.id));
+        const signalKey = String(column.key || '').replace(/^cfs\./, '');
+        return scored ? number(scored[signalKey]) : null;
+    }
     if (column.family === 'videoForecast' || column.family === 'accountForecast') {
         const protocol = column.family === 'videoForecast' ? 'video' : 'account';
         return number(row.predictions && row.predictions.score21 && row.predictions.score21[protocol]
@@ -5967,6 +6050,9 @@ function coordinateValidationTier(column, outcome) {
     if (column.family === 'visualKeepProtocolForecast') return `identity_${column.protocol}`;
     if (column.family === 'creatorAdaptiveKeepPrequential') {
         return 'creator_prequential_historical_identity';
+    }
+    if (column.family === 'channelFree') {
+        return 'channel_free_pooled_no_creator_identity';
     }
     return 'diagnostic_identity';
 }
