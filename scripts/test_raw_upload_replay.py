@@ -2,9 +2,8 @@
 """Focused deterministic replay tests for raw_upload.py.
 
 No network, Gemini, ffmpeg, or real R2 credentials are used. The fake score has the
-same 21 canonical embedding outputs plus the universal frozen visual keep forecast.
-The conditional creator forecast is represented in the manifest but is intentionally
-unavailable without an explicit eligible creator profile.
+same 21 canonical embedding outputs plus the four governed channel-free keep
+outputs. Creator identity is intentionally absent from every scoring formula.
 """
 import base64
 import importlib.util
@@ -112,7 +111,47 @@ def revisions(suffix='a'):
     }
 
 
-def canonical_score(seed=1, creator_profile=None):
+def channel_free_fixture(seed=1, transcript_used=True):
+    outputs = {}
+    for index, signal in enumerate(RAW.CHANNEL_FREE_SIGNALS):
+        available = signal in ('visual', 'together') or transcript_used
+        outputs[signal] = {
+            'coordinate_id': f'shorts.channel-free.{signal}.keep',
+            'signal': signal,
+            'kind': 'channel_free_keep_rate_percent',
+            'unit': 'percent',
+            'percentile_unit': 'percentile_0_100',
+            'input': f'fixture {signal} input',
+            'channel_information': None,
+            'calibration_scope': 'pooled_global_no_creator',
+            'source': 'live_frozen_channel_free_model_score',
+            'model_artifact_path': RAW.CHANNEL_FREE_MODEL_RELATIVE_PATH,
+            'model_artifact_sha256': 'c' * 64,
+            'model_run_id': 'channel-free-fixture-run',
+            'selected': signal == 'concat',
+            'oof_mae': 7.0 + index / 10,
+            'oof_spearman': 0.5 + index / 100,
+            'available': available,
+            'est': float(60 + seed + index) if available else None,
+            'raw': float(60 + seed + index) if available else None,
+            'pctile': float(50 + seed + index) if available else None,
+            'unavailable_reason': None if available else (
+                'A coherent first-5-second transcript is required for this signal.'
+            ),
+        }
+    return {
+        'schema': 'shorts-channel-free-keep-forecasts-v1',
+        'model_artifact_path': RAW.CHANNEL_FREE_MODEL_RELATIVE_PATH,
+        'model_artifact_sha256': 'c' * 64,
+        'model_run_id': 'channel-free-fixture-run',
+        'selected_signal': 'concat',
+        'source': 'live_frozen_channel_free_model_score',
+        'channel_information': None,
+        'outputs': outputs,
+    }
+
+
+def canonical_score(seed=1, creator_profile=None, transcript_used=True):
     targets = ('keep', 'ret5', 'views', 'realviews', 'outlier', 'gt10M')
     steer = {}
     n = seed
@@ -133,20 +172,10 @@ def canonical_score(seed=1, creator_profile=None):
     return {
         'indicators': indicators,
         'steer': steer,
-        'visual_keep_forecast': {
-            'coordinate_id': RAW.VISUAL_KEEP_COORDINATE_ID,
-            'est': 65.0 + seed,
-            'raw': 65.0 + seed,
-            'pctile': None,
-            'kind': 'keep_rate_percent',
-            'unit': 'percent',
-            'calibration_scope': 'pooled_global',
-            'account_model': None,
-            'model_artifact_sha256': f'visual-keep-artifact-{seed}',
-            'model_artifact_key': f'raw/predictor-lab/visual-keep-model/by-sha256/{seed:064x}.json',
-            'model_artifact_canonical_key': RAW.VISUAL_KEEP_MODEL_KEY,
-            'model_manifest_key': RAW.VISUAL_KEEP_MODEL_MANIFEST_KEY,
-        },
+        'channel_free_keep_forecasts': channel_free_fixture(
+            seed,
+            transcript_used,
+        ),
         'emb_preview': {
             'visual': [0.1] * 48,
             'text': [0.3] * 48,
@@ -161,11 +190,6 @@ def canonical_score(seed=1, creator_profile=None):
             'text': {'neighbors': [{'id': 'text-neighbor', 'sim': 0.8}]},
             'together': {'neighbors': [{'id': 'together-neighbor', 'sim': 0.85}]},
         },
-        'creator_adaptive_keep_forecast': {
-            'coordinate_id': RAW.CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
-            'profile_account': creator_profile,
-            'raw': 70.0 + seed,
-        } if creator_profile else None,
     }
 
 
@@ -176,7 +200,7 @@ def score_once(fake_s3, calls, montage, transcript, used, duration, revision_sta
     if replay['score'] is not None:
         return replay['score'], replay['meta']
     calls['embedding'] += 3
-    score = canonical_score(seed, creator_profile)
+    score = canonical_score(seed, creator_profile, used)
     return score, RAW._score_replay_store(
         replay,
         score,
@@ -220,12 +244,12 @@ def test_cache_hit_skips_all_embedding_calls():
     assert manifest['output_fingerprint'] == replay_meta['output_fingerprint']
     assert manifest['scorer_revisions'] == revision_state
     assert manifest['canonical_output_contract']['canonical_embedding_outputs'] == 21
-    assert manifest['canonical_output_contract']['universal_raw_scorer_total'] == 22
-    assert manifest['canonical_output_contract']['creator_profile_enriched_maximum'] == 23
-    assert manifest['canonical_output_contract']['derived_forecasts_total'] == 2
-    assert manifest['canonical_output_contract']['frozen_model_forecasts'] == 1
-    assert manifest['canonical_output_contract']['conditional_creator_forecasts'] == 1
-    assert output['visual_keep_forecast'] == first_score['visual_keep_forecast']
+    assert manifest['canonical_output_contract']['universal_raw_scorer_total'] == 25
+    assert manifest['canonical_output_contract']['channel_free_keep_outputs'] == 4
+    assert manifest['canonical_output_contract']['complete_score_outputs'] == 25
+    assert manifest['canonical_output_contract']['derived_forecasts_total'] == 4
+    assert manifest['canonical_output_contract']['channel_free_creator_information'] is None
+    assert output['channel_free_keep_forecasts'] == first_score['channel_free_keep_forecasts']
     assert manifest['steer_artifact_archive_key'].endswith('steer-artifact-1.npz')
     assert manifest['steer_lineage_manifest_sha256'] == 'steer-lineage-1'
     assert manifest['steer_lineage_schema_version'] == 1
@@ -282,7 +306,7 @@ def test_input_and_revision_changes_invalidate_replay():
     score_once(fake_s3, calls, base64.b64encode(b'different-montage').decode(), 'same words', True, 8.0, rev_a, seed=5)
     score_once(fake_s3, calls, montage, 'same words', True, 8.0, rev_a, seed=6, creator_profile='tyler')
 
-    assert calls['embedding'] == 18, 'duration, profile, channel state, revisions, or montage failed to invalidate replay'
+    assert calls['embedding'] == 15, 'creator metadata changed a channel-free replay identity'
 
 
 def test_embedding_identity_is_independent_from_duration_and_creator_profile():
@@ -295,7 +319,13 @@ def test_embedding_identity_is_independent_from_duration_and_creator_profile():
     assert first['embedding_input_fingerprint'] == second['embedding_input_fingerprint']
     assert first['embedding_input'] == second['embedding_input']
     assert first['duration_ms'] != second['duration_ms']
-    assert first['creator_profile'] != second['creator_profile']
+    assert 'creator_profile' not in first
+    same_duration_a, state_a = RAW._score_input_fingerprint(
+        montage, 'same words', True, 8.0, 'tyler')
+    same_duration_b, state_b = RAW._score_input_fingerprint(
+        montage, 'same words', True, 8.0, 'hafu')
+    assert same_duration_a == same_duration_b
+    assert state_a == state_b
 
 
 def test_source_image_encodings_converge_to_one_canonical_montage():
@@ -376,9 +406,8 @@ def test_equivalent_ingress_modes_share_canonical_score_identity():
         'score_ledger': first['score_ledger'],
         'steer': first['steer'],
         'features': first['features'],
-        'visual_keep_forecast': first['visual_keep_forecast'],
-        'creator_adaptive_keep_forecast':
-            first['creator_adaptive_keep_forecast'],
+        'channel_free_keep_forecasts':
+            first['channel_free_keep_forecasts'],
         'input_manifest': first_manifest,
     })
     for output, source_mode in zip(outputs, source_modes):
@@ -414,10 +443,8 @@ def test_equivalent_ingress_modes_share_canonical_score_identity():
             'score_ledger': output['score_ledger'],
             'steer': output['steer'],
             'features': output['features'],
-            'visual_keep_forecast':
-                output['visual_keep_forecast'],
-            'creator_adaptive_keep_forecast':
-                output['creator_adaptive_keep_forecast'],
+            'channel_free_keep_forecasts':
+                output['channel_free_keep_forecasts'],
             'input_manifest': manifest,
         })
         assert binding == first_binding
@@ -490,7 +517,7 @@ def test_incomplete_scores_are_never_cached():
     assert replay['meta']['cache_key'] not in fake_s3.objects
 
 
-def test_optional_creator_forecast_failure_does_not_hide_canonical_score():
+def test_channel_free_outputs_fail_closed_and_silent_inputs_are_explicit():
     fake_s3 = FakeS3()
     RAW.s3 = fake_s3
     montage = base64.b64encode(b'exact-five-frame-jpeg-bytes').decode()
@@ -502,39 +529,36 @@ def test_optional_creator_forecast_failure_does_not_hide_canonical_score():
         'tyler',
         revisions=revisions(),
     )
-    score = canonical_score(creator_profile='tyler')
-    score['creator_adaptive_keep_forecast'] = None
-    score['creator_adaptive_keep_forecast_error'] = (
-        'creator-adaptive keep serving release is unavailable'
-    )
-    meta = RAW._score_replay_store(
-        replay,
-        score,
-        'tyler',
-        True,
-    )
-    assert meta['cache_write_status'] == 'skipped_optional_creator_forecast'
-    assert meta['output_fingerprint'] == RAW._score_output_fingerprint(score)
-    assert 'serving release is unavailable' in meta['cache_error']
-    assert meta['cache_key'] not in fake_s3.objects
-
-    silent_failure = canonical_score(creator_profile='tyler')
-    silent_failure['creator_adaptive_keep_forecast'] = None
+    missing = canonical_score(creator_profile='tyler')
+    del missing['channel_free_keep_forecasts']['outputs']['concat']
     errors = RAW._score_completeness_errors(
-        silent_failure,
+        missing,
         'tyler',
         True,
     )
-    assert 'creator-adaptive keep forecast status' in errors
+    assert 'channel-free concat keep forecast' in errors
+    try:
+        RAW._score_replay_store(replay, missing, 'tyler', True)
+    except RuntimeError as error:
+        assert 'channel-free concat keep forecast' in str(error)
+    else:
+        raise AssertionError('incomplete channel-free output set was cached')
 
-    malformed = canonical_score(creator_profile='tyler')
-    malformed['creator_adaptive_keep_forecast']['profile_account'] = 'hafu'
-    errors = RAW._score_completeness_errors(
-        malformed,
-        'tyler',
-        True,
+    silent = canonical_score(
+        creator_profile='tyler',
+        transcript_used=False,
     )
-    assert 'creator-adaptive keep forecast' in errors
+    errors = RAW._score_completeness_errors(
+        silent,
+        'tyler',
+        False,
+    )
+    assert not errors
+    outputs = silent['channel_free_keep_forecasts']['outputs']
+    assert outputs['visual']['available'] is True
+    assert outputs['together']['available'] is True
+    assert outputs['text']['available'] is False
+    assert outputs['concat']['available'] is False
 
 
 def test_production_lookup_precedes_embedding():
@@ -545,97 +569,51 @@ def test_production_lookup_precedes_embedding():
     assert lookup < return_on_hit < first_embedding
 
 
-def test_visual_keep_formula_replays_the_frozen_raw_coordinate():
-    embedding = RAW.np.zeros(RAW.DIM, dtype=float)
-    embedding[0] = 3
-    embedding[1] = 4
-    pooled_coefficients = [0.0] * RAW.DIM
-    pooled_coefficients[0] = 10
-    pooled_coefficients[1] = 20
-    payload = {
-        'coordinateId': RAW.VISUAL_KEEP_COORDINATE_ID,
-        'generatedAt': 123456,
-        'status': 'research_only_not_validated_for_pre_upload_decisions',
-        'input': 'fixture visual embedding',
-        'formula': {
-            'estimatorId': RAW.VISUAL_KEEP_ESTIMATOR_ID,
-            'scope': 'pooled_global',
-            'accountInputs': [],
-            'selected': {
-                'estimatorId': RAW.VISUAL_KEEP_ESTIMATOR_ID,
-                'pooledAlpha': 1.0,
-                'accountWeight': 0.0,
-            },
-            'outputTransform': 'clip(linear_prediction, 0, 100)',
-            'outputBounds': [0, 100],
-            'pooled': {
-                'intercept': 5,
-                'coefficients': pooled_coefficients,
-            },
-        },
-    }
-    artifact_sha256 = 'a' * 64
-    artifact_key = (
-        'raw/predictor-lab/visual-keep-model/by-sha256/'
-        f'{artifact_sha256}.json'
-    )
-    pooled = RAW._visual_keep_forecast_from_payload(
-        embedding,
+def test_channel_free_formula_replays_all_four_frozen_coordinates():
+    with open(RAW.CHANNEL_FREE_MODEL_PATH, 'rb') as handle:
+        payload_bytes = handle.read()
+    payload = json.loads(payload_bytes)
+    artifact_sha256 = hashlib.sha256(payload_bytes).hexdigest()
+    embeddings = {}
+    for index, signal in enumerate(('visual', 'text', 'together')):
+        vector = RAW.np.zeros(RAW.DIM, dtype=float)
+        vector[index] = 1.0
+        embeddings[signal] = vector
+    first = RAW._channel_free_keep_forecasts_from_payload(
+        embeddings,
         payload,
         artifact_sha256,
-        artifact_key,
-        'b' * 64,
     )
-    assert pooled['raw'] == 27.0
-    assert pooled['calibration_scope'] == 'pooled_global'
-    assert pooled['account_model'] is None
-    replayed = RAW._visual_keep_forecast_from_payload(
-        embedding,
+    replayed = RAW._channel_free_keep_forecasts_from_payload(
+        embeddings,
         payload,
         artifact_sha256,
-        artifact_key,
-        'b' * 64,
     )
-    assert replayed['raw'] == pooled['raw']
-    assert replayed['coordinate_id'] == RAW.VISUAL_KEEP_COORDINATE_ID
-    assert replayed['model_artifact_sha256'] == artifact_sha256
-    assert replayed['model_artifact_key'] == artifact_key
-    assert replayed['model_manifest_sha256'] == 'b' * 64
-    for invalid_formula in (
+    assert first == replayed
+    assert first['channel_information'] is None
+    assert first['selected_signal'] == 'concat'
+    assert set(first['outputs']) == set(RAW.CHANNEL_FREE_SIGNALS)
+    for signal, output in first['outputs'].items():
+        assert output['available'] is True
+        assert output['coordinate_id'] == f'shorts.channel-free.{signal}.keep'
+        assert output['model_artifact_sha256'] == artifact_sha256
+        assert output['channel_information'] is None
+        assert 0 <= output['raw'] <= 100
+        assert 0 <= output['pctile'] <= 100
+
+    no_text = RAW._channel_free_keep_forecasts_from_payload(
         {
-            **payload['formula'],
-            'estimatorId': 'unregistered-estimator',
+            'visual': embeddings['visual'],
+            'text': None,
+            'together': embeddings['together'],
         },
-        {
-            **payload['formula'],
-            'accountInputs': ['creator_id'],
-        },
-        {
-            **payload['formula'],
-            'selected': {
-                **payload['formula']['selected'],
-                'pooledAlpha': 100.0,
-            },
-        },
-    ):
-        invalid_payload = {
-            **payload,
-            'formula': invalid_formula,
-        }
-        try:
-            RAW._visual_keep_forecast_from_payload(
-                embedding,
-                invalid_payload,
-                artifact_sha256,
-                artifact_key,
-                'b' * 64,
-            )
-        except RuntimeError:
-            pass
-        else:
-            raise AssertionError(
-                'unregistered visual keep formula was accepted'
-            )
+        payload,
+        artifact_sha256,
+    )
+    assert no_text['outputs']['visual']['available'] is True
+    assert no_text['outputs']['together']['available'] is True
+    assert no_text['outputs']['text']['available'] is False
+    assert no_text['outputs']['concat']['available'] is False
 
 
 def test_revision_pinned_reads_fail_closed_on_mutation():
@@ -671,9 +649,9 @@ if __name__ == '__main__':
         test_cache_failures_fall_through_without_hiding_scores()
         test_corrupt_cache_is_an_integrity_miss()
         test_incomplete_scores_are_never_cached()
-        test_optional_creator_forecast_failure_does_not_hide_canonical_score()
+        test_channel_free_outputs_fail_closed_and_silent_inputs_are_explicit()
         test_production_lookup_precedes_embedding()
-        test_visual_keep_formula_replays_the_frozen_raw_coordinate()
+        test_channel_free_formula_replays_all_four_frozen_coordinates()
         test_revision_pinned_reads_fail_closed_on_mutation()
     finally:
         RAW._PINNED_ARTIFACT_REVISIONS = {}

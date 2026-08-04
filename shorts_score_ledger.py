@@ -395,6 +395,19 @@ def score_record_binding_payload(record):
             'query_input': input_manifest.get('query_input'),
         } if isinstance(input_manifest, dict) else None,
     }
+    channel_free_present = (
+        'channel_free_keep_forecasts' in (record or {})
+        or 'channel_free_keep_forecasts' in score
+    )
+    if score_domain == 'shorts' and channel_free_present:
+        payload['schema'] = 'shorts-score-record-binding-v4'
+        payload.pop('visual_keep_forecast', None)
+        payload.pop('creator_adaptive_keep_forecast', None)
+        payload['channel_free_keep_forecasts'] = (
+            (record or {}).get('channel_free_keep_forecasts')
+            if 'channel_free_keep_forecasts' in (record or {})
+            else score.get('channel_free_keep_forecasts')
+        )
     if score_domain == 'longquant':
         payload.update({
             'schema': 'score-record-binding-v6',

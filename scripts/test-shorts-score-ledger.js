@@ -734,6 +734,88 @@ assert.strictEqual(
     pythonBindingSha256,
     'Python and JavaScript must bind a scored record to identical bytes'
 );
+const channelFreeBindingRecord = JSON.parse(JSON.stringify(bindingRecord));
+channelFreeBindingRecord.channel_free_keep_forecasts = {
+    schema: 'shorts-channel-free-keep-forecasts-v1',
+    model_artifact_sha256: 'c'.repeat(64),
+    model_run_id: 'fixture-run',
+    selected_signal: 'concat',
+    source: 'live_frozen_channel_free_model_score',
+    channel_information: null,
+    outputs: Object.fromEntries(
+        ['visual', 'text', 'together', 'concat'].map(
+            (signal, index) => [signal, {
+                coordinate_id: `shorts.channel-free.${signal}.keep`,
+                signal,
+                available: true,
+                raw: 60 + index,
+                est: 60 + index,
+                pctile: 50 + index,
+            }]
+        )
+    ),
+};
+channelFreeBindingRecord.visual_keep_forecast = { raw: 1 };
+channelFreeBindingRecord.creator_adaptive_keep_forecast = { raw: 2 };
+const channelFreePayload = ledgerContract.scoreRecordBindingPayload(
+    channelFreeBindingRecord
+);
+assert.strictEqual(
+    channelFreePayload.schema,
+    'shorts-score-record-binding-v4'
+);
+assert.strictEqual(
+    Object.prototype.hasOwnProperty.call(
+        channelFreePayload,
+        'visual_keep_forecast'
+    ),
+    false,
+    'v4 must retire the old frozen visual field'
+);
+assert.strictEqual(
+    Object.prototype.hasOwnProperty.call(
+        channelFreePayload,
+        'creator_adaptive_keep_forecast'
+    ),
+    false,
+    'v4 must retire the old creator-adaptive field'
+);
+const pythonChannelFreeBindingSha256 = execFileSync(
+    'python3',
+    [
+        '-c',
+        'import json,sys\nfrom shorts_score_ledger import score_record_binding_sha256\nprint(score_record_binding_sha256(json.load(sys.stdin)))',
+    ],
+    {
+        cwd: ROOT,
+        encoding: 'utf8',
+        input: JSON.stringify(channelFreeBindingRecord),
+    }
+).trim();
+assert.strictEqual(
+    ledgerContract.scoreRecordBindingSha256(channelFreeBindingRecord),
+    pythonChannelFreeBindingSha256,
+    'Python and JavaScript must bind the four channel-free outputs identically'
+);
+const changedChannelFreeRecord = JSON.parse(
+    JSON.stringify(channelFreeBindingRecord)
+);
+changedChannelFreeRecord.channel_free_keep_forecasts.outputs.concat.raw += 1;
+assert.notStrictEqual(
+    ledgerContract.scoreRecordBindingSha256(changedChannelFreeRecord),
+    ledgerContract.scoreRecordBindingSha256(channelFreeBindingRecord),
+    'a channel-free output mutation must change the score-record hash'
+);
+const changedRetiredFields = JSON.parse(
+    JSON.stringify(channelFreeBindingRecord)
+);
+changedRetiredFields.visual_keep_forecast.raw = 99;
+changedRetiredFields.creator_adaptive_keep_forecast.raw = 99;
+assert.strictEqual(
+    ledgerContract.scoreRecordBindingSha256(changedRetiredFields),
+    ledgerContract.scoreRecordBindingSha256(channelFreeBindingRecord),
+    'retired fields must not create a duplicate v4 score authority'
+);
 const alternateAcquisition = JSON.parse(
     JSON.stringify(bindingRecord)
 );

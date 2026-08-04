@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
 const read = p => JSON.parse(fs.readFileSync(path.join(ROOT, p), 'utf8'));
@@ -27,6 +28,15 @@ const signal = read('buildings/jarvis/predictor-lab/channel-free-signal.json');
 const scores = read('buildings/jarvis/predictor-lab/channel-free-scores.json');
 const ledger = read('buildings/jarvis/principles-lab/quant/promotion-ledger.json');
 const artifact = read('buildings/jarvis/principles-lab/artifact.json');
+const modelPath = path.join(
+    ROOT,
+    'buildings/jarvis/predictor-lab/channel-free-keep-model-v1.json'
+);
+const modelBytes = fs.readFileSync(modelPath);
+const model = JSON.parse(modelBytes.toString('utf8'));
+const modelSha256 = crypto.createHash('sha256')
+    .update(modelBytes)
+    .digest('hex');
 
 console.log('channel-free signal consistency gate');
 
@@ -39,6 +49,36 @@ check((scores.rows || []).length === signal.dataIdentity.n, 'row count matches n
     `${(scores.rows || []).length} vs ${signal.dataIdentity.n}`);
 check(scores.selected === signal.selectedSignal.name, 'selected signal matches',
     `${scores.selected} vs ${signal.selectedSignal.name}`);
+check(model.runId === signal.runId, 'deployment model matches signal run',
+    `${model.runId} vs ${signal.runId}`);
+check(modelSha256 === signal.deploymentArtifact.sha256,
+    'deployment model bytes match the pinned SHA-256',
+    `${modelSha256} vs ${signal.deploymentArtifact.sha256}`);
+check(model.selectedSignal === signal.selectedSignal.name,
+    'deployment model selected signal matches validation',
+    `${model.selectedSignal} vs ${signal.selectedSignal.name}`);
+check(model.training.channelInformation === null,
+    'deployment model contains no creator information',
+    JSON.stringify(model.training.channelInformation));
+for (const name of ['visual', 'text', 'together', 'concat']) {
+    const deployed = (model.models || {})[name] || {};
+    const expectedDimensions = name === 'concat' ? 4608 : 1536;
+    check(
+        deployed.coordinateId === `shorts.channel-free.${name}.keep`
+        && deployed.inputDimensions === expectedDimensions
+        && Array.isArray(deployed.coefficients)
+        && deployed.coefficients.length === expectedDimensions
+        && Array.isArray(deployed.percentileReference)
+        && deployed.percentileReference.length === signal.dataIdentity.n,
+        `deployment formula[${name}] is complete`,
+        JSON.stringify({
+            coordinateId: deployed.coordinateId,
+            inputDimensions: deployed.inputDimensions,
+            coefficients: (deployed.coefficients || []).length,
+            percentileReference: (deployed.percentileReference || []).length,
+        })
+    );
+}
 
 // 2) scores summary metrics match the validated results (UI reads summary)
 for (const name of signal.protocol.adaptiveSearchUniverse.candidates) {

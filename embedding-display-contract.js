@@ -789,6 +789,11 @@ function compactSavedHookRecord(record, options = {}) {
     const creatorForecast = record && record.creator_adaptive_keep_forecast && typeof record.creator_adaptive_keep_forecast === 'object'
         ? record.creator_adaptive_keep_forecast
         : null;
+    const channelFreeForecasts = record
+        && record.channel_free_keep_forecasts
+        && typeof record.channel_free_keep_forecasts === 'object'
+        ? record.channel_free_keep_forecasts
+        : null;
     const scoreRecordSha256 =
         savedHookScoreRecordSha256(record);
     if (
@@ -847,7 +852,36 @@ function compactSavedHookRecord(record, options = {}) {
                         && record.score_ledger.ledger_sha256 || null,
             meaning: 'A compact navigation view only. Every selected value retains its canonical coordinateId and source ledger hash; the policy does not create a generic metric coordinate or a second score authority.',
         },
-        derived_identity: scoreDomain === 'longquant' ? null : {
+        derived_identity: scoreDomain === 'longquant'
+            ? null
+            : channelFreeForecasts
+                ? {
+                    channel_free_keep: Object.fromEntries(
+                        ['concat', 'visual', 'together', 'text'].map(
+                            signal => {
+                                const output = channelFreeForecasts.outputs
+                                    && channelFreeForecasts.outputs[signal];
+                                return [signal, output ? {
+                                    coordinateId:
+                                        output.coordinate_id || null,
+                                    available: output.available === true,
+                                    raw: output.raw == null
+                                        ? null
+                                        : Number(output.raw),
+                                    percentile100: output.pctile == null
+                                        ? null
+                                        : Number(output.pctile),
+                                    artifactSha256:
+                                        output.model_artifact_sha256
+                                        || channelFreeForecasts
+                                            .model_artifact_sha256
+                                        || null,
+                                } : null];
+                            }
+                        )
+                    ),
+                }
+                : {
             visual_keep_forecast: visualForecast ? {
                 coordinateId: visualForecast.coordinate_id
                     || coordinateGovernance.coordinates.visualKeepForecast.id,

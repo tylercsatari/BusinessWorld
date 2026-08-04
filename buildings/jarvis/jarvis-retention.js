@@ -1834,6 +1834,110 @@ const JarvisRetention = (function () {
                 && registeredCoordinate.validationRowLedgerSha256 || null,
         };
     }
+    function channelFreeKeepForecastsOf(up) {
+        const value = up && up.channel_free_keep_forecasts;
+        const ledgerState = shortsLedgerState(up);
+        const recordValidation = up && up.score_record_validation;
+        if (
+            !value
+            || value.schema !== 'shorts-channel-free-keep-forecasts-v1'
+            || value.source !== 'live_frozen_channel_free_model_score'
+            || !value.outputs
+            || !ledgerState.valid
+            || !recordValidation
+            || recordValidation.valid !== true
+            || !SHORTS_LEDGER_SHA256.test(
+                String(recordValidation.recorded_sha256 || '')
+            )
+            || recordValidation.recorded_sha256
+                !== recordValidation.calculated_sha256
+            || !SHORTS_LEDGER_SHA256.test(
+                String(value.model_artifact_sha256 || '')
+            )
+        ) return null;
+        const live = SCORECONTRACT && SCORECONTRACT.live || {};
+        const liveCoordinates = live.coordinates
+            && live.coordinates.channel_free_keep || {};
+        const outputs = {};
+        for (const signal of ['visual', 'text', 'together', 'concat']) {
+            const output = value.outputs[signal];
+            const registryColumn = savedCoordinateByRole(
+                column => (
+                    column.family === 'channelFree'
+                    && column.key === `cfs.${signal}`
+                )
+            );
+            const coordinateId = registryColumn && registryColumn.id
+                || liveCoordinates[signal]
+                || `shorts.channel-free.${signal}.keep`;
+            if (
+                !output
+                || output.signal !== signal
+                || output.coordinate_id !== coordinateId
+                || output.kind !== 'channel_free_keep_rate_percent'
+                || output.unit !== 'percent'
+                || output.percentile_unit !== SHORTS_PERCENTILE_UNIT
+                || output.source
+                    !== 'live_frozen_channel_free_model_score'
+                || output.model_artifact_sha256
+                    !== value.model_artifact_sha256
+                || output.model_run_id !== value.model_run_id
+            ) return null;
+            const raw = output.raw != null ? +output.raw : +output.est;
+            const percentile = output.pctile == null
+                ? null
+                : +output.pctile;
+            if (
+                output.available === true
+                && (
+                    !isFinite(raw)
+                    || raw < 0
+                    || raw > 100
+                    || !isFinite(percentile)
+                    || percentile < 0
+                    || percentile > 100
+                )
+            ) return null;
+            if (
+                output.available !== true
+                && (
+                    output.available !== false
+                    || output.raw != null
+                    || output.est != null
+                    || output.pctile != null
+                    || !output.unavailable_reason
+                )
+            ) return null;
+            outputs[signal] = {
+                ...output,
+                coordinateId,
+                featureKey: `channel_free.${signal}.keep`,
+                channel: signal === 'concat' ? 'combined' : signal,
+                modality: signal,
+                target: 'keep',
+                value: output.available === true ? raw : null,
+                valueUnit: 'percent',
+                displayUnit: 'percent',
+                percentile100: output.available === true
+                    ? percentile
+                    : null,
+                percentileUnit: SHORTS_PERCENTILE_UNIT,
+                ledgerSha256: ledgerState.ledgerSha256,
+                kind: 'record_bound_channel_free_forecast',
+                sourceKey: `channel_free.${signal}.keep`,
+                authority: 'record-bound-derived-coordinate',
+                origin: 'canonical-score-record',
+                scoreRecordSha256: recordValidation.recorded_sha256,
+                baseLedgerSha256: ledgerState.ledgerSha256,
+            };
+        }
+        return {
+            ...value,
+            outputs,
+            scoreRecordSha256: recordValidation.recorded_sha256,
+            baseLedgerSha256: ledgerState.ledgerSha256,
+        };
+    }
     function savedVisualKeepCoordinateSnapshot(videoId, channelId) {
         const validation = SAVEDCHANNELVALIDATION;
         if (!videoId || !validation || validation.loading || validation.error) return null;
@@ -2767,14 +2871,7 @@ const JarvisRetention = (function () {
         return profiles.includes(requested) ? requested : profiles[0];
     }
     function expCreatorProfileHtml() {
-        const selected = selectedCreatorProfile();
-        const options = scorerCreatorProfiles().map(profile => (
-            `<option value="${esc(profile)}"${profile === selected ? ' selected' : ''}>${esc(savedVisualKeepAccountName(profile, profile))}</option>`
-        )).join('');
-        return `<label style="display:inline-flex;align-items:center;gap:6px;border-left:1px solid ${C.border};padding-left:9px;font-size:9px;color:${C.mute}">
-          creator history for the research forecast
-          <select data-expcreatorprofile style="background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:5px;padding:5px 7px;font-size:10px;min-height:32px">${options}</select>
-        </label>`;
+        return `<span data-channel-free-score-mode style="display:inline-flex;align-items:center;gap:6px;border-left:1px solid ${C.border};padding-left:9px;font-size:9px;color:${C.green};font-weight:800">Channel-free keep · no creator profile or scale</span>`;
     }
     function rawScoreProvenanceHtml(up) {
         const manifest = up && up.input_manifest || {};
@@ -2801,17 +2898,20 @@ const JarvisRetention = (function () {
               <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Displayed unit calibrated on:</b> ${esc(row.calibrationPopulation || 'not documented')}</div>
               <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Truth it represents:</b> ${esc(row.observedOutcome || 'not documented')}</div>
             </div>`;
-        }).join('') + `<div style="display:grid;grid-template-columns:minmax(105px,.55fr) minmax(220px,1.35fr) minmax(190px,1.1fr) minmax(160px,1fr);gap:8px;padding:7px;border-top:1px solid ${C.border};align-items:start">
-          <div><div style="font-size:9px;color:${C.green};font-weight:950">Frozen visual keep forecast</div><div style="font-size:7.5px;color:${C.faint}">1 derived production output</div></div>
-          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Input:</b> the complete L2-normalized 1,536D visual montage embedding.</div>
-          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Formula:</b> one immutable pooled Ridge. Creator identity is never an input.</div>
-          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Output:</b> raw stayed-to-watch percentage. It reuses the visual embedding and is not a new embedding space.</div>
-        </div><div style="display:grid;grid-template-columns:minmax(105px,.55fr) minmax(220px,1.35fr) minmax(190px,1.1fr) minmax(160px,1fr);gap:8px;padding:7px;border-top:1px solid ${C.border};align-items:start">
-          <div><div style="font-size:9px;color:${C.amber};font-weight:950">Prequential multimodal keep mixture</div><div style="font-size:7.5px;color:${C.amber}">1 research scalar · never predictor-eligible</div></div>
-          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Inputs:</b> canonical 1,536D <b>visual</b> embedding + canonical 1,536D <b>together (visual + text)</b> embedding + up to 30 strictly earlier same-creator keep labels; minimum 8.</div>
-          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Frozen selection:</b> 43,360 prespecified time-ordered candidates on the chronological 50%–80% window. Selected formula: 0.5 × centered-together residual analog + 0.5 × visual+together semantic stack.</div>
-          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Output:</b> a derived next-upload keep percentage plus its matched history-only baseline. It is not a new embedding plane and remains excluded from predictor rankings pending prospective fixed-horizon validation.</div>
-        </div>`;
+        }).join('') + ['concat', 'visual', 'together', 'text'].map(signal => {
+            const input = {
+                concat: 'the ordered concatenation of independently normalized visual, text, and together embeddings (4,608D)',
+                visual: 'the complete normalized visual montage embedding (1,536D)',
+                together: 'the complete normalized montage + transcript embedding (1,536D)',
+                text: 'the complete normalized transcript-only embedding (1,536D)',
+            }[signal];
+            return `<div style="display:grid;grid-template-columns:minmax(105px,.55fr) minmax(220px,1.35fr) minmax(190px,1.1fr) minmax(160px,1fr);gap:8px;padding:7px;border-top:1px solid ${C.border};align-items:start">
+              <div><div style="font-size:9px;color:${signal === 'visual' ? C.green : signal === 'text' ? C.purple : C.cyan};font-weight:950">Channel-free ${esc(signal)} keep</div><div style="font-size:7.5px;color:${C.faint}">1 governed output · ${signal === 'concat' ? 'selected signal' : 'independent diagnostic'}</div><code style="display:block;font-size:6.5px;color:${C.faint};margin-top:3px">shorts.channel-free.${esc(signal)}.keep</code></div>
+              <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Input:</b> ${esc(input)}.</div>
+              <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Formula:</b> one immutable pooled Ridge fitted after repeated held-out validation. Creator identity, history, baseline, and scale are absent.</div>
+              <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Output:</b> keep-rate percentage plus pooled-corpus percentile. Historical rows use OOF predictions; new inputs use the frozen final fit.</div>
+            </div>`;
+        }).join('');
         const hash = manifest.steer_artifact_sha256
             ? String(manifest.steer_artifact_sha256).slice(0, 12)
             : 'not persisted on this historical score';
@@ -2824,17 +2924,17 @@ const JarvisRetention = (function () {
         const liveRevision = SCORECONTRACT.live && SCORECONTRACT.live.revision_fingerprint;
         const revisionCurrent = !!(manifest.revision_fingerprint && liveRevision && manifest.revision_fingerprint === liveRevision);
         const pipeline = SCORECONTRACT.pipeline || {};
-        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">21 stored score coordinates + 2 derived keep forecasts</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The original 21 coordinates remain unchanged. Some are direct embedding axes and some are registered transforms. The frozen visual forecast reuses the visual vector. The prequential creator mixture consumes both the visual and together vectors plus strictly earlier creator history. Neither derived scalar is a new embedding space.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
+        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">21 stored score coordinates + 4 channel-free keep outputs</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The original 21 coordinates remain unchanged. The four channel-free outputs reuse the exact visual, text, and together embeddings with one frozen formula per signal. None uses creator identity, channel history, a channel baseline, or a scale factor.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
           <div style="overflow:auto"><div style="min-width:760px;border:1px solid ${C.border}">${targetRows}</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;margin-top:7px">
             <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Deterministic replay</div><div style="font-size:9px;color:${manifest.cache_status === 'hit' ? C.green : C.text};font-weight:900">${esc(replayStatus)}</div></div>
             <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Embedding input fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(shortFingerprint(embeddingInputFingerprint))}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">canonical pixels + normalized transcript; device, YouTube, and 5-frame routes are identical only when this fingerprint matches</div></div>
-            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Derived-score fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(shortFingerprint(scoreInputFingerprint))}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">embedding identity + duration + explicit creator profile</div></div>
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Score fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(shortFingerprint(scoreInputFingerprint))}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">embedding identity + duration; creator profile is excluded</div></div>
             <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Scorer revision</div><div style="font-size:9px;color:${revisionCurrent ? C.green : C.amber};font-weight:900">${esc(revisionFingerprint)} · ${revisionCurrent ? 'current' : liveRevision ? `stale vs ${esc(shortFingerprint(liveRevision))}` : 'live revision unavailable'}</div></div>
-            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Canonical source</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(manifest.source_mode || 'historical unknown')} · ${esc(manifest.creator_profile || 'no creator profile')}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">${manifest.canonical_montage ? `${manifest.canonical_montage.width}×${manifest.canonical_montage.height} ${esc(manifest.canonical_montage.format || 'JPEG')} · pixels ${esc(shortFingerprint(manifest.canonical_montage.montage_sha256))}` : 'canonical montage metadata unavailable'}</div></div>
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Canonical source</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(manifest.source_mode || 'historical unknown')} · channel-free</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">${manifest.canonical_montage ? `${manifest.canonical_montage.width}×${manifest.canonical_montage.height} ${esc(manifest.canonical_montage.format || 'JPEG')} · pixels ${esc(shortFingerprint(manifest.canonical_montage.montage_sha256))}` : 'canonical montage metadata unavailable'}</div></div>
             <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Duration boundary</div><div style="font-size:9px;color:${C.text};font-weight:900">${manifest.duration_s == null ? 'duration defaulted' : `${fmtv(manifest.duration_s, 3)} seconds`}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">ordinary axes ignore duration; forecast-views parity additionally requires the same duration</div></div>
           </div>
-          <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second axes were fitted and calibrated on the exact modality-specific Tyler rows recorded in the current artifact manifest. Their stored Tyler values are in-sample diagnostics; Hafu is account-external. Public views, outlier, and 10M axes use their separately recorded public fit populations. “Forecast views” is a separate Tyler-channel retention-to-views model. The retrospective validation tab rebuilds eligible axes with video/account exclusion and reports the actual error. The prequential multimodal mixture is research-only: known creator, at least 8 and at most 30 strictly earlier labels, one next upload at a time, and never predictor-eligible.</div>`, 10);
+          <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second embedding axes retain their original fit populations. The four channel-free outputs are a separate pooled research family: historical private rows are evaluated out of fold, while a new opening is scored by the frozen final fit. Repeated held-out error estimates measure ranking and within-population prediction; they do not prove that absolute creator baselines transfer to an unseen account. That is why each card shows both percentage and pooled-corpus position.</div>`, 10);
     }
     function predictorRolloverError(message) {
         const error = new Error(message);
@@ -3570,47 +3670,21 @@ const JarvisRetention = (function () {
         const upDetail = (st.rawUpSel != null && ups[st.rawUpSel]) ? (() => {
             const i = st.rawUpSel, U = ups[i], col = upColor(i);
             const montageSrc = U.montageDataUrl || (U.montage ? 'data:image/jpeg;base64,' + U.montage : '');
-            const frozenVisualKeep = visualKeepForecastOf(U);
-            const frozenVisualKeepOrigin = 'Persisted raw forecast';
-            const frozenVisualKeepHtml = frozenVisualKeep ? `<div data-visual-keep-raw-map-value${embeddingIdentityAttrs(frozenVisualKeep, rawEmbeddingAssetId(U))} style="border-left:3px solid ${C.green};background:${C.green}0d;padding:8px 9px;margin:8px 0">
-                <div style="font-size:8px;color:${C.green};font-weight:950;text-transform:uppercase">${esc(frozenVisualKeepOrigin)} · raw ledger value</div>
-                <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(frozenVisualKeep.value, 1)}%</div>
-                <div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The marker above is geometry only. This separate <code>${esc(frozenVisualKeep.valueUnit)}</code> scalar is <b>${esc(frozenVisualKeep.coordinateId)}</b> · ledger ${frozenVisualKeep.ledgerSha256.slice(0, 12)}… · artifact ${esc(String(frozenVisualKeep.model_artifact_sha256 || 'unavailable').slice(0, 12))}.</div>
-                ${coordinateTraceHtml(U, frozenVisualKeep.coordinateId, frozenVisualKeep, { modelRevision: frozenVisualKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
-            </div>` : `<div data-visual-keep-raw-map-value style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">${esc(U.visual_keep_forecast_error || `This stored score predates ${savedCoordinateIdByFamily('visualKeepForecast') || 'the registered frozen visual keep coordinate'}. Re-score it once to persist the forecast.`)}</div>`;
-            const creatorAdaptiveKeep = creatorAdaptiveKeepForecastOf(U);
-            const creatorPresentation = creatorAdaptiveKeep
-                ? creatorAdaptiveForecastPresentation(creatorAdaptiveKeep)
-                : null;
-            const creatorAdaptiveBaseline = creatorAdaptiveKeep
-                && creatorAdaptiveKeep.history_only_baseline != null
-                && isFinite(+creatorAdaptiveKeep.history_only_baseline)
-                ? +creatorAdaptiveKeep.history_only_baseline
-                : null;
-            const creatorAdaptiveShift = creatorAdaptiveBaseline == null
-                ? null
-                : +creatorAdaptiveKeep.raw - creatorAdaptiveBaseline;
-            const creatorComponentA = creatorAdaptiveKeep
-                && creatorAdaptiveKeep.component_a != null
-                && isFinite(+creatorAdaptiveKeep.component_a)
-                ? +creatorAdaptiveKeep.component_a
-                : null;
-            const creatorComponentB = creatorAdaptiveKeep
-                && creatorAdaptiveKeep.component_b != null
-                && isFinite(+creatorAdaptiveKeep.component_b)
-                ? +creatorAdaptiveKeep.component_b
-                : null;
-            const creatorComponentLine = creatorComponentA == null
-                || creatorComponentB == null
-                ? ''
-                : `<br><b>Component A:</b> ${fmtv(creatorComponentA, 1)}% centered-together residual analog · <b>Component B:</b> ${fmtv(creatorComponentB, 1)}% visual+together semantic stack · final = clipped 50/50 mean.`;
-            const creatorAdaptiveKeepHtml = creatorAdaptiveKeep ? `<div data-creator-adaptive-keep-raw-map-value data-revision-status="${esc(creatorPresentation.revisionStatus)}"${embeddingIdentityAttrs(creatorAdaptiveKeep, rawEmbeddingAssetId(U))} style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0">
-                <div style="display:flex;justify-content:space-between;gap:7px;align-items:start;flex-wrap:wrap"><div style="font-size:8px;color:${C.amber};font-weight:950;text-transform:uppercase">Prequential multimodal mixture · research only · not predictor-eligible</div><span style="border:1px solid ${creatorPresentation.revisionMeta.color};color:${creatorPresentation.revisionMeta.color};padding:2px 6px;font-size:6.5px;font-weight:950;text-transform:uppercase">${esc(creatorPresentation.revisionMeta.label)}</span></div>
-                <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(creatorAdaptiveKeep.value, 1)}%</div>
-                <div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">Mixture scalar <b style="color:${C.cyan}">${fmtv(creatorAdaptiveKeep.value, 1)}%</b>${creatorAdaptiveBaseline == null ? '' : ` · matched recent-history baseline <b style="color:${C.text}">${fmtv(creatorAdaptiveBaseline, 1)}%</b> · scalar shift <b style="color:${C.text}">${creatorAdaptiveShift >= 0 ? '+' : ''}${fmtv(creatorAdaptiveShift, 1)} pp</b>`}.${creatorComponentLine}<br><b>Inputs:</b> ${esc(creatorAdaptiveKeep.input)}; ${esc(creatorPresentation.history)} (30 maximum; 8 minimum)${creatorPresentation.historyEnd ? ` · history through ${esc(creatorPresentation.historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${creatorPresentation.historicalPrequential ? C.cyan : C.amber}">${esc(creatorPresentation.claimBoundary)}</span><br><b>Selected formula:</b> ${esc(creatorAdaptiveKeep.model_formula)}. Coordinate <b>${esc(creatorAdaptiveKeep.coordinateId)}</b> · ledger ${creatorAdaptiveKeep.ledgerSha256.slice(0, 12)}…. This percentage is not a point on either embedding plane.</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep geometry →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep geometry →</button></div>
-                ${coordinateTraceHtml(U, creatorAdaptiveKeep.coordinateId, creatorAdaptiveKeep, { profile: creatorAdaptiveKeep.profile_account, artifactLabel: 'creator serving artifact', modelRevision: creatorAdaptiveKeep.serving_artifact_sha256 || creatorAdaptiveKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
-            </div>` : `<div data-creator-adaptive-keep-raw-map-value style="border-left:3px solid ${C.faint};background:${C.card};padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">No prequential mixture value is shown: this score lacks an explicit creator profile with at least 8 prior labels or is outside the registered chronological evaluation window.</div>`;
+            const channelFreeKeep = channelFreeKeepForecastsOf(U);
+            const channelFreeKeepHtml = channelFreeKeep
+                ? `<div data-channel-free-keep-raw-map style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px;margin:8px 0">${['concat', 'visual', 'together', 'text'].map(signal => {
+                    const forecast = channelFreeKeep.outputs[signal];
+                    const color = signal === 'visual'
+                        ? C.green
+                        : signal === 'text'
+                            ? C.purple
+                            : C.cyan;
+                    if (!forecast || forecast.available !== true) {
+                        return `<div data-channel-free-raw-map-value="${esc(signal)}" style="border-left:3px solid ${C.faint};background:${C.card};padding:8px 9px;font-size:8px;color:${C.dim}"><b style="color:${color};text-transform:uppercase">${esc(signal)} keep</b><br>${esc(forecast && forecast.unavailable_reason || 'Not available on this stored score.')}</div>`;
+                    }
+                    return `<div data-channel-free-raw-map-value="${esc(signal)}"${embeddingIdentityAttrs(forecast, rawEmbeddingAssetId(U))} style="border-left:3px solid ${color};background:${color}0d;padding:8px 9px"><div style="font-size:8px;color:${color};font-weight:950;text-transform:uppercase">Channel-free ${esc(signal)} keep${forecast.selected ? ' · selected' : ''}</div><div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(forecast.value, 1)}%</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">${fmtv(forecast.percentile100, 1)}th pooled-corpus position · no creator profile or scale.<br><code>${esc(forecast.coordinateId)}</code></div>${coordinateTraceHtml(U, forecast.coordinateId, forecast, { artifactLabel: 'channel-free frozen model', modelRevision: forecast.model_artifact_sha256, valueNote: 'final-fit percentage plus corpus-position percentile' })}</div>`;
+                }).join('')}</div>`
+                : `<div data-channel-free-keep-raw-map style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">This score predates the four record-bound channel-free outputs. Re-score it once to add them.</div>`;
             const uc = shortsGeometryChannel(U, chan), pos = upPos(U);
             const nbrTitles = (uc && uc.neighbors ? uc.neighbors.slice(0, 4) : []).map(nb => {
                 const idx = (R.id || []).indexOf(nb.id);
@@ -3641,8 +3715,7 @@ const JarvisRetention = (function () {
                       </div>`;
                   })()}
                   ${savedVisualKeepCoordinateTableHtml(U)}
-                  ${frozenVisualKeepHtml}
-                  ${creatorAdaptiveKeepHtml}
+                  ${channelFreeKeepHtml}
                   ${placed}
                   ${(() => { const row = (tn, lab) => { const k = steerBest(U, tn); return k ? `<div${embeddingDataAttrs(U, k.mod, tn, 'canonical-score-ledger', rawEmbeddingAssetId(U), k)} style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.value}% <span style="color:${C.mute};font-weight:400">(${k.percentile100}th · ${k.percentileUnit} · ${k.coordinateId} · ledger ${k.ledgerSha256.slice(0, 12)}…)</span></span></div>` : ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">canonical ledger coordinates</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">The scalar and map placement are separate. Open <b>→ keep-rate</b> to inspect geometry; the number above remains bound to its ledger coordinate.</div></div>` : ''; })()}
                   ${rawChanGridHtml(U)}
@@ -4458,7 +4531,7 @@ const JarvisRetention = (function () {
             : up.savedId || up.source === 'saved'
                 ? C.green
                 : C.amber;
-        const scoreAnalysisIntro = cardc(`<div data-canonical-score-summary style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap"><div><div style="font-size:9px;color:${C.cyan};font-weight:950;text-transform:uppercase">Complete canonical analysis</div><div style="font-size:18px;color:${C.text};font-weight:950;margin-top:3px">${scoreLedgerEntries.length} ledger coordinates + 2 derived keep outputs</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:5px">${availableLedgerCoordinates}/${scoreLedgerEntries.length} ledger coordinates are available from this exact input. Every coordinate, its raw value, percentile, model provenance, input channel, and geometry is shown below. Unavailable coordinates remain explicit rather than being inferred.</div></div><div style="border:1px solid ${scoreStorageColor};color:${scoreStorageColor};padding:5px 8px;font-size:8px;font-weight:900;max-width:280px">${esc(scoreStorageLabel)}</div></div>`, 12);
+        const scoreAnalysisIntro = cardc(`<div data-canonical-score-summary style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap"><div><div style="font-size:9px;color:${C.cyan};font-weight:950;text-transform:uppercase">Complete canonical analysis</div><div style="font-size:18px;color:${C.text};font-weight:950;margin-top:3px">${scoreLedgerEntries.length} ledger coordinates + 4 channel-free keep outputs</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:5px">${availableLedgerCoordinates}/${scoreLedgerEntries.length} ledger coordinates are available from this exact input. Every coordinate, its raw value, percentile, model provenance, input channel, and geometry is shown below. The four keep outputs are bound into the same immutable score record; unavailable text-dependent signals remain explicit.</div></div><div style="border:1px solid ${scoreStorageColor};color:${scoreStorageColor};padding:5px 8px;font-size:8px;font-weight:900;max-width:280px">${esc(scoreStorageLabel)}</div></div>`, 12);
         const savedRescoreEligible = !!(
             up.source === 'saved'
             && up.savedId
@@ -4690,6 +4763,35 @@ const JarvisRetention = (function () {
                 : `<b>Component A:</b> ${fmtv(componentA, 1)}% centered-together residual analog · <b>Component B:</b> ${fmtv(componentB, 1)}% visual+together semantic stack · final = clipped 50/50 mean.<br>`;
             return cardc(`<div data-creator-adaptive-keep-forecast data-revision-status="${esc(revisionStatus)}"${embeddingIdentityAttrs(forecast, rawEmbeddingAssetId(up))}><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only · not predictor-eligible</div><span style="border:1px solid ${revisionMeta.color};color:${revisionMeta.color};padding:2px 6px;font-size:7px;font-weight:950;text-transform:uppercase">${esc(revisionMeta.label)}</span></div>${bigNumHTML(`${fmtv(forecast.value, 1)}%`, `${esc(forecast.valueUnit)} · no percentile`)}<div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:4px">${baseline == null ? '' : `History-only baseline <b style="color:${C.text}">${fmtv(baseline, 1)}%</b> · mixture shift <b style="color:${C.text}">${modelMinusBaseline >= 0 ? '+' : ''}${fmtv(modelMinusBaseline, 1)} pp</b>.<br>`}${componentLine}<b>Inputs:</b> ${esc(forecast.input)}; ${esc(profile || 'explicit creator')} ${esc(history)}; ${historyWindow} maximum, ${minimumHistory} minimum${historyEnd ? ` · history through ${esc(historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${historicalPrequential ? C.cyan : C.amber}">${esc(claimBoundary)}</span><br><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified time-ordered candidates. <b>Selected formula:</b> ${esc(forecast.model_formula)}.<br>Coordinate <b>${esc(forecast.coordinateId)}</b> · ledger ${forecast.ledgerSha256.slice(0, 12)}…. This is one derived scalar, not a location on either raw plane.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep geometry →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep geometry →</button></div>${coordinateTraceHtml(up, forecast.coordinateId, forecast, { profile: forecast.profile_account, artifactLabel: 'creator serving artifact', modelRevision: forecast.serving_artifact_sha256 || forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
         };
+        const channelFreeForecastBox = signal => {
+            const forecasts = channelFreeKeepForecastsOf(up);
+            const forecast = forecasts && forecasts.outputs[signal];
+            const labels = {
+                concat: 'Concat (selected)',
+                visual: 'Visual only',
+                together: 'Visual + text together',
+                text: 'Text only',
+            };
+            const colors = {
+                concat: C.cyan,
+                visual: C.green,
+                together: C.accent,
+                text: C.purple,
+            };
+            const color = colors[signal] || C.cyan;
+            const coordinateId = `shorts.channel-free.${signal}.keep`;
+            if (!forecast) {
+                return cardc(`<div data-channel-free-keep="${esc(signal)}"><div style="font-size:11px;color:${color};font-weight:800;text-transform:uppercase">Channel-free ${esc(labels[signal] || signal)} → keep</div>${bigNumHTML('Not available', 'no verified score-record value')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">This score predates the four channel-free outputs or failed their record-binding checks.${savedRescoreEligible ? ' Re-score this saved opening once to add them.' : ''}</div><code style="display:block;font-size:7px;color:${C.faint};margin-top:6px">${esc(coordinateId)}</code></div>`, 12);
+            }
+            if (forecast.available !== true) {
+                return cardc(`<div data-channel-free-keep="${esc(signal)}"><div style="font-size:11px;color:${color};font-weight:800;text-transform:uppercase">Channel-free ${esc(labels[signal] || signal)} → keep</div>${bigNumHTML('Not available', 'required input absent')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">${esc(forecast.unavailable_reason || 'This signal could not be scored from the supplied input.')}</div><code style="display:block;font-size:7px;color:${C.faint};margin-top:6px">${esc(forecast.coordinateId)}</code></div>`, 12);
+            }
+            const percentile = `${fmtv(forecast.percentile100, 1)}th corpus position`;
+            const revision = String(
+                forecast.model_artifact_sha256 || ''
+            ).slice(0, 12);
+            return cardc(`<div data-channel-free-keep="${esc(signal)}"${embeddingIdentityAttrs(forecast, rawEmbeddingAssetId(up))}><div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><div style="font-size:11px;color:${color};font-weight:800;text-transform:uppercase">Channel-free ${esc(labels[signal] || signal)} → keep</div>${forecast.selected ? `<span style="border:1px solid ${color};color:${color};padding:2px 6px;font-size:7px;font-weight:950;text-transform:uppercase">selected</span>` : ''}</div>${bigNumHTML(`${fmtv(forecast.value, 1)}%`, percentile)}<div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:4px"><b>Input:</b> ${esc(forecast.input)}.<br><b>No creator scaling:</b> one frozen pooled Ridge formula is used for every account; creator ID, channel baseline, and prior outcomes are absent.<br><b>Validation:</b> repeated held-out MAE ${fmtv(forecast.oof_mae, 3)} pp · Spearman ${fmtv(forecast.oof_spearman, 3)}. The percentage is the final-fit score; ${esc(percentile)} is the portable rank-first interpretation.<br>Coordinate <b>${esc(forecast.coordinateId)}</b> · model ${esc(revision)}… · score record ${forecast.scoreRecordSha256.slice(0, 12)}….</div>${coordinateTraceHtml(up, forecast.coordinateId, forecast, { artifactLabel: 'channel-free frozen model', modelRevision: forecast.model_artifact_sha256, valueNote: 'final-fit percentage plus corpus-position percentile' })}</div>`, 12);
+        };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
         const metShort2 = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'view-equivalent (corpus quantile)', realviews: 'forecast views (your channel scale)', outlier: 'outlier ×', gt10M: '>10M class' })[tn] || tn;
         const projFor2 = { keep: 'keep', ret5: 'ret5', views: 'views', realviews: 'realviews', outlier: 'outlier', gt10M: 'hi10m' };
@@ -4725,34 +4827,30 @@ const JarvisRetention = (function () {
                 tn => !!steerOf(up, ch, tn)
             ).length, 0);
         const canonicalVisualKeep = steerOf(up, 'visual', 'keep');
-        const frozenVisualKeep = visualKeepForecastOf(up);
-        const creatorAdaptiveKeep = creatorAdaptiveKeepForecastOf(up);
-        const keepPrimary = creatorAdaptiveKeep
+        const channelFreeKeep = channelFreeKeepForecastsOf(up);
+        const channelFreeOutputs = channelFreeKeep
+            && channelFreeKeep.outputs || {};
+        const selectedChannelFree = channelFreeOutputs[
+            channelFreeKeep && channelFreeKeep.selected_signal || 'concat'
+        ];
+        const keepPrimary = selectedChannelFree
+            && selectedChannelFree.available === true
             ? {
-                label: 'Known-creator multimodal forecast',
-                value: `${fmtv(creatorAdaptiveKeep.value, 1)}%`,
-                coordinateId: creatorAdaptiveKeep.coordinateId,
-                badge: 'BEST RETROSPECTIVE KNOWN-CREATOR PREDICTOR',
-                color: C.amber,
-                explanation: 'This is the strongest measured keep-rate forecast currently available for a registered creator: visual + together embeddings plus strictly prior creator outcomes. It passed the retrospective per-account MAE target, but remains research-only until prospective confirmation.',
+                label: 'Channel-free concat keep signal',
+                value: `${fmtv(selectedChannelFree.value, 1)}%`,
+                coordinateId: selectedChannelFree.coordinateId,
+                badge: 'SELECTED CHANNEL-FREE SIGNAL',
+                color: C.cyan,
+                explanation: `The selected concat model uses the visual, text, and together embeddings with one identical formula for every channel. Its ${fmtv(selectedChannelFree.percentile100, 1)}th corpus position is the portable interpretation; the absolute percentage remains a research estimate because unseen-channel baseline transfer is not yet reliable.`,
             }
-            : frozenVisualKeep
-                ? {
-                    label: 'Frozen visual-only forecast',
-                    value: `${fmtv(frozenVisualKeep.value, 1)}%`,
-                    coordinateId: frozenVisualKeep.coordinateId,
-                    badge: 'BEST TESTED VISUAL-ONLY CANDIDATE',
-                    color: C.green,
-                    explanation: 'This full-vector Ridge forecast is the strongest visual-only candidate. It is a percentage prediction, separate from the visual keep embedding coordinate, and remains research-only until unseen-creator transfer is confirmed.',
-                }
-                : canonicalVisualKeep
+            : canonicalVisualKeep
                     ? {
                         label: 'Canonical visual keep embedding estimate',
                         value: steerDisp('keep', canonicalVisualKeep.value),
                         coordinateId: canonicalVisualKeep.coordinateId,
                         badge: 'CANONICAL LEDGER COORDINATE',
                         color: C.cyan,
-                        explanation: 'This historical record still has its exact ledger-backed visual keep coordinate. It is an embedding-axis estimate, not the newer full-vector percentage forecast; explicitly re-score the saved video to add the current forecasts.',
+                        explanation: 'This historical record still has its exact ledger-backed visual keep coordinate, but predates the four channel-free outputs. Re-score the saved opening once to add the current model outputs.',
                     }
                     : {
                         label: 'Keep-rate prediction',
@@ -4767,13 +4865,33 @@ const JarvisRetention = (function () {
             <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:9px;color:${keepPrimary.color};font-weight:950;text-transform:uppercase">${esc(keepPrimary.badge)}</div><div style="font-size:14px;color:${C.text};font-weight:950;margin-top:3px">${esc(keepPrimary.label)}</div><div data-best-keep-predictor-value style="font-size:30px;color:${keepPrimary.color};font-weight:950;line-height:1.1;margin-top:3px">${esc(keepPrimary.value)}</div></div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${canonicalVisualKeep ? `<button type="button" data-expgo="visual:keep" style="min-height:36px;background:transparent;border:1px solid ${C.cyan};color:${C.cyan};padding:6px 10px;cursor:pointer;font-size:8px;font-weight:900">Open visual keep geometry</button>` : ''}${savedRescoreButton}</div></div>
             <div style="font-size:8.5px;color:${C.dim};line-height:1.5;margin:6px 0 8px">${esc(keepPrimary.explanation)}</div>
             ${keepReadoutRow('Canonical visual embedding', canonicalVisualKeep && canonicalVisualKeep.coordinateId, canonicalVisualKeep ? steerDisp('keep', canonicalVisualKeep.value) : 'Not available', 'The exact stored visual-axis scalar and corpus percentile.', C.cyan)}
-            ${keepReadoutRow('Frozen visual-only forecast', frozenVisualKeep && frozenVisualKeep.coordinateId, frozenVisualKeep ? `${fmtv(frozenVisualKeep.value, 1)}%` : 'Not available', 'Full 1,536D visual vector converted directly to keep-rate percentage.', C.green)}
-            ${keepReadoutRow('Known-creator forecast', creatorAdaptiveKeep && creatorAdaptiveKeep.coordinateId, creatorAdaptiveKeep ? `${fmtv(creatorAdaptiveKeep.value, 1)}%` : 'Not available', `Visual + together vectors + strictly prior ${savedVisualKeepAccountName(selectedCreatorProfile(), selectedCreatorProfile())} outcomes; retrospectively validated, research-only.`, C.amber)}
+            ${['concat', 'visual', 'together', 'text'].map(signal => {
+                const output = channelFreeOutputs[signal];
+                const label = signal === 'concat'
+                    ? 'Channel-free concat'
+                    : `Channel-free ${signal}`;
+                const color = signal === 'visual'
+                    ? C.green
+                    : signal === 'text'
+                        ? C.purple
+                        : signal === 'together'
+                            ? C.accent
+                            : C.cyan;
+                return keepReadoutRow(
+                    label,
+                    output && output.coordinateId,
+                    output && output.available === true
+                        ? `${fmtv(output.value, 1)}% · ${fmtv(output.percentile100, 1)}th`
+                        : 'Not available',
+                    'One pooled formula for every channel; no creator ID, baseline, or scale factor.',
+                    color
+                );
+            }).join('')}
         </section>`, 12);
         const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">18 modality × target coordinates · ${availableChannelCoordinates} scored · ${18 - availableChannelCoordinates} explicitly unavailable</div>
-            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Availability comes only from the persisted score ledger. The page never infers it from transcript text. Two optional keep forecasts reuse existing vectors: a pooled visual diagnostic and a known-creator prequential next-upload forecast. Neither mints another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
-            <div style="font-size:10px;color:${C.green};font-weight:800;text-transform:uppercase;margin-bottom:5px">Full-vector keep forecasts — 2 derived outputs</div>
-            <div style="${gcol};margin-bottom:12px">${visualForecastBox()}${creatorAdaptiveForecastBox()}</div>
+            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Availability comes only from the persisted score record and its canonical 21-coordinate ledger. Four channel-free outputs reuse the exact visual, text, and together vectors with no creator scale factor. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
+            <div style="font-size:10px;color:${C.green};font-weight:800;text-transform:uppercase;margin-bottom:5px">Channel-free keep signals — 4 governed outputs</div>
+            <div style="${gcol};margin-bottom:12px">${['concat', 'visual', 'together', 'text'].map(channelFreeForecastBox).join('')}</div>
             ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
@@ -4781,7 +4899,7 @@ const JarvisRetention = (function () {
             + experimentRegion(
                 'score',
                 controls
-                + `<section id="exp-scoreout" data-canonical-score-analysis data-ledger-coordinate-count="${scoreLedgerEntries.length}" data-ledger-coordinate-available-count="${availableLedgerCoordinates}" data-derived-output-count="2" data-inspection-readonly="${inspectionReadOnly ? 'true' : 'false'}" tabindex="-1">`
+                + `<section id="exp-scoreout" data-canonical-score-analysis data-ledger-coordinate-count="${scoreLedgerEntries.length}" data-ledger-coordinate-available-count="${availableLedgerCoordinates}" data-derived-output-count="4" data-inspection-readonly="${inspectionReadOnly ? 'true' : 'false'}" tabindex="-1">`
                 + scoreAnalysisIntro
                 + trace
                 + savedVisualKeepCoordinateTableHtml(up)
@@ -6684,7 +6802,9 @@ const JarvisRetention = (function () {
         if (state === 'queued') return 'Queued';
         if (state === 'loading') return 'Loading saved ledger';
         if (state === 'waiting') return 'Waiting for scorer';
-        if (state === 'scoring') return 'Scoring 21 coordinates';
+        if (state === 'scoring') {
+            return 'Scoring 21 coordinates + 4 channel-free keep outputs';
+        }
         if (state === 'ready') return 'Ready';
         if (state === 'error') return 'Error';
         return 'Processing';
@@ -6705,7 +6825,7 @@ const JarvisRetention = (function () {
         const available = entries.filter(
             entry => entry && entry.available === true
         ).length;
-        return `${available}/${entries.length} coordinates · 2 keep forecasts`;
+        return `${available}/${entries.length} coordinates · 4 channel-free keep outputs`;
     }
     function renderScoreAnalysisQueue(uploads) {
         if (!uploads.length) return '';
@@ -6765,7 +6885,7 @@ const JarvisRetention = (function () {
                     availableCount: entries.filter(
                         entry => entry && entry.available === true
                     ).length,
-                    derivedCount: 2,
+                    derivedCount: 4,
                     savedId: upload && upload.savedId || null,
                 },
             }
@@ -6808,12 +6928,8 @@ const JarvisRetention = (function () {
                 upload.score_ledger.ledger_sha256,
             novelty_provenance:
                 upload.novelty_provenance || null,
-            visual_keep_forecast:
-                upload.visual_keep_forecast || null,
-            creator_adaptive_keep_forecast:
-                upload.creator_adaptive_keep_forecast || null,
-            creator_adaptive_keep_forecast_error:
-                upload.creator_adaptive_keep_forecast_error || null,
+            channel_free_keep_forecasts:
+                upload.channel_free_keep_forecasts || null,
             channels: upload.channels || null,
             emb_preview: upload.emb_preview || null,
             input_manifest:
@@ -8284,6 +8400,8 @@ const JarvisRetention = (function () {
             input_binding_validation:
                 rec.input_binding_validation || null,
             novelty_provenance: rec.novelty_provenance || null,
+            channel_free_keep_forecasts:
+                rec.channel_free_keep_forecasts || null,
             visual_keep_forecast: rec.visual_keep_forecast || null,
             creator_adaptive_keep_forecast: rec.creator_adaptive_keep_forecast || null,
             creator_adaptive_keep_forecast_error: rec.creator_adaptive_keep_forecast_error || null,
@@ -12998,7 +13116,7 @@ const JarvisRetention = (function () {
     function labActivityOutputSummary(row) {
         const output = row && row.output || {};
         if (Number.isFinite(Number(output.coordinateCount))) {
-            return `${Number(output.availableCoordinateCount) || 0}/${Number(output.coordinateCount)} ledger coordinates + 2 keep forecasts`;
+            return `${Number(output.availableCoordinateCount) || 0}/${Number(output.coordinateCount)} ledger coordinates + 4 channel-free keep outputs`;
         }
         const parts = [
             output.kind,
@@ -13087,17 +13205,19 @@ const JarvisRetention = (function () {
         }
         if (!row) return '';
         const output = row.output || {};
-        const forecasts = output.derivedKeepForecasts || {};
-        const forecastPanel = forecasts.visual || forecasts.creator
-            ? labEvidencePanel('Derived keep forecasts', {
-                pooledVisual: labActivityForecastSummary(forecasts.visual),
-                creatorAdaptive: labActivityForecastSummary(forecasts.creator),
+        const forecasts = output.channelFreeKeepForecasts || {};
+        const forecastPanel = Object.values(forecasts).some(Boolean)
+            ? labEvidencePanel('Channel-free keep outputs', {
+                concat: labActivityForecastSummary(forecasts.concat),
+                visual: labActivityForecastSummary(forecasts.visual),
+                together: labActivityForecastSummary(forecasts.together),
+                text: labActivityForecastSummary(forecasts.text),
             }, C.purple)
             : '';
         const media = output.mediaUrl
             ? authenticatedMediaUrl(output.mediaUrl, st.labTeamAccount)
             : '';
-        return `<section class="lab-team-operation-detail" data-lab-team-activity-detail="${esc(st.labTeamActivity)}"><div class="lab-team-detail-head"><div><small>Complete operation record</small><h4>${esc(meta.label)}</h4><p>${esc(row.title || row.detail || 'Untitled work')}</p></div><button type="button" data-labteamactivityclose aria-label="Close operation detail">×</button></div>${media ? `<img class="lab-team-output-media" src="${esc(media)}" alt="Generated operation output">` : ''}<div class="lab-team-evidence-grid">${labEvidencePanel('Input', row.input, C.cyan)}${labEvidencePanel('Input identity', row.inputEvidence, C.dim)}${labEvidencePanel('Output', output, C.green)}${forecastPanel}${labEvidencePanel('Storage', { saved: row.saved === true, artifactKind: row.artifactKind, artifactId: row.artifactId }, C.amber)}</div><div class="lab-team-detail-section"><h5>Action timeline</h5>${renderLabActivityLifecycle(row)}</div><div class="lab-team-detail-section"><h5>Traceability</h5><div class="lab-team-id-grid"><span>Activity ID<b>${esc(row.id || 'Legacy record')}</b></span><span>Job / request ID<b>${esc(row.requestId || 'Not linked')}</b></span><span>Operation type<b>${esc(row.type || 'Unknown')}</b></span><span>Last update<b>${row.updatedAt ? esc(new Date(row.updatedAt).toLocaleString()) : 'Not recorded'}</b></span></div></div>${labActivityCanOpenScore(row) ? `<button type="button" class="lab-team-open-analysis" data-labteamactivityscore="${esc(st.labTeamActivity)}">Open all 21 coordinates + 2 forecasts</button>` : ''}</section>`;
+        return `<section class="lab-team-operation-detail" data-lab-team-activity-detail="${esc(st.labTeamActivity)}"><div class="lab-team-detail-head"><div><small>Complete operation record</small><h4>${esc(meta.label)}</h4><p>${esc(row.title || row.detail || 'Untitled work')}</p></div><button type="button" data-labteamactivityclose aria-label="Close operation detail">×</button></div>${media ? `<img class="lab-team-output-media" src="${esc(media)}" alt="Generated operation output">` : ''}<div class="lab-team-evidence-grid">${labEvidencePanel('Input', row.input, C.cyan)}${labEvidencePanel('Input identity', row.inputEvidence, C.dim)}${labEvidencePanel('Output', output, C.green)}${forecastPanel}${labEvidencePanel('Storage', { saved: row.saved === true, artifactKind: row.artifactKind, artifactId: row.artifactId }, C.amber)}</div><div class="lab-team-detail-section"><h5>Action timeline</h5>${renderLabActivityLifecycle(row)}</div><div class="lab-team-detail-section"><h5>Traceability</h5><div class="lab-team-id-grid"><span>Activity ID<b>${esc(row.id || 'Legacy record')}</b></span><span>Job / request ID<b>${esc(row.requestId || 'Not linked')}</b></span><span>Operation type<b>${esc(row.type || 'Unknown')}</b></span><span>Last update<b>${row.updatedAt ? esc(new Date(row.updatedAt).toLocaleString()) : 'Not recorded'}</b></span></div></div>${labActivityCanOpenScore(row) ? `<button type="button" class="lab-team-open-analysis" data-labteamactivityscore="${esc(st.labTeamActivity)}">Open all 21 coordinates + 4 channel-free outputs</button>` : ''}</section>`;
     }
 
     async function openLabTeamActivity(key) {

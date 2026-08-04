@@ -7,7 +7,7 @@ to — consistent across all three channels/projections).
 
   args: --file <path> [--title <name>]
   stdout: JSON {montage (b64 jpeg), transcript, silent, channels:{visual,text,together},
-                visual_keep_forecast:{raw, coordinate_id, model_artifact_sha256}}
+                channel_free_keep_forecasts:{outputs:{concat,visual,together,text}}}
           each channel = {neighbors:[{id,sim}]} (text=null when no real voiceover)
 
 Identical montage/whisper/embed to raw_embed.py so the upload's vectors are comparable.
@@ -74,13 +74,24 @@ DIM = 1536
 EMBEDDING_MODEL = 'gemini-embedding-2'
 TRANSCRIPTION_MODEL = env('RAW_TRANSCRIPTION_MODEL') or 'gemini-2.5-flash'
 EMB_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent'
-SCORE_CACHE_VERSION = 2
+SCORE_CACHE_VERSION = 3
 DISPLAY_CONTRACT_VERSION = _load_display_contract_version()
 COORDINATE_GOVERNANCE = _load_coordinate_governance()
 COORDINATE_GOVERNANCE_SHA256 = hashlib.sha256(
     open(COORDINATE_GOVERNANCE_PATH, 'rb').read()
 ).hexdigest()
-SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v2').strip('/')
+SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v3').strip('/')
+CHANNEL_FREE_MODEL_RELATIVE_PATH = (
+    'buildings/jarvis/predictor-lab/channel-free-keep-model-v1.json'
+)
+CHANNEL_FREE_MODEL_PATH = os.path.join(
+    HERE,
+    *CHANNEL_FREE_MODEL_RELATIVE_PATH.split('/'),
+)
+CHANNEL_FREE_SIGNALS = ('visual', 'text', 'together', 'concat')
+CHANNEL_FREE_MODEL_ARTIFACT_KEY = (
+    'local:' + CHANNEL_FREE_MODEL_RELATIVE_PATH
+)
 VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json'
 VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json'
 VISUAL_KEEP_COORDINATE_ID = (
@@ -111,9 +122,6 @@ SCORE_REVISION_KEYS = (
     'raw/indicators/weights.npz',
     'raw/indicators/registry.json',
     'raw/novelty_models.npz',
-    VISUAL_KEEP_MODEL_MANIFEST_KEY,
-    CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY,
-    CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY,
     'raw/visual/embeddings.npz',
     'raw/text/embeddings.npz',
     'raw/together/embeddings.npz',
@@ -237,6 +245,7 @@ def _indicator_registry_snapshot():
 
 _VISUAL_KEEP_MODEL_CACHE = None
 _CREATOR_ADAPTIVE_KEEP_STATE_CACHE = None
+_CHANNEL_FREE_MODEL_CACHE = None
 
 def _exact_sha256(value):
     return bool(re.fullmatch(r'[a-f0-9]{64}', str(value or '').lower()))
@@ -378,6 +387,180 @@ def visual_keep_forecast(embedding):
         cached['artifact_sha256'],
         cached['artifact_key'],
         cached['manifest_sha256'],
+    )
+
+
+def _channel_free_keep_forecasts_from_payload(
+    embeddings,
+    payload,
+    artifact_sha256,
+):
+    if (
+        not isinstance(payload, dict)
+        or payload.get('schema') != 'channel-free-keep-model-v1'
+        or payload.get('embedding', {}).get('model') != EMBEDDING_MODEL
+        or int(payload.get('embedding', {}).get('dimensionsPerModality') or 0)
+            != DIM
+    ):
+        raise RuntimeError('channel-free keep model contract is invalid')
+    models = payload.get('models') or {}
+    normalized = {}
+    for signal in ('visual', 'text', 'together'):
+        embedding = (embeddings or {}).get(signal)
+        if embedding is None:
+            normalized[signal] = None
+            continue
+        vector = np.asarray(embedding, dtype=float).reshape(-1)
+        if len(vector) != DIM or not np.isfinite(vector).all():
+            raise RuntimeError(
+                f'channel-free {signal} input must contain {DIM} finite dimensions'
+            )
+        normalized[signal] = vector / (np.linalg.norm(vector) + 1e-9)
+
+    inputs = {
+        'visual': normalized['visual'],
+        'text': normalized['text'],
+        'together': normalized['together'],
+        'concat': (
+            np.hstack([
+                normalized['visual'],
+                normalized['text'],
+                normalized['together'],
+            ])
+            if all(normalized[signal] is not None for signal in (
+                'visual', 'text', 'together'
+            ))
+            else None
+        ),
+    }
+    input_labels = {
+        'visual': 'canonical first-5-second 5-frame montage embedding only',
+        'text': 'canonical first-5-second normalized transcript embedding only',
+        'together': 'canonical montage + normalized transcript embedding',
+        'concat': 'ordered concatenation of visual + text + together embeddings',
+    }
+    outputs = {}
+    for signal in CHANNEL_FREE_SIGNALS:
+        model = models.get(signal) or {}
+        expected_coordinate = f'shorts.channel-free.{signal}.keep'
+        expected_dimensions = DIM * 3 if signal == 'concat' else DIM
+        coefficients = np.asarray(
+            model.get('coefficients') or [],
+            dtype=float,
+        )
+        reference = np.asarray(
+            model.get('percentileReference') or [],
+            dtype=float,
+        )
+        if (
+            model.get('signal') != signal
+            or model.get('coordinateId') != expected_coordinate
+            or int(model.get('inputDimensions') or 0) != expected_dimensions
+            or len(coefficients) != expected_dimensions
+            or not np.isfinite(coefficients).all()
+            or not np.isfinite(float(model.get('intercept')))
+            or not len(reference)
+            or not np.isfinite(reference).all()
+        ):
+            raise RuntimeError(
+                f'channel-free {signal} frozen formula is invalid'
+            )
+        vector = inputs[signal]
+        common = {
+            'coordinate_id': expected_coordinate,
+            'signal': signal,
+            'kind': 'channel_free_keep_rate_percent',
+            'unit': 'percent',
+            'percentile_unit': 'percentile_0_100',
+            'input': input_labels[signal],
+            'channel_information': None,
+            'calibration_scope': 'pooled_global_no_creator',
+            'source': 'live_frozen_channel_free_model_score',
+            'model_artifact_path': CHANNEL_FREE_MODEL_RELATIVE_PATH,
+            'model_artifact_sha256': artifact_sha256,
+            'model_run_id': payload.get('runId'),
+            'model_generated_at': payload.get('generatedAt'),
+            'training_identity_hash': (
+                payload.get('training') or {}
+            ).get('identityHash'),
+            'selected': payload.get('selectedSignal') == signal,
+            'oof_mae': (
+                (payload.get('validation') or {}).get(signal, {})
+                .get('oof_5x5', {})
+                .get('mae_mean')
+            ),
+            'oof_spearman': (
+                (payload.get('validation') or {}).get(signal, {})
+                .get('oof_5x5', {})
+                .get('spearman_mean')
+            ),
+            'percentile_reference_n': int(len(reference)),
+        }
+        if vector is None:
+            outputs[signal] = {
+                **common,
+                'available': False,
+                'est': None,
+                'raw': None,
+                'pctile': None,
+                'unavailable_reason': (
+                    'A coherent first-5-second transcript is required for this signal.'
+                ),
+            }
+            continue
+        prediction = float(np.clip(
+            float(model.get('intercept'))
+            + float(vector @ coefficients),
+            0,
+            100,
+        ))
+        percentile = 100 * float(
+            np.searchsorted(reference, prediction, side='right')
+        ) / len(reference)
+        outputs[signal] = {
+            **common,
+            'available': True,
+            'est': round(prediction, 6),
+            'raw': round(prediction, 6),
+            'pctile': round(min(100.0, max(0.0, percentile)), 6),
+            'unavailable_reason': None,
+        }
+    return {
+        'schema': 'shorts-channel-free-keep-forecasts-v1',
+        'model_artifact_path': CHANNEL_FREE_MODEL_RELATIVE_PATH,
+        'model_artifact_sha256': artifact_sha256,
+        'model_run_id': payload.get('runId'),
+        'selected_signal': payload.get('selectedSignal'),
+        'source': 'live_frozen_channel_free_model_score',
+        'channel_information': None,
+        'outputs': outputs,
+    }
+
+
+def channel_free_keep_forecasts(embeddings):
+    global _CHANNEL_FREE_MODEL_CACHE
+    if _CHANNEL_FREE_MODEL_CACHE is None:
+        try:
+            payload_bytes = open(CHANNEL_FREE_MODEL_PATH, 'rb').read()
+        except OSError as error:
+            raise RuntimeError(
+                'channel-free keep model artifact is unavailable'
+            ) from error
+        artifact_sha256 = hashlib.sha256(payload_bytes).hexdigest()
+        try:
+            payload = json.loads(payload_bytes)
+        except Exception as error:
+            raise RuntimeError(
+                'channel-free keep model artifact is invalid JSON'
+            ) from error
+        _CHANNEL_FREE_MODEL_CACHE = {
+            'payload': payload,
+            'artifact_sha256': artifact_sha256,
+        }
+    return _channel_free_keep_forecasts_from_payload(
+        embeddings,
+        _CHANNEL_FREE_MODEL_CACHE['payload'],
+        _CHANNEL_FREE_MODEL_CACHE['artifact_sha256'],
     )
 
 def creator_adaptive_keep_forecast(visual, together, profile):
@@ -632,11 +815,10 @@ def _score_input_state(
         _canonical_json(embedding_state)
     ).hexdigest()
     return {
-        'schema': 'shorts-score-input-v2',
+        'schema': 'shorts-score-input-v3',
         'embedding_input_fingerprint': embedding_fingerprint,
         'embedding_input': embedding_state,
         'duration_ms': _duration_milliseconds(duration_s),
-        'creator_profile': str(creator_profile or '').strip().lower() or None,
     }
 
 def _score_input_fingerprint(
@@ -703,6 +885,23 @@ def _object_revision(key):
             return {'state': 'missing'}
         return {'state': 'unavailable', 'error': f'{type(error).__name__}: {str(error)[:160]}'}
 
+
+def _local_artifact_revision(key, artifact_path):
+    try:
+        payload = open(artifact_path, 'rb').read()
+        return {
+            'state': 'present',
+            'source': 'deployment_image',
+            'byte_length': len(payload),
+            'sha256': hashlib.sha256(payload).hexdigest(),
+        }
+    except Exception as error:
+        return {
+            'state': 'unavailable',
+            'source': 'deployment_image',
+            'error': f'{type(error).__name__}: {str(error)[:160]}',
+        }
+
 def _score_code_sha256():
     try:
         return hashlib.sha256(open(__file__, 'rb').read()).hexdigest()
@@ -713,14 +912,6 @@ def _score_ledger_code_sha256():
     try:
         return hashlib.sha256(
             open(os.path.join(HERE, 'shorts_score_ledger.py'), 'rb').read()
-        ).hexdigest()
-    except Exception:
-        return None
-
-def _creator_scorer_code_sha256():
-    try:
-        return hashlib.sha256(
-            open(os.path.join(HERE, 'creator_adaptive_keep.py'), 'rb').read()
         ).hexdigest()
     except Exception:
         return None
@@ -749,6 +940,13 @@ def _score_revisions():
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=len(SCORE_REVISION_KEYS)) as executor:
         artifact_rows = list(executor.map(_object_revision, SCORE_REVISION_KEYS))
+    artifacts = dict(zip(SCORE_REVISION_KEYS, artifact_rows))
+    artifacts[CHANNEL_FREE_MODEL_ARTIFACT_KEY] = (
+        _local_artifact_revision(
+            CHANNEL_FREE_MODEL_ARTIFACT_KEY,
+            CHANNEL_FREE_MODEL_PATH,
+        )
+    )
     return {
         'schema': 'shorts-score-revisions-v1',
         'scorer': {
@@ -756,8 +954,6 @@ def _score_revisions():
             'sha256': _score_code_sha256(),
             'score_ledger_module_sha256':
                 _score_ledger_code_sha256(),
-            'creator_adaptive_module_sha256':
-                _creator_scorer_code_sha256(),
         },
         'models': {
             'embedding': {
@@ -779,7 +975,7 @@ def _score_revisions():
             ),
             'ffmpeg': _ffmpeg_version(),
         },
-        'artifacts': dict(zip(SCORE_REVISION_KEYS, artifact_rows)),
+        'artifacts': artifacts,
     }
 
 def _revision_fingerprint(revisions):
@@ -831,39 +1027,38 @@ def _score_completeness_errors(
         value = indicators.get('nov_txt_global')
         if value is None or not np.isfinite(value):
             missing.append('nov_txt_global')
-    visual_forecast = score.get('visual_keep_forecast') or {}
+    channel_free = score.get('channel_free_keep_forecasts') or {}
+    channel_free_outputs = channel_free.get('outputs') or {}
     if (
-        visual_forecast.get('coordinate_id')
-        != VISUAL_KEEP_COORDINATE_ID
-        or visual_forecast.get('raw') is None
-        or not np.isfinite(visual_forecast.get('raw'))
+        channel_free.get('schema')
+        != 'shorts-channel-free-keep-forecasts-v1'
+        or channel_free.get('source')
+        != 'live_frozen_channel_free_model_score'
     ):
-        missing.append('frozen visual keep forecast')
+        missing.append('channel-free keep forecast contract')
+    for signal in CHANNEL_FREE_SIGNALS:
+        output = channel_free_outputs.get(signal) or {}
+        required = signal in ('visual', 'together') or transcript_used
+        if (
+            output.get('coordinate_id')
+            != f'shorts.channel-free.{signal}.keep'
+            or output.get('available') is not required
+            or (
+                required
+                and (
+                    output.get('raw') is None
+                    or not np.isfinite(output.get('raw'))
+                    or output.get('pctile') is None
+                    or not np.isfinite(output.get('pctile'))
+                )
+            )
+        ):
+            missing.append(f'channel-free {signal} keep forecast')
     for channel in ('visual', 'together'):
         placement = ((score.get('channels') or {}).get(channel) or {})
         neighbors_value = placement.get('neighbors')
         if not isinstance(neighbors_value, list) or not neighbors_value:
             missing.append(f'{channel} map placement')
-    if creator_profile:
-        creator_forecast = score.get(
-            'creator_adaptive_keep_forecast'
-        )
-        creator_forecast_error = str(
-            score.get('creator_adaptive_keep_forecast_error') or ''
-        ).strip()
-        if creator_forecast is None:
-            if not creator_forecast_error:
-                missing.append('creator-adaptive keep forecast status')
-        elif (
-            not isinstance(creator_forecast, dict)
-            or creator_forecast.get('coordinate_id')
-                != CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
-            or creator_forecast.get('profile_account')
-                != creator_profile
-            or creator_forecast.get('raw') is None
-            or not np.isfinite(creator_forecast.get('raw'))
-        ):
-            missing.append('creator-adaptive keep forecast')
     return missing
 
 def _score_cache_read(
@@ -887,7 +1082,7 @@ def _score_cache_read(
             and all(isinstance(score.get(field), dict) for field in (
                 'indicators',
                 'steer',
-                'visual_keep_forecast',
+                'channel_free_keep_forecasts',
                 'emb_preview',
                 'channels',
             ))
@@ -991,41 +1186,18 @@ def _scorer_contract():
     _PINNED_ARTIFACT_REVISIONS = dict(
         revisions.get('artifacts') or {}
     )
-    creator_profiles = []
-    visual_manifest_bytes = r2_get(
-        VISUAL_KEEP_MODEL_MANIFEST_KEY
-    )
-    serving_manifest_bytes = r2_get(
-        CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY
-    )
-    model_manifest_bytes = r2_get(
-        CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY
-    )
-    visual_manifest = None
-    serving_manifest = None
-    model_manifest = None
-    if visual_manifest_bytes:
-        try:
-            visual_manifest = json.loads(visual_manifest_bytes)
-        except Exception:
-            visual_manifest = None
-    if serving_manifest_bytes:
-        try:
-            serving_manifest = json.loads(serving_manifest_bytes)
-            creator_profiles = sorted(
-                str(value).strip().lower()
-                for value in (serving_manifest.get('profiles') or [])
-                if str(value).strip()
-            )
-        except Exception:
-            creator_profiles = []
-    if model_manifest_bytes:
-        try:
-            model_manifest = json.loads(model_manifest_bytes)
-        except Exception:
-            model_manifest = None
+    channel_free_revision = (
+        revisions.get('artifacts') or {}
+    ).get(CHANNEL_FREE_MODEL_ARTIFACT_KEY) or {}
+    try:
+        channel_free_payload = json.load(open(
+            CHANNEL_FREE_MODEL_PATH,
+            encoding='utf-8',
+        ))
+    except Exception:
+        channel_free_payload = {}
     return {
-        'schema': 'shorts-live-score-contract-v2',
+        'schema': 'shorts-live-score-contract-v3',
         'scorer': 'raw_upload.py',
         'revision_fingerprint': _revision_fingerprint(revisions),
         'scorer_revisions': revisions,
@@ -1051,55 +1223,26 @@ def _scorer_contract():
             'stored_pattern':
                 COORDINATE_GOVERNANCE['coordinates']['storedPattern'],
             'stored': list(SHORTS_STORED_COORDINATE_IDS),
-            'visual_keep_forecast': VISUAL_KEEP_COORDINATE_ID,
-            'creator_adaptive_keep_forecast':
-                CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+            'channel_free_keep': {
+                signal: f'shorts.channel-free.{signal}.keep'
+                for signal in CHANNEL_FREE_SIGNALS
+            },
         },
-        'creator_profiles': creator_profiles,
-        'visual_keep_model_manifest_sha256': (
-            hashlib.sha256(visual_manifest_bytes).hexdigest()
-            if visual_manifest_bytes else None
-        ),
-        'visual_keep_model_artifact_sha256': (
-            visual_manifest.get('artifactSha256')
-            if visual_manifest else None
-        ),
-        'visual_keep_model_producer_source_sha256': (
-            visual_manifest.get('producerSourceSha256')
-            if visual_manifest else None
-        ),
-        'creator_serving_manifest_sha256': (
-            hashlib.sha256(serving_manifest_bytes).hexdigest()
-            if serving_manifest_bytes else None
-        ),
-        'creator_serving_artifact_sha256': (
-            serving_manifest.get('artifactSha256')
-            if serving_manifest else None
-        ),
-        'creator_serving_producer_source_sha256': (
-            serving_manifest.get('producerSourceSha256')
-            if serving_manifest else None
-        ),
-        'creator_serving_scorer_source_sha256': (
-            serving_manifest.get('servingScorerSourceSha256')
-            if serving_manifest else None
-        ),
-        'creator_model_manifest_sha256': (
-            hashlib.sha256(model_manifest_bytes).hexdigest()
-            if model_manifest_bytes else None
-        ),
-        'creator_model_artifact_sha256': (
-            model_manifest.get('artifactSha256')
-            if model_manifest else None
-        ),
-        'creator_model_producer_source_sha256': (
-            model_manifest.get('producerSourceSha256')
-            if model_manifest else None
-        ),
+        'creator_profiles': [],
+        'channel_free_model_artifact_sha256':
+            channel_free_revision.get('sha256'),
+        'channel_free_model_run_id':
+            channel_free_payload.get('runId'),
+        'channel_free_selected_signal':
+            channel_free_payload.get('selectedSignal'),
+        'channel_free_training_identity_hash': (
+            channel_free_payload.get('training') or {}
+        ).get('identityHash'),
         'parity_rule': (
             'Ordinary embedding coordinates replay exactly when the '
             'embedding_input_fingerprint and revision_fingerprint match. '
-            'Duration and creator profile affect only derived scores. '
+            'Creator profile does not enter any channel-free output. '
+            'Duration affects only the existing realistic-views transform. '
             'The realviews coordinate also requires the same duration_ms; '
             'a five-frame input without duration uses the documented default '
             'and cannot claim realviews parity with a source of known duration.'
@@ -1124,21 +1267,6 @@ def _score_replay_store(
             'scoring dependencies returned an incomplete result: '
             + ', '.join(incomplete)
         )
-    creator_forecast_error = str(
-        score.get('creator_adaptive_keep_forecast_error') or ''
-    ).strip()
-    if (
-        creator_profile
-        and score.get('creator_adaptive_keep_forecast') is None
-        and creator_forecast_error
-    ):
-        meta['cache_write_status'] = 'skipped_optional_creator_forecast'
-        meta['output_fingerprint'] = _score_output_fingerprint(score)
-        meta['cache_error'] = (
-            'creator-adaptive keep forecast unavailable: '
-            + creator_forecast_error[:300]
-        )
-        return meta
     if meta.get('cache_status') in ('disabled', 'disabled_revision_unavailable'):
         meta['output_fingerprint'] = _score_output_fingerprint(score)
         return meta
@@ -1568,17 +1696,17 @@ def _score_input_manifest(
         'canonical_output_contract': {
             'canonical_embedding_outputs': len(SHORTS_STORED_COORDINATE_IDS),
             'canonical_coordinate_ids': list(SHORTS_STORED_COORDINATE_IDS),
-            'universal_raw_scorer_total': 22,
-            'creator_profile_enriched_maximum': 23,
+            'channel_free_keep_outputs': 4,
+            'complete_score_outputs': 25,
+            'universal_raw_scorer_total': 25,
             'steer_coordinates': 18,
             'novelty_coordinates': 3,
-            'derived_forecasts_total': 2,
-            'frozen_model_forecasts': 1,
-            'conditional_creator_forecasts': 1,
-            'visual_keep_forecast_coordinate_id': VISUAL_KEEP_COORDINATE_ID,
-            'creator_adaptive_keep_forecast_coordinate_id':
-                CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
-            'creator_adaptive_availability': 'registered known creator with at least eight strictly earlier labeled uploads; unavailable in anonymous raw scoring',
+            'derived_forecasts_total': 4,
+            'channel_free_keep_forecasts': {
+                signal: f'shorts.channel-free.{signal}.keep'
+                for signal in CHANNEL_FREE_SIGNALS
+            },
+            'channel_free_creator_information': None,
             'novelty_derivation': 'cached indicator state + revision-pinned indicator registry',
         },
         'steer_artifact_sha256': score.get('steer_artifact_sha256'),
@@ -1598,7 +1726,10 @@ def _score_input_manifest(
         'display_preference': ['together', 'text', 'visual'],
         'transcript_used': bool(good),
         'duration_s': round(float(dur_s), 3) if dur_s else None,
-        'creator_profile': str(creator_profile or '').strip().lower() or None,
+        'creator_profile': None,
+        'requested_creator_profile': (
+            str(creator_profile or '').strip().lower() or None
+        ),
         'cache_version': replay_meta.get('cache_version'),
         'cache_key': replay_meta.get('cache_key'),
         'cache_status': replay_meta.get('cache_status'),
@@ -1676,12 +1807,8 @@ def _score_output(
         'features': bundle['features'],
         'score_ledger': ledger,
         'novelty_provenance': bundle['novelty_provenance'],
-        'visual_keep_forecast': score.get('visual_keep_forecast') or None,
-        'creator_adaptive_keep_forecast': (
-            score.get('creator_adaptive_keep_forecast') or None
-        ),
-        'creator_adaptive_keep_forecast_error': score.get(
-            'creator_adaptive_keep_forecast_error'
+        'channel_free_keep_forecasts': (
+            score.get('channel_free_keep_forecasts') or None
         ),
         'emb_preview': score.get('emb_preview') or {},
         'input_manifest': _score_input_manifest(
@@ -1931,24 +2058,15 @@ def _run():
         if e is None: return None
         a = np.asarray(e, float)
         return [round(float(x), 3) for x in (a[:1536].reshape(48, 32).mean(1) if len(a) >= 1536 else a)]
-    visual_keep = visual_keep_forecast(ev)
-    creator_keep = None
-    creator_keep_error = None
-    if creator_profile:
-        try:
-            creator_keep = creator_adaptive_keep_forecast(
-                ev,
-                eg,
-                creator_profile,
-            )
-        except Exception as error:
-            creator_keep_error = str(error)[:500]
+    channel_free_keep = channel_free_keep_forecasts({
+        'visual': ev,
+        'text': et if good else None,
+        'together': eg,
+    })
     score = {
         'indicators': indicators,
         'steer': steer,
-        'visual_keep_forecast': visual_keep,
-        'creator_adaptive_keep_forecast': creator_keep,
-        'creator_adaptive_keep_forecast_error': creator_keep_error,
+        'channel_free_keep_forecasts': channel_free_keep,
         'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
         'steer_artifact_sha256': steer_artifact_sha256,
         'steer_artifact_archive_key': steer_artifact_archive_key,

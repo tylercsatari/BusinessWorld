@@ -38,6 +38,9 @@ const displayContract = require('../embedding-display-contract');
 const savedHookRuntimeIndex = require(
     '../buildings/jarvis/saved-hook-runtime-index'
 );
+const channelFreeKeepContract = require(
+    '../buildings/jarvis/channel-free-keep-forecast-contract'
+);
 
 const ROOT = path.resolve(__dirname, '..');
 const ORIGIN = process.env.EXPERIMENT_LAB_ORIGIN || 'http://127.0.0.1:8002';
@@ -294,6 +297,75 @@ async function main() {
             + 'the semantic score-ledger identity hash in this fixture'
     );
     const fixtureSha256 = label => crypto.createHash('sha256').update(`experiment-lab:${label}`).digest('hex');
+    const channelFreeKeepForecasts = videoIndex => {
+        const inputLabels = {
+            visual: 'canonical first-5-second 5-frame montage embedding only',
+            text: 'canonical first-5-second normalized transcript embedding only',
+            together: 'canonical montage + normalized transcript embedding',
+            concat: 'ordered concatenation of visual + text + together embeddings',
+        };
+        const baseValues = {
+            visual: 61.25,
+            text: 59.5,
+            together: 63.75,
+            concat: 65.5,
+        };
+        return {
+            schema: 'shorts-channel-free-keep-forecasts-v1',
+            model_artifact_path:
+                'buildings/jarvis/predictor-lab/channel-free-keep-model-v1.json',
+            model_artifact_sha256:
+                channelFreeKeepContract.MODEL_SHA256,
+            model_run_id: channelFreeKeepContract.MODEL.runId,
+            selected_signal:
+                channelFreeKeepContract.MODEL.selectedSignal,
+            source: 'live_frozen_channel_free_model_score',
+            channel_information: null,
+            outputs: Object.fromEntries(
+                channelFreeKeepContract.SIGNALS.map(signal => {
+                    const model = channelFreeKeepContract.MODEL.models[signal];
+                    const validation = channelFreeKeepContract.MODEL
+                        .validation[signal].oof_5x5;
+                    const raw = baseValues[signal] + videoIndex * 0.4;
+                    return [signal, {
+                        coordinate_id:
+                            channelFreeKeepContract.COORDINATE_IDS[signal],
+                        signal,
+                        kind: 'channel_free_keep_rate_percent',
+                        unit: 'percent',
+                        percentile_unit: 'percentile_0_100',
+                        input: inputLabels[signal],
+                        channel_information: null,
+                        calibration_scope: 'pooled_global_no_creator',
+                        source: 'live_frozen_channel_free_model_score',
+                        model_artifact_path:
+                            'buildings/jarvis/predictor-lab/channel-free-keep-model-v1.json',
+                        model_artifact_sha256:
+                            channelFreeKeepContract.MODEL_SHA256,
+                        model_run_id:
+                            channelFreeKeepContract.MODEL.runId,
+                        model_generated_at:
+                            channelFreeKeepContract.MODEL.generatedAt,
+                        training_identity_hash:
+                            channelFreeKeepContract.MODEL.training
+                                .identityHash,
+                        selected:
+                            channelFreeKeepContract.MODEL.selectedSignal
+                                === signal,
+                        oof_mae: validation.mae_mean,
+                        oof_spearman: validation.spearman_mean,
+                        percentile_reference_n:
+                            model.percentileReference.length,
+                        available: true,
+                        est: raw,
+                        raw,
+                        pctile: 45 + videoIndex * 1.5,
+                        unavailable_reason: null,
+                    }];
+                })
+            ),
+        };
+    };
     const population = (label, rowCount) => ({
         rowCount,
         uniqueVideoCount: rowCount,
@@ -516,6 +588,8 @@ async function main() {
                 scoredAt: Date.now() - videoIndex * 1000,
                 features,
                 indicators: {},
+                channel_free_keep_forecasts:
+                    channelFreeKeepForecasts(videoIndex),
                 visual_keep_forecast: {
                     coordinate_id: 'shorts.visual-keep-forecast.v1',
                     est: 61.25 + videoIndex * .55,
@@ -1677,7 +1751,7 @@ async function main() {
             [`/api/raw/saved-channel/${channelId}/analysis`]: riskAnalysis,
             '/api/raw/saved-channel-validation': validationArtifact,
             '/api/raw/scorer-contract': {
-                schema: 'shorts-live-score-contract-v2',
+                schema: 'shorts-live-score-contract-v3',
                 revision_fingerprint:
                     fixtureSha256('current-live-revision'),
                 feature_contract_sha256:
@@ -1685,20 +1759,16 @@ async function main() {
                 feature_contract_document_sha256:
                     FEATURE_CONTRACT_DOCUMENT_SHA256,
                 coordinates: {
-                    visual_keep_forecast:
-                        coordinateGovernance.coordinates
-                            .visualKeepForecast.id,
-                    creator_adaptive_keep_forecast:
-                        coordinateGovernance.coordinates
-                            .creatorAdaptiveKeepForecast.id,
+                    channel_free_keep:
+                        channelFreeKeepContract.COORDINATE_IDS,
                 },
-                visual_keep_model_artifact_sha256:
-                    fixtureSha256('visual-keep-model'),
-                visual_keep_model_manifest_sha256:
-                    fixtureSha256('visual-keep-model-manifest'),
-                creator_model_artifact_sha256: fixtureSha256('creator-adaptive-keep-model'),
-                creator_serving_artifact_sha256: fixtureSha256('creator-adaptive-keep-serving'),
-                creator_profiles: ['tyler', 'hafu'],
+                channel_free_model_artifact_sha256:
+                    channelFreeKeepContract.MODEL_SHA256,
+                channel_free_model_run_id:
+                    channelFreeKeepContract.MODEL.runId,
+                channel_free_selected_signal:
+                    channelFreeKeepContract.MODEL.selectedSignal,
+                creator_profiles: [],
             },
             '/api/raw/map': rawVisualMap,
             [`/api/raw/saved-channel/${channelId}/resume`]: { ok: true },
@@ -1785,20 +1855,20 @@ async function main() {
                                 ledgerSha256:
                                     historicalUpgradeScore.score_ledger
                                         .ledger_sha256,
-                                derivedKeepForecasts: {
-                                    visual: {
-                                        coordinateId:
-                                            'shorts.visual-keep-forecast.v1',
-                                        value: 68.75,
-                                        valueUnit: 'percent',
-                                    },
-                                    creator: {
-                                        coordinateId:
-                                            'shorts.creator-adaptive-keep.v1',
-                                        value: 72.25,
-                                        valueUnit: 'percent',
-                                    },
-                                },
+                                channelFreeKeepForecasts:
+                                    Object.fromEntries(
+                                        ['concat', 'visual', 'together', 'text']
+                                            .map(signal => [signal, {
+                                                coordinateId:
+                                                    channelFreeKeepContract
+                                                        .COORDINATE_IDS[signal],
+                                                value:
+                                                    historicalUpgradeScore
+                                                        .channel_free_keep_forecasts
+                                                        .outputs[signal].raw,
+                                                valueUnit: 'percent',
+                                            }])
+                                    ),
                                 predictorEligible: true,
                             },
                             history: [{
@@ -2274,9 +2344,10 @@ window.fetch=function(url,options){
         }
         assert(
             teamScoreActivityText.includes(
-                '21/21 ledger coordinates + 2 keep forecasts'
+                '21/21 ledger coordinates + 4 channel-free keep outputs'
             ),
-            'scored activity must summarize the complete persisted result before it is opened'
+            'scored activity must summarize the complete persisted result '
+                + `before it is opened: ${JSON.stringify(teamScoreActivityText)}`
         );
         await page.locator(
             '[data-labteamactivity="elateamgenerated1"]'
@@ -2346,10 +2417,10 @@ window.fetch=function(url,options){
             {
                 ledgerCoordinates: 21,
                 availableCoordinates: 21,
-                derivedOutputs: 2,
+                derivedOutputs: 4,
                 inspectionReadOnly: 'true',
             },
-            'an unsaved Team score must open the exact canonical 21 + 2 analysis in read-only mode'
+            'an unsaved Team score must open the exact canonical 21 + 4 analysis in read-only mode'
         );
         assert(
             (await teamActivityAnalysis.innerText()).includes(
@@ -2385,10 +2456,17 @@ window.fetch=function(url,options){
         const scoredActivityDetailText =
             await scoredActivityDetail.innerText();
         assert(
-            scoredActivityDetailText.includes('68.75%')
-                && scoredActivityDetailText.includes('72.25%')
+            ['concat', 'visual', 'together', 'text'].every(signal => (
+                scoredActivityDetailText.includes(
+                    `${historicalUpgradeScore.channel_free_keep_forecasts.outputs[signal].raw.toFixed(2)}%`
+                )
+            ))
+                && scoredActivityDetailText.includes(
+                    'Channel-free keep outputs'
+                )
                 && scoredActivityDetailText.includes('Action timeline'),
-            'the owner activity record must retain both forecast values and its complete lifecycle'
+            'the owner activity record must retain all four channel-free '
+                + 'values and its complete lifecycle'
         );
         const teamStoryboardCard = page.locator(
             `[data-labteamstoryboard="${teamStoryboardId}"]`
@@ -2497,14 +2575,14 @@ window.fetch=function(url,options){
             {
                 ledgerCoordinates: 21,
                 availableCoordinates: 21,
-                derivedOutputs: 2,
+                derivedOutputs: 4,
             },
             'the automatically opened analysis must expose the complete '
-                + '21-coordinate ledger and both derived outputs'
+                + '21-coordinate ledger and all four channel-free outputs'
         );
         assert(
             (await automaticScoreAnalysis.innerText()).includes(
-                '21 ledger coordinates + 2 derived keep outputs'
+                '21 stored score coordinates + 4 channel-free keep outputs'
             ),
             'the full result must label the complete analysis explicitly'
         );
@@ -2948,15 +3026,15 @@ window.fetch=function(url,options){
         const upgradedKeepDecision = page.locator(
             '#rtg-exppanel '
                 + '[data-best-keep-predictor]'
-                + '[data-coordinate-id="shorts.creator-adaptive-keep.v1"]'
+                + '[data-coordinate-id="shorts.channel-free.concat.keep"]'
         );
         await upgradedKeepDecision.waitFor();
         assert(
             (await upgradedKeepDecision.innerText()).includes(
-                `${historicalUpgradeScore.creator_adaptive_keep_forecast.raw.toFixed(1)}%`
+                `${historicalUpgradeScore.channel_free_keep_forecasts.outputs.concat.raw.toFixed(1)}%`
             ),
             'the explicit upgrade must reopen the persisted current score '
-                + 'and promote its known-creator forecast'
+                + 'and promote its selected channel-free forecast'
         );
         const enrichSubmission = await page.evaluate(
             () => window.__historicalEnrichSubmission
@@ -3199,7 +3277,7 @@ window.fetch=function(url,options){
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), explicitRescoreEmbedCount, 'opening a saved scored Short must not invoke the embedding endpoint');
         try {
             await page.locator(
-                '#rtg-exppanel [data-visual-keep-forecast]'
+                '#rtg-exppanel [data-channel-free-keep="concat"]'
             ).waitFor();
         } catch (error) {
             console.error(
@@ -3225,54 +3303,45 @@ window.fetch=function(url,options){
             }`
         );
         await page.getByText(
-            '21 stored score coordinates + 2 derived keep forecasts',
+            '21 stored score coordinates + 4 channel-free keep outputs',
             { exact: true }
         ).waitFor();
-        const storedVisualForecast = page.locator('[data-visual-keep-forecast]');
-        await storedVisualForecast.waitFor();
-        const storedVisualForecastText =
-            await storedVisualForecast.innerText();
-        assert(
-            storedVisualForecastText.includes(
-                `${videos[1].visual_keep_forecast.raw.toFixed(1)}%`
-            ),
-            'the ordinary stored score card must show the exact frozen visual '
-                + `raw value: ${storedVisualForecastText}`
-        );
-        assert((await storedVisualForecast.innerText()).includes('shorts.visual-keep-forecast.v1'), 'the ordinary score card must name the canonical ledger coordinate');
-        const storedCreatorForecast = page.locator('[data-creator-adaptive-keep-forecast]');
-        await storedCreatorForecast.waitFor();
-        const storedCreatorForecastText = await storedCreatorForecast.innerText();
-        assert(
-            storedCreatorForecastText.includes(
-                `${videos[1].creator_adaptive_keep_forecast.raw.toFixed(1)}%`
-            ),
-            'the ordinary stored score card must show the exact '
-                + `creator-adaptive raw value: ${storedCreatorForecastText}`
-        );
-        assert(storedCreatorForecastText.includes(`${videos[1].creator_adaptive_keep_forecast.history_only_baseline.toFixed(1)}%`), 'the ordinary stored score card must show the matched history-only baseline');
-        assert(/research only.*not predictor-eligible/i.test(storedCreatorForecastText), 'the ordinary score card must identify the ineligible coordinate as research only');
-        assert(storedCreatorForecastText.includes('shorts.creator-adaptive-keep.v1'), 'the ordinary score card must name the creator-adaptive ledger coordinate');
-        assert(storedCreatorForecastText.includes('canonical visual embedding + canonical together'), 'the derived scalar must disclose both multimodal embedding inputs');
-        assert(storedCreatorForecastText.includes('43,360 prespecified time-ordered candidates'), 'the stored card must disclose the frozen schema-3 registry size');
-        assert.strictEqual(await storedCreatorForecast.getAttribute('data-revision-status'), 'current', 'the creator forecast must prove its live model and scorer revisions match');
-        assert(/future-upload research forecast/i.test(storedCreatorForecastText), 'an arbitrary historical open must not be mislabeled as a blind prequential replay');
+        for (const signal of ['concat', 'visual', 'together', 'text']) {
+            const storedForecast = page.locator(
+                `[data-channel-free-keep="${signal}"]`
+            );
+            await storedForecast.waitFor();
+            const storedForecastText = await storedForecast.innerText();
+            assert(
+                storedForecastText.includes(
+                    `${videos[1].channel_free_keep_forecasts.outputs[signal].raw.toFixed(1)}%`
+                ),
+                `the ordinary stored score card must show the exact ${signal} channel-free value: ${storedForecastText}`
+            );
+            assert(
+                storedForecastText.includes(
+                    `shorts.channel-free.${signal}.keep`
+                ),
+                `the ${signal} card must name its governed coordinate`
+            );
+            assert(
+                storedForecastText.includes('No creator scaling'),
+                `the ${signal} card must disclose that creator scaling is absent`
+            );
+        }
         const currentKeepDecision = page.locator(
             '#rtg-exppanel [data-best-keep-predictor]'
         );
         assert.strictEqual(
             await currentKeepDecision.getAttribute('data-coordinate-id'),
-            'shorts.creator-adaptive-keep.v1',
-            'the score card must promote the strongest available '
-                + 'known-creator keep forecast without minting a new space'
+            'shorts.channel-free.concat.keep',
+            'the score card must promote the selected channel-free signal'
         );
         assert(
             (await currentKeepDecision.innerText()).includes(
-                `${videos[1].creator_adaptive_keep_forecast.raw.toFixed(1)}%`
+                `${videos[1].channel_free_keep_forecasts.outputs.concat.raw.toFixed(1)}%`
             )
         );
-        assert.strictEqual(await storedCreatorForecast.locator('[data-expgo="visual:keep"]').count(), 1, 'the multimodal scalar must expose its visual source plane');
-        assert.strictEqual(await storedCreatorForecast.locator('[data-expgo="together:keep"]').count(), 1, 'the multimodal scalar must expose its together source plane');
         const lineageText = await page.locator('#rtg-exppanel').innerText();
         assert(lineageText.includes("exact raw-map video IDs that join to a finite Tyler stayed-to-watch label"), 'score detail must expose the keep-axis fitting population');
         assert(lineageText.includes('Public Shorts embedding corpus'), 'score detail must expose the public-axis fitting population');
@@ -3695,10 +3764,25 @@ window.fetch=function(url,options){
             1,
             'Experiment Lab must not hide a canonical Shorts Quant raw-view control'
         );
-        const rawMapForecast = page.locator('[data-visual-keep-raw-map-value]');
-        await rawMapForecast.waitFor();
-        assert((await rawMapForecast.innerText()).includes(`${visualKeepVideo.visual_keep_forecast.raw.toFixed(1)}%`), 'clicking a validation point must open its normal embedding with the same raw ledger value');
-        assert((await rawMapForecast.innerText()).includes('shorts.visual-keep-forecast.v1'), 'the normal map must name the forecast coordinate rather than inventing another embedding');
+        for (const signal of ['concat', 'visual', 'together', 'text']) {
+            const rawMapForecast = page.locator(
+                `[data-channel-free-raw-map-value="${signal}"]`
+            );
+            await rawMapForecast.waitFor();
+            const rawMapForecastText = await rawMapForecast.innerText();
+            assert(
+                rawMapForecastText.includes(
+                    `${visualKeepVideo.channel_free_keep_forecasts.outputs[signal].raw.toFixed(1)}%`
+                ),
+                `opening normal geometry must preserve the ${signal} channel-free value`
+            );
+            assert(
+                rawMapForecastText.includes(
+                    `shorts.channel-free.${signal}.keep`
+                ),
+                `normal geometry must name the ${signal} channel-free coordinate`
+            );
+        }
         const selectedRawMapPoint = page.locator(
             `circle[data-rawid="${visualKeepVideoId}"]`
         );

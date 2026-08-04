@@ -1,7 +1,7 @@
 {
  "schema": "channel-free-keep-signal-v2",
  "runId": "7faaaf9f53d57d2c",
- "generatedAt": "2026-08-03T23:41:08+00:00",
+ "generatedAt": "2026-08-04T01:17:44+00:00",
  "generator": "predictor-lab/run_channel_free_signal.py",
  "question": "Best single signal, identical across all channels (no per-channel offsets, refits, or centering), predicting raw stayedToWatch keep %, minimizing MAE.",
  "protocol": {
@@ -376,6 +376,18 @@
   "path": "predictor-lab/channel-free-scores.json",
   "runId": "7faaaf9f53d57d2c",
   "rows": 584
+ },
+ "deploymentArtifact": {
+  "path": "predictor-lab/channel-free-keep-model-v1.json",
+  "sha256": "c579a5fcfcbe5d6c36a96bd1c01667d27d78060d148376962c30a6d4271a38ed",
+  "runId": "7faaaf9f53d57d2c",
+  "signals": [
+   "visual",
+   "text",
+   "together",
+   "concat"
+  ],
+  "selected": "concat"
  },
  "honestLimitations": [
   "No forward-time holdout: folds are random over publication time.",

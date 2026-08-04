@@ -856,10 +856,19 @@ async function main() {
                 },
             });
             cloud.resetOperations();
-            const visualKeepForecast = {
-                coordinate_id: 'shorts.visual-keep-forecast.v1',
-                raw: 73.25,
-                est: 73.25,
+            const channelFreeKeepForecasts = {
+                schema: 'shorts-channel-free-keep-forecasts-v1',
+                outputs: Object.fromEntries(
+                    ['visual', 'text', 'together', 'concat'].map(
+                        (signal, index) => [signal, {
+                            coordinate_id:
+                                `shorts.channel-free.${signal}.keep`,
+                            raw: 70 + index,
+                            est: 70 + index,
+                            available: true,
+                        }]
+                    )
+                ),
             };
             const reply = await dispatch(
                 runtime,
@@ -877,10 +886,8 @@ async function main() {
                     score_ledger_sha256:
                         fixture.record.score_ledger.ledger_sha256,
                     novelty_provenance: null,
-                    visual_keep_forecast: visualKeepForecast,
-                    creator_adaptive_keep_forecast: null,
-                    creator_adaptive_keep_forecast_error:
-                        'fixture profile unavailable',
+                    channel_free_keep_forecasts:
+                        channelFreeKeepForecasts,
                     channels: fixture.record.channels,
                     emb_preview: fixture.record.emb_preview,
                     input_manifest: fixture.record.input_manifest,
@@ -905,8 +912,13 @@ async function main() {
                 cloud.objects.get(fixture.recordKey).toString('utf8')
             );
             assert.deepStrictEqual(
-                persisted.visual_keep_forecast,
-                visualKeepForecast
+                persisted.channel_free_keep_forecasts,
+                channelFreeKeepForecasts
+            );
+            assert.strictEqual(persisted.visual_keep_forecast, null);
+            assert.strictEqual(
+                persisted.creator_adaptive_keep_forecast,
+                null
             );
             assert.notStrictEqual(
                 persisted.score_record_sha256,
@@ -1267,28 +1279,33 @@ async function main() {
             'async function openSaved(id, options)',
                 'function savedDetail()'
             );
-            assert.match(
+            const resolveSavedSource = sourceSlice(
                 retentionUiSource,
-                /Opening a saved hook is read-only/
+                'async function resolveSavedScoreQueueEntry(entry, requestGeneration)',
+                'function drainSavedScoreQueue()'
             );
             assert.match(
-                openSavedSource,
+                retentionUiSource,
+                /loaded read-only\. No value was recalculated/
+            );
+            assert.match(
+                resolveSavedSource,
                 /exact persisted historical/
             );
             assert.match(
-                openSavedSource,
+                resolveSavedSource,
                 /it was not silently recalculated/
             );
             assert.doesNotMatch(
-                openSavedSource,
+                openSavedSource + resolveSavedSource,
                 /\/api\/raw\/hook-enrich/
             );
             assert.match(
-                openSavedSource,
+                resolveSavedSource,
                 /new transient score for an unscored/
             );
             assert.match(
-                openSavedSource,
+                resolveSavedSource,
                 /original record was not changed/
             );
         }

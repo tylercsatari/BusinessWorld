@@ -88,8 +88,8 @@ const savedChannelIndexContract = require(
 const visualKeepForecastContract = require(
     './buildings/jarvis/visual-keep-forecast-contract'
 );
-const creatorAdaptiveKeepForecastContract = require(
-    './buildings/jarvis/creator-adaptive-keep-forecast-contract'
+const channelFreeKeepForecastContract = require(
+    './buildings/jarvis/channel-free-keep-forecast-contract'
 );
 const storyboardContract = require(
     './buildings/jarvis/storyboard-contract'
@@ -2034,86 +2034,21 @@ function validateRawScoreResult(result, options = {}) {
     if (!result.emb_preview || !validPreview(result.emb_preview.visual)) warnings.push('visual embedding');
     if (!result.emb_preview || !validPreview(result.emb_preview.together)) warnings.push('combined embedding');
     if (!result.indicators || !Object.keys(result.indicators).length) warnings.push('indicator outputs');
-    const visualKeepForecast = result.visual_keep_forecast;
-    const visualKeepManifestRevision = result.input_manifest
-        && result.input_manifest.scorer_revisions
-        && result.input_manifest.scorer_revisions.artifacts
-        && result.input_manifest.scorer_revisions.artifacts[
-            'raw/predictor-lab/visual-keep-model-v1.manifest.json'
-        ];
-    const visualKeepAudit =
-        visualKeepForecastContract.validateVisualKeepForecast(
-            visualKeepForecast,
-            {
-                coordinateId:
-                    quantCoordinateGovernance.coordinates
-                        .visualKeepForecast.id,
-                modelManifestSha256:
-                    visualKeepManifestRevision
-                    && visualKeepManifestRevision.sha256,
-                featureContractVersion:
-                    savedChannelFeatureContract.version,
-                featureContractSha256:
-                    savedChannelFeatureContractDocumentSha256,
-            }
-        );
-    if (!visualKeepAudit.valid) {
-        warnings.push('frozen visual keep forecast');
-    }
-    const requestedCreatorProfile = String(
-        result.input_manifest && result.input_manifest.creator_profile || ''
-    ).trim();
-    const creatorForecast = result.creator_adaptive_keep_forecast;
-    const scorerArtifacts = result.input_manifest
-        && result.input_manifest.scorer_revisions
-        && result.input_manifest.scorer_revisions.artifacts || {};
-    const creatorModelManifestRevision = scorerArtifacts[
-        'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json'
-    ];
-    const creatorServingManifestRevision = scorerArtifacts[
-        'raw/predictor-lab/creator-adaptive-keep-serving-v1.manifest.json'
-    ];
-    const creatorForecastAudit = requestedCreatorProfile
-        ? creatorAdaptiveKeepForecastContract
-            .validateCreatorAdaptiveKeepForecast(
-                creatorForecast,
+    const channelFreeAudit =
+        channelFreeKeepForecastContract
+            .validateChannelFreeKeepForecasts(
+                result.channel_free_keep_forecasts,
                 {
-                    coordinateId:
-                        quantCoordinateGovernance.coordinates
-                            .creatorAdaptiveKeepForecast.id,
-                    profileAccount: requestedCreatorProfile,
-                    modelManifestSha256:
-                        creatorModelManifestRevision
-                        && creatorModelManifestRevision.sha256,
-                    servingManifestSha256:
-                        creatorServingManifestRevision
-                        && creatorServingManifestRevision.sha256,
-                    featureContractVersion:
-                        savedChannelFeatureContract.version,
-                    featureContractSha256:
-                        savedChannelFeatureContractDocumentSha256,
+                    requireText: !!(
+                        result.input_manifest
+                        && result.input_manifest.transcript_used
+                    ),
                 }
-            )
-        : null;
-    if (
-        requestedCreatorProfile
-        && (!creatorForecastAudit || !creatorForecastAudit.valid)
-    ) {
-        warnings.push(
-            'creator-adaptive keep forecast'
-            + (
-                creatorForecastAudit
-                && creatorForecastAudit.errors.length
-                    ? ` (${creatorForecastAudit.errors.join('; ').slice(0, 300)})`
-                    : ''
-            )
-            + (result.creator_adaptive_keep_forecast_error
-                ? ` (${String(result.creator_adaptive_keep_forecast_error).slice(0, 140)})`
-                : '')
-        );
-    } else if (!requestedCreatorProfile && creatorForecast) {
-        warnings.push(
-            'unexpected creator-adaptive forecast without an explicit profile'
+            );
+    if (!channelFreeAudit.valid) {
+        fatal.push(
+            'channel-free keep outputs: '
+            + channelFreeAudit.errors.join('; ')
         );
     }
     if (!result.channels || !validPlacement(result.channels.visual)) warnings.push('visual map placement');
@@ -2140,7 +2075,7 @@ function validateRawScoreResult(result, options = {}) {
         complete: warnings.length === 0,
         warnings: [...new Set(warnings)],
         note: (
-            'Optional forecasts, denormalized caches, previews, and map '
+            'Channel-free outputs, denormalized caches, previews, and map '
             + 'geometry never replace or suppress canonical ledger scalars.'
         ),
     };
@@ -3158,14 +3093,18 @@ function experimentLabScoreActivityEvidence(result) {
             availableCoordinateCount: validation.entries.filter(
                 entry => entry && entry.available === true
             ).length,
-            derivedKeepForecasts: {
-                visual: compactExperimentLabForecast(
-                    result.visual_keep_forecast
-                ),
-                creator: compactExperimentLabForecast(
-                    result.creator_adaptive_keep_forecast
-                ),
-            },
+            channelFreeKeepForecasts: Object.fromEntries(
+                channelFreeKeepForecastContract.DISPLAY_ORDER.map(
+                    signal => [
+                        signal,
+                        compactExperimentLabForecast(
+                            result.channel_free_keep_forecasts
+                            && result.channel_free_keep_forecasts.outputs
+                            && result.channel_free_keep_forecasts.outputs[signal]
+                        ),
+                    ]
+                )
+            ),
             predictorEligible: result.predictor_eligible !== false,
         },
     };
@@ -11293,9 +11232,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         ? body.non_authoritative_geometry
                         : null,
                 novelty_provenance: (body.novelty_provenance && typeof body.novelty_provenance === 'object') ? body.novelty_provenance : null,
-                visual_keep_forecast: (body.visual_keep_forecast && typeof body.visual_keep_forecast === 'object') ? body.visual_keep_forecast : null,
-                creator_adaptive_keep_forecast: (body.creator_adaptive_keep_forecast && typeof body.creator_adaptive_keep_forecast === 'object') ? body.creator_adaptive_keep_forecast : null,
-                creator_adaptive_keep_forecast_error: body.creator_adaptive_keep_forecast_error == null ? null : String(body.creator_adaptive_keep_forecast_error).slice(0, 500),
+                channel_free_keep_forecasts: (body.channel_free_keep_forecasts && typeof body.channel_free_keep_forecasts === 'object') ? body.channel_free_keep_forecasts : null,
+                visual_keep_forecast: null,
+                creator_adaptive_keep_forecast: null,
+                creator_adaptive_keep_forecast_error: null,
                 channels: (body.channels && typeof body.channels === 'object') ? body.channels : null,
                 emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : null,
                 input_manifest: (body.input_manifest && typeof body.input_manifest === 'object') ? body.input_manifest : null,
@@ -11463,23 +11403,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     && typeof body.novelty_provenance === 'object'
                         ? body.novelty_provenance
                         : null,
-                visual_keep_forecast:
-                    body.visual_keep_forecast
-                    && typeof body.visual_keep_forecast === 'object'
-                        ? body.visual_keep_forecast
+                channel_free_keep_forecasts:
+                    body.channel_free_keep_forecasts
+                    && typeof body.channel_free_keep_forecasts === 'object'
+                        ? body.channel_free_keep_forecasts
                         : null,
-                creator_adaptive_keep_forecast:
-                    body.creator_adaptive_keep_forecast
-                    && typeof body.creator_adaptive_keep_forecast
-                        === 'object'
-                        ? body.creator_adaptive_keep_forecast
-                        : null,
-                creator_adaptive_keep_forecast_error:
-                    body.creator_adaptive_keep_forecast_error == null
-                        ? null
-                        : String(
-                            body.creator_adaptive_keep_forecast_error
-                        ).slice(0, 500),
+                visual_keep_forecast: null,
+                creator_adaptive_keep_forecast: null,
+                creator_adaptive_keep_forecast_error: null,
                 channels:
                     body.channels
                     && typeof body.channels === 'object'

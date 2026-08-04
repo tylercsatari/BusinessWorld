@@ -569,9 +569,18 @@ assert(
 );
 assert(
     serverSource.includes(
-        "'computed:raw/saved-channel-validation',\n            -1,"
-    ),
-    'saved-channel validation must not reuse a release-blind TTL cache'
+        'async function savedChannelValidationCacheKey()'
+    )
+        && serverSource.includes(
+            '`computed:raw/saved-channel-validation:${sha}`'
+        )
+        && serverSource.includes(
+            'const validationCacheKey = await savedChannelValidationCacheKey();'
+        )
+        && serverSource.includes(
+            'validationCacheKey,\n            6 * 3600e3,'
+        ),
+    'saved-channel validation cache must be keyed by the immutable release SHA'
 );
 assert(
     serverSource.includes(

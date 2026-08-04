@@ -122,44 +122,50 @@ includes(shorts, 'expected_score_record_sha256:', 'the explicit saved-video upgr
 includes(shorts, "rec.transcript || rec.text || ''", 'the explicit re-score must preserve transcripts from every historical schema');
 includes(shorts, "'/api/raw/saved-montage/' + id", 'the explicit re-score must attempt durable legacy montage recovery even when old metadata omitted hasMontage');
 includes(shorts, 'data-best-keep-predictor', 'every score card must surface the strongest available keep-rate readout');
-assert.strictEqual(
-    (
-        server.match(
-            /featureContractSha256:\s*savedChannelFeatureContractDocumentSha256/g
-        ) || []
-    ).length,
-    2,
-    'both derived keep-forecast contracts must validate against the exact '
-        + 'feature-contract document release rather than the separate '
-        + 'semantic identity hash'
+const rawValidationPath = server.slice(
+    server.indexOf('function validateRawScoreResult('),
+    server.indexOf('// Most recent raw_upload.py run')
 );
-const keepForecastReadPath = shorts.slice(
-    shorts.indexOf('function visualKeepForecastOf(up)'),
+includes(
+    rawValidationPath,
+    'validateChannelFreeKeepForecasts(',
+    'every fresh scorer response must validate the four channel-free outputs'
+);
+includes(
+    rawValidationPath,
+    "fatal.push(\n            'channel-free keep outputs: '",
+    'an incomplete or mismatched channel-free output set must fail closed'
+);
+excludes(
+    rawValidationPath,
+    'validateCreatorAdaptiveKeepForecast(',
+    'the retired creator-adaptive output must not run on new scores'
+);
+excludes(
+    rawValidationPath,
+    'validateVisualKeepForecast(',
+    'the retired frozen visual output must not run on new scores'
+);
+const channelFreeReadPath = shorts.slice(
+    shorts.indexOf('function channelFreeKeepForecastsOf(up)'),
     shorts.indexOf('function savedVisualKeepCoordinateSnapshot')
 );
+for (const signal of ['visual', 'text', 'together', 'concat']) {
+    includes(
+        channelFreeReadPath,
+        signal,
+        `the score reader must recognize channel-free ${signal}`
+    );
+}
 includes(
-    keepForecastReadPath,
-    'live.feature_contract_document_sha256',
-    'the visual keep forecast must use the document lineage recorded by its model release'
-);
-excludes(
-    keepForecastReadPath,
-    'live.feature_contract_sha256',
-    'the visual keep forecast must not compare a document-bound model to the semantic identity hash'
-);
-const creatorForecastReadPath = shorts.slice(
-    shorts.indexOf('function creatorAdaptiveKeepForecastOf(up)'),
-    shorts.indexOf('function creatorAdaptiveForecastPresentation')
+    channelFreeReadPath,
+    "value.source !== 'live_frozen_channel_free_model_score'",
+    'the UI must verify the frozen channel-free source identity'
 );
 includes(
-    creatorForecastReadPath,
-    'manifest.feature_contract_document_sha256',
-    'the creator-adaptive forecast must use the document lineage recorded by its model release'
-);
-excludes(
-    creatorForecastReadPath,
-    'manifest.feature_contract_sha256',
-    'the creator-adaptive forecast must not compare a document-bound model to the semantic identity hash'
+    shorts,
+    'Channel-free keep · no creator profile or scale',
+    'the score UI must clearly disclose that creator scaling is absent'
 );
 includes(server, 'replacement score does not bind the canonical ledger SHA', 'saved-video upgrades must bind the exact scorer ledger before replacing evidence');
 includes(server, 'surfaceSourceErrors: true', 'map and status routes must surface backing-storage failures');
@@ -194,7 +200,7 @@ assert(activeLongScores === 0, `opening Long Quant detail surfaces must never cr
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
 includes(index, 'jarvis-upload-utils.js?v=canonical-source-v2', 'upload canonicalization bundle cache key must be bumped');
-includes(index, 'jarvis-retention.js?v=experiment-lab-surface-v5', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=channel-free-score-v1', 'Shorts bundle cache key must be bumped');
 includes(index, 'storyboard-workbench.js?v=4', 'the advanced storyboard workbench bundle must load before Shorts');
 includes(index, 'experimentlab-ui.js?v=7', 'Experiment Lab score handoff bundle must be cache-busted');
 includes(index, 'experimentlab.css?v=9', 'Experiment Lab score presentation styles must be cache-busted');

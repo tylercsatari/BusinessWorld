@@ -123,10 +123,15 @@ assert.deepStrictEqual(
     'validation must expose the unchanged canonical 21-feature scorer contract'
 );
 assert.strictEqual(validation.contract.version, 10);
-assert.match(
-    serverSource,
-    /'computed:raw\/saved-channel-validation',\s*-1,\s*buildSavedChannelValidationBuffer/,
-    'saved-channel validation must bypass time-based response reuse and defer to its exact source fingerprint'
+assert(
+    serverSource.includes('async function savedChannelValidationCacheKey()')
+        && serverSource.includes(
+            '`computed:raw/saved-channel-validation:${sha}`'
+        )
+        && serverSource.includes(
+            'const validationCacheKey = await savedChannelValidationCacheKey();'
+        ),
+    'saved-channel validation must key response reuse to its exact release fingerprint'
 );
 assert.strictEqual(validation.contract.pipeline.embeddingModel, 'gemini-embedding-2');
 assert.strictEqual(

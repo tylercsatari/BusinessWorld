@@ -43,6 +43,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_predictor_lab as P  # exact same loaders as the predictor lab
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[2]
+MODEL_ARTIFACT = HERE / "channel-free-keep-model-v1.json"
 ALPHAS = [1.0, 10.0, 100.0, 1000.0, 10000.0]
 SEEDS = [11, 22, 33, 44, 55]
 MODALITIES = ["visual", "text", "together"]
@@ -79,6 +81,36 @@ def metric_row(y: np.ndarray, p: np.ndarray) -> dict:
     return {"n": int(len(y)), "mae": round(mae, 3),
             "spearman": None if rho is None else round(rho, 3),
             "r2": None if r2 is None else round(r2, 3)}
+
+
+def deployment_model(
+    name: str,
+    X: np.ndarray,
+    y: np.ndarray,
+) -> dict:
+    """Fit the frozen score-time model after all validation choices are locked."""
+    alpha = inner_alpha(X, y, 101)
+    model = Ridge(alpha=alpha).fit(X, y)
+    fitted = np.clip(model.predict(X), 0, 100)
+    return {
+        "coordinateId": f"shorts.channel-free.{name}.keep",
+        "signal": name,
+        "label": SIGNAL_LABELS[name],
+        "inputDimensions": int(X.shape[1]),
+        "ridgeAlpha": float(alpha),
+        "intercept": float(model.intercept_),
+        "coefficients": [float(value) for value in model.coef_],
+        "outputTransform": "clip(linear_prediction, 0, 100)",
+        "outputBounds": [0, 100],
+        "percentileReference": [
+            round(float(value), 8)
+            for value in np.sort(fitted)
+        ],
+        "percentileReferenceMeaning": (
+            "Empirical percentile among final-fit predictions for the complete "
+            "584-video training population; it is a corpus position, not held-out evidence."
+        ),
+    }
 
 
 def main() -> int:
@@ -157,6 +189,65 @@ def main() -> int:
     baseline_mae = round(float(np.mean(base)), 3)
     selected = min(SIGNALS, key=lambda s: results[s]["oof_5x5"]["mae_mean"])
 
+    producer_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    feature_contract_path = (
+        ROOT / "buildings" / "jarvis" / "saved-channel-feature-contract.json"
+    )
+    deployment_models = {
+        name: deployment_model(name, feats[name], y)
+        for name in SIGNALS
+    }
+    model_artifact = {
+        "schema": "channel-free-keep-model-v1",
+        "schemaVersion": 1,
+        "runId": run_id,
+        "generatedAt": generated,
+        "generator": "predictor-lab/run_channel_free_signal.py",
+        "producerSourceSha256": producer_sha256,
+        "featureContractDocumentSha256": hashlib.sha256(
+            feature_contract_path.read_bytes()
+        ).hexdigest(),
+        "embedding": {
+            "model": "gemini-embedding-2",
+            "dimensionsPerModality": 1536,
+            "normalization": (
+                "L2-normalize visual, text, and together independently; concat is "
+                "the ordered concatenation [visual, text, together] without a second "
+                "global normalization."
+            ),
+            "concatOrder": MODALITIES,
+        },
+        "training": {
+            "rows": len(eligible),
+            "identityHash": identity,
+            "target": "keep_rate (stayedToWatch, percent)",
+            "channelInformation": None,
+            "selectionBoundary": (
+                "All candidate definitions and alpha search were fixed before this "
+                "final fit. These formulas use every eligible training row and are "
+                "deployment scores, not held-out predictions for historical rows."
+            ),
+        },
+        "signals": list(SIGNALS),
+        "selectedSignal": selected,
+        "models": deployment_models,
+        "validation": {
+            name: results[name]
+            for name in SIGNALS
+        },
+        "limitations": [
+            "The final-fit score is not held out for a video in the training corpus.",
+            "Absolute keep level did not transfer reliably to every unseen creator; use the corpus percentile as the portable interpretation.",
+            "No creator ID, creator baseline, per-channel offset, or post-upload outcome enters score-time inference.",
+        ],
+    }
+    model_bytes = (
+        json.dumps(model_artifact, separators=(",", ":"), ensure_ascii=False)
+        + "\n"
+    ).encode("utf-8")
+    MODEL_ARTIFACT.write_bytes(model_bytes)
+    model_sha256 = hashlib.sha256(model_bytes).hexdigest()
+
     acct_counts = {a: int((acct == a).sum()) for a in np.unique(acct)}
     signal_artifact = {
         "schema": "channel-free-keep-signal-v2",
@@ -193,6 +284,13 @@ def main() -> int:
                            "selectionRule": "argmin mean OOF MAE across the declared candidate universe"},
         "scoresArtifact": {"path": "predictor-lab/channel-free-scores.json", "runId": run_id,
                            "rows": len(eligible)},
+        "deploymentArtifact": {
+            "path": "predictor-lab/channel-free-keep-model-v1.json",
+            "sha256": model_sha256,
+            "runId": run_id,
+            "signals": list(SIGNALS),
+            "selected": selected,
+        },
         "honestLimitations": [
             "No forward-time holdout: folds are random over publication time.",
             "Unseen-channel ABSOLUTE error is dominated by the unknown channel baseline; only the "
@@ -230,7 +328,10 @@ def main() -> int:
                  for i, r in enumerate(eligible)],
     }
     (HERE / "channel-free-scores.json").write_text(json.dumps(scores_artifact) + "\n")
-    print(f"wrote channel-free-signal.json + channel-free-scores.json (runId {run_id}, selected {selected})")
+    print(
+        "wrote channel-free-signal.json + channel-free-scores.json + "
+        f"channel-free-keep-model-v1.json (runId {run_id}, selected {selected})"
+    )
     return 0
 
 

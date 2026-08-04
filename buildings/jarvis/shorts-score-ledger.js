@@ -343,6 +343,32 @@ function scoreRecordBindingPayload(record) {
                 inputManifest.query_input || null,
         } : null,
     };
+    const channelFreePresent = !!(
+        record
+        && Object.prototype.hasOwnProperty.call(
+            record,
+            'channel_free_keep_forecasts'
+        )
+        || nestedScore
+        && Object.prototype.hasOwnProperty.call(
+            nestedScore,
+            'channel_free_keep_forecasts'
+        )
+    );
+    if (scoreDomain === 'shorts' && channelFreePresent) {
+        payload.schema = 'shorts-score-record-binding-v4';
+        delete payload.visual_keep_forecast;
+        delete payload.creator_adaptive_keep_forecast;
+        payload.channel_free_keep_forecasts = (
+            record
+            && Object.prototype.hasOwnProperty.call(
+                record,
+                'channel_free_keep_forecasts'
+            )
+        )
+            ? record.channel_free_keep_forecasts
+            : nestedScore.channel_free_keep_forecasts;
+    }
     if (scoreDomain === 'longquant') {
         payload.schema = 'score-record-binding-v6';
         payload.score_domain = 'longquant';
