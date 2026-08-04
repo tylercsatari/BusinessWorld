@@ -2369,7 +2369,7 @@ window.fetch=function(url,options){
     return nativeFetch(url,options);
 };
 </script>
-<script src="/buildings/jarvis/storyboard-workbench.js"></script><script src="/buildings/jarvis/jarvis-retention.js"></script><script src="/buildings/experimentlab/experimentlab-ui.js"></script><script>BuildingRegistry.get('Experiment Lab').open(document.getElementById('root'));</script></body></html>`, { waitUntil: 'networkidle' });
+<script src="/buildings/jarvis/storyboard-style-presets.js"></script><script src="/buildings/jarvis/storyboard-workbench.js"></script><script src="/buildings/jarvis/jarvis-retention.js"></script><script src="/buildings/experimentlab/experimentlab-ui.js"></script><script>BuildingRegistry.get('Experiment Lab').open(document.getElementById('root'));</script></body></html>`, { waitUntil: 'networkidle' });
 
         await page.getByRole('heading', { name: 'Experiment Lab' }).waitFor();
         await page.getByText('Owner workspace', { exact: true }).waitFor();
@@ -3008,6 +3008,13 @@ window.fetch=function(url,options){
             'the integrated storyboard must expose the canonical Shorts '
                 + 'score action'
         );
+        assert.strictEqual(
+            await integratedStoryboard.locator(
+                '[data-sb-animation-style]'
+            ).count(),
+            1,
+            'Experiment Lab must expose the shared text-only animation preset'
+        );
         const storyboardBrief = integratedStoryboard.locator(
             '[data-sb-brief]'
         );
@@ -3054,6 +3061,15 @@ window.fetch=function(url,options){
             ['upload', 'build', 'refine'],
             'Experiment Lab must expose the shared upload and AI entry '
                 + 'paths before their common refinement surface'
+        );
+        await integratedStoryboard.locator('.sb-style-toggle').click();
+        assert.strictEqual(
+            await integratedStoryboard.locator(
+                '[data-sb-animation-style]'
+            ).isChecked(),
+            true,
+            'the animation switch must work through the shared Experiment '
+                + 'event boundary'
         );
         assert.strictEqual(
             await integratedStoryboard.evaluate(element => (

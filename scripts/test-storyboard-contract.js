@@ -22,6 +22,9 @@ const {
 const {
     scoreRecordBindingSha256,
 } = require('../buildings/jarvis/shorts-score-ledger');
+const {
+    ANIMATION_STYLE_ID,
+} = require('../buildings/jarvis/storyboard-style-presets');
 
 const sha = character => character.repeat(64);
 const media = (character, extension = 'jpg', byteLength = 1024) => ({
@@ -113,6 +116,22 @@ assert.strictEqual(document.score.score_input.binding_sha256, scoreInput.binding
 assert.strictEqual(document.score.score_montage.sha256, sha('d'));
 assert.deepStrictEqual(document.score.indicators, { fixture: true });
 assert(validateDocument(document).valid, 'bound document must validate');
+assert.strictEqual(
+    Object.prototype.hasOwnProperty.call(document, 'stylePreset'),
+    false,
+    'legacy photographic storyboards must retain their canonical shape'
+);
+const animatedDocument = bindDocument({
+    ...document,
+    id: 'sbanimated001',
+    stylePreset: ANIMATION_STYLE_ID,
+});
+assert.strictEqual(animatedDocument.stylePreset, ANIMATION_STYLE_ID);
+assert(
+    validateDocument(animatedDocument).valid,
+    'the animation style must persist inside the immutable storyboard revision'
+);
+assert.notStrictEqual(animatedDocument.revision, document.revision);
 assert.strictEqual(
     Object.prototype.hasOwnProperty.call(
         document.panels[0],

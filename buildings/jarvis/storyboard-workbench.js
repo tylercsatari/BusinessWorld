@@ -9,6 +9,11 @@
     const MAX_CANDIDATES = 12;
     const MAX_REFERENCES = 8;
     const DEFAULT_MODEL = 'gpt-image-2';
+    const STYLE_PRESETS = window.JarvisStoryboardStylePresets || {};
+    const DEFAULT_STYLE_ID =
+        STYLE_PRESETS.DEFAULT_STYLE_ID || 'photographic';
+    const ANIMATION_STYLE_ID =
+        STYLE_PRESETS.ANIMATION_STYLE_ID || 'stylized-3d-explainer-v1';
     const MODEL_REFERENCE_LIMITS = {
         'gpt-image-2': 8,
         'flux-2-pro': 8,
@@ -85,6 +90,7 @@
                 hookText: '',
                 editPrompt: '',
                 model: DEFAULT_MODEL,
+                stylePreset: DEFAULT_STYLE_ID,
                 generationMode: 'composite',
                 selectedPanel: 0,
                 panels: Array.from({ length: PANEL_COUNT }, (_, index) => blankPanel(index)),
@@ -154,6 +160,7 @@
                 || item.brief.trim()
                 || item.hookText.trim()
                 || item.references.length
+                || item.stylePreset !== DEFAULT_STYLE_ID
                 || item.composite
                 || item.panels.some(entry => entry.image || entry.prompt)
             )
@@ -165,6 +172,7 @@
             && !item.brief
             && !item.hookText
             && !item.references.length
+            && item.stylePreset === DEFAULT_STYLE_ID
             && !item.composite
             && !item.panels.some(entry => entry.image || entry.prompt)
         );
@@ -692,6 +700,11 @@
                             </div>
                             <div class="sb-generation-bar">
                                 <label class="sb-model-picker"><span>Image model</span><select data-sb-model>${MODEL_OPTIONS.map(([value, label]) => `<option value="${value}" ${current.model === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+                                <label class="sb-style-toggle" title="Render all five frames with the consistent 3D animation preset">
+                                    <input type="checkbox" role="switch" data-sb-animation-style ${current.stylePreset === ANIMATION_STYLE_ID ? 'checked' : ''}>
+                                    <span class="sb-style-toggle-track" aria-hidden="true"><span></span></span>
+                                    <strong>Animation</strong>
+                                </label>
                                 <span class="sb-geometry-lock" title="Five contiguous equal-width columns">5 × 9:16 · 45:16</span>
                                 <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate 5-frame panel</button>
                             </div>
@@ -1173,6 +1186,7 @@
             const result = await runJob('/api/storyboards/generate', {
                 async: true,
                 model: current.model,
+                stylePreset: current.stylePreset,
                 brief: current.brief,
                 hookText: '',
                 panels: current.panels.map(entry => entry.prompt),
@@ -1318,6 +1332,7 @@
                 const result = await runJob('/api/storyboards/panel', {
                     async: true,
                     model: current.model,
+                    stylePreset: current.stylePreset,
                     prompt: selected.image && selected.strokes.length
                         ? `${prompt}. Follow the drawn markup as an edit guide, then remove all markup from the finished image.`
                         : prompt,
@@ -1613,6 +1628,7 @@
                 brief: current.brief,
                 hookText: current.hookText,
                 model: current.model,
+                stylePreset: current.stylePreset,
                 generationMode: current.generationMode,
                 selectedPanel: current.selectedPanel,
                 composite: current.composite,
@@ -1779,6 +1795,11 @@
             current.model = MODEL_OPTIONS.some(
                 ([value]) => value === record.model
             ) ? record.model : DEFAULT_MODEL;
+            current.stylePreset = (
+                record.stylePreset === ANIMATION_STYLE_ID
+                    ? ANIMATION_STYLE_ID
+                    : DEFAULT_STYLE_ID
+            );
             current.generationMode = record.generationMode || 'composite';
             current.selectedPanel = Math.max(0, Math.min(4, Number(record.selectedPanel) || 0));
             current.composite = record.composite || null;
@@ -2646,6 +2667,14 @@
             if (state.busy) return true;
             if (target.hasAttribute('data-sb-model')) {
                 candidate().model = target.value;
+                touchCandidate(candidate());
+                paint();
+                return true;
+            }
+            if (target.hasAttribute('data-sb-animation-style')) {
+                candidate().stylePreset = target.checked
+                    ? ANIMATION_STYLE_ID
+                    : DEFAULT_STYLE_ID;
                 touchCandidate(candidate());
                 paint();
                 return true;

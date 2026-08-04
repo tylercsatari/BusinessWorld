@@ -48,6 +48,13 @@ async function main() {
         path.join(ROOT, 'server.js'),
         'utf8'
     );
+    const styleSource = fs.readFileSync(
+        path.join(
+            ROOT,
+            'buildings/jarvis/storyboard-style-presets.js'
+        ),
+        'utf8'
+    );
     assert(
         retentionSource.includes('scoreCandidate: scoreStoryboardCandidate'),
         'workbench must use the canonical Shorts scoring callback'
@@ -82,10 +89,21 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=10')
-            && indexSource.indexOf('storyboard-workbench.js?v=10')
+        indexSource.includes('storyboard-workbench.js?v=11')
+            && indexSource.indexOf('storyboard-style-presets.js?v=1')
+            < indexSource.indexOf('storyboard-workbench.js?v=11')
+            && indexSource.indexOf('storyboard-workbench.js?v=11')
             < indexSource.indexOf('jarvis-retention.js?v='),
-        'the storyboard module must load before the Shorts integration'
+        'the shared style contract and storyboard module must load before '
+            + 'the Shorts integration'
+    );
+    assert(
+        styleSource.includes('FIVE-FRAME CONTINUITY LOCK')
+            && serverSource.includes(
+                "require(\n    './buildings/jarvis/storyboard-style-presets'"
+            )
+            && serverSource.includes('styleContract: style.promptContract'),
+        'the server must inject the versioned text-only style contract'
     );
     assert(
         serverSource.includes("'gpt-image-2':")
@@ -167,6 +185,12 @@ async function main() {
             body { color: white; font: 14px Arial, sans-serif; }
             #app { margin: 0 auto; max-width: 1180px; padding: 18px; }
         `,
+    });
+    await page.addScriptTag({
+        path: path.join(
+            ROOT,
+            'buildings/jarvis/storyboard-style-presets.js'
+        ),
     });
     await page.addScriptTag({
         path: path.join(
@@ -593,6 +617,14 @@ async function main() {
         '[data-sb-brief]',
         'A spill-proof machine is tested across five escalating scenes.'
     );
+    await page.click('.sb-style-toggle');
+    assert.strictEqual(
+        await page.evaluate(() => (
+            window.__workbench.getState().candidates[0].stylePreset
+        )),
+        'stylized-3d-explainer-v1',
+        'the animation switch must select the versioned style preset'
+    );
     await page.evaluate(() => window.__queueReferences(2));
     await page.click('[data-sb-add-reference]');
     await page.waitForFunction(() => (
@@ -643,6 +675,10 @@ async function main() {
     assert(coherent.sources.every(source => source === 'coherent-sheet'));
     assert.strictEqual(coherent.payload.async, true);
     assert.strictEqual(coherent.payload.model, 'gpt-image-2');
+    assert.strictEqual(
+        coherent.payload.stylePreset,
+        'stylized-3d-explainer-v1'
+    );
     assert.strictEqual(coherent.payload.panels.length, 5);
     assert.strictEqual(
         coherent.payload.brief,
@@ -678,7 +714,15 @@ async function main() {
     assert.strictEqual(
         coherent.payload.refs.length,
         2,
-        'a coherent sheet must receive references scoped to any frame'
+        'enabling animation must not add either supplied example as an image '
+            + 'reference'
+    );
+    assert(
+        !JSON.stringify(coherent.payload.refs).includes(
+            'stylized-3d-explainer'
+        ),
+        'the style preset must travel as text identity, never disguised as '
+            + 'an image reference'
     );
     assert.deepStrictEqual(
         coherent.payload.refs.map(reference => ({
@@ -777,6 +821,7 @@ async function main() {
                 })
             ),
             targetPanel: window.__calls.panel[0].targetPanel,
+            stylePreset: window.__calls.panel[0].stylePreset,
             brief: window.__calls.panel[0].brief,
             panels: window.__calls.panel[0].panels,
             context: window.__calls.panel[0].context,
@@ -810,6 +855,11 @@ async function main() {
         'every automatic reference must be scoped to the selected output frame'
     );
     assert.strictEqual(edit.targetPanel, 0);
+    assert.strictEqual(
+        edit.stylePreset,
+        'stylized-3d-explainer-v1',
+        'frame refinements must reuse the whole-panel animation style'
+    );
     assert.strictEqual(
         edit.brief,
         'A spill-proof machine is tested across five escalating scenes.'
@@ -986,6 +1036,11 @@ async function main() {
         reopen.hasComposite,
         true,
         'saved storyboards must restore the canonical whole-panel artifact'
+    );
+    assert.strictEqual(
+        await page.locator('[data-sb-animation-style]').isChecked(),
+        true,
+        'the animation style must survive save and reload'
     );
     assert.strictEqual(
         await page.locator('[data-sb-auto-continuity]').count(),

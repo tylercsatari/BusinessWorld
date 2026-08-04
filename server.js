@@ -94,6 +94,9 @@ const channelFreeKeepForecastContract = require(
 const storyboardContract = require(
     './buildings/jarvis/storyboard-contract'
 );
+const storyboardStylePresets = require(
+    './buildings/jarvis/storyboard-style-presets'
+);
 const openAIImageProvider = require(
     './buildings/jarvis/openai-image-provider'
 );
@@ -4517,11 +4520,12 @@ function storyboardSheetGeometry(modelKey) {
     };
 }
 
-function storyboardGenerationIdentity(modelKey, mode) {
+function storyboardGenerationIdentity(modelKey, mode, stylePresetId) {
     const resolvedKey = STORY_MODELS[modelKey]
         ? modelKey
         : STORYBOARD_DEFAULT_MODEL;
     const model = STORY_MODELS[resolvedKey];
+    const style = storyboardStylePresets.stylePreset(stylePresetId);
     const panelSize = model.provider === 'openai'
         ? openAIImageProvider.outputSize('9:16')
         : null;
@@ -4531,6 +4535,11 @@ function storyboardGenerationIdentity(modelKey, mode) {
         model_key: resolvedKey,
         model_slug: model.slug,
         mode,
+        style_preset: style.id,
+        style_contract_sha256: sha256Bytes(Buffer.from(
+            style.promptContract,
+            'utf8'
+        )),
         prompt_template: mode === 'coherent-sheet'
             ? 'five-panel-coherent-sheet-v2'
             : 'single-panel-automatic-continuity-v2',
@@ -4555,6 +4564,7 @@ function storyboardSheetPrompt({
     brief,
     hookText,
     panels,
+    styleContract = '',
     referenceDescriptions = [],
 }) {
     const opening = brief || hookText || 'A compelling visual opening.';
@@ -4565,8 +4575,9 @@ function storyboardSheetPrompt({
         }`
     ));
     return [
-        'Create ONE single edge-to-edge photographic storyboard sheet on a '
-            + '45:16 canvas. This is one image, not five image outputs.',
+        `Create ONE single edge-to-edge ${
+            styleContract ? 'stylized 3D animated' : 'photographic'
+        } storyboard sheet on a 45:16 canvas. This is one image, not five image outputs.`,
         'Divide the canvas into EXACTLY FIVE contiguous equal-width columns: '
             + 'panel 1 occupies 0-20%, panel 2 20-40%, panel 3 40-60%, '
             + 'panel 4 60-80%, and panel 5 80-100% of the canvas width.',
@@ -4579,6 +4590,7 @@ function storyboardSheetPrompt({
             + 'span, merge, or bleed across a panel boundary.',
         'Do not add captions, words, letters, numbers, watermarks, borders, '
             + 'gaps, frames, contact-sheet labels, or UI.',
+        styleContract,
         `OVERALL OPENING: ${opening}`,
         hookText ? `SPOKEN CONTEXT: ${hookText}` : '',
         referenceDescriptions.length
@@ -4595,6 +4607,7 @@ function storyboardPanelPrompt({
     targetPanel,
     brief,
     panels,
+    styleContract = '',
     referenceDescriptions = [],
 }) {
     const panelNumber = targetPanel + 1;
@@ -4613,6 +4626,7 @@ function storyboardPanelPrompt({
         'Resolve words such as this, that, it, they, the same, the machine, the object, or the person from the established visual sequence and the chronological frame plan. Never replace a referenced entity with a newly invented substitute.',
         'Use preceding frames as the viewer context for this moment and following frames as continuity constraints. Preserve chronology and cause-and-effect.',
         'Reference images are evidence only. Do not create a collage, contact sheet, split screen, border, caption, label, text, watermark, or multiple panels. Return one clean frame.',
+        styleContract,
         brief ? `OVERALL SCENE: ${brief}` : '',
         'CHRONOLOGICAL FIVE-FRAME PLAN:',
         ...sequenceLines,
@@ -14981,6 +14995,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     ? body.model
                     : STORYBOARD_DEFAULT_MODEL,
                 generationMode: body.generationMode,
+                stylePreset: body.stylePreset,
                 selectedPanel: body.selectedPanel,
                 composite: await optionalStoryboardMedia(
                     body.composite,
@@ -15090,6 +15105,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         hookText: record.hookText || null,
                         model: record.model,
                         generationMode: record.generationMode,
+                        stylePreset:
+                            record.stylePreset
+                            || storyboardStylePresets.DEFAULT_STYLE_ID,
                         panelCount: Array.isArray(record.panels)
                             ? record.panels.length
                             : 0,
@@ -15173,10 +15191,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const refs = await storyboardGenerationReferences(
                 Array.isArray(body.refs) ? body.refs : []
             );
+            const style = storyboardStylePresets.stylePreset(
+                body.stylePreset
+            );
             const prompt = storyboardSheetPrompt({
                 brief,
                 hookText,
                 panels,
+                styleContract: style.promptContract,
                 referenceDescriptions: refs.descriptions,
             });
             const requestFingerprint = quantRequestFingerprint(
@@ -15190,7 +15212,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 },
                 storyboardGenerationIdentity(
                     model,
-                    'coherent-sheet'
+                    'coherent-sheet',
+                    style.id
                 )
             );
             const jobId = quantJobSubmit(
@@ -15222,6 +15245,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         modelSlug: STORY_MODELS[model].slug,
                         provider,
                         mode: 'coherent-sheet',
+                        stylePreset: style.id,
                         panelCount: storyboardContract.PANEL_COUNT,
                         geometry: storyboardSheetGeometry(model),
                         requestFingerprint,
@@ -15250,6 +15274,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         panelPrompts: panels,
                         model,
                         provider,
+                        stylePreset: style.id,
                         referenceCount:
                             refs.identities.length,
                     },
@@ -15304,6 +15329,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const refs = await storyboardGenerationReferences(
                 Array.isArray(body.refs) ? body.refs : []
             );
+            const style = storyboardStylePresets.stylePreset(
+                body.stylePreset
+            );
             const requestedTargetPanel = Number(body.targetPanel);
             const targetPanel = Number.isInteger(requestedTargetPanel)
                 && requestedTargetPanel >= 0
@@ -15323,6 +15351,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 targetPanel,
                 brief,
                 panels,
+                styleContract: style.promptContract,
                 referenceDescriptions: refs.descriptions,
             });
             const effectiveModel = storyboardEffectiveModel(
@@ -15350,7 +15379,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     reference_identities: refs.identities,
                     aspect_ratio: '9:16',
                 },
-                storyboardGenerationIdentity(effectiveModel, 'panel')
+                storyboardGenerationIdentity(
+                    effectiveModel,
+                    'panel',
+                    style.id
+                )
             );
             const jobId = quantJobSubmit(
                 'raw-storyboard-panel',
@@ -15382,6 +15415,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         provider,
                         requestedModel: model,
                         relation,
+                        stylePreset: style.id,
                         continuityPolicy: 'automatic-continuity-v2',
                         targetPanel,
                         referenceRoles: refs.identities.map(
@@ -15410,6 +15444,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         effectiveModel,
                         provider,
                         relation,
+                        stylePreset: style.id,
                         targetPanel,
                         continuityPolicy: 'automatic-continuity-v2',
                         referenceCount:

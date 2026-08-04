@@ -6,6 +6,7 @@ const {
     sha256Bytes,
 } = require('./canonical-json-artifact');
 const shortsScoreLedger = require('./shorts-score-ledger');
+const storyboardStylePresets = require('./storyboard-style-presets');
 
 const SCHEMA = 'shorts-storyboard-document-v1';
 const INDEX_SCHEMA = 'shorts-storyboard-index-v1';
@@ -395,6 +396,9 @@ function documentRevisionPayload(document) {
 }
 
 function bindDocument(value) {
+    const stylePreset = storyboardStylePresets.normalizeStylePreset(
+        value.stylePreset
+    );
     const document = {
         schema: SCHEMA,
         version: 1,
@@ -411,6 +415,9 @@ function bindDocument(value) {
             value.generationMode === 'directed'
                 ? 'directed'
                 : 'composite',
+        ...(stylePreset !== storyboardStylePresets.DEFAULT_STYLE_ID
+            ? { stylePreset }
+            : {}),
         selectedPanel: Math.max(
             0,
             Math.min(PANEL_COUNT - 1, Math.floor(
