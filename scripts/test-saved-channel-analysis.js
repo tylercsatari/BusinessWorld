@@ -6,8 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const analysis = require('../buildings/jarvis/saved-channel-analysis');
 
-assert.strictEqual(analysis.contract.features.length, 21, 'saved channels must expose exactly 21 canonical outputs');
-assert.deepStrictEqual(analysis.contract.groups.map(group => group.key), ['visual', 'text', 'together', 'novelty']);
+assert.strictEqual(analysis.contract.features.length, 25, 'saved channels must expose the 21 canonical outputs plus 4 channel-free signals');
+assert.deepStrictEqual(analysis.contract.groups.map(group => group.key), ['visual', 'text', 'together', 'novelty', 'cfs']);
 
 const videos = [];
 for (let index = 0; index < 96; index++) {
@@ -40,24 +40,24 @@ for (let index = 0; index < 96; index++) {
 
 const first = analysis.analyzeChannel({ id: 'chtest', name: 'Synthetic', videos });
 assert.strictEqual(first.status, 'ready');
-assert.strictEqual(first.version, 5, 'visual analysis contract version must invalidate legacy cached responses');
+assert.strictEqual(first.version, 6, 'visual analysis contract version must invalidate legacy cached responses');
 assert.strictEqual(first.n, 96);
 assert.strictEqual(first.eligibility.completedWithPublicViews, 96, 'eligibility must distinguish scored public-view rows from optional age metadata');
 assert.strictEqual(first.eligibility.knownPublicationDates, 96);
-assert.strictEqual(first.search.exhaustiveCandidates, 1561);
+assert.strictEqual(first.search.exhaustiveCandidates, 2625);
 assert.strictEqual(first.singles[0].key, 'visual.keep', 'the known synthetic signal must rank first');
 assert(first.singles[0].oof.r2 > 0.8, 'known signal should predict unseen rows');
 assert(first.models.nestedSelected.r2 > 0.7, 'nested selection should recover the held-out signal');
 assert.strictEqual(first.models.nestedSelected.points.length, videos.length);
-assert.strictEqual(first.indicatorMatrix.columns.length, 21, 'matrix must contain every canonical indicator');
+assert.strictEqual(first.indicatorMatrix.columns.length, 25, 'matrix must contain every canonical indicator (incl. channel-free)');
 assert.strictEqual(first.indicatorMatrix.rows.length, videos.length, 'matrix must retain every scored Short');
 assert.strictEqual(first.indicatorMatrix.rows[0].views, Math.max(...videos.map(video => video.views)), 'matrix rows should make actual-view trajectory visually explicit');
-assert.strictEqual(first.indicatorMatrix.rows[0].rawValues.length, 21, 'matrix must retain exact stored values for point-level readouts');
-assert.strictEqual(first.indicatorRelationships.columns.length, 21, 'redundancy map must cover every indicator');
-assert.strictEqual(first.indicatorRelationships.matrix.length, 21, 'redundancy map must contain every row');
-assert.strictEqual(first.indicatorRelationships.matrix[0].length, 21, 'redundancy map must be square');
+assert.strictEqual(first.indicatorMatrix.rows[0].rawValues.length, 25, 'matrix must retain exact stored values for point-level readouts');
+assert.strictEqual(first.indicatorRelationships.columns.length, 25, 'redundancy map must cover every indicator');
+assert.strictEqual(first.indicatorRelationships.matrix.length, 25, 'redundancy map must contain every row');
+assert.strictEqual(first.indicatorRelationships.matrix[0].length, 25, 'redundancy map must be square');
 assert(first.indicatorRelationships.matrix[0][0].spearman > 0.99, 'an indicator must be perfectly rank-correlated with itself');
-assert.strictEqual(first.featureProfiles.length, 21, 'every indicator needs a visible score-to-outcome profile');
+assert.strictEqual(first.featureProfiles.length, 25, 'every indicator needs a visible score-to-outcome profile');
 assert(first.featureProfiles.every(profile => profile.bins.length >= 2), 'every populated indicator needs visible trajectory bins');
 assert(first.featureProfiles.find(profile => profile.key === 'text.keep').missing > 0, 'profile coverage must surface missing text inputs');
 assert(first.outcomeProfile.histogram.reduce((sum, bin) => sum + bin.n, 0) === videos.length, 'outcome histogram must account for every analyzed Short');

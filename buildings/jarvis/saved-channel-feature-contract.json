@@ -4,7 +4,8 @@
     { "key": "visual", "label": "Visual", "description": "5-frame montage only" },
     { "key": "text", "label": "Text", "description": "First-5-second transcript only" },
     { "key": "together", "label": "Both", "description": "5-frame montage plus transcript" },
-    { "key": "novelty", "label": "Novelty", "description": "Independent novelty calibration" }
+    { "key": "novelty", "label": "Novelty", "description": "Independent novelty calibration" },
+    { "key": "cfs", "label": "Channel-free", "description": "One identical direction for every channel (ledger: channelFreeKeepDirection) — held-out OOF scores, no creator information" }
   ],
   "features": [
     { "key": "visual.keep", "group": "visual", "target": "keep", "source": "steer", "sourceKey": "visual_keep", "label": "Keep rate", "unit": "percent" },
@@ -30,6 +31,11 @@
 
     { "key": "novelty.keep", "group": "novelty", "target": "keep", "source": "novelty", "label": "Novelty to keep rate", "unit": "percent" },
     { "key": "novelty.ret5", "group": "novelty", "target": "ret5", "source": "novelty", "label": "Novelty to 5s retention", "unit": "percent" },
-    { "key": "novelty.views", "group": "novelty", "target": "views", "source": "novelty", "label": "Novelty to views", "unit": "views" }
+    { "key": "novelty.views", "group": "novelty", "target": "views", "source": "novelty", "label": "Novelty to views", "unit": "views" },
+
+    { "key": "cfs.visual", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free visual → keep", "unit": "percent" },
+    { "key": "cfs.text", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free text → keep", "unit": "percent" },
+    { "key": "cfs.together", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free together → keep", "unit": "percent" },
+    { "key": "cfs.concat", "group": "cfs", "target": "keep", "source": "channelFree", "label": "Channel-free concat → keep (selected)", "unit": "percent" }
   ]
 }

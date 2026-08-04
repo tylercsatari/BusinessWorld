@@ -2,6 +2,27 @@
 
 const contract = require('./saved-channel-feature-contract.json');
 
+// Channel-free signal OOF scores (ledger: channelFreeKeepDirection) — merged into every
+// analyzed video's feature cells by id, so the cfs.* contract features light up wherever
+// the video is one of the 584 keep-labeled corpus videos. Tolerant load: analyses still
+// build without the artifact; cfs.* features simply stay uncovered.
+let CHANNEL_FREE_BY_ID = {};
+try {
+    const cfScores = require('./predictor-lab/channel-free-scores.json');
+    for (const row of cfScores.rows || []) {
+        CHANNEL_FREE_BY_ID[row.id] = {
+            'cfs.visual': [row.visual], 'cfs.text': [row.text],
+            'cfs.together': [row.together], 'cfs.concat': [row.concat],
+        };
+    }
+} catch (e) { CHANNEL_FREE_BY_ID = {}; }
+
+function withChannelFreeFeatures(video) {
+    const extra = video && CHANNEL_FREE_BY_ID[video.id];
+    if (!extra) return video;
+    return { ...video, features: { ...(video.features || {}), ...extra } };
+}
+
 const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 
@@ -402,6 +423,7 @@ function cleanBinaryMetric(metric) {
 function buildRows(manifest, observedAt) {
     const now = finite(observedAt) ? Number(observedAt) : Date.now();
     return (manifest.videos || []).filter(video => video && video.status === 'done' && finite(video.views) && Number(video.views) > 0)
+        .map(withChannelFreeFeatures)
         .map(video => {
             const publishedAt = parsePublished(video.publishedAt != null ? video.publishedAt : video.published);
             const viewsObservedAt = finite(video.viewsObservedAt) ? Number(video.viewsObservedAt) : (finite(video.scoredAt) ? Number(video.scoredAt) : now);
@@ -893,7 +915,8 @@ function savedChannelAnalysisFingerprint(manifest) {
             stableHash(JSON.stringify(video.viewsHistory || [])).toString(16),
         ].join(':');
     }).sort();
-    return `v5:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
+    const cfsRun = (() => { try { return require('./predictor-lab/channel-free-scores.json').runId || 'none'; } catch (e) { return 'none'; } })();
+    return `v6:${cfsRun}:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
 }
 
 function analyzeChannel(manifest) {
@@ -910,7 +933,7 @@ function analyzeChannel(manifest) {
         note: 'All-ages analysis requires only a completed score and positive public views. Minimum-age cohorts additionally require a publication timestamp.',
     };
     if (rows.length < 8) return {
-        version: 5,
+        version: 6,
         generatedAt,
         channelId: manifest && manifest.id,
         n: rows.length,
@@ -966,7 +989,7 @@ function analyzeChannel(manifest) {
     const strongestTail = primaryCohort && (primaryCohort.featureRankings || []).filter(row => row.directionalAuc != null)[0] || null;
 
     return {
-        version: 5,
+        version: 6,
         generatedAt,
         channelId: manifest && manifest.id,
         channelName: manifest && manifest.name,

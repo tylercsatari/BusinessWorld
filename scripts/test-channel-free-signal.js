@@ -77,5 +77,16 @@ const retentionUi = fs.readFileSync(path.join(ROOT, 'buildings/jarvis/jarvis-ret
 check(!/CFS_META\s*=\s*{/.test(retentionUi), 'Experiment tab has no hardcoded signal metrics', 'CFS_META constant found');
 check(retentionUi.includes('channel-free-scores.json'), 'Experiment tab loads the scores artifact', '');
 
+// 7) Saved-channel analysis layer carries the signals (Experiment tab -> Saved accounts)
+const scContract = read('buildings/jarvis/saved-channel-feature-contract.json');
+const cfsFeatures = (scContract.features || []).filter(f => f.group === 'cfs');
+check(cfsFeatures.length === 4, 'saved-channel contract has all 4 cfs features', `${cfsFeatures.length} found`);
+const scAnalysis = require(path.join(ROOT, 'buildings/jarvis/saved-channel-analysis.js'));
+check(scAnalysis.contract.features.filter(f => f.group === 'cfs').length === 4,
+    'saved-channel analysis module exposes cfs features', '');
+const fpProbe = scAnalysis.savedChannelAnalysisFingerprint({ videos: [] });
+check(fpProbe.includes(scores.runId), 'analysis fingerprint binds to scores runId (cache invalidates on regeneration)',
+    fpProbe);
+
 console.log(failures ? `\nFAIL — ${failures} consistency check(s) failed` : '\nPASS — every consumer agrees with the canonical run');
 process.exit(failures ? 1 : 0);
