@@ -121,6 +121,7 @@ const SHORTS_EXPERIMENT_SHARED_ROUTES = [
     /^\/api\/hooks\/demo\/status\/[\w-]{1,40}$/,
     /^\/api\/hooks\/grpo\/group\/demo\/[\w-]{1,32}$/,
     /^\/api\/hooks\/grpo\/montage\/demo\/[\w-]{1,40}$/,
+    /^\/api\/hooks\/grpo\/score\/demo\/[\w-]{1,40}$/,
     /^\/api\/hooks\/grind\/runs$/,
     /^\/api\/hooks\/grind\/(?:run|stop)\/[a-z0-9]{1,32}$/,
     /^\/api\/hooks\/grind\/(?:score|montage)\/[\w-]{1,48}$/,

@@ -48,6 +48,13 @@ async function main() {
         path.join(ROOT, 'server.js'),
         'utf8'
     );
+    const fivePanelSource = fs.readFileSync(
+        path.join(
+            ROOT,
+            'buildings/jarvis/five-panel-sheet.js'
+        ),
+        'utf8'
+    );
     const styleSource = fs.readFileSync(
         path.join(
             ROOT,
@@ -129,8 +136,9 @@ async function main() {
         'coherent generation must request the five-panel geometry contract'
     );
     assert(
-        serverSource.includes('panel 1 occupies 0-20%')
-            && serverSource.includes('panel 5 80-100%'),
+        fivePanelSource.includes('panel 1 occupies 0-20%')
+            && fivePanelSource.includes('panel 5 80-100%')
+            && serverSource.includes('fivePanelSheet.buildPrompt'),
         'the model prompt must lock all five equal panel boundaries'
     );
     assert(

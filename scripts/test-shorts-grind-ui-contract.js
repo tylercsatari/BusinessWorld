@@ -12,7 +12,11 @@ const source = fs.readFileSync(UI_PATH, 'utf8');
 const validatorStart = source.indexOf('function shortsGrindVerifiedScore(attempt)');
 const validatorEnd = source.indexOf('function shortsGrindUnverifiedMessage(attempt)', validatorStart);
 assert.ok(validatorStart >= 0 && validatorEnd > validatorStart);
-const helperContext = vm.createContext({});
+const helperContext = vm.createContext({
+    channelFreeKeepForecastsOf(readout) {
+        return readout && readout._channelFree || null;
+    },
+});
 vm.runInContext(
     `${source.slice(validatorStart, validatorEnd)}
     this.verifiedScore = shortsGrindVerifiedScore;
@@ -83,6 +87,43 @@ assert.strictEqual(readoutMatches({
         ledger_sha256: 'b'.repeat(64),
     },
 }, binding), false);
+
+const channelFree = {
+    ...valid,
+    score_coordinate_id: 'shorts.channel-free.concat.keep',
+    score_value: 78.4,
+    score_percentile_0_100: 91.2,
+    score_record_sha256: 'b'.repeat(64),
+    score_model_artifact_sha256: 'c'.repeat(64),
+    score_target_unit: 'predicted_keep_percent',
+};
+const channelFreeBinding = verifiedScore(channelFree);
+assert(channelFreeBinding);
+assert.strictEqual(channelFreeBinding.score_value, 78.4);
+assert.strictEqual(readoutMatches({
+    score_ledger: {
+        ledger_sha256: valid.score_ledger_sha256,
+        entries: [],
+    },
+    _channelFree: {
+        outputs: {
+            concat: {
+                coordinateId: channelFree.score_coordinate_id,
+                value: channelFree.score_value,
+                percentile100:
+                    channelFree.score_percentile_0_100,
+                scoreRecordSha256:
+                    channelFree.score_record_sha256,
+                model_artifact_sha256:
+                    channelFree.score_model_artifact_sha256,
+            },
+        },
+    },
+}, channelFreeBinding), true);
+assert.strictEqual(verifiedScore({
+    ...channelFree,
+    score_target_unit: 'percentile_0_100',
+}), null);
 assert.strictEqual(readoutMatches({
     score_ledger: {
         ...validReadout.score_ledger,
@@ -113,5 +154,8 @@ assert.ok(grindSource.includes('Historical score unverified'));
 assert.ok(grindSource.includes("Object.prototype.hasOwnProperty.call(a, 'pct')"));
 assert.ok(grindSource.includes('score_ledger_sha256: verifiedScore.score_ledger_sha256'));
 assert.ok(grindSource.includes('score_percentile_0_100: verifiedScore.score_percentile_0_100'));
+assert.ok(grindSource.includes('shorts.channel-free.concat.keep'));
+assert.ok(grindSource.includes('predicted_keep_percent'));
+assert.ok(grindSource.includes('data-grindanimation'));
 
 console.log('shorts grind UI ledger contract: ok');

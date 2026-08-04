@@ -3627,7 +3627,7 @@ window.fetch=function(url,options){
         ).waitFor();
         await page.locator('[data-savedbank="channels"]').click();
         assert.strictEqual(await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').count(), 1);
-        assert.strictEqual(await page.getByPlaceholder("the hook you're writing — every variant stays grounded on this…").count(), 1);
+        assert.strictEqual(await page.getByPlaceholder('describe the topic — the idea model writes grounded hook variants…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder('or paste a YouTube link…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder('https://youtube.com/@channel').count(), 1);
         assert.strictEqual(await page.getByText('Save channel + score every Short', { exact: true }).count(), 1);

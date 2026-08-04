@@ -34,7 +34,7 @@ const JarvisRetention = (function () {
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     let SAVED_OPEN_DRAIN = null;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, grindAnimation: false, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -3994,9 +3994,9 @@ const JarvisRetention = (function () {
         rtFetchJson('/api/hooks/grpo/group/demo/' + rid, {}, 2).then(j => {
             if (j && Array.isArray(j.attempts) && j.attempts.length) {
                 EXPDEMO[rid] = j; rtgUpdateExp();               // render live — hooks + frames stream in
-                if (j.done) {                                   // fully complete → stop, auto-score the first
+                if (j.done) {                                   // fully complete → load every persisted canonical score
                     st.expGenBusy = false; st.expGenStage = 'done';
-                    const a0 = j.attempts[0]; if (a0 && a0.frame_imgs && a0.frame_imgs.filter(Boolean).length) scoreGenerated(0, a0.frame_imgs, a0.premise || a0.caption || '');
+                    hydrateGeneratedScores(rid, j.attempts);
                 } else if (tries < 300) { setTimeout(() => expDemoPoll(rid, tries + 1), 2000); }   // still streaming — poll faster
                 return;
             }
@@ -4019,14 +4019,14 @@ const JarvisRetention = (function () {
         const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
         st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null; st.warmHold = 1;
         window.clearInterval(st._genTick); st._genTick = window.setInterval(() => { if (st.expGenBusy) rtgUpdateExp(); else window.clearInterval(st._genTick); }, 1000);   // live elapsed timer
-        rtFetchJson('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem }) }, 1)
+        rtFetchJson('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem, animation: st.expGenAnimation === true, creatorProfile: selectedCreatorProfile() }) }, 1)
             .then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
             .catch(() => { st.expGenBusy = false; rtgUpdateExp(); });
         rtgUpdateExp();
     }
     function expGenPanel() {
         const bg = C.bg || '#0f172a', n = st.expGenN || 4;
-        const STAGES = { queued: 'queued — spinning up the fine-tuned model…', reasoning: 'the fine-tuned model is thinking…', rendering: 'rendering frames…', done: 'done' };
+        const STAGES = { queued: 'queued — spinning up the fine-tuned model…', reasoning: 'the fine-tuned model is thinking…', rendering: 'generating one coherent five-panel image…', done: 'done' };
         let result = '';
         if (st.expGenRid) {
             const g = EXPDEMO[st.expGenRid];
@@ -4043,14 +4043,14 @@ const JarvisRetention = (function () {
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
                       <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating — ideas stream in one at a time</span>
                       <span style="font-size:11px;color:${C.mute};font-variant-numeric:tabular-nums">${elapsed} elapsed</span></div>
-                    <div style="font-size:12px">ideas: ${ideaDots} <span style="font-size:10px;color:${C.mute}">(${nDone}/${nTot} — each appears below the moment it exists, then its frames fill in)</span></div>
+                    <div style="font-size:12px">ideas: ${ideaDots} <span style="font-size:10px;color:${C.mute}">(${nDone}/${nTot} — each appears below when written, then one image is split into five panels)</span></div>
                     ${note}
                     <div style="font-size:10px;color:${C.mute};margin-top:6px">The first idea also wakes the GPU (~2–3 min cold, seconds warm). Ideas too similar to anything previously generated are rejected and redone — you'll see that here.</div>${longHint}</div>`;
             }
             else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
             else if (g && g.attempts && g.attempts.length) {
                 const cards = g.attempts.map(a => {
-                    // hosted result: 5 separate frame images; legacy box result: one montage + keep%
+                    // One provider image is deterministically split into the five score frames.
                     const errFor = i => ((a.errs || []).find(x => x.indexOf('frame ' + (i + 1) + ':') === 0) || '').slice(9);
                     const frameTile = (fid, i) => {
                         if (fid) return `<div style="flex:1;position:relative"><img src="${esc(authenticatedMediaUrl(`/api/hooks/grpo/montage/demo/${fid}`))}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>`;
@@ -4063,24 +4063,25 @@ const JarvisRetention = (function () {
                         : `<img src="${esc(authenticatedMediaUrl(`/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}`))}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
                     const _hardErrs = (a.errs || []).filter(x => x.indexOf('FAILED') >= 0).length;
                     const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:${_hardErrs ? '#ef4444' : C.amber};margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame note${a.errs.length > 1 ? 's' : ''} (${_hardErrs ? _hardErrs + ' missing, ' : ''}rest = fallback renders) — hover for details</div>` : '';
-                    const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
+                    const keepBadge = a.keep_percentile_0_100 != null ? `<span>together keep <b style="color:${heatCol(a.keep_percentile_0_100 / 100)}">${fmtv(a.keep_percentile_0_100, 1)}th</b></span>` : '';
+                    const channelFreeBadge = a.channel_free_concat_keep_percent != null ? `<span>channel-free concat <b style="color:${heatCol(a.channel_free_concat_keep_percent / 100)}">${fmtv(a.channel_free_concat_keep_percent, 1)}%</b></span>` : '';
                     // novelty = cos-distance of this idea's text embedding from EVERY idea ever generated (memory in R2)
                     const novBadge = a.novelty != null ? `<span title="${esc('how far this idea sits from every idea previously generated (cosine distance in embedding space — higher = more new)' + (a.nearest ? '. Closest past idea: “' + a.nearest + '”' : ''))}" style="cursor:help">🆕 unique <b style="color:${heatCol(Math.min(1, (a.novelty || 0) * 2.5))}">${(a.novelty || 0).toFixed(2)}</b></span>` : '';
                     const frameText = (a.frames && a.frames.length) ? `<details style="margin-top:5px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">the 5 frames</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px">${a.frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div></details>` : '';
                     const actions = (a.frame_imgs && a.frame_imgs.filter(Boolean).length) ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-                        <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ scoring…' : '◆ Score this hook'}</span>
+                        <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ loading…' : (a.score_available ? '◆ Open embeddings' : '◆ Score this hook')}</span>
                         <span data-gensave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">💾 Save idea</span>
                       </div>` : '';
                     const nOk = (a.frame_imgs || []).filter(Boolean).length, nMiss = 5 - nOk, nNote = (a.errs || []).length;
                     const cardStat = a.status === 'done'
                         ? (nMiss ? `<span style="color:${C.amber};font-size:9px;font-weight:800;white-space:nowrap">✓ ${nOk}/5 (${nMiss} missing)</span>`
-                                : `<span style="color:${nNote ? C.amber : C.green};font-size:9px;font-weight:800;white-space:nowrap" ${nNote ? `title="${esc((a.errs || []).join('\n'))}"` : ''}>✓ 5 frames${nNote ? ' *' : ''}</span>`)
-                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ frame ${(a.frames_done || 0)}/5</span>`;
+                                : `<span style="color:${nNote ? C.amber : C.green};font-size:9px;font-weight:800;white-space:nowrap" ${nNote ? `title="${esc((a.errs || []).join('\n'))}"` : ''}>✓ one sheet → 5 crops${nNote ? ' *' : ''}</span>`)
+                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ ${a.status === 'scoring' ? 'embedding + scoring' : 'generating one panel'}</span>`;
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
                         <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
                       ${frameStrip}${errLine}
-                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${novBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
+                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${channelFreeBadge}${novBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
                 }).join('');
                 const _streaming = g.streaming && !g.done;
                 const _doneN = g.attempts.filter(x => x.status === 'done').length;
@@ -4095,10 +4096,11 @@ const JarvisRetention = (function () {
         }
         const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one). Ideas stream in ONE AT A TIME: each appears the moment the model writes it, its frames fill in while the next idea generates. Any idea <b style="color:${C.purple}">too close to anything it's ever generated is rejected and redone</b> (you'll see it happen) — press Generate forever and it keeps exploring new territory.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one). Each candidate is generated as one coherent 45:16 image, split into five exact 9:16 score frames, then sent through the same embedding pipeline. Any idea <b style="color:${C.purple}">too close to anything it's ever generated is rejected and redone</b>.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
+            <label style="display:inline-flex;gap:6px;align-items:center;color:${st.expGenAnimation ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-expanimation ${st.expGenAnimation ? 'checked' : ''} ${st.expGenBusy ? 'disabled' : ''} style="accent-color:${C.accent}">Animation</label>
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
           </div>${(!st.expGenBusy && st.warmHold) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px">🔥 holding the GPU warm while you're on this tab — presses stay fast (~15s/idea); it powers down a few minutes after you leave</div>` : ''}${result}</div>`;
     }
@@ -4125,35 +4127,75 @@ const JarvisRetention = (function () {
             || attempt.score_percentile_0_100 > 100
         ) return null;
         const coordinateParts = attempt.score_coordinate_id.split('.');
-        if (
+        const storedCoordinate = (
             coordinateParts.length !== 4
-            || coordinateParts[0] !== 'shorts'
-            || coordinateParts[1] !== 'stored'
-            || !['visual', 'text', 'together', 'novelty'].includes(
+            ? false
+            : coordinateParts[0] === 'shorts'
+            && coordinateParts[1] === 'stored'
+            && ['visual', 'text', 'together', 'novelty'].includes(
                 coordinateParts[2]
             )
-            || !coordinateParts[3]
+            && !!coordinateParts[3]
+        );
+        const channelFreeConcat = attempt.score_coordinate_id
+            === 'shorts.channel-free.concat.keep';
+        if (!storedCoordinate && !channelFreeConcat) return null;
+        if (
+            channelFreeConcat
+            && (
+                attempt.score_target_unit
+                    !== 'predicted_keep_percent'
+                || typeof attempt.score_record_sha256 !== 'string'
+                || !/^[a-f0-9]{64}$/.test(
+                    attempt.score_record_sha256
+                )
+                || typeof attempt.score_model_artifact_sha256
+                    !== 'string'
+                || !/^[a-f0-9]{64}$/.test(
+                    attempt.score_model_artifact_sha256
+                )
+                || attempt.score_value < 0
+                || attempt.score_value > 100
+            )
         ) return null;
-        return Object.freeze({
+        const verified = {
             score_verified: true,
             score_coordinate_id: attempt.score_coordinate_id,
             score_ledger_sha256: attempt.score_ledger_sha256,
             score_value: attempt.score_value,
             score_percentile_0_100: attempt.score_percentile_0_100,
-        });
+        };
+        if (channelFreeConcat) {
+            verified.score_record_sha256 =
+                attempt.score_record_sha256;
+            verified.score_model_artifact_sha256 =
+                attempt.score_model_artifact_sha256;
+            verified.score_target_unit =
+                'predicted_keep_percent';
+        }
+        return Object.freeze(verified);
     }
     function shortsGrindScoreDescriptor(verifiedScore) {
         const parts = verifiedScore.score_coordinate_id.split('.');
         const channel = parts[2];
+        const channelFree = verifiedScore.score_coordinate_id
+            === 'shorts.channel-free.concat.keep';
         return {
             percentileUnit: 'percentile_0_100',
-            target: parts[3],
-            modality: channel === 'together'
+            targetUnit: channelFree
+                ? 'predicted_keep_percent'
+                : 'percentile_0_100',
+            target: channelFree ? 'keep' : parts[3],
+            modality: channelFree
+                ? 'visual + text + together vectors'
+                : channel === 'together'
                 ? 'multimodal'
                 : channel === 'novelty'
                     ? 'derived'
                     : channel,
-            input: channel === 'visual'
+            input: channelFree
+                ? 'frozen pooled channel-free concat model; no creator scaling'
+                : channel === 'visual'
                 ? 'first-five-second five-frame montage only'
                 : channel === 'text'
                     ? 'first-five-second transcript only'
@@ -4161,6 +4203,18 @@ const JarvisRetention = (function () {
                         ? 'first-five-second montage plus transcript'
                         : 'derived novelty inputs recorded in coordinate provenance',
         };
+    }
+    function shortsGrindObjectiveValue(verifiedScore) {
+        if (!verifiedScore) return null;
+        return verifiedScore.score_coordinate_id
+            === 'shorts.channel-free.concat.keep'
+            ? verifiedScore.score_value
+            : verifiedScore.score_percentile_0_100;
+    }
+    function shortsGrindObjectiveSuffix(unit) {
+        return unit === 'predicted_keep_percent'
+            ? '% predicted keep'
+            : 'th percentile';
     }
     function shortsGrindReadoutMatchesVerifiedScore(readout, verifiedScore) {
         const ledger = readout && readout.score_ledger;
@@ -4171,6 +4225,26 @@ const JarvisRetention = (function () {
             || ledger.ledger_sha256 !== verifiedScore.score_ledger_sha256
             || !Array.isArray(ledger.entries)
         ) return false;
+        if (
+            verifiedScore.score_coordinate_id
+                === 'shorts.channel-free.concat.keep'
+        ) {
+            const forecasts = channelFreeKeepForecastsOf(readout);
+            const concat = forecasts && forecasts.outputs
+                && forecasts.outputs.concat;
+            return !!(
+                concat
+                && concat.coordinateId
+                    === verifiedScore.score_coordinate_id
+                && concat.value === verifiedScore.score_value
+                && concat.percentile100
+                    === verifiedScore.score_percentile_0_100
+                && concat.scoreRecordSha256
+                    === verifiedScore.score_record_sha256
+                && concat.model_artifact_sha256
+                    === verifiedScore.score_model_artifact_sha256
+            );
+        }
         const entry = ledger.entries.find(candidate => (
             candidate
             && candidate.coordinate_id === verifiedScore.score_coordinate_id
@@ -4237,9 +4311,17 @@ const JarvisRetention = (function () {
         const prem = inp ? inp.value.trim() : '';
         if (!prem || st.grindStarting) return;
         const metric = st.grindMetric || 'keep';
-        const coordinateId = `shorts.stored.together.${metric}`;
+        const channelFree = metric === 'channelFreeConcat';
+        const coordinateId = channelFree
+            ? 'shorts.channel-free.concat.keep'
+            : `shorts.stored.together.${metric}`;
+        const threshold = channelFree
+            ? (st.grindChannelFreeThreshold == null
+                ? 75
+                : st.grindChannelFreeThreshold)
+            : st.grindThr || 82;
         st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile() }) }, 1)
+        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile(), animation: st.grindAnimation === true }) }, 1)
             .then(j => {
                 st.grindStarting = 0;
                 if (j.rid) {
@@ -4252,12 +4334,23 @@ const JarvisRetention = (function () {
                         premise: prem,
                         status: 'running',
                         attempts: [],
+                        threshold_unit:
+                            j.threshold_unit
+                            || (channelFree
+                                ? 'predicted_keep_percent'
+                                : 'percentile_0_100'),
+                        threshold_value_0_100:
+                            j.threshold_value_0_100 == null
+                                ? threshold
+                                : j.threshold_value_0_100,
                         threshold_percentile_0_100:
                             j.threshold_percentile_0_100,
                         threshold_coordinate_id:
                             j.threshold_coordinate_id || coordinateId,
                         attempt_count: 0,
                         rejected_variant_count: 0,
+                        animation: st.grindAnimation === true,
+                        render_mode: 'single-panel',
                         note: 'queued — the worker picks it up within seconds…',
                     };
                     grindPoll(j.rid);
@@ -4310,15 +4403,27 @@ const JarvisRetention = (function () {
             const score = await rtFetchJson('/api/hooks/grind/score/' + rid + '_' + k, {}, 3);
             if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
             const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
-            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score.indicators, score_ledger: score.score_ledger, novelty_provenance: score.novelty_provenance, channels: score.channels, emb_preview: score.emb_preview, input_manifest: score.input_manifest, score_verified: verifiedScore.score_verified, score_coordinate_id: verifiedScore.score_coordinate_id, score_ledger_sha256: verifiedScore.score_ledger_sha256, score_value: verifiedScore.score_value, score_percentile_0_100: verifiedScore.score_percentile_0_100, montage: monUrl });
+            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score.indicators, score_ledger: score.score_ledger, score_record_sha256: score.score_record_sha256, score_record_validation: score.score_record_validation, channel_free_keep_forecasts: score.channel_free_keep_forecasts, novelty_provenance: score.novelty_provenance, channels: score.channels, emb_preview: score.emb_preview, input_manifest: score.input_manifest, score_verified: verifiedScore.score_verified, score_coordinate_id: verifiedScore.score_coordinate_id, score_ledger_sha256: verifiedScore.score_ledger_sha256, score_value: verifiedScore.score_value, score_percentile_0_100: verifiedScore.score_percentile_0_100, score_target_unit: verifiedScore.score_target_unit || 'percentile_0_100', montage: monUrl });
         } catch (e) { st.grindErr = 'save: ' + e.message; rtgUpdateExp(); }
     }
     function grindPanel() {
         grindEnsure();
-        const bg = C.bg || '#0f172a', thr = st.grindThr || 82, metric = st.grindMetric || 'keep', hours = st.grindHours || 3;
+        const bg = C.bg || '#0f172a', metric = st.grindMetric || 'keep', hours = st.grindHours || 3;
+        const channelFree = metric === 'channelFreeConcat';
+        const thr = channelFree
+            ? (st.grindChannelFreeThreshold == null
+                ? 75
+                : st.grindChannelFreeThreshold)
+            : st.grindThr || 82;
+        const selectedCoordinateId = channelFree
+            ? 'shorts.channel-free.concat.keep'
+            : `shorts.stored.together.${metric}`;
+        const selectedTargetUnit = channelFree
+            ? 'predicted_keep_percent'
+            : 'percentile_0_100';
         const g = (GRINDRUN && GRINDRUN.rid === st.grindRid) ? GRINDRUN : null;
         const running = g && g.status === 'running';
-        const M = [['keep', 'keep-rate %ile'], ['ret5', 'past-5s %ile'], ['gt10M', '>10M %ile']];
+        const M = [['keep', 'keep-rate %ile'], ['ret5', 'past-5s %ile'], ['gt10M', '>10M %ile'], ['channelFreeConcat', 'channel-free concat keep %']];
         const mPill = ([id, lab]) => `<span data-grindmetric="${id}" style="cursor:pointer;border:1px solid ${metric === id ? C.accent : C.border};background:${metric === id ? C.accent + '22' : 'transparent'};color:${metric === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const hPill = h => `<span data-grindhours="${h}" style="cursor:pointer;border:1px solid ${hours === h ? C.accent : C.border};background:${hours === h ? C.accent + '22' : 'transparent'};color:${hours === h ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${h}h</span>`;
         let runHtml = '';
@@ -4326,10 +4431,20 @@ const JarvisRetention = (function () {
             const last = GRINDLIST.runs[0];
             const lastStatus = last.status === 'won' ? 'reported threshold result · verification required' : last.status;
             const lastBest = last.best_score
-                && last.best_score.score_percentile_0_100;
+                && (
+                    last.best_score.target_value
+                    ?? (last.threshold_unit
+                        === 'predicted_keep_percent'
+                        ? last.best_score.score_value
+                        : last.best_score.score_percentile_0_100)
+                );
             const lastThreshold =
-                last.threshold_percentile_0_100;
-            runHtml = `<div style="font-size:10px;color:${C.mute};margin-top:8px">📁 previous run: “${esc((last.premise || '').slice(0, 60))}” — ${esc(lastStatus)} · ${lastBest == null ? 'no verified score' : `best ${fmtv(lastBest, 1)}th vs ${fmtv(lastThreshold, 1)}th`} <span data-grindview="${esc(last.rid)}" style="cursor:pointer;color:${C.cyan};text-decoration:underline">view</span></div>`;
+                last.threshold_value_0_100
+                ?? last.threshold_percentile_0_100;
+            const lastSuffix = shortsGrindObjectiveSuffix(
+                last.threshold_unit || 'percentile_0_100'
+            );
+            runHtml = `<div style="font-size:10px;color:${C.mute};margin-top:8px">📁 previous run: “${esc((last.premise || '').slice(0, 60))}” — ${esc(lastStatus)} · ${lastBest == null ? 'no verified score' : `best ${fmtv(lastBest, 1)}${esc(lastSuffix)} vs ${fmtv(lastThreshold, 1)}${esc(lastSuffix)}`} <span data-grindview="${esc(last.rid)}" style="cursor:pointer;color:${C.cyan};text-decoration:underline">view</span></div>`;
         }
         if (g) {
             const mine = !!((st.grindMine || {})[g.rid]);
@@ -4340,18 +4455,27 @@ const JarvisRetention = (function () {
                 score: shortsGrindVerifiedScore(attempt),
             })).filter(item => item.score);
             const verifiedBest = verifiedAttempts.slice().sort((left, right) => {
-                const scoreDelta = right.score.score_percentile_0_100 - left.score.score_percentile_0_100;
+                const scoreDelta = shortsGrindObjectiveValue(right.score)
+                    - shortsGrindObjectiveValue(left.score);
                 return scoreDelta || ((left.attempt.k || 0) - (right.attempt.k || 0));
             })[0] || null;
+            const targetUnit = g.threshold_unit
+                || 'percentile_0_100';
             const threshold = (
-                typeof g.threshold_percentile_0_100 === 'number'
+                typeof g.threshold_value_0_100 === 'number'
                 && Number.isFinite(
-                    g.threshold_percentile_0_100
+                    g.threshold_value_0_100
                 )
-            ) ? g.threshold_percentile_0_100 : null;
-            const verifiedWinner = threshold == null || !verifiedBest || verifiedBest.score.score_percentile_0_100 < threshold
+            ) ? g.threshold_value_0_100 : (
+                typeof g.threshold_percentile_0_100 === 'number'
+                && Number.isFinite(g.threshold_percentile_0_100)
+                    ? g.threshold_percentile_0_100
+                    : null
+            );
+            const verifiedWinner = threshold == null || !verifiedBest || shortsGrindObjectiveValue(verifiedBest.score) < threshold
                 ? null
                 : verifiedBest;
+            const targetSuffix = shortsGrindObjectiveSuffix(targetUnit);
             const statCol = g.status === 'won' && !verifiedWinner
                 ? C.amber
                 : ({ running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim);
@@ -4369,8 +4493,11 @@ const JarvisRetention = (function () {
                     || Object.prototype.hasOwnProperty.call(a, 'pct')
                     || Object.prototype.hasOwnProperty.call(a, 'score_verified');
                 const unverifiedMessage = scoreClaimed && !verifiedScore ? shortsGrindUnverifiedMessage(a) : '';
+                const objectiveValue = shortsGrindObjectiveValue(
+                    verifiedScore
+                );
                 const pctBadge = verifiedScore
-                    ? `<b style="color:${heatCol(verifiedScore.score_percentile_0_100 / 100)};font-size:14px">${fmtv(verifiedScore.score_percentile_0_100, 1)}</b><span style="font-size:9px;color:${C.mute}">%ile · verified</span>`
+                    ? `<b style="color:${heatCol(objectiveValue / 100)};font-size:14px">${fmtv(objectiveValue, 1)}</b><span style="font-size:9px;color:${C.mute}">${verifiedScore.score_target_unit === 'predicted_keep_percent' ? '% predicted keep' : '%ile'} · verified</span>`
                     : (scoreClaimed ? `<span style="font-size:9px;color:${C.amber}">historical · unverified</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring' : `⏳ ${a.frames_done || 0}/5`}</span>`);
                 const win = !!(verifiedWinner && verifiedWinner.attempt.k === a.k);
                 const img = verifiedScore
@@ -4388,7 +4515,7 @@ const JarvisRetention = (function () {
                   <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:10px;font-weight:800;color:${win ? C.green : C.dim}">#${a.k + 1}${win ? ' 🎯 WINNER' : ''}</span>${pctBadge}</div>
                   ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
                   <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
-                  ${verifiedScore ? `<div style="font-size:7px;color:${C.faint};margin-top:3px;overflow-wrap:anywhere"><code>${esc(verifiedScore.score_coordinate_id)}</code> · ${esc(verifiedDescriptor.percentileUnit)} · target ${esc(verifiedDescriptor.target)} · modality ${esc(verifiedDescriptor.modality)} · input ${esc(verifiedDescriptor.input)} · ledger <code>${verifiedScore.score_ledger_sha256.slice(0, 12)}…</code></div>` : ''}
+                  ${verifiedScore ? `<div style="font-size:7px;color:${C.faint};margin-top:3px;overflow-wrap:anywhere"><code>${esc(verifiedScore.score_coordinate_id)}</code> · ${esc(verifiedDescriptor.targetUnit)} · target ${esc(verifiedDescriptor.target)} · modality ${esc(verifiedDescriptor.modality)} · input ${esc(verifiedDescriptor.input)} · ${verifiedScore.score_target_unit === 'predicted_keep_percent' ? `pooled percentile ${fmtv(verifiedScore.score_percentile_0_100, 1)}th · score record <code>${verifiedScore.score_record_sha256.slice(0, 12)}…</code> · ` : ''}ledger <code>${verifiedScore.score_ledger_sha256.slice(0, 12)}…</code></div>` : ''}
                   ${unverifiedMessage ? `<div style="font-size:8px;color:${C.amber};line-height:1.35;margin-top:4px">${esc(unverifiedMessage)}</div>` : ''}
                   <div style="display:flex;gap:5px;margin-top:5px;align-items:center">
                     ${a.nov != null ? `<span style="font-size:8.5px;color:${C.purple}" title="TEXT embedding distance from this run's earlier attempts (idea variety)">🆕${a.nov.toFixed(2)}</span>` : ''}
@@ -4405,24 +4532,27 @@ const JarvisRetention = (function () {
                 ${runIntegrity}
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} attempts · verified scores ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(verifiedBest.score.score_percentile_0_100 / 100) : C.mute}">${verifiedBest ? fmtv(verifiedBest.score.score_percentile_0_100, 1) + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + 'th'}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.rejected_variant_count || 0} rejected as too-similar${g.minimum_text_embedding_distance != null ? ` · <span title="minimum text-embedding cosine distance a new variant must keep from every earlier attempt" style="cursor:help;color:${C.purple}">exploration ≥ ${(+g.minimum_text_embedding_distance).toFixed(2)}</span>` : ''}</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} attempts · verified scores ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.animation ? 'animation · ' : ''}one image → five deterministic crops · ${g.rejected_variant_count || 0} rejected as too-similar${g.minimum_text_embedding_distance != null ? ` · <span title="minimum text-embedding cosine distance a new variant must keep from every earlier attempt" style="cursor:help;color:${C.purple}">exploration ≥ ${(+g.minimum_text_embedding_distance).toFixed(2)}</span>` : ''}</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
                 ${g.note ? `<div style="font-size:10px;color:${running ? C.cyan : C.mute};margin-bottom:7px">${running ? '⏳ ' : ''}${esc(g.note)}${running && st.grindT0 ? ` <span style="color:${C.mute}">· ${Math.round((Date.now() - st.grindT0) / 60000)}m elapsed</span>` : ''}</div>` : ''}
                 ${g.error ? `<div style="font-size:10px;color:#ef4444;margin-bottom:7px">${esc(g.error)}</div>` : ''}
-                <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:6px">${atts.map(card).join('') || (running ? `<span style="font-size:10px;color:${C.cyan}">⏳ attempt 1 is being written by the model — its card appears here the moment it exists (each attempt ≈ 2–3 min: write → render 5 frames → score)</span>` : '')}</div></div>`;
+                <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:6px">${atts.map(card).join('') || (running ? `<span style="font-size:10px;color:${C.cyan}">⏳ attempt 1 is being written by the model — its card appears here the moment it exists (write hook → generate one coherent panel → split → score)</span>` : '')}</div></div>`;
         }
+        const targetControl = channelFree
+            ? `<span style="font-size:10px;color:${C.mute}">target ≥</span><input type="number" min="0" max="100" step="0.1" value="${thr}" data-grindcfthr aria-label="Target predicted keep percentage" style="width:70px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 7px;font-size:11px" ${running ? 'disabled' : ''}><span style="font-size:10px;color:${C.accent};font-weight:800">% predicted keep</span>`
+            : `<span style="font-size:10px;color:${C.mute}">target ≥ <b style="color:${C.accent}">${thr}</b>th</span><input type="range" min="60" max="97" value="${thr}" data-grindthr style="width:110px;accent-color:${C.accent}" ${running ? 'disabled' : ''}>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— write YOUR hook; the loop generates variants grounded on it (each pushed away from the last by embedding distance), renders + scores every one on the trained models, and keeps going — for hours if needed — until one clears your bar. ~$0.25/attempt (frames + GPU).</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— describe the topic; the idea model writes progressively different grounded hooks. Each attempt uses one coherent 45:16 image call, five deterministic 9:16 crops, and the canonical scorer until it clears your selected bar.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
-            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="the hook you're writing — every variant stays grounded on this…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
-            <span style="font-size:10px;color:${C.mute}">target ≥ <b style="color:${C.accent}">${thr}</b>th</span>
-            <input type="range" min="60" max="97" value="${thr}" data-grindthr style="width:110px;accent-color:${C.accent}" ${running ? 'disabled' : ''}/>
+            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="describe the topic — the idea model writes grounded hook variants…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
+            ${targetControl}
             ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
+            <label style="display:inline-flex;gap:6px;align-items:center;color:${st.grindAnimation ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-grindanimation ${st.grindAnimation ? 'checked' : ''} ${running ? 'disabled' : ''} style="accent-color:${C.accent}">Animation</label>
             ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? '⏳' : '🎯 Grind'}</span>`}
           </div>
-          <div style="font-size:8px;color:${C.faint};margin-top:5px">Threshold coordinate: <code style="color:${C.dim}">shorts.stored.together.${esc(metric)}</code>. It always uses the image + generated hook text coordinate; no modality fallback is allowed.</div>
+          <div style="font-size:8px;color:${C.faint};margin-top:5px">Threshold coordinate: <code style="color:${C.dim}">${esc(selectedCoordinateId)}</code> · unit <code style="color:${C.dim}">${esc(selectedTargetUnit)}</code>. ${channelFree ? 'This compares the frozen pooled model’s actual predicted keep percentage; the separate pooled percentile is shown only as context.' : 'This compares the coordinate’s corpus percentile.'} No creator scale factor or modality fallback is substituted.</div>
           ${st.grindErr ? `<div style="font-size:10px;color:#ef4444;margin-top:6px">${esc(st.grindErr)}</div>` : ''}
           ${runHtml}</div>`;
     }
@@ -4431,7 +4561,7 @@ const JarvisRetention = (function () {
     function pipelineProgress() {
         let phase = -1, sub = '', cold = false;
         if (st.expGenBusy) {
-            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing ideas — they stream in one at a time…', rendering: 'rendering the 5 frames…', done: 'done' };
+            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing ideas — they stream in one at a time…', rendering: 'generating one panel and splitting its five frames…', done: 'done' };
             phase = 0; sub = (st.expGenStat && st.expGenStat.note) || M[st.expGenStage] || 'working…'; cold = (st.expGenStage === 'queued' || (st.expGenStage === 'reasoning' && !(st.expGenStat && st.expGenStat.done)));
         } else if (st.rawUploading) {
             const s = Math.min(st.rawUpStage || 0, 4), vid = !!(st.rawUpQueue && st.rawUpQueue.total);
@@ -8071,6 +8201,7 @@ const JarvisRetention = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedfoldername')) { st.savedFolderName = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindthr')) { st.grindThr = +e.target.value; window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindcfthr')) { st.grindChannelFreeThreshold = Math.max(0, Math.min(100, +e.target.value || 0)); window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.id === 'grind-input') { st.grindPrem = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
@@ -8083,6 +8214,16 @@ const JarvisRetention = (function () {
         ) return;
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleChange(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleChange(e)) return;
+        if (e.target.hasAttribute && e.target.hasAttribute('data-expanimation')) {
+            st.expGenAnimation = e.target.checked === true;
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindanimation')) {
+            st.grindAnimation = e.target.checked === true;
+            rtgUpdateExp();
+            return;
+        }
         if (
             e.target.hasAttribute
             && e.target.hasAttribute(
@@ -8300,19 +8441,85 @@ const JarvisRetention = (function () {
     }
     // Score a GENERATED hook through the SAME embed+score pipeline as a built/uploaded hook,
     // so it lands in the same indicator + embedded-space display.
-    async function scoreGenerated(k, fids, text) {
+    async function hydrateGeneratedScores(rid, attempts) {
+        st._generatedScoreHydration = st._generatedScoreHydration || {};
+        if (st._generatedScoreHydration[rid]) return;
+        st._generatedScoreHydration[rid] = true;
+        try {
+            const candidates = (attempts || []).filter(attempt => (
+                attempt
+                && attempt.score_available === true
+                && attempt.frame_imgs
+                && attempt.frame_imgs.filter(Boolean).length === 5
+            ));
+            for (let index = 0; index < candidates.length; index++) {
+                const attempt = candidates[index];
+                const alreadyLoaded = (st.rawUploads || []).some(score => (
+                    score
+                    && score.generatedRunId === rid
+                    && score.generatedAttemptIndex === attempt.k
+                    && rawUploadIsScored(score)
+                ));
+                if (alreadyLoaded) continue;
+                let waits = 0;
+                while (rawScoreBusy() && waits < 1200) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    waits += 1;
+                }
+                if (rawScoreBusy()) break;
+                await scoreGenerated(
+                    attempt.k,
+                    attempt.frame_imgs,
+                    attempt.premise || attempt.caption || '',
+                    {
+                        rid,
+                        present: index === 0,
+                        preferPersisted: true,
+                    }
+                );
+            }
+        } finally {
+            delete st._generatedScoreHydration[rid];
+        }
+    }
+    async function scoreGenerated(k, fids, text, options) {
+        options = options || {};
         if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before scoring this generated hook.'); return; }
         st.genScoringK = k; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
         const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1600);
         let completedScore = null;
         try {
-            const dataUrls = [];
-            for (const f of (fids || [])) dataUrls.push(f ? await urlToDataUrl('/api/hooks/grpo/montage/demo/' + f) : null);
-            const montage = await composeFrames(dataUrls);
-            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), creatorProfile: selectedCreatorProfile(), async: true }) });
-            const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
+            const rid = options.rid || st.expGenRid;
+            const g = EXPDEMO[rid];
+            const a = g && g.attempts
+                && g.attempts.find(x => x.k === k);
+            let montage;
+            let j;
+            if (
+                options.preferPersisted !== false
+                && a
+                && a.score_available === true
+            ) {
+                j = await rtFetchJson(
+                    `/api/hooks/grpo/score/demo/${rid}_${k}`,
+                    {},
+                    3
+                );
+                montage = await urlToDataUrl(
+                    `/api/hooks/grpo/montage/demo/${rid}_${k}`
+                );
+            } else {
+                const dataUrls = [];
+                for (const f of (fids || [])) {
+                    dataUrls.push(f ? await urlToDataUrl(
+                        '/api/hooks/grpo/montage/demo/' + f
+                    ) : null);
+                }
+                montage = await composeFrames(dataUrls);
+                j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), creatorProfile: selectedCreatorProfile(), async: true }) });
+            }
             j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
-            j.generatedRunId = st.expGenRid;
+            j.generatedRunId = rid;
             j.generatedAttemptIndex = k;
             st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
             completedScore = j;
@@ -8322,7 +8529,11 @@ const JarvisRetention = (function () {
             rtgUpdateExp();
             return;
         }
-        presentCanonicalScore(completedScore, { closeBuilder: true });
+        if (options.present !== false) {
+            presentCanonicalScore(completedScore, { closeBuilder: true });
+        } else {
+            rtgUpdateExp();
+        }
         persistExperimentLabScoreInBackground(
             completedScore,
             'The generated hook score is complete, but its private saved copy failed'

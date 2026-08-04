@@ -97,6 +97,9 @@ const storyboardContract = require(
 const storyboardStylePresets = require(
     './buildings/jarvis/storyboard-style-presets'
 );
+const fivePanelSheet = require(
+    './buildings/jarvis/five-panel-sheet'
+);
 const openAIImageProvider = require(
     './buildings/jarvis/openai-image-provider'
 );
@@ -4567,38 +4570,13 @@ function storyboardSheetPrompt({
     styleContract = '',
     referenceDescriptions = [],
 }) {
-    const opening = brief || hookText || 'A compelling visual opening.';
-    const panelLines = panels.map((prompt, index) => (
-        `PANEL ${index + 1}: ${
-            String(prompt || '').trim()
-            || `Continue the visual progression of: ${opening}`
-        }`
-    ));
-    return [
-        `Create ONE single edge-to-edge ${
-            styleContract ? 'stylized 3D animated' : 'photographic'
-        } storyboard sheet on a 45:16 canvas. This is one image, not five image outputs.`,
-        'Divide the canvas into EXACTLY FIVE contiguous equal-width columns: '
-            + 'panel 1 occupies 0-20%, panel 2 20-40%, panel 3 40-60%, '
-            + 'panel 4 60-80%, and panel 5 80-100% of the canvas width.',
-        'Every column is a complete vertical 9:16 image. Arrange the five '
-            + 'columns left to right in chronological order with no gutter, '
-            + 'overlap, inset, or unequal spacing.',
-        'Maintain the exact same people, faces, wardrobe, objects, location, '
-            + 'lighting logic, and visual style whenever they recur.',
-        'Keep every subject inside its own column. Never let one composition '
-            + 'span, merge, or bleed across a panel boundary.',
-        'Do not add captions, words, letters, numbers, watermarks, borders, '
-            + 'gaps, frames, contact-sheet labels, or UI.',
+    return fivePanelSheet.buildPrompt({
+        brief,
+        hookText,
+        panels,
         styleContract,
-        `OVERALL OPENING: ${opening}`,
-        hookText ? `SPOKEN CONTEXT: ${hookText}` : '',
-        referenceDescriptions.length
-            ? 'REFERENCE SCOPE (obey this panel mapping exactly):'
-            : '',
-        ...referenceDescriptions,
-        ...panelLines,
-    ].filter(Boolean).join('\n');
+        referenceDescriptions,
+    });
 }
 
 function storyboardPanelPrompt({
@@ -14336,17 +14314,33 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 if (pend.length) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'a grind is already queued' })); return; }
             } catch (e) {}
             const rid = 'gr' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-            const metric = ['keep', 'ret5', 'views', 'gt10M'].includes(body.metric)
-                ? body.metric
-                : 'keep';
+            const metric = [
+                'keep',
+                'ret5',
+                'views',
+                'gt10M',
+                'channelFreeConcat',
+            ].includes(body.metric) ? body.metric : 'keep';
             const requestedCoordinate = String(body.coordinateId || '');
-            const coordinateId = /^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/.test(requestedCoordinate)
-                && requestedCoordinate.endsWith(`.${metric}`)
-                ? requestedCoordinate
+            const metricCoordinate = metric === 'channelFreeConcat'
+                ? SHORTS_GRIND_CHANNEL_FREE_CONCAT
                 : `shorts.stored.together.${metric}`;
-            const thresholdPercentile = Math.max(
-                50,
-                Math.min(99, Number.parseInt(body.threshold, 10) || 82)
+            const coordinateId = shortsGrindCoordinateValid(
+                requestedCoordinate
+            ) && (
+                requestedCoordinate === metricCoordinate
+            ) ? requestedCoordinate : metricCoordinate;
+            const thresholdUnit = shortsGrindTargetUnit(coordinateId);
+            const thresholdDefault = thresholdUnit
+                === 'predicted_keep_percent' ? 75 : 82;
+            const thresholdValue = Math.max(
+                thresholdUnit === 'predicted_keep_percent' ? 0 : 50,
+                Math.min(
+                    thresholdUnit === 'predicted_keep_percent' ? 100 : 99,
+                    Number.isFinite(Number(body.threshold))
+                        ? Number(body.threshold)
+                        : thresholdDefault
+                )
             );
             const maxAttempts = Math.max(
                 1,
@@ -14357,13 +14351,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 Math.max(0.25, Number.parseFloat(body.hours) || 3)
             );
             await cloud.uploadToR2(`hooks/grind/requests/${rid}.json`, Buffer.from(JSON.stringify({
-                schema: 'shorts-grind-request-v2',
-                schema_version: 2,
+                schema: 'shorts-grind-request-v3',
+                schema_version: 3,
                 premise,
                 threshold_coordinate_id: coordinateId,
-                threshold_percentile_0_100: thresholdPercentile,
+                threshold_unit: thresholdUnit,
+                threshold_value_0_100: thresholdValue,
                 hours,
                 max_attempts: maxAttempts,
+                animation: body.animation === true,
+                render_mode: 'single-panel',
                 creator_profile:
                     safeCreatorProfile(body.creatorProfile) || null,
                 created_at_ms: Date.now(),
@@ -14376,7 +14373,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     title: premise,
                     requestId: rid,
                     detail:
-                        `${coordinateId} · target ${thresholdPercentile}th `
+                        `${coordinateId} · target ${thresholdValue}${
+                            thresholdUnit === 'predicted_keep_percent'
+                                ? '% predicted keep'
+                                : 'th percentile'
+                        } `
                         + `· up to ${maxAttempts} attempts`,
                     saved: false,
                 }
@@ -14385,7 +14386,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.end(JSON.stringify({
                 rid,
                 threshold_coordinate_id: coordinateId,
-                threshold_percentile_0_100: thresholdPercentile,
+                threshold_unit: thresholdUnit,
+                threshold_value_0_100: thresholdValue,
+                threshold_percentile_0_100:
+                    thresholdUnit === 'percentile_0_100'
+                        ? thresholdValue
+                        : null,
+                animation: body.animation === true,
+                render_mode: 'single-panel',
             }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -14464,7 +14472,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         requestId: grindRun[1],
                         detail:
                             `${run.attempt_count || 0} attempts · `
-                            + `best ${run.best_score == null ? 'unscored' : `${run.best_score}th`}`,
+                            + `best ${
+                                !run.best_score
+                                    ? 'unscored'
+                                    : `${run.best_score.target_value}${
+                                        run.threshold_unit
+                                            === 'predicted_keep_percent'
+                                            ? '% predicted keep'
+                                            : 'th percentile'
+                                    }`
+                            }`,
                         saved: false,
                     }
                 );
@@ -14510,63 +14527,31 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 ['shorts-grind'],
                 { write: false }
             );
-            const scoreKey = `hooks/grind/scores/${grindScore[1]}.json`;
-            const montageKey =
-                `hooks/grind/montages/${grindScore[1]}.jpg`;
-            const [b, montageBytes] = await Promise.all([
-                cloud.downloadFromR2(scoreKey),
-                cloud.downloadFromR2(montageKey),
-            ]);
-            if (!b || !montageBytes) {
-                res.writeHead(404, {
-                    'Content-Type': 'application/json',
-                    'Cache-Control': 'no-cache',
-                });
-                res.end(JSON.stringify({
-                    error: 'canonical score evidence is incomplete',
-                }));
-                return;
-            }
-            const score = withPersistedShortsLedgerValidation(
-                JSON.parse(b.toString('utf8'))
+            const evidence = await loadPersistedShortsScoreEvidence(
+                `hooks/grind/scores/${grindScore[1]}.json`,
+                `hooks/grind/montages/${grindScore[1]}.jpg`
             );
-            const inputValidation =
-                shortsScoreLedger.validateShortsInputManifest(
-                    score,
-                    { montageBytes }
-                );
-            const valid = (
-                score.score_record_validation
-                && score.score_record_validation.valid === true
-                && score.score_ledger_validation
-                && score.score_ledger_validation.valid === true
-                && inputValidation.valid
-            );
-            if (!valid) {
-                res.writeHead(409, {
-                    'Content-Type': 'application/json',
-                    'Cache-Control': 'no-cache',
-                });
-                res.end(JSON.stringify({
-                    error: 'saved grind score failed canonical integrity validation',
-                    code: 'grind_score_integrity_error',
-                    score_record_validation:
-                        score.score_record_validation,
-                    score_ledger_validation:
-                        score.score_ledger_validation,
-                    input_manifest_validation: inputValidation,
-                }));
-                return;
-            }
             res.writeHead(200, {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-cache',
             });
+            res.end(JSON.stringify(evidence.score));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
             res.end(JSON.stringify({
-                ...score,
-                input_manifest_validation: inputValidation,
+                error: error.message,
+                code: error.code || 'grind_score_failed',
+                score_record_validation:
+                    error.scoreRecordValidation,
+                score_ledger_validation:
+                    error.scoreLedgerValidation,
+                input_manifest_validation:
+                    error.inputManifestValidation,
             }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        }
         return;
     }
     if (pathname === '/api/hooks/grind/runs' && req.method === 'GET') {
@@ -14617,6 +14602,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             j.threshold_coordinate_id,
                         threshold_percentile_0_100:
                             j.threshold_percentile_0_100,
+                        threshold_unit: j.threshold_unit,
+                        threshold_value_0_100:
+                            j.threshold_value_0_100,
+                        animation: j.animation === true,
+                        render_mode: j.render_mode || null,
                         updated_at_ms: j.updated_at_ms,
                         run_validation: j.run_validation,
                     });
@@ -14637,12 +14627,23 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 400);
             const invent = !!body.invent || !premise;
+            const animation = body.animation === true;
             if (!premise && !invent) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
             const count = Math.max(1, Math.min(parseInt(body.count) || 4, 8));
             // rate guard (endpoint is public): cap the pending queue so it can't be spammed into render costs
             try { const pend = (await cloud.listR2Keys('hooks/grpo/requests/')) || []; if (pend.filter(k => k.endsWith('.json')).length >= 6) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — a few generations are already queued, try again in a moment' })); return; } } catch (e) {}
             const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-            await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, invent, ts: Date.now() })), 'application/json');
+            await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({
+                schema: 'shorts-hook-generation-request-v2',
+                premise,
+                count,
+                invent,
+                animation,
+                render_mode: 'single-panel',
+                creator_profile:
+                    safeCreatorProfile(body.creatorProfile) || null,
+                ts: Date.now(),
+            })), 'application/json');
             if (labScope) {
                 await recordExperimentLabActivity(labScope, {
                     type: 'hook-generated',
@@ -14659,12 +14660,25 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             : 'seeded-idea',
                         premise: premise || null,
                         candidateCount: count,
+                        animation,
+                        stylePreset: animation
+                            ? storyboardStylePresets.ANIMATION_STYLE_ID
+                            : storyboardStylePresets.DEFAULT_STYLE_ID,
+                        renderMode: 'single-panel',
+                        creatorProfile:
+                            safeCreatorProfile(body.creatorProfile) || null,
                     },
                     saved: false,
                 });
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ rid, premise, count }));   // poll status + group/demo/<rid> for the result
+            res.end(JSON.stringify({
+                rid,
+                premise,
+                count,
+                animation,
+                render_mode: 'single-panel',
+            }));   // poll status + group/demo/<rid> for the result
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -15667,7 +15681,10 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     if (grpoMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
             if (grpoMon[1] === 'demo') {
-                const runId = grpoMon[2].replace(/_\d+$/, '');
+                const runId = grpoMon[2].replace(
+                    /_\d+(?:_\d+)?$/,
+                    ''
+                );
                 await requireExperimentLabActivity(
                     req,
                     url,
@@ -15688,6 +15705,46 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
                 code:
                     error.code
                     || 'hook_generation_montage_failed',
+            }));
+        }
+        return;
+    }
+    const grpoScore = pathname.match(
+        /^\/api\/hooks\/grpo\/score\/demo\/([\w-]{1,40})$/
+    );
+    if (grpoScore && req.method === 'GET') {
+        try {
+            const runId = grpoScore[1].replace(/_\d+$/, '');
+            await requireExperimentLabActivity(
+                req,
+                url,
+                runId,
+                ['hook-generated'],
+                { write: false }
+            );
+            const evidence = await loadPersistedShortsScoreEvidence(
+                `hooks/grpo/demo/scores/${grpoScore[1]}.json`,
+                `hooks/grpo/demo/montages/${grpoScore[1]}.jpg`
+            );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+            });
+            res.end(JSON.stringify(evidence.score));
+        } catch (error) {
+            res.writeHead(error.statusCode || 500, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'generated_hook_score_failed',
+                score_record_validation:
+                    error.scoreRecordValidation,
+                score_ledger_validation:
+                    error.scoreLedgerValidation,
+                input_manifest_validation:
+                    error.inputManifestValidation,
             }));
         }
         return;
@@ -21719,10 +21776,41 @@ async function replicateRun(slug, input, timeoutMs = 180000) {
         { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'wait' }, body: JSON.stringify({ input }) }, 120000);
     let j = await r.json().catch(() => null);
     if (!j) throw new Error('replicate returned no JSON (http ' + r.status + ')');
+    if (!r.ok) {
+        const detail = j.error || j.detail || j.title || j.message || j;
+        throw new Error(
+            `replicate http ${r.status}: ${String(
+                typeof detail === 'string'
+                    ? detail
+                    : JSON.stringify(detail)
+            ).slice(0, 500)}`
+        );
+    }
     const deadline = Date.now() + timeoutMs;
     while (j && (j.status === 'starting' || j.status === 'processing') && j.urls && j.urls.get && Date.now() < deadline) {
         await new Promise(s => setTimeout(s, 1500));
-        j = await (await fetchT(j.urls.get, { headers: auth }, 20000)).json().catch(() => j);
+        const poll = await fetchT(
+            j.urls.get,
+            { headers: auth },
+            20000
+        );
+        const next = await poll.json().catch(() => null);
+        if (!poll.ok) {
+            const detail = next && (
+                next.error
+                || next.detail
+                || next.title
+                || next.message
+            );
+            throw new Error(
+                `replicate poll http ${poll.status}: ${String(
+                    typeof detail === 'string'
+                        ? detail
+                        : JSON.stringify(detail || {})
+                ).slice(0, 500)}`
+            );
+        }
+        if (next) j = next;
     }
     if (!j || j.error) throw new Error('replicate: ' + ((j && j.error) ? (typeof j.error === 'string' ? j.error : JSON.stringify(j.error)) : 'no result'));
     if (j.status && j.status !== 'succeeded') throw new Error('replicate ' + j.status + (j.logs ? ' — ' + String(j.logs).slice(-140) : ''));
@@ -21802,36 +21890,123 @@ async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
     const type = storyboardImageType(buf);
     return `data:${type.mediaType};base64,${buf.toString('base64')}`;
 }
-async function hookRenderFrame(prompt, modelOverride) {
-    // Poll-until-terminal via replicateRun: 'Prefer: wait' alone returns 202 "starting" whenever
-    // flux is cold/queued — the old code threw "no render output" there, silently dropping frames.
-    const model = modelOverride || process.env.HOOK_FRAME_MODEL || 'black-forest-labs/flux-2-pro';
-    const input = { prompt, aspect_ratio: '9:16' };
-    if (/flux|nano/.test(model)) input.output_format = 'jpg';   // seedream rejects output_format
-    const out = await replicateRun(model, input, 180000);
-    return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
+function hookPanelModelKey(value) {
+    const requested = String(value || '').trim();
+    if (STORY_MODELS[requested]) return requested;
+    const match = Object.entries(STORY_MODELS).find(
+        ([, model]) => model.slug === requested
+    );
+    return match ? match[0] : 'flux-2-pro';
 }
-// A hook must NEVER ship with a missing frame — and failures must be handled DETERMINISTICALLY:
-//  · flux-2-pro's content moderation (E005 "flagged as sensitive") flags the SAME prompt every
-//    time (skulls/bones trip it constantly) — retrying pro is pointless, so on a moderation flag
-//    we go STRAIGHT to Seedream-4 (comparable quality, ~$0.03, doesn't flag this content).
-//  · transient errors (timeouts/5xx) get 2 tries on the primary before falling down the ladder.
-//  · schnell (draft quality) is the true last resort, and it's labelled when used.
-async function renderFrameRobust(prompt) {
-    const LADDER = [process.env.HOOK_FRAME_MODEL || 'black-forest-labs/flux-2-pro', 'bytedance/seedream-4', 'black-forest-labs/flux-schnell'];
-    let lastErr = null, flagged = false;
-    for (let mi = 0; mi < LADDER.length; mi++) {
-        const tries = mi === 0 ? 2 : 1;
-        for (let t = 0; t < tries; t++) {
-            try { return { buf: await hookRenderFrame(prompt, LADDER[mi]), model: LADDER[mi].split('/').pop(), fallback: mi > 0, draft: /schnell/.test(LADDER[mi]), flagged }; }
-            catch (e) {
-                lastErr = e;
-                if (/sensitive|E005|flagged|nsfw/i.test(String(e.message || e))) { flagged = true; break; }   // deterministic — next model
-                await new Promise(s => setTimeout(s, 1200 * (t + 1)));
+
+// Auto, Grind, and the manual Storyboard workbench now share one visual
+// primitive: one 45:16 generation, followed by deterministic equal-width
+// crops. A retry can make another provider call after a failed request, but a
+// successful attempt never renders the five frames independently.
+async function renderHookPanelRobust({
+    brief,
+    hookText,
+    panels,
+    animation,
+}) {
+    const style = storyboardStylePresets.stylePreset(
+        animation
+            ? storyboardStylePresets.ANIMATION_STYLE_ID
+            : storyboardStylePresets.DEFAULT_STYLE_ID
+    );
+    const prompt = storyboardSheetPrompt({
+        brief,
+        hookText,
+        panels: fivePanelSheet.normalizePanels(panels, brief || hookText),
+        styleContract: style.promptContract,
+    });
+    const preferred = hookPanelModelKey(
+        process.env.HOOK_PANEL_MODEL
+        || process.env.HOOK_FRAME_MODEL
+        || 'flux-2-pro'
+    );
+    const ladder = [
+        preferred,
+        'flux-2-pro',
+        'seedream-4',
+        'gpt-image-2',
+    ].filter((value, index, values) => values.indexOf(value) === index);
+    let lastError = null;
+    let flagged = false;
+    let providerCalls = 0;
+    const failures = [];
+    for (let modelIndex = 0; modelIndex < ladder.length; modelIndex++) {
+        const model = ladder[modelIndex];
+        const tries = modelIndex === 0 ? 2 : 1;
+        for (let attempt = 0; attempt < tries; attempt++) {
+            providerCalls += 1;
+            try {
+                const image = await genStoryFrame(
+                    model,
+                    prompt,
+                    [],
+                    'new',
+                    { aspectRatio: 'storyboard-sheet' }
+                );
+                const decoded = decodeStoryboardDataImage(
+                    image,
+                    'generated five-panel hook sheet'
+                );
+                const split = await fivePanelSheet.splitImage(
+                    decoded.bytes,
+                    { env: RAW_PY_ENV }
+                );
+                return {
+                    source: decoded.bytes,
+                    frames: split.frames,
+                    montage: split.montage,
+                    model,
+                    modelSlug: STORY_MODELS[model].slug,
+                    provider: STORY_MODELS[model].provider || 'replicate',
+                    stylePreset: style.id,
+                    prompt,
+                    geometry: {
+                        ...storyboardSheetGeometry(model),
+                        ...split.geometry,
+                        provider_call_count: providerCalls,
+                    },
+                    fallback: modelIndex > 0,
+                    flagged,
+                };
+            } catch (error) {
+                lastError = error;
+                failures.push(
+                    `${model}: ${String(
+                        error && error.message || error
+                    ).slice(0, 220)}`
+                );
+                if (
+                    /sensitive|E005|flagged|nsfw/i.test(
+                        String(error && error.message || error)
+                    )
+                ) {
+                    flagged = true;
+                    break;
+                }
+                if (attempt + 1 < tries) {
+                    await new Promise(resolve => setTimeout(
+                        resolve,
+                        1200 * (attempt + 1)
+                    ));
+                }
             }
         }
     }
-    throw lastErr;
+    const failure = new Error(
+        `five-panel image generation failed${
+            failures.length ? ` — ${failures.join(' | ')}` : ''
+        }`
+    );
+    if (lastError && lastError.code) failure.code = lastError.code;
+    if (lastError && lastError.statusCode) {
+        failure.statusCode = lastError.statusCode;
+    }
+    throw failure;
 }
 // The idea model samples at temperature — a single malformed generation (truncated JSON, ≠5
 // frames) is NORMAL, not fatal. Retry up to 3×; only infra failures (credit/config) are terminal.
@@ -21852,6 +22027,8 @@ async function hookProcessRequest(
     premise,
     count,
     invent,
+    animation,
+    creatorProfile,
     ownership
 ) {
     requireQueueLeaseOwnership(
@@ -21875,8 +22052,8 @@ async function hookProcessRequest(
     let attempts = [];
     let err = '';
     let memN = 0;
-    // STREAMING: the group file is rewritten after every frame so the UI surfaces each hook the
-    // moment its idea exists, then fills its 5 frames in live. `done` flips true only at the very end.
+    // STREAMING: the group file is rewritten as each idea and coherent panel
+    // completes. `done` flips true only after every requested panel finishes.
     const warns = new Set();   // non-fatal problems — surfaced in the UI, never swallowed
     const writeGroup = (done) => ownership.mutate(
         'write Shorts hook group',
@@ -21892,7 +22069,12 @@ async function hookProcessRequest(
                 streaming: true,
                 error: (done && !attempts.length) ? err : '',
                 warn: Array.from(warns).join(' · '),
-                model: 'idea_r7 (fine-tuned) + flux',
+                model: 'idea_r7 (fine-tuned) + one five-panel image',
+                animation: !!animation,
+                style_preset: animation
+                    ? storyboardStylePresets.ANIMATION_STYLE_ID
+                    : storyboardStylePresets.DEFAULT_STYLE_ID,
+                render_mode: 'single-panel',
                 hosted: true,
                 queue_lease_fence: queueLeaseFence,
             })),
@@ -21947,40 +22129,129 @@ async function hookProcessRequest(
             }
             const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
                 frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise,
-                cohesion_mode: spec.cohesion_mode || '', novelty: nov, nearest: near };
+                cohesion_mode: spec.cohesion_mode || '', novelty: nov, nearest: near,
+                animation: !!animation,
+                render_mode: 'single-panel' };
             attempts.push(a);
             if (q) { accVecs.push(q); mem[mem.length - 1].s = 1; }
             await writeGroup(false);                          // ← the card appears NOW, frames fill in live
             await stat({ stage: attempts.length < count ? 'reasoning' : 'rendering', done: attempts.length, n: count,
-                note: attempts.length < count ? `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its frames render…` : 'all ideas in — rendering the last frames…' });
+                note: attempts.length < count ? `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its coherent panel renders…` : 'all ideas in — rendering the last coherent panels…' });
             renders.push((async () => {                       // render THIS hook while the next idea generates
-                for (let i = 0; i < 5; i++) {
-                    try {
-                        const r2 = await renderFrameRobust(a.frames[i]);   // model ladder — a hole is exceptional
-                        const id = `${rid}_${a.k}_${i}`;
-                        await ownership.mutate(
-                            'store Shorts hook frame',
-                            () => cloud.uploadToR2(
-                                `hooks/grpo/demo/montages/${id}.jpg`,
-                                r2.buf,
+                try {
+                    const panel = await renderHookPanelRobust({
+                        brief: spec.premise,
+                        hookText: spec.premise,
+                        panels: a.frames,
+                        animation,
+                    });
+                    const montageId = `${rid}_${a.k}`;
+                    const frameIds = panel.frames.map((_, index) => (
+                        `${montageId}_${index}`
+                    ));
+                    await ownership.mutate(
+                        'store Shorts hook five-panel render',
+                        () => Promise.all([
+                            cloud.uploadToR2(
+                                `hooks/grpo/demo/montages/${montageId}.jpg`,
+                                panel.montage,
                                 'image/jpeg'
-                            )
+                            ),
+                            ...panel.frames.map((frame, index) => (
+                                cloud.uploadToR2(
+                                    `hooks/grpo/demo/montages/${frameIds[index]}.jpg`,
+                                    frame,
+                                    'image/jpeg'
+                                )
+                            )),
+                        ])
+                    );
+                    a.frame_imgs = frameIds;
+                    a.frames_done = fivePanelSheet.PANEL_COUNT;
+                    a.panel_sheet_id = montageId;
+                    a.panel_model = panel.model;
+                    a.panel_model_slug = panel.modelSlug;
+                    a.panel_provider = panel.provider;
+                    a.style_preset = panel.stylePreset;
+                    a.panel_geometry = panel.geometry;
+                    a.errs = a.errs || [];
+                    if (panel.fallback) {
+                        a.errs.push(
+                            `five-panel image: primary model failed${
+                                panel.flagged ? ' moderation' : ''
+                            } — rendered with ${panel.model}`
                         );
-                        a.frame_imgs[i] = id;
-                        a.errs = a.errs || [];
-                        if (r2.draft) a.errs.push(`frame ${i + 1}: fell through to a DRAFT (schnell) render${r2.flagged ? ' — pro & seedream both flagged it as sensitive' : ''}`);
-                        else if (r2.fallback) a.errs.push(`frame ${i + 1}: ${r2.flagged ? 'flux-2-pro flagged it as sensitive (E005)' : 'flux-2-pro failed'} — rendered with ${r2.model} (full quality)`);
-                    } catch (e) {                              // NEVER silent: the failure rides the group JSON to the card
-                        if (isQueueLeaseOwnershipError(e)) {
-                            throw e;
-                        }
-                        const lastErr = String(e.message || e).slice(0, 160);
-                        a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: FAILED after all retries — ${lastErr}`);
-                        warns.add(`hook ${a.k + 1} frame ${i + 1} failed: ${lastErr.slice(0, 90)}`);
-                        err = 'render: ' + lastErr;
                     }
-                    a.frames_done = a.frame_imgs.filter(Boolean).length;
-                    await writeGroup(false);                  // ← each frame appears the moment it renders
+                    a.status = 'scoring';
+                    await writeGroup(false);
+                    const score = await scoreMontage(
+                        panel.montage,
+                        spec.premise,
+                        premise || spec.premise,
+                        creatorProfile
+                    );
+                    delete score.montage;
+                    score.score_record_sha256 =
+                        savedHookScoreRecordSha256(score);
+                    const persistedValidation =
+                        withPersistedShortsLedgerValidation(score);
+                    if (
+                        !persistedValidation.score_record_validation
+                        || persistedValidation.score_record_validation.valid
+                            !== true
+                        || !persistedValidation.score_ledger_validation
+                        || persistedValidation.score_ledger_validation.valid
+                            !== true
+                    ) {
+                        throw new Error(
+                            'scorer output failed persisted ledger binding'
+                        );
+                    }
+                    await ownership.mutate(
+                        'store Shorts generated-hook score',
+                        () => cloud.uploadToR2(
+                            `hooks/grpo/demo/scores/${montageId}.json`,
+                            Buffer.from(JSON.stringify(score)),
+                            'application/json'
+                        )
+                    );
+                    const keepScore = grindCoordinateValue(
+                        score,
+                        'shorts.stored.together.keep'
+                    );
+                    const channelFreeScore = grindCoordinateValue(
+                        score,
+                        SHORTS_GRIND_CHANNEL_FREE_CONCAT
+                    );
+                    a.score_available = true;
+                    a.score_ledger_sha256 =
+                        score.score_ledger.ledger_sha256;
+                    a.score_record_sha256 =
+                        score.score_record_sha256;
+                    a.score_coordinate_count =
+                        score.score_ledger.entries.length;
+                    a.keep_percentile_0_100 = keepScore
+                        ? keepScore.score_percentile_0_100
+                        : null;
+                    a.channel_free_concat_keep_percent =
+                        channelFreeScore
+                            ? channelFreeScore.score_value
+                            : null;
+                } catch (e) {                                  // NEVER silent: the failure rides the group JSON to the card
+                    if (isQueueLeaseOwnershipError(e)) throw e;
+                    const lastErr = String(e.message || e).slice(0, 240);
+                    const failedStage = a.frames_done
+                        === fivePanelSheet.PANEL_COUNT
+                        ? 'score'
+                        : 'five-panel image';
+                    a.errs = a.errs || [];
+                    a.errs.push(
+                        `${failedStage}: FAILED — ${lastErr}`
+                    );
+                    warns.add(
+                        `hook ${a.k + 1} ${failedStage} failed: ${lastErr.slice(0, 120)}`
+                    );
+                    err = `${failedStage}: ${lastErr}`;
                 }
                 a.status = 'done';
                 await writeGroup(false);
@@ -22078,7 +22349,12 @@ async function hookSweepOrphans() {
                                 ? `only ${attempts.length} hook(s) finished — ${msg}`
                                 : '',
                             model:
-                                'idea_r7 (fine-tuned) + flux',
+                                'idea_r7 (fine-tuned) + one five-panel image',
+                            animation: !!(g && g.animation),
+                            style_preset:
+                                g && g.style_preset
+                                || storyboardStylePresets.DEFAULT_STYLE_ID,
+                            render_mode: 'single-panel',
                             hosted: true,
                             queue_lease_fence:
                                 queueLeaseFence,
@@ -22172,20 +22448,28 @@ async function grindSweepOrphans() {
                         j.status = 'error';
                         j.error = 'interrupted by a server restart — the attempts above survived; press Grind to continue from here';
                         j.note = '';
-                        const persisted =
-                            j.schema === 'shorts-grind-run-v2'
-                                ? bindShortsGrindRun({
-                                    ...j,
-                                    updated_at_ms:
-                                        Date.now(),
-                                    queue_lease_fence:
-                                        queueLeaseFence,
-                                })
-                                : {
-                                    ...j,
-                                    queue_lease_fence:
-                                        queueLeaseFence,
-                                };
+                        const updated = {
+                            ...j,
+                            updated_at_ms: Date.now(),
+                            queue_lease_fence:
+                                queueLeaseFence,
+                        };
+                        let persisted;
+                        if (j.schema === 'shorts-grind-run-v3') {
+                            persisted = bindShortsGrindRun(updated);
+                        } else if (j.schema === 'shorts-grind-run-v2') {
+                            persisted = {
+                                ...shortsGrindRunHashPayload(updated),
+                                schema: 'shorts-grind-run-v2',
+                                schema_version: 2,
+                            };
+                            persisted.run_sha256 =
+                                shortsScoreLedger.sha256Canonical(
+                                    persisted
+                                );
+                        } else {
+                            persisted = updated;
+                        }
                         return cloud.uploadToR2(
                             key,
                             Buffer.from(
@@ -22249,11 +22533,17 @@ async function hookDemoQueue() {
                     Math.min(parseInt(req.count) || 4, 8)
                 );
                 const invent = !!req.invent || !premise;
+                const animation = req.animation === true;
+                const creatorProfile = safeCreatorProfile(
+                    req.creator_profile || req.creatorProfile
+                );
                 await hookProcessRequest(
                     rid,
                     premise,
                     count,
                     invent,
+                    animation,
+                    creatorProfile,
                     ownership
                 );
             } catch (error) {
@@ -22312,21 +22602,6 @@ async function composeMontageFiles(framePaths, dir) {
     return fs.readFileSync(out);
 }
 
-async function composeMontage(frameBufs) {
-    const os = require('os');
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grind_'));
-    try {
-        const framePaths = [];
-        frameBufs.forEach((bytes, index) => {
-            const framePath = path.join(dir, `f${index}.img`);
-            fs.writeFileSync(framePath, bytes);
-            framePaths.push(framePath);
-        });
-        // force EVERY tile to exactly 320x568 (cover-crop) — frames can come from different models
-        // with different native sizes, and hstack hard-fails on mixed heights (ffmpeg exit 1)
-        return await composeMontageFiles(framePaths, dir);
-    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-}
 async function scoreMontage(buf, text, title, creatorProfile) {
     const os = require('os');
     const tmp = path.join(os.tmpdir(), `grindmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
@@ -22345,9 +22620,120 @@ async function scoreMontage(buf, text, title, creatorProfile) {
         }));
     } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
 }
+async function loadPersistedShortsScoreEvidence(scoreKey, montageKey) {
+    const [scoreBytes, montageBytes] = await Promise.all([
+        cloud.downloadFromR2(scoreKey),
+        cloud.downloadFromR2(montageKey),
+    ]);
+    if (!scoreBytes || !montageBytes) {
+        throw new HttpRequestError(
+            404,
+            'canonical score evidence is incomplete',
+            'shorts_score_evidence_missing'
+        );
+    }
+    const score = withPersistedShortsLedgerValidation(
+        JSON.parse(scoreBytes.toString('utf8'))
+    );
+    const inputValidation =
+        shortsScoreLedger.validateShortsInputManifest(
+            score,
+            { montageBytes }
+        );
+    const valid = (
+        score.score_record_validation
+        && score.score_record_validation.valid === true
+        && score.score_ledger_validation
+        && score.score_ledger_validation.valid === true
+        && inputValidation.valid
+    );
+    if (!valid) {
+        const error = new HttpRequestError(
+            409,
+            'saved score failed canonical integrity validation',
+            'shorts_score_integrity_error'
+        );
+        error.scoreRecordValidation =
+            score.score_record_validation;
+        error.scoreLedgerValidation =
+            score.score_ledger_validation;
+        error.inputManifestValidation = inputValidation;
+        throw error;
+    }
+    return {
+        score: {
+            ...score,
+            input_manifest_validation: inputValidation,
+        },
+        montageBytes,
+    };
+}
+const SHORTS_GRIND_CHANNEL_FREE_CONCAT =
+    channelFreeKeepForecastContract.COORDINATE_IDS.concat;
+
+function shortsGrindCoordinateValid(coordinateId) {
+    return (
+        /^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/
+            .test(String(coordinateId || ''))
+        || coordinateId === SHORTS_GRIND_CHANNEL_FREE_CONCAT
+    );
+}
+
+function shortsGrindTargetUnit(coordinateId) {
+    return coordinateId === SHORTS_GRIND_CHANNEL_FREE_CONCAT
+        ? 'predicted_keep_percent'
+        : 'percentile_0_100';
+}
+
+function shortsGrindAttemptTargetValue(attempt, coordinateId) {
+    return coordinateId === SHORTS_GRIND_CHANNEL_FREE_CONCAT
+        ? Number(attempt && attempt.score_value)
+        : Number(attempt && attempt.score_percentile_0_100);
+}
+
 function grindCoordinateValue(score, coordinateId) {
     const ledger = score && score.score_ledger;
     const validation = shortsScoreLedger.validateScoreLedger(ledger);
+    if (!validation.valid) return null;
+    if (coordinateId === SHORTS_GRIND_CHANNEL_FREE_CONCAT) {
+        const forecastValidation =
+            channelFreeKeepForecastContract
+                .validateChannelFreeKeepForecasts(
+                    score && score.channel_free_keep_forecasts,
+                    { requireText: true }
+                );
+        const output = forecastValidation.valid
+            ? forecastValidation.outputs.concat
+            : null;
+        const value = output && (
+            output.raw != null ? output.raw : output.est
+        );
+        if (
+            !output
+            || output.available !== true
+            || !Number.isFinite(Number(value))
+            || Number(value) < 0
+            || Number(value) > 100
+            || !Number.isFinite(Number(output.pctile))
+            || Number(output.pctile) < 0
+            || Number(output.pctile) > 100
+            || !exactSha256(score && score.score_record_sha256)
+        ) return null;
+        return {
+            score_coordinate_id: coordinateId,
+            score_source_key: `channel_free.concat.keep`,
+            score_value: Math.round(Number(value) * 10) / 10,
+            score_percentile_0_100:
+                Math.round(Number(output.pctile) * 10) / 10,
+            score_kind: output.kind,
+            score_ledger_sha256: ledger.ledger_sha256,
+            score_record_sha256: score.score_record_sha256,
+            score_model_artifact_sha256:
+                output.model_artifact_sha256,
+            score_target_unit: 'predicted_keep_percent',
+            score_verified: true,
+        };
+    }
     const entry = validation.valid && Array.isArray(ledger.entries)
         ? ledger.entries.find(candidate => (
             candidate
@@ -22371,6 +22757,11 @@ function grindCoordinateValue(score, coordinateId) {
         score_kind: entry.provenance
             && entry.provenance.kind || null,
         score_ledger_sha256: ledger.ledger_sha256,
+        score_record_sha256:
+            exactSha256(score && score.score_record_sha256)
+                ? score.score_record_sha256
+                : null,
+        score_target_unit: 'percentile_0_100',
         score_verified: true,
     };
 }
@@ -22381,11 +22772,25 @@ function shortsGrindAttemptProjectionValid(attempt, coordinateId) {
     const percentile = Number(attempt.score_percentile_0_100);
     if (
         attempt.score_coordinate_id !== coordinateId
+        || !shortsGrindCoordinateValid(coordinateId)
         || !exactSha256(attempt.score_ledger_sha256)
         || !Number.isFinite(value)
         || !Number.isFinite(percentile)
         || percentile < 0
         || percentile > 100
+    ) return false;
+    if (
+        coordinateId === SHORTS_GRIND_CHANNEL_FREE_CONCAT
+        && (
+            !exactSha256(attempt.score_record_sha256)
+            || !exactSha256(
+                attempt.score_model_artifact_sha256
+            )
+            || attempt.score_target_unit
+                !== 'predicted_keep_percent'
+            || value < 0
+            || value > 100
+        )
     ) return false;
     const target = String(coordinateId || '').split('.').pop();
     if (
@@ -22408,8 +22813,8 @@ function shortsGrindRunHashPayload(run) {
 function bindShortsGrindRun(run) {
     const bound = {
         ...shortsGrindRunHashPayload(run),
-        schema: 'shorts-grind-run-v2',
-        schema_version: 2,
+        schema: 'shorts-grind-run-v3',
+        schema_version: 3,
     };
     bound.run_sha256 = shortsScoreLedger.sha256Canonical(bound);
     return bound;
@@ -22424,28 +22829,46 @@ function validateShortsGrindRun(run) {
     ) {
         errors.push('grind run is missing');
     } else {
-        if (
-            run.schema !== 'shorts-grind-run-v2'
-            || run.schema_version !== 2
-        ) {
+        const isV2 = run.schema === 'shorts-grind-run-v2'
+            && run.schema_version === 2;
+        const isV3 = run.schema === 'shorts-grind-run-v3'
+            && run.schema_version === 3;
+        if (!isV2 && !isV3) {
             errors.push('grind run schema is not canonical');
         }
         if (
-            !/^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/
-                .test(String(run.threshold_coordinate_id || ''))
+            !shortsGrindCoordinateValid(
+                run.threshold_coordinate_id
+            )
+            || (
+                isV2
+                && run.threshold_coordinate_id
+                    === SHORTS_GRIND_CHANNEL_FREE_CONCAT
+            )
         ) {
             errors.push('threshold coordinate is invalid');
         }
-        const threshold = Number(
-            run.threshold_percentile_0_100
+        const expectedUnit = shortsGrindTargetUnit(
+            run.threshold_coordinate_id
         );
+        const threshold = Number(
+            isV3
+                ? run.threshold_value_0_100
+                : run.threshold_percentile_0_100
+        );
+        if (
+            isV3
+            && run.threshold_unit !== expectedUnit
+        ) {
+            errors.push('threshold unit does not match coordinate');
+        }
         if (
             !Number.isFinite(threshold)
             || threshold < 0
             || threshold > 100
         ) {
             errors.push(
-                'threshold percentile is outside [0, 100]'
+                'threshold value is outside [0, 100]'
             );
         }
         if (!Array.isArray(run.attempts)) {
@@ -22457,6 +22880,9 @@ function validateShortsGrindRun(run) {
                     'score_ledger_sha256',
                     'score_value',
                     'score_percentile_0_100',
+                    'score_record_sha256',
+                    'score_model_artifact_sha256',
+                    'score_target_unit',
                     'score_verified',
                 ].some(key => (
                     Object.prototype.hasOwnProperty.call(
@@ -22473,6 +22899,17 @@ function validateShortsGrindRun(run) {
                 ) {
                     errors.push(
                         `attempt ${index + 1} score projection is invalid`
+                    );
+                }
+                if (
+                    isV3
+                    && hasAnyScore
+                    && attempt
+                    && attempt.score_verified === true
+                    && attempt.score_target_unit !== expectedUnit
+                ) {
+                    errors.push(
+                        `attempt ${index + 1} target unit is invalid`
                     );
                 }
                 if (
@@ -22549,6 +22986,9 @@ function shortsGrindRunForResponse(run) {
                 'score_percentile_0_100',
                 'score_kind',
                 'score_source_key',
+                'score_record_sha256',
+                'score_model_artifact_sha256',
+                'score_target_unit',
             ].forEach(key => delete unverified[key]);
             unverified.score_verified = false;
             unverified.score_evidence_state =
@@ -22567,15 +23007,22 @@ function shortsGrindRunForResponse(run) {
     const bestAttempt = verifiedAttempts.reduce(
         (best, attempt) => (
             !best
-            || Number(attempt.score_percentile_0_100)
-                > Number(best.score_percentile_0_100)
+            || shortsGrindAttemptTargetValue(attempt, coordinateId)
+                > shortsGrindAttemptTargetValue(best, coordinateId)
                 ? attempt
                 : best
         ),
         null
     );
+    const targetUnit = validation.valid
+        ? shortsGrindTargetUnit(run.threshold_coordinate_id)
+        : null;
     const threshold = validation.valid
-        ? Number(run.threshold_percentile_0_100)
+        ? Number(
+            run.schema_version === 3
+                ? run.threshold_value_0_100
+                : run.threshold_percentile_0_100
+        )
         : null;
     const winner = threshold == null
         ? null
@@ -22583,7 +23030,10 @@ function shortsGrindRunForResponse(run) {
             .slice()
             .sort((left, right) => Number(left.k) - Number(right.k))
             .find(attempt => (
-                Number(attempt.score_percentile_0_100) >= threshold
+                shortsGrindAttemptTargetValue(
+                    attempt,
+                    coordinateId
+                ) >= threshold
             )) || null;
     const responseBase = { ...(run || {}) };
     [
@@ -22603,9 +23053,11 @@ function shortsGrindRunForResponse(run) {
         attempts,
         threshold_coordinate_id:
             validation.valid ? run.threshold_coordinate_id : null,
+        threshold_unit: targetUnit,
+        threshold_value_0_100: threshold,
         threshold_percentile_0_100:
-            validation.valid
-                ? Number(run.threshold_percentile_0_100)
+            validation.valid && targetUnit === 'percentile_0_100'
+                ? threshold
                 : null,
         attempt_count: attempts.length,
         best_score: bestAttempt ? {
@@ -22617,6 +23069,13 @@ function shortsGrindRunForResponse(run) {
             score_value: bestAttempt.score_value,
             score_percentile_0_100:
                 bestAttempt.score_percentile_0_100,
+            score_target_unit:
+                bestAttempt.score_target_unit
+                || shortsGrindTargetUnit(coordinateId),
+            target_value: shortsGrindAttemptTargetValue(
+                bestAttempt,
+                coordinateId
+            ),
         } : null,
         winner_attempt_index: winner ? winner.k : null,
         run_validation: validation.valid
@@ -22656,25 +23115,37 @@ async function grindProcess(rid, req0, ownership) {
     const requestedCoordinate = String(
         req0.threshold_coordinate_id || req0.coordinateId || ''
     );
-    const coordinateId = /^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/.test(requestedCoordinate)
+    const coordinateId = shortsGrindCoordinateValid(requestedCoordinate)
         && (
-            req0.schema === 'shorts-grind-request-v2'
+            req0.schema === 'shorts-grind-request-v3'
+            || (
+                req0.schema === 'shorts-grind-request-v2'
+                && requestedCoordinate
+                    !== SHORTS_GRIND_CHANNEL_FREE_CONCAT
+            )
             || requestedCoordinate.endsWith(`.${legacyMetric}`)
         )
         ? requestedCoordinate
         : `shorts.stored.together.${legacyMetric}`;
-    const metric = coordinateId.split('.').pop();
+    const targetUnit = shortsGrindTargetUnit(coordinateId);
     const threshold = Math.max(
-        50,
+        targetUnit === 'predicted_keep_percent' ? 0 : 50,
         Math.min(
-            99,
-            Number.parseInt(
-                req0.threshold_percentile_0_100
-                ?? req0.threshold,
-                10
-            ) || 82
+            targetUnit === 'predicted_keep_percent' ? 100 : 99,
+            Number.isFinite(Number(
+                req0.threshold_value_0_100
+                ?? req0.threshold_percentile_0_100
+                ?? req0.threshold
+            ))
+                ? Number(
+                    req0.threshold_value_0_100
+                    ?? req0.threshold_percentile_0_100
+                    ?? req0.threshold
+                )
+                : targetUnit === 'predicted_keep_percent' ? 75 : 82
         )
     );
+    const animation = req0.animation === true;
     const maxAttempts = Math.max(
         1,
         Math.min(
@@ -22691,14 +23162,20 @@ async function grindProcess(rid, req0, ownership) {
     // attempt. Starts grounded (0.12); every non-improving attempt widens it (+0.03, cap 0.30) so
     // a stuck grind is FORCED to explore farther from the pack; a new best pulls it back in.
     const GATE0 = 0.12;
-    let gate = GATE0, sinceBest = 0, bestPct = null;
+    let gate = GATE0, sinceBest = 0, bestTarget = null;
     const best = () => attempts.reduce((bestValue, attempt) => (
         shortsGrindAttemptProjectionValid(attempt, coordinateId)
         && (
             bestValue == null
-            || Number(attempt.score_percentile_0_100) > bestValue
+            || shortsGrindAttemptTargetValue(
+                attempt,
+                coordinateId
+            ) > bestValue
         )
-            ? Number(attempt.score_percentile_0_100)
+            ? shortsGrindAttemptTargetValue(
+                attempt,
+                coordinateId
+            )
             : bestValue
     ), null);
     const write = () => ownership.mutate(
@@ -22708,7 +23185,8 @@ async function grindProcess(rid, req0, ownership) {
                 rid,
                 premise,
                 threshold_coordinate_id: coordinateId,
-                threshold_percentile_0_100: threshold,
+                threshold_unit: targetUnit,
+                threshold_value_0_100: threshold,
                 attempts,
                 status,
                 error: err,
@@ -22716,6 +23194,11 @@ async function grindProcess(rid, req0, ownership) {
                 rejected_variant_count: rejected,
                 minimum_text_embedding_distance:
                     Math.round(gate * 100) / 100,
+                animation,
+                style_preset: animation
+                    ? storyboardStylePresets.ANIMATION_STYLE_ID
+                    : storyboardStylePresets.DEFAULT_STYLE_ID,
+                render_mode: 'single-panel',
                 deadline_at_ms: deadline,
                 updated_at_ms: Date.now(),
                 queue_lease_fence: queueLeaseFence,
@@ -22771,48 +23254,79 @@ async function grindProcess(rid, req0, ownership) {
                 vnov: null,
                 errs: [],
                 ts: Date.now(),
+                animation,
+                render_mode: 'single-panel',
                 score_verified: false,
             };
-            attempts.push(a); note = `attempt ${a.k + 1}: rendering frames…`; await write();
-            // 3) render the 5 frames — robust (3× pro + draft fallback), a missing frame is now exceptional
-            const bufs = [null, null, null, null, null];
-            for (let i = 0; i < 5; i++) {
-                try {
-                    const r2 = await renderFrameRobust(a.frames[i]);
-                    bufs[i] = r2.buf; const id = `${rid}_${a.k}_${i}`;
-                    await ownership.mutate(
-                        'store Shorts grind frame',
-                        () => cloud.uploadToR2(
-                            `hooks/grind/montages/${id}.jpg`,
-                            r2.buf,
+            attempts.push(a);
+            note = `attempt ${a.k + 1}: generating one coherent five-panel image…`;
+            await write();
+            // 3) one 45:16 provider image, then deterministic 9:16 crops.
+            let panel = null;
+            try {
+                panel = await renderHookPanelRobust({
+                    brief: spec.premise,
+                    hookText: spec.premise,
+                    panels: a.frames,
+                    animation,
+                });
+                const montageId = `${rid}_${a.k}`;
+                const frameIds = panel.frames.map((_, index) => (
+                    `${montageId}_${index}`
+                ));
+                await ownership.mutate(
+                    'store Shorts grind five-panel render',
+                    () => Promise.all([
+                        cloud.uploadToR2(
+                            `hooks/grind/montages/${montageId}.jpg`,
+                            panel.montage,
                             'image/jpeg'
-                        )
+                        ),
+                        ...panel.frames.map((frame, index) => (
+                            cloud.uploadToR2(
+                                `hooks/grind/montages/${frameIds[index]}.jpg`,
+                                frame,
+                                'image/jpeg'
+                            )
+                        )),
+                    ])
+                );
+                a.frame_imgs = frameIds;
+                a.frames_done = fivePanelSheet.PANEL_COUNT;
+                a.panel_sheet_id = montageId;
+                a.panel_model = panel.model;
+                a.panel_model_slug = panel.modelSlug;
+                a.panel_provider = panel.provider;
+                a.style_preset = panel.stylePreset;
+                a.panel_geometry = panel.geometry;
+                if (panel.fallback) {
+                    a.errs.push(
+                        `five-panel image: primary model failed${
+                            panel.flagged ? ' moderation' : ''
+                        } — rendered with ${panel.model}`
                     );
-                    a.frame_imgs[i] = id;
-                    if (r2.draft) a.errs.push(`frame ${i + 1}: fell through to a DRAFT (schnell) render${r2.flagged ? ' — pro & seedream both flagged it as sensitive' : ''}`);
-                    else if (r2.fallback) a.errs.push(`frame ${i + 1}: ${r2.flagged ? 'flux-2-pro flagged it as sensitive (E005)' : 'flux-2-pro failed'} — rendered with ${r2.model} (full quality)`);
-                } catch (e) {
-                    if (isQueueLeaseOwnershipError(e)) throw e;
-                    a.errs.push(`frame ${i + 1}: FAILED after all retries — ${String(e.message || e).slice(0, 120)}`);
                 }
-                a.frames_done = bufs.filter(Boolean).length;
-                await write();
+            } catch (e) {
+                if (isQueueLeaseOwnershipError(e)) throw e;
+                a.errs.push(
+                    `five-panel image: FAILED after all retries — ${
+                        String(e.message || e).slice(0, 220)
+                    }`
+                );
             }
-            // 4) compose the strip + score on the trained models
+            await write();
+            // 4) score the exact deterministic montage on the trained models
             a.status = 'scoring'; note = `attempt ${a.k + 1}: scoring on the trained models…`; await write();
             try {
-                const okBufs = bufs.filter(Boolean);
-                if (!okBufs.length) throw new Error('no frames rendered');
-                const mon = await composeMontage(okBufs);
-                await ownership.mutate(
-                    'store Shorts grind montage',
-                    () => cloud.uploadToR2(
-                        `hooks/grind/montages/${rid}_${a.k}.jpg`,
-                        mon,
-                        'image/jpeg'
-                    )
+                if (!panel || !panel.montage) {
+                    throw new Error('five-panel image was not rendered');
+                }
+                const score = await scoreMontage(
+                    panel.montage,
+                    spec.premise,
+                    premise,
+                    creatorProfile
                 );
-                const score = await scoreMontage(mon, premise, spec.premise, creatorProfile);
                 delete score.montage;   // the strip is already in R2 — don't double-store 200KB of b64
                 score.score_record_sha256 =
                     savedHookScoreRecordSha256(score);
@@ -22861,22 +23375,29 @@ async function grindProcess(rid, req0, ownership) {
             a.status = 'done';
             // drift: widen the required distance while not improving; snap back on a new best
             if (shortsGrindAttemptProjectionValid(a, coordinateId)) {
-                const attemptPct = Number(
-                    a.score_percentile_0_100
+                const attemptTarget = shortsGrindAttemptTargetValue(
+                    a,
+                    coordinateId
                 );
-                if (bestPct == null || attemptPct > bestPct) { bestPct = attemptPct; sinceBest = 0; gate = GATE0; }
+                if (bestTarget == null || attemptTarget > bestTarget) { bestTarget = attemptTarget; sinceBest = 0; gate = GATE0; }
                 else { sinceBest++; if (a.vnov != null && a.vnov < 0.02) sinceBest++; gate = Math.min(0.30, GATE0 + 0.03 * Math.max(0, sinceBest - 1)); }
             }
+            const targetSuffix = targetUnit === 'predicted_keep_percent'
+                ? '% predicted keep'
+                : 'th percentile';
             note = a.score_verified === true
-                ? `attempt ${a.k + 1} scored ${a.score_percentile_0_100}th percentile (target ${threshold}) — best ${best()} · exploration ≥ ${gate.toFixed(2)}`
+                ? `attempt ${a.k + 1} scored ${shortsGrindAttemptTargetValue(a, coordinateId)}${targetSuffix} (target ${threshold}${targetSuffix}) — best ${best()}${targetSuffix} · exploration ≥ ${gate.toFixed(2)}`
                 : `attempt ${a.k + 1} could not be scored`;
             await write();
             if (
                 shortsGrindAttemptProjectionValid(a, coordinateId)
-                && Number(a.score_percentile_0_100) >= threshold
+                && shortsGrindAttemptTargetValue(
+                    a,
+                    coordinateId
+                ) >= threshold
             ) {
                 status = 'won';
-                note = `attempt ${a.k + 1} cleared the bar: ${a.score_percentile_0_100} ≥ ${threshold}`;
+                note = `attempt ${a.k + 1} cleared the bar: ${shortsGrindAttemptTargetValue(a, coordinateId)}${targetSuffix} ≥ ${threshold}${targetSuffix}`;
             }
         }
     } catch (e) {
