@@ -197,6 +197,19 @@ async function stop(id) {
     return status(id);
 }
 
+async function resume(id) {
+    const experiment = await loadExperiment(id);
+    if (!experiment) throw new Error(`experiment ${id} was not found`);
+    if (experiment.status === 'complete') {
+        throw new Error(`experiment ${id} is already complete`);
+    }
+    experiment.status = 'running';
+    experiment.error = null;
+    experiment.stopped_at_ms = null;
+    await writeExperiment(experiment);
+    return status(id);
+}
+
 async function watch(id) {
     const intervalSeconds = Math.max(
         5,
@@ -221,6 +234,7 @@ async function main() {
     const id = experimentId();
     let output;
     if (has('stop')) output = await stop(id);
+    else if (has('resume')) output = await resume(id);
     else if (has('status')) output = await status(id);
     else if (has('watch')) output = await watch(id);
     else output = await launch(id);

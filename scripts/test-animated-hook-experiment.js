@@ -139,6 +139,8 @@ for (const required of [
     'render_concurrency: 2',
     'hookModelGenerateBatchRetry',
     'animatedHookBatchExperimentStopped',
+    'discard terminal duplicate Shorts hook request',
+    'mark Shorts hook request claimed',
     "request.mode === 'threshold-refinement'",
     'seed_premise: refinementSeed',
     'rankedVerifiedAttempts',
@@ -148,6 +150,13 @@ for (const required of [
         `server is missing animated batch integration: ${required}`
     );
 }
+
+const operator = fs.readFileSync(
+    path.resolve(__dirname, 'animated-hook-experiment.js'),
+    'utf8'
+);
+assert(operator.includes("else if (has('resume'))"));
+assert(operator.includes("experiment.status = 'running'"));
 
 process.stdout.write(JSON.stringify({
     ok: true,

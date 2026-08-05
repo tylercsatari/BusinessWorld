@@ -22958,6 +22958,55 @@ async function hookDemoQueue() {
                     );
                     continue;
                 }
+                const [existingGroupBytes, existingStatusBytes] =
+                    await Promise.all([
+                        cloud.downloadFromR2(
+                            `hooks/grpo/demo/groups/${rid}.json`
+                        ).catch(() => null),
+                        cloud.downloadFromR2(
+                            `hooks/grpo/demo/status/${rid}.json`
+                        ).catch(() => null),
+                    ]);
+                let existingGroup = null;
+                let existingStatus = null;
+                try {
+                    existingGroup = existingGroupBytes
+                        ? JSON.parse(existingGroupBytes.toString('utf8'))
+                        : null;
+                } catch (error) {}
+                try {
+                    existingStatus = existingStatusBytes
+                        ? JSON.parse(existingStatusBytes.toString('utf8'))
+                        : null;
+                } catch (error) {}
+                if (
+                    existingGroup && existingGroup.done === true
+                    || existingStatus && existingStatus.stage === 'done'
+                ) {
+                    await ownership.mutate(
+                        'discard terminal duplicate Shorts hook request',
+                        () => cloud.deleteFromR2(key)
+                    );
+                    continue;
+                }
+                await ownership.mutate(
+                    'mark Shorts hook request claimed',
+                    queueLeaseFence => cloud.uploadToR2(
+                        `hooks/grpo/demo/status/${rid}.json`,
+                        Buffer.from(JSON.stringify({
+                            stage: 'claimed',
+                            done: 0,
+                            n: Math.max(
+                                1,
+                                Math.min(parseInt(req.count) || 4, 8)
+                            ),
+                            note: 'request claimed by the hook worker',
+                            ts: Date.now(),
+                            queue_lease_fence: queueLeaseFence,
+                        })),
+                        'application/json'
+                    )
+                );
                 await ownership.mutate(
                     'consume Shorts hook request',
                     () => cloud.deleteFromR2(key)
