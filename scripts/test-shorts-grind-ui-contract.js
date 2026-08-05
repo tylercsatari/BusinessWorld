@@ -157,5 +157,9 @@ assert.ok(grindSource.includes('score_percentile_0_100: verifiedScore.score_perc
 assert.ok(grindSource.includes('shorts.channel-free.concat.keep'));
 assert.ok(grindSource.includes('predicted_keep_percent'));
 assert.ok(grindSource.includes('data-grindanimation'));
+assert.ok(grindSource.includes('required_seed_embedding_distance'));
+assert.ok(grindSource.includes('topical_similarity_floor'));
+assert.ok(grindSource.includes('image_provider_call_count'));
+assert.ok(grindSource.includes('one provider call → one 45:16 sheet'));
 
 console.log('shorts grind UI ledger contract: ok');

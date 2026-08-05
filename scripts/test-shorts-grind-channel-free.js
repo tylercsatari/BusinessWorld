@@ -170,6 +170,25 @@ assert.strictEqual(runContext.validateRun(winningRun).valid, true);
 assert.strictEqual(winningResponse.winner_attempt_index, 1);
 assert.strictEqual(winningResponse.best_score.target_value, 82.3);
 
+const runningUnscoredAttempt = runContext.bindRun({
+    rid: 'gr-running',
+    premise: 'test premise',
+    threshold_coordinate_id: coordinateId,
+    threshold_unit: 'predicted_keep_percent',
+    threshold_value_0_100: 80,
+    attempts: [{
+        k: 0,
+        status: 'rendering',
+        score_verified: false,
+    }],
+    status: 'running',
+});
+assert.strictEqual(
+    runContext.validateRun(runningUnscoredAttempt).valid,
+    true,
+    'an in-flight attempt without score evidence must not invalidate the run'
+);
+
 assert(source.includes("schema: 'shorts-grind-request-v3'"));
 assert(source.includes("schema: 'shorts-grind-run-v3'"));
 assert(source.includes("render_mode: 'single-panel'"));

@@ -100,6 +100,9 @@ const storyboardStylePresets = require(
 const fivePanelSheet = require(
     './buildings/jarvis/five-panel-sheet'
 );
+const grindExploration = require(
+    './buildings/jarvis/grind-exploration'
+);
 const animatedHookExperiment = require(
     './buildings/jarvis/animated-hook-experiment'
 );
@@ -14377,6 +14380,25 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 500);
             if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write the hook/idea first — it grounds every variant' })); return; }
+            const requestedImageModel = String(
+                body.imageModel || body.image_model || ''
+            ).trim();
+            if (
+                requestedImageModel
+                && !STORY_MODELS[requestedImageModel]
+            ) {
+                throw new HttpRequestError(
+                    400,
+                    `Unknown image model: ${requestedImageModel}`,
+                    'grind_image_model_invalid'
+                );
+            }
+            const imageModel = hookPanelModelKey(
+                requestedImageModel
+                || process.env.HOOK_PANEL_MODEL
+                || process.env.HOOK_FRAME_MODEL
+                || STORYBOARD_DEFAULT_MODEL
+            );
             // one grind at a time: it monopolises the GPU + spends real money per attempt
             try {
                 const pend = ((await cloud.listR2Keys('hooks/grind/requests/')) || []).filter(k => k.endsWith('.json'));
@@ -14430,6 +14452,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 max_attempts: maxAttempts,
                 animation: body.animation === true,
                 render_mode: 'single-panel',
+                image_model: imageModel,
+                image_provider_call_budget_per_attempt: 1,
+                exploration_strategy: grindExploration.STRATEGY,
                 creator_profile:
                     safeCreatorProfile(body.creatorProfile) || null,
                 created_at_ms: Date.now(),
@@ -14463,8 +14488,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         : null,
                 animation: body.animation === true,
                 render_mode: 'single-panel',
+                image_model: imageModel,
+                image_provider_call_budget_per_attempt: 1,
+                exploration_strategy: grindExploration.STRATEGY,
             }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'shorts_grind_start_failed',
+            }));
+        }
         return;
     }
     const grindStop = pathname.match(/^\/api\/hooks\/grind\/stop\/([a-z0-9]{1,32})$/);
@@ -21800,8 +21836,18 @@ const GENMEM_PREMISE_ONLY_KEY =
     'hooks/gen-memory/premise-only-memory.json';
 const GENMEM_CAP = 4000;    // oldest beyond this fall off (≈4MB JSON at the cap)
 const GENMEM_DIM = 768;
-async function geminiTextEmbed(text) {
-    const key = process.env.GEMINI_API_KEY; if (!key) return null;
+async function geminiTextEmbed(text, options = {}) {
+    const required = options.required === true;
+    const context = String(options.context || 'text').slice(0, 80);
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+        if (required) {
+            throw new Error(
+                `Gemini embedding is not configured for ${context} (GEMINI_API_KEY)`
+            );
+        }
+        return null;
+    }
     try {
         const r = await fetchT('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
@@ -21809,10 +21855,25 @@ async function geminiTextEmbed(text) {
         }, 20000);
         const j = await r.json().catch(() => null);
         const v = j && j.embedding && j.embedding.values;
-        if (!Array.isArray(v) || v.length < 8) return null;
+        if (!r.ok || !Array.isArray(v) || v.length < 8) {
+            if (required) {
+                const detail = j && j.error && (
+                    j.error.message || j.error.status
+                );
+                throw new Error(
+                    `Gemini embedding failed for ${context} (HTTP ${r.status})${
+                        detail ? `: ${String(detail).slice(0, 240)}` : ''
+                    }`
+                );
+            }
+            return null;
+        }
         let n = 0; for (const x of v) n += x * x; n = Math.sqrt(n) || 1;
         return v.map(x => x / n);
-    } catch (e) { return null; }
+    } catch (e) {
+        if (required) throw e;
+        return null;
+    }
 }
 const genVecEnc = v => Buffer.from(Int8Array.from(v, x => Math.max(-127, Math.min(127, Math.round(x * 127)))).buffer).toString('base64');
 const genVecDec = b => { const buf = Buffer.from(b, 'base64'); return new Int8Array(buf.buffer, buf.byteOffset, buf.length); };
@@ -21982,7 +22043,7 @@ function hookPanelModelKey(value) {
     const match = Object.entries(STORY_MODELS).find(
         ([, model]) => model.slug === requested
     );
-    return match ? match[0] : 'flux-2-pro';
+    return match ? match[0] : STORYBOARD_DEFAULT_MODEL;
 }
 
 // Auto, Grind, and the manual Storyboard workbench now share one visual
@@ -21996,6 +22057,7 @@ async function renderHookPanelRobust({
     animation,
     imageModel,
     strictImageModel = false,
+    providerCallBudget = Number.POSITIVE_INFINITY,
 }) {
     const style = storyboardStylePresets.stylePreset(
         animation
@@ -22024,7 +22086,7 @@ async function renderHookPanelRobust({
         explicitlyRequested
         || process.env.HOOK_PANEL_MODEL
         || process.env.HOOK_FRAME_MODEL
-        || 'flux-2-pro'
+        || STORYBOARD_DEFAULT_MODEL
     );
     const ladder = (strictImageModel
         ? [preferred]
@@ -22045,6 +22107,7 @@ async function renderHookPanelRobust({
         const model = ladder[modelIndex];
         const tries = modelIndex === 0 ? 2 : 1;
         for (let attempt = 0; attempt < tries; attempt++) {
+            if (providerCalls >= providerCallBudget) break;
             providerCalls += 1;
             try {
                 const image = await genStoryFrame(
@@ -22096,7 +22159,10 @@ async function renderHookPanelRobust({
                     flagged = true;
                     break;
                 }
-                if (attempt + 1 < tries) {
+                if (
+                    attempt + 1 < tries
+                    && providerCalls < providerCallBudget
+                ) {
                     await new Promise(resolve => setTimeout(
                         resolve,
                         1200 * (attempt + 1)
@@ -22104,6 +22170,7 @@ async function renderHookPanelRobust({
                 }
             }
         }
+        if (providerCalls >= providerCallBudget) break;
     }
     const failure = new Error(
         `five-panel image generation failed${
@@ -23549,11 +23616,11 @@ setInterval(() => {
 }, 15000);
 
 // ── 🎯 GRIND: loop generate→render→score until a hook clears the user's threshold ──────────
-// The user writes the hook (grounding), sets a target (e.g. keep-rate ≥ 82nd pctile) and a time
-// budget; the worker loops: idea_r7 writes a variant grounded on their text → embedding gate
-// rejects variants too close to earlier attempts (before any render spend) → flux renders the 5
-// frames → ffmpeg composes the SAME 5x1 strip the corpus uses → raw_upload.py scores it on the
-// trained steer models → streamed to R2 so every attempt is visible/clickable/savable live.
+// The user writes a topic anchor and target. Every loop uses idea_r7 to propose
+// grounded concepts, selects one on a progressively outward semantic shell,
+// makes one 45:16 image-provider call, splits it into five deterministic crops,
+// and scores that exact montage on the canonical trained models. The verified
+// score deficit determines the next shell before any further image spend.
 async function composeMontageFiles(framePaths, dir) {
     const inputs = [];
     framePaths.forEach(framePath => inputs.push('-i', framePath));
@@ -23854,7 +23921,7 @@ function validateShortsGrindRun(run) {
             errors.push('grind attempts are missing');
         } else {
             run.attempts.forEach((attempt, index) => {
-                const hasAnyScore = [
+                const hasProjectionFields = [
                     'score_coordinate_id',
                     'score_ledger_sha256',
                     'score_value',
@@ -23862,13 +23929,17 @@ function validateShortsGrindRun(run) {
                     'score_record_sha256',
                     'score_model_artifact_sha256',
                     'score_target_unit',
-                    'score_verified',
                 ].some(key => (
                     Object.prototype.hasOwnProperty.call(
                         attempt || {},
                         key
                     )
                 ));
+                const hasAnyScore = hasProjectionFields
+                    || (
+                        attempt
+                        && attempt.score_verified === true
+                    );
                 if (
                     hasAnyScore
                     && !shortsGrindAttemptProjectionValid(
@@ -24125,6 +24196,12 @@ async function grindProcess(rid, req0, ownership) {
         )
     );
     const animation = req0.animation === true;
+    const imageModel = hookPanelModelKey(
+        req0.image_model
+        || process.env.HOOK_PANEL_MODEL
+        || process.env.HOOK_FRAME_MODEL
+        || STORYBOARD_DEFAULT_MODEL
+    );
     const maxAttempts = Math.max(
         1,
         Math.min(
@@ -24136,12 +24213,11 @@ async function grindProcess(rid, req0, ownership) {
         )
     );
     const deadline = Date.now() + Math.min(8, Math.max(0.25, parseFloat(req0.hours) || 3)) * 3600e3;
-    let attempts = [], status = 'running', err = '', note = '', rejected = 0;
-    // ADAPTIVE EXPLORATION: the minimum embedding distance a variant must keep from every prior
-    // attempt. Starts grounded (0.12); every non-improving attempt widens it (+0.03, cap 0.30) so
-    // a stuck grind is FORCED to explore farther from the pack; a new best pulls it back in.
-    const GATE0 = 0.12;
-    let gate = GATE0, sinceBest = 0, bestTarget = null;
+    let attempts = [], status = 'running', err = '', note = '';
+    let explorationState = grindExploration.createState({
+        threshold,
+    });
+    const rejectedPremises = [];
     const best = () => attempts.reduce((bestValue, attempt) => (
         shortsGrindAttemptProjectionValid(attempt, coordinateId)
         && (
@@ -24170,14 +24246,27 @@ async function grindProcess(rid, req0, ownership) {
                 status,
                 error: err,
                 note,
-                rejected_variant_count: rejected,
+                rejected_variant_count:
+                    explorationState.rejectedCount,
                 minimum_text_embedding_distance:
-                    Math.round(gate * 100) / 100,
+                    explorationState.requiredPriorDistance,
+                required_seed_embedding_distance:
+                    explorationState.requiredSeedDistance,
+                topical_similarity_floor:
+                    explorationState.topicalSimilarityFloor,
+                score_deficit:
+                    explorationState.scoreDeficit,
+                exploration:
+                    grindExploration.publicState(explorationState),
+                exploration_strategy:
+                    grindExploration.STRATEGY,
                 animation,
                 style_preset: animation
                     ? storyboardStylePresets.ANIMATION_STYLE_ID
                     : storyboardStylePresets.DEFAULT_STYLE_ID,
                 render_mode: 'single-panel',
+                image_model: imageModel,
+                image_provider_call_budget_per_attempt: 1,
                 deadline_at_ms: deadline,
                 updated_at_ms: Date.now(),
                 queue_lease_fence: queueLeaseFence,
@@ -24195,10 +24284,20 @@ async function grindProcess(rid, req0, ownership) {
         );
         return cloud.existsInR2(`hooks/grind/stop/${rid}`);
     };
-    const vecs = [];      // this run's accepted variants — text-embedding differentiation
+    const ideaEmbeddings = [];
+    const acceptedPremises = [];
     const visPrev = [];   // 48-d pooled VISUAL embeddings of scored attempts — quantified visual variety
     let mem = []; try { mem = await genMemLoad(); } catch (e) {}
     try {
+        note = 'embedding the original topic anchor before concept generation…';
+        await write();
+        const seedEmbedding = await geminiTextEmbed(
+            premise,
+            {
+                required: true,
+                context: 'the original Grind topic',
+            }
+        );
         while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
             if (await checkStopped()) {
                 status = 'stopped';
@@ -24206,22 +24305,171 @@ async function grindProcess(rid, req0, ownership) {
                 break;
             }
             _hookLastGen = Date.now(); _hookLastPing = Date.now();   // grinding IS warmth
-            // 1) a variant grounded on the user's written hook — malformed samples retried, not fatal
-            let spec;
-            const beat = (rstat, sec) => { const t = sec >= 60 ? `${Math.floor(sec / 60)}m ${sec % 60}s` : `${sec}s`; note = `attempt ${attempts.length + 1}: ${rstat === 'starting' ? `GPU booting (${t})` : `writing a variant (${t})`}`; return write(); };
-            const onRetry = (msg, t) => { note = `attempt ${attempts.length + 1}: the model returned a malformed idea — retrying (${t}/3) · ${msg.slice(0, 60)}`; return write(); };
-            try { spec = await hookModelGenerateRetry(premise, false, beat, onRetry); }
-            catch (e) { err = 'idea: ' + e.message + ' (3 tries)'; status = 'error'; break; }
-            // 2) ADAPTIVE embedding gate BEFORE any render spend
-            const emb = await geminiTextEmbed(spec.premise + '\n' + spec.frames.join('\n'));
-            let nov = null;
-            if (emb) {
-                const q = Int8Array.from(emb, x => Math.round(x * 127));
-                let m = -1; for (const v of vecs) { const c = genCos(q, v); if (c > m) m = c; }
-                nov = vecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
-                if (nov < gate && rejected < maxAttempts) { rejected++; note = `variant only ${nov} from an earlier attempt — required ≥ ${gate.toFixed(2)} (exploration widens when stuck) — regenerating (${rejected} rejected)`; await write(); continue; }
-                vecs.push(q); mem.push({ id: rid + '_' + attempts.length, t: Date.now(), p: spec.premise.slice(0, 140), v: genVecEnc(emb), s: 1 });
+            // 1) Generate concept candidates from the fine-tuned idea model.
+            // The first attempt starts directly from the user's seed. Later
+            // rounds receive the immutable seed plus explicit outward-shell
+            // requirements and recent concepts to avoid.
+            let selectedCandidate = null;
+            let selectionRound = 0;
+            while (
+                !selectedCandidate
+                && Date.now() < deadline
+            ) {
+                selectionRound += 1;
+                if (await checkStopped()) {
+                    status = 'stopped';
+                    note = 'stopped by you before the next image call';
+                    break;
+                }
+                const generationPrompt = grindExploration.generationPrompt({
+                    seedPremise: premise,
+                    state: explorationState,
+                    priorPremises: acceptedPremises,
+                    rejectedPremises,
+                });
+                const candidateCount = (
+                    attempts.length === 0
+                    && selectionRound === 1
+                ) ? 1 : 4;
+                const beat = (rstat, sec) => {
+                    const elapsed = sec >= 60
+                        ? `${Math.floor(sec / 60)}m ${sec % 60}s`
+                        : `${sec}s`;
+                    note = `attempt ${attempts.length + 1}: ${
+                        rstat === 'starting'
+                            ? `idea-model GPU booting (${elapsed})`
+                            : `writing ${candidateCount} grounded concept${
+                                candidateCount === 1 ? '' : 's'
+                            } (${elapsed})`
+                    }`;
+                    return write();
+                };
+                const onRetry = (message, retry) => {
+                    note = `attempt ${attempts.length + 1}: malformed idea output — retrying (${retry}/3) · ${message.slice(0, 60)}`;
+                    return write();
+                };
+                let specs;
+                try {
+                    specs = candidateCount === 1
+                        ? [await hookModelGenerateRetry(
+                            generationPrompt,
+                            false,
+                            beat,
+                            onRetry
+                        )]
+                        : await hookModelGenerateBatchRetry(
+                            generationPrompt,
+                            false,
+                            candidateCount,
+                            beat,
+                            onRetry
+                        );
+                } catch (error) {
+                    err = `idea: ${error.message} (3 tries)`;
+                    status = 'error';
+                    break;
+                }
+                const candidates = await Promise.all(specs.map(
+                    async spec => {
+                        const embedding = await geminiTextEmbed(
+                            spec.premise,
+                            {
+                                required: true,
+                                context: 'a Grind candidate concept',
+                            }
+                        );
+                        return {
+                            spec,
+                            embedding,
+                            measurement:
+                                grindExploration.measureCandidate({
+                                    candidateEmbedding: embedding,
+                                    seedEmbedding,
+                                    priorEmbeddings: ideaEmbeddings,
+                                }),
+                        };
+                    }
+                ));
+                const selection = grindExploration.selectCandidate(
+                    explorationState,
+                    candidates
+                );
+                const discarded = selection.evaluated.filter(
+                    candidate => !selection.selected
+                        || candidate.sourceIndex
+                            !== selection.selected.sourceIndex
+                );
+                explorationState = grindExploration.recordRejections(
+                    explorationState,
+                    discarded.map(candidate => (
+                        candidate.decision.accepted
+                            ? 'eligible_unselected'
+                            : candidate.decision.reason
+                    ))
+                );
+                discarded.forEach(candidate => {
+                    const rejectedPremise = candidate
+                        && candidate.spec
+                        && candidate.spec.premise;
+                    if (rejectedPremise) {
+                        rejectedPremises.push(rejectedPremise);
+                    }
+                });
+                if (rejectedPremises.length > 100) {
+                    rejectedPremises.splice(
+                        0,
+                        rejectedPremises.length - 100
+                    );
+                }
+                if (selection.selected) {
+                    selectedCandidate = {
+                        ...selection.selected,
+                        candidatePoolSize: candidates.length,
+                        selectionRound,
+                    };
+                    break;
+                }
+                const reasonCounts = selection.evaluated.reduce(
+                    (counts, candidate) => {
+                        const reason = candidate.decision.reason;
+                        counts[reason] = (counts[reason] || 0) + 1;
+                        return counts;
+                    },
+                    {}
+                );
+                note = `attempt ${attempts.length + 1}: screened ${
+                    candidates.length
+                } concepts before image spend — ${Object.entries(
+                    reasonCounts
+                ).map(([reason, count]) => `${reason} ${count}`).join(', ')}; generating farther outward…`;
+                await write();
             }
+            if (status !== 'running') break;
+            if (!selectedCandidate) {
+                status = Date.now() >= deadline
+                    ? 'deadline'
+                    : 'error';
+                if (status === 'deadline') {
+                    note = 'time budget ended while screening outward concepts; no off-topic or too-similar draft was rendered';
+                } else {
+                    err = 'idea exploration stopped before it found a candidate that was both topical and far enough outward; no image call was made for that round';
+                }
+                break;
+            }
+            const spec = selectedCandidate.spec;
+            const emb = selectedCandidate.embedding;
+            const measurement = selectedCandidate.measurement;
+            const requirementsBefore =
+                grindExploration.publicState(explorationState);
+            ideaEmbeddings.push(emb);
+            acceptedPremises.push(spec.premise);
+            mem.push({
+                id: `${rid}_${attempts.length}`,
+                t: Date.now(),
+                p: spec.premise.slice(0, 140),
+                v: genVecEnc(emb),
+                s: 1,
+            });
             const a = {
                 k: attempts.length,
                 premise: spec.premise,
@@ -24229,8 +24477,31 @@ async function grindProcess(rid, req0, ownership) {
                 frame_imgs: [null, null, null, null, null],
                 frames_done: 0,
                 status: 'rendering',
-                nov,
+                nov: measurement.nearestPriorDistance == null
+                    ? 1
+                    : measurement.nearestPriorDistance,
                 vnov: null,
+                seed_distance: measurement.seedDistance,
+                nearest_prior_distance:
+                    measurement.nearestPriorDistance,
+                nearest_prior_attempt:
+                    measurement.nearestPriorIndex,
+                topical_similarity:
+                    measurement.topicalSimilarity,
+                topical_similarity_floor:
+                    explorationState.topicalSimilarityFloor,
+                required_seed_distance:
+                    explorationState.requiredSeedDistance,
+                required_prior_distance:
+                    explorationState.requiredPriorDistance,
+                exploration_strategy:
+                    grindExploration.STRATEGY,
+                exploration_before: requirementsBefore,
+                concept_candidate_pool_size:
+                    selectedCandidate.candidatePoolSize,
+                concept_selection_round:
+                    selectedCandidate.selectionRound,
+                concept_embedding_model: 'gemini-embedding-2',
                 errs: [],
                 ts: Date.now(),
                 animation,
@@ -24248,7 +24519,20 @@ async function grindProcess(rid, req0, ownership) {
                     hookText: spec.premise,
                     panels: a.frames,
                     animation,
+                    imageModel,
+                    strictImageModel: true,
+                    providerCallBudget: 1,
                 });
+                if (
+                    !panel.geometry
+                    || panel.geometry.provider_call_count !== 1
+                    || panel.geometry.render_call_count !== 1
+                    || panel.frames.length !== fivePanelSheet.PANEL_COUNT
+                ) {
+                    throw new Error(
+                        'single-sheet render contract was not satisfied'
+                    );
+                }
                 const montageId = `${rid}_${a.k}`;
                 const frameIds = panel.frames.map((_, index) => (
                     `${montageId}_${index}`
@@ -24278,6 +24562,12 @@ async function grindProcess(rid, req0, ownership) {
                 a.panel_provider = panel.provider;
                 a.style_preset = panel.stylePreset;
                 a.panel_geometry = panel.geometry;
+                a.image_provider_call_count =
+                    panel.geometry.provider_call_count;
+                a.render_call_count =
+                    panel.geometry.render_call_count;
+                a.requested_image_model = imageModel;
+                a.strict_image_model = true;
                 if (panel.fallback) {
                     a.errs.push(
                         `five-panel image: primary model failed${
@@ -24288,7 +24578,7 @@ async function grindProcess(rid, req0, ownership) {
             } catch (e) {
                 if (isQueueLeaseOwnershipError(e)) throw e;
                 a.errs.push(
-                    `five-panel image: FAILED after all retries — ${
+                    `five-panel image: FAILED on its single provider call — ${
                         String(e.message || e).slice(0, 220)
                     }`
                 );
@@ -24338,9 +24628,9 @@ async function grindProcess(rid, req0, ownership) {
                     );
                 }
                 Object.assign(a, coordinateScore);
-                // quantified VISUAL variety: cosine distance of this attempt's pooled visual embedding
-                // to its most-similar prior attempt — surfaced on the card, and near-duplicate LOOKS
-                // (< 0.02) count as "stuck" so the exploration gate widens even when scores wobble
+                // Visual distance is descriptive. The next concept's outward
+                // requirement is controlled only by pre-render idea geometry
+                // and the verified score deficit.
                 const vp = score.emb_preview && score.emb_preview.visual;
                 if (vp && vp.length) {
                     let vm = -1; for (const pv of visPrev) { const c = genCos(vp, pv); if (c > vm) vm = c; }
@@ -24352,32 +24642,37 @@ async function grindProcess(rid, req0, ownership) {
                 a.errs.push('score: ' + String(e.message || e).slice(0, 140));
             }
             a.status = 'done';
-            // drift: widen the required distance while not improving; snap back on a new best
-            if (shortsGrindAttemptProjectionValid(a, coordinateId)) {
-                const attemptTarget = shortsGrindAttemptTargetValue(
-                    a,
-                    coordinateId
-                );
-                if (bestTarget == null || attemptTarget > bestTarget) { bestTarget = attemptTarget; sinceBest = 0; gate = GATE0; }
-                else { sinceBest++; if (a.vnov != null && a.vnov < 0.02) sinceBest++; gate = Math.min(0.30, GATE0 + 0.03 * Math.max(0, sinceBest - 1)); }
-            }
+            const attemptVerified =
+                shortsGrindAttemptProjectionValid(a, coordinateId);
+            const attemptTarget = attemptVerified
+                ? shortsGrindAttemptTargetValue(a, coordinateId)
+                : null;
+            explorationState = grindExploration.recordScore(
+                explorationState,
+                attemptTarget,
+                {
+                    observedSeedDistance: measurement.seedDistance,
+                }
+            );
+            a.exploration_after =
+                grindExploration.publicState(explorationState);
+            a.score_deficit_after = explorationState.scoreDeficit;
+            a.next_required_seed_distance =
+                explorationState.requiredSeedDistance;
+            a.next_required_prior_distance =
+                explorationState.requiredPriorDistance;
             const targetSuffix = targetUnit === 'predicted_keep_percent'
                 ? '% predicted keep'
                 : 'th percentile';
-            note = a.score_verified === true
-                ? `attempt ${a.k + 1} scored ${shortsGrindAttemptTargetValue(a, coordinateId)}${targetSuffix} (target ${threshold}${targetSuffix}) — best ${best()}${targetSuffix} · exploration ≥ ${gate.toFixed(2)}`
-                : `attempt ${a.k + 1} could not be scored`;
-            await write();
-            if (
-                shortsGrindAttemptProjectionValid(a, coordinateId)
-                && shortsGrindAttemptTargetValue(
-                    a,
-                    coordinateId
-                ) >= threshold
-            ) {
+            if (attemptVerified && attemptTarget >= threshold) {
                 status = 'won';
-                note = `attempt ${a.k + 1} cleared the bar: ${shortsGrindAttemptTargetValue(a, coordinateId)}${targetSuffix} ≥ ${threshold}${targetSuffix}`;
+                note = `attempt ${a.k + 1} cleared the bar: ${attemptTarget}${targetSuffix} ≥ ${threshold}${targetSuffix}`;
+            } else if (attemptVerified) {
+                note = `attempt ${a.k + 1} scored ${attemptTarget}${targetSuffix} (target ${threshold}${targetSuffix}) — best ${best()}${targetSuffix} · next seed distance ≥ ${explorationState.requiredSeedDistance.toFixed(3)} · next prior distance ≥ ${explorationState.requiredPriorDistance.toFixed(3)} · deficit ${explorationState.scoreDeficit.toFixed(1)}`;
+            } else {
+                note = `attempt ${a.k + 1} could not be scored — the next concept still moves outward; seed distance ≥ ${explorationState.requiredSeedDistance.toFixed(3)}, prior distance ≥ ${explorationState.requiredPriorDistance.toFixed(3)}`;
             }
+            await write();
         }
     } catch (e) {
         if (isQueueLeaseOwnershipError(e)) throw e;

@@ -4360,6 +4360,10 @@ const JarvisRetention = (function () {
                         rejected_variant_count: 0,
                         animation: st.grindAnimation === true,
                         render_mode: 'single-panel',
+                        exploration_strategy:
+                            'topic-anchored-proportional-outward-v1',
+                        required_seed_embedding_distance: 0,
+                        minimum_text_embedding_distance: 0,
                         note: 'queued — the worker picks it up within seconds…',
                     };
                     grindPoll(j.rid);
@@ -4485,6 +4489,11 @@ const JarvisRetention = (function () {
                 ? null
                 : verifiedBest;
             const targetSuffix = shortsGrindObjectiveSuffix(targetUnit);
+            const rejectionReasonSummary = Object.entries(
+                g.exploration
+                && g.exploration.rejection_reasons
+                || {}
+            ).map(([reason, count]) => `${reason}: ${count}`).join(' · ');
             const statCol = g.status === 'won' && !verifiedWinner
                 ? C.amber
                 : ({ running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim);
@@ -4526,9 +4535,12 @@ const JarvisRetention = (function () {
                   <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
                   ${verifiedScore ? `<div style="font-size:7px;color:${C.faint};margin-top:3px;overflow-wrap:anywhere"><code>${esc(verifiedScore.score_coordinate_id)}</code> · ${esc(verifiedDescriptor.targetUnit)} · target ${esc(verifiedDescriptor.target)} · modality ${esc(verifiedDescriptor.modality)} · input ${esc(verifiedDescriptor.input)} · ${verifiedScore.score_target_unit === 'predicted_keep_percent' ? `pooled percentile ${fmtv(verifiedScore.score_percentile_0_100, 1)}th · score record <code>${verifiedScore.score_record_sha256.slice(0, 12)}…</code> · ` : ''}ledger <code>${verifiedScore.score_ledger_sha256.slice(0, 12)}…</code></div>` : ''}
                   ${unverifiedMessage ? `<div style="font-size:8px;color:${C.amber};line-height:1.35;margin-top:4px">${esc(unverifiedMessage)}</div>` : ''}
-                  <div style="display:flex;gap:5px;margin-top:5px;align-items:center">
-                    ${a.nov != null ? `<span style="font-size:8.5px;color:${C.purple}" title="TEXT embedding distance from this run's earlier attempts (idea variety)">🆕${a.nov.toFixed(2)}</span>` : ''}
-                    ${a.vnov != null ? `<span style="font-size:8.5px;color:${a.vnov < 0.02 ? '#ef4444' : C.cyan}" title="VISUAL embedding distance from the most-similar earlier attempt — how different it LOOKS (red = near-duplicate look; counts as stuck and widens exploration)">👁${a.vnov.toFixed(2)}</span>` : ''}
+                  <div style="display:flex;gap:5px;margin-top:5px;align-items:center;flex-wrap:wrap">
+                    ${a.seed_distance != null ? `<span style="font-size:8.5px;color:${C.purple}" title="Cosine distance from your immutable original topic embedding. This radius is intentionally pushed outward after misses.">seed ↗ ${(+a.seed_distance).toFixed(3)}</span>` : ''}
+                    ${a.nearest_prior_distance != null ? `<span style="font-size:8.5px;color:${C.cyan}" title="Cosine distance from the nearest previously rendered concept in this run.">prior ↔ ${(+a.nearest_prior_distance).toFixed(3)}</span>` : ''}
+                    ${a.topical_similarity != null ? `<span style="font-size:8.5px;color:${(+a.topical_similarity) < (+a.topical_similarity_floor || 0) ? '#ef4444' : C.green}" title="Similarity to the original topic anchor versus the topical floor. Candidates below the floor are rejected before image generation.">topic ${(+a.topical_similarity).toFixed(3)} / ${(+a.topical_similarity_floor).toFixed(3)}</span>` : ''}
+                    ${a.image_provider_call_count != null ? `<span style="font-size:8.5px;color:${a.image_provider_call_count === 1 ? C.green : '#ef4444'}" title="Image-provider calls for this rendered attempt. One call returns the whole 45:16 sheet; the five panels are deterministic crops.">${a.image_provider_call_count} image call</span>` : ''}
+                    ${a.vnov != null ? `<span style="font-size:8.5px;color:${C.dim}" title="Descriptive visual-embedding distance from the closest earlier rendered montage. It does not control concept selection.">visual ↔ ${a.vnov.toFixed(3)}</span>` : ''}
                     ${verifiedScore ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
                   </div></div>`;
             };
@@ -4541,7 +4553,7 @@ const JarvisRetention = (function () {
                 ${runIntegrity}
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} attempts · verified scores ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.animation ? 'animation · ' : ''}one image → five deterministic crops · ${g.rejected_variant_count || 0} rejected as too-similar${g.minimum_text_embedding_distance != null ? ` · <span title="minimum text-embedding cosine distance a new variant must keep from every earlier attempt" style="cursor:help;color:${C.purple}">exploration ≥ ${(+g.minimum_text_embedding_distance).toFixed(2)}</span>` : ''}</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered attempts · verified scores ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Every discarded concept failed the outward or topical pre-render selection, or was an unselected sibling in the candidate pool.')}" style="cursor:help">${g.rejected_variant_count || 0} concepts screened before render</span>${g.required_seed_embedding_distance != null ? ` · <span title="minimum cosine distance the next concept must move from the immutable original topic" style="cursor:help;color:${C.purple}">seed ≥ ${(+g.required_seed_embedding_distance).toFixed(3)}</span>` : ''}${g.minimum_text_embedding_distance != null ? ` · <span title="minimum cosine distance the next concept must keep from every rendered concept" style="cursor:help;color:${C.cyan}">prior ≥ ${(+g.minimum_text_embedding_distance).toFixed(3)}</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum cosine similarity every concept must retain to the original topic" style="cursor:help;color:${C.green}">topic ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
