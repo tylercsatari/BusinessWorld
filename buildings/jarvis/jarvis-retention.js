@@ -34,6 +34,8 @@ const JarvisRetention = (function () {
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     let SAVED_OPEN_DRAIN = null;
+    let SAVED_EDITOR_DETAIL = Object.create(null);
+    let SAVED_EDITOR_OPEN_SEQUENCE = 0;
     let SAVED_PENDING = Object.create(null);
     let SAVED_CONFIRMED = Object.create(null);
     let SAVED_MOVES = Object.create(null);
@@ -41,9 +43,10 @@ const JarvisRetention = (function () {
     const SAVED_HOOK_DETAIL_TIMEOUT_MS = 15000;
     const SAVED_HOOK_DETAIL_ATTEMPTS = 2;
     const SAVED_HOOK_DETAIL_TOTAL_TIMEOUT_MS = 40000;
+    const SAVED_HOOK_EDITOR_TIMEOUT_MS = 12000;
     const SAVED_HOOK_MEDIA_TIMEOUT_MS = 20000;
     const SAVED_HOOK_SCORER_WAIT_TIMEOUT_MS = 5 * 60e3;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, autoImageModel: 'gpt-image-2', grindAnimation: false, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, autoImageModel: 'gpt-image-2', grindAnimation: false, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedEditingId: null, savedEditorStage: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -7180,7 +7183,9 @@ const JarvisRetention = (function () {
         if (state === 'scoring') {
             return 'Scoring 21 coordinates + 4 channel-free keep outputs';
         }
-        if (state === 'ready') return 'Ready';
+        if (state === 'ready') return upload && upload.savedId
+            ? 'Score ready'
+            : 'Ready';
         if (state === 'error') return 'Error';
         return 'Processing';
     }
@@ -7224,7 +7229,7 @@ const JarvisRetention = (function () {
                     || (selected ? 'Expanded below' : 'Select to inspect');
             return `<div class="score-analysis-queue-row" data-score-queue-state="${esc(state)}" data-score-queue-id="${esc(upload._scoreQueueId || `result:${index}`)}" data-saved-id="${esc(upload.savedId || '')}" data-selected="${selected ? 'true' : 'false'}" style="--score-queue-accent:${color}"><button type="button" data-rawupmark="${index}" aria-expanded="${selected ? 'true' : 'false'}"><span class="score-analysis-queue-state"><i></i>${esc(scoreQueueStateLabel(upload))}</span><span class="score-analysis-queue-copy"><b>${esc(upload.title || upload.filename || `Opening ${index + 1}`)}</b><small>${esc(detail)}</small></span><span class="score-analysis-queue-toggle" aria-hidden="true">${selected ? '▾' : '▸'}</span></button><button type="button" data-rawupdel="${index}" class="score-analysis-queue-remove" title="Remove this analysis from the queue" aria-label="Remove ${esc(upload.title || `opening ${index + 1}`)} from the queue">×</button></div>`;
         }).join('');
-        return `<section class="score-analysis-queue" data-score-analysis-queue aria-label="Opening analysis queue"><div class="score-analysis-queue-head"><div><small>Analysis queue</small><b>${uploads.length} opening${uploads.length === 1 ? '' : 's'}</b><span role="status" aria-live="polite">${counts.ready || 0} ready${active ? ` · ${active} active` : ''}${counts.error ? ` · ${counts.error} error${counts.error === 1 ? '' : 's'}` : ''}</span></div><button type="button" data-scorequeuecollapse ${st.rawUpSel == null ? 'disabled' : ''} title="Collapse the expanded analysis">Collapse</button></div><div class="score-analysis-queue-list">${rows}</div></section>`;
+        return `<section class="score-analysis-queue" data-score-analysis-queue aria-label="Opening analysis queue"><div class="score-analysis-queue-head"><div><small>Score analysis queue</small><b>${uploads.length} opening${uploads.length === 1 ? '' : 's'}</b><span role="status" aria-live="polite">${counts.ready || 0} score${counts.ready === 1 ? '' : 's'} ready${active ? ` · ${active} active` : ''}${counts.error ? ` · ${counts.error} error${counts.error === 1 ? '' : 's'}` : ''}</span></div><button type="button" data-scorequeuecollapse ${st.rawUpSel == null ? 'disabled' : ''} title="Collapse the expanded analysis">Collapse</button></div><div class="score-analysis-queue-list">${rows}</div></section>`;
     }
     function renderSelectedQueuePlaceholder(upload) {
         if (!upload) return '';
@@ -8606,6 +8611,11 @@ const JarvisRetention = (function () {
             editSavedHook(savedEdit.getAttribute('data-savededit'));
             return;
         }
+        const savedScore = e.target.closest('[data-savedscore]');
+        if (savedScore) {
+            openSaved(savedScore.getAttribute('data-savedscore'));
+            return;
+        }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) {
             closeSavedDetail();
@@ -8633,7 +8643,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savedmore]')) { const page = window.innerWidth < 700 ? 20 : 60; st.savedShow = (st.savedShow || page) + page; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedfiltclear]')) { st.savedFilt = {}; rtgUpdateExp(); return; }
         if (e.target.closest('.saved-hook-card-actions')) return;
-        const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
+        const sopen = e.target.closest('[data-savedopen]'); if (sopen) { editSavedHook(sopen.getAttribute('data-savedopen')); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
         const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
         const grpoInpBtn = e.target.closest('[data-grpoinput]'); if (grpoInpBtn) { st.grpoSel = grpoInpBtn.getAttribute('data-grpoinput'); rtgUpdateGrpo(); return; }
@@ -9311,82 +9321,153 @@ const JarvisRetention = (function () {
             }
         }
     }
+    function publishExperimentLabEditorOpen(id, stage) {
+        if (
+            !isExperimentLabSurface()
+            || !root
+            || typeof window.CustomEvent !== 'function'
+        ) return;
+        root.dispatchEvent(new window.CustomEvent(
+            'experiment-lab-editor-open',
+            { detail: { savedId: id, stage } }
+        ));
+    }
+    function loadSavedHookEditorDetail(id) {
+        const cacheKey = savedScoreQueueKey(id, null);
+        const fullRecord = SAVEDDETAIL[cacheKey]
+            && SAVEDDETAIL[cacheKey].rec;
+        if (fullRecord) return Promise.resolve(fullRecord);
+        const cached = SAVED_EDITOR_DETAIL[cacheKey];
+        if (cached && cached.record) return Promise.resolve(cached.record);
+        if (cached && cached.promise) return cached.promise;
+        const request = rtFetchJson(
+            `/api/raw/saved-hook/${encodeURIComponent(id)}?view=editor`,
+            {
+                cache: 'force-cache',
+                _timeoutMs: SAVED_HOOK_EDITOR_TIMEOUT_MS,
+                _retryDelays: [500],
+            },
+            2
+        ).then(record => {
+            SAVED_EDITOR_DETAIL[cacheKey] = {
+                record,
+                touchedAt: Date.now(),
+            };
+            const cacheKeys = Object.keys(SAVED_EDITOR_DETAIL).sort(
+                (left, right) => (
+                    Number(SAVED_EDITOR_DETAIL[left].touchedAt || 0)
+                    - Number(SAVED_EDITOR_DETAIL[right].touchedAt || 0)
+                )
+            );
+            while (cacheKeys.length > 24) {
+                delete SAVED_EDITOR_DETAIL[cacheKeys.shift()];
+            }
+            return record;
+        }).catch(error => {
+            delete SAVED_EDITOR_DETAIL[cacheKey];
+            throw error;
+        });
+        SAVED_EDITOR_DETAIL[cacheKey] = {
+            promise: request,
+            touchedAt: Date.now(),
+        };
+        return request;
+    }
     async function editSavedHook(id) {
         const key = String(id || '');
-        if (!key || st.savedEditingId) return;
+        if (!key) return null;
+        const requestGeneration = mountGeneration;
+        const openSequence = ++SAVED_EDITOR_OPEN_SEQUENCE;
         st.savedEditingId = key;
+        st.savedEditorStage = 'loading';
         st.rawBuildMode = true;
         st.rawUpErr = null;
+        publishExperimentLabEditorOpen(key, 'loading');
         rtgUpdateExp();
         try {
-            const detailKey = savedScoreQueueKey(key, null);
-            let stored = SAVEDDETAIL[detailKey];
-            if (!stored || !stored.rec) {
-                stored = SAVEDDETAIL[detailKey] = {
-                    rec: await rtFetchJson(
-                        `/api/raw/saved-hook/${key}`,
-                        { cache: 'no-store' },
-                        4
-                    ),
-                    montage: null,
-                    reconstructed: false,
-                };
-            }
-            const rec = stored.rec || {};
-            if ((rec.score_domain || 'shorts') !== 'shorts') {
-                throw new Error(
-                    'Only Shorts saved hooks can be edited in this Storyboard workbench.'
-                );
-            }
-            let montage = stored.montage || null;
-            if (!montage && (rec.hasMontage || rec.montage_ref)) {
-                montage = await urlToDataUrl(
-                    `/api/raw/saved-montage/${key}`
-                );
-            }
-            if (
-                !montage
-                && Array.isArray(rec.frame_imgs)
-                && rec.frame_imgs.length
-            ) {
-                montage = await montageFromFrameIds(rec.frame_imgs);
-                stored.reconstructed = true;
-            }
-            stored.montage = montage;
             const ui = storyboardUI();
             if (!ui || typeof ui.importSavedHook !== 'function') {
                 throw new Error(
                     'The Storyboard editor did not load. Reload Experiment Lab and try again.'
                 );
             }
+            const rec = await loadSavedHookEditorDetail(key);
+            if (
+                openSequence !== SAVED_EDITOR_OPEN_SEQUENCE
+                || requestGeneration !== mountGeneration
+            ) return null;
+            if ((rec.score_domain || 'shorts') !== 'shorts') {
+                throw new Error(
+                    'Only Shorts saved hooks can be edited in this Storyboard workbench.'
+                );
+            }
             const indexRow = savedHookCanonicalRows().find(
                 hook => String(hook.id) === key
             );
-            await ui.importSavedHook({
+            const mediaUrl = rec.editor_media
+                && rec.editor_media.available
+                && rec.editor_media.url
+                    ? rec.editor_media.url
+                    : rec.hasMontage || rec.montage_ref
+                        ? `/api/raw/saved-montage/${key}`
+                        : null;
+            const frameImages = Array.isArray(rec.frame_imgs)
+                ? rec.frame_imgs.filter(Boolean).slice(0, 5).map(frameId => (
+                    authenticatedMediaUrl(
+                        '/api/hooks/grpo/montage/demo/'
+                            + encodeURIComponent(frameId)
+                    )
+                ))
+                : [];
+            st.savedEditorStage = 'hydrating';
+            rtgUpdateExp();
+            const imported = await ui.importSavedHook({
                 id: key,
                 title: rec.title || indexRow && indexRow.title || 'Saved opening',
                 idea: rec.idea || '',
                 text: rec.transcript || rec.text || '',
                 frames: Array.isArray(rec.frames) ? rec.frames : [],
-                montage,
+                montage: mediaUrl
+                    ? authenticatedMediaUrl(mediaUrl)
+                    : null,
+                frameImages,
                 folderId: savedHookFolder(indexRow),
             });
+            if (openSequence !== SAVED_EDITOR_OPEN_SEQUENCE) return null;
             st.rawBuildMode = true;
             st.rawUpErr = null;
+            st.savedEditorStage = 'open';
+            publishExperimentLabEditorOpen(key, 'open');
+            if (imported && imported.mediaReady) {
+                await imported.mediaReady;
+            }
+            if (openSequence !== SAVED_EDITOR_OPEN_SEQUENCE) return null;
+            st.savedEditorStage = 'ready';
+            publishExperimentLabEditorOpen(key, 'ready');
+            return imported && imported.candidateId || imported;
         } catch (error) {
-            st.rawUpErr = `Edit saved hook: ${fetchFail(error)}`;
+            if (openSequence === SAVED_EDITOR_OPEN_SEQUENCE) {
+                st.rawUpErr = `Open saved hook in editor: ${fetchFail(error)}`;
+                st.savedEditorStage = 'error';
+                publishExperimentLabEditorOpen(key, 'error');
+            }
+            return null;
         } finally {
-            st.savedEditingId = null;
-            rtgUpdateExp();
-            window.requestAnimationFrame(() => {
-                const workbench = window.document.getElementById(
-                    'shorts-storyboard-workbench'
-                );
-                if (workbench) workbench.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
+            if (openSequence === SAVED_EDITOR_OPEN_SEQUENCE) {
+                st.savedEditingId = null;
+                rtgUpdateExp();
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => {
+                        const workbench = window.document.getElementById(
+                            'shorts-storyboard-workbench'
+                        );
+                        if (workbench) workbench.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start',
+                        });
+                    });
                 });
-            });
+            }
         }
     }
     async function deleteFolder(fid) {
@@ -9665,6 +9746,7 @@ const JarvisRetention = (function () {
             return;
         }
         delete SAVEDDETAIL[detailCacheKey];
+        delete SAVED_EDITOR_DETAIL[detailCacheKey];
         SAVED = null;
         const ownQueueKey = savedScoreQueueKey(id, null);
         st.rawUploads = (st.rawUploads || []).filter(row => !(
@@ -15268,7 +15350,8 @@ const JarvisRetention = (function () {
               <div style="font-size:10px;color:${C.text};font-weight:700;line-height:1.3;max-height:39px;overflow:hidden">${esc((h.title || '').slice(0, 75))}</div>
               <div style="margin-top:4px">${badge}</div>
               <div class="saved-hook-card-actions">
-                <button type="button" data-savededit="${h.id}" ${editing ? 'disabled' : ''} title="Edit this saved opening as a new revision">${editing ? 'Loading…' : 'Edit'}</button>
+                <button type="button" data-savededit="${h.id}" ${editing ? 'disabled' : ''} title="Open this saved opening in the Storyboard editor">${editing ? 'Opening…' : 'Open editor'}</button>
+                <button type="button" data-savedscore="${h.id}" title="View the persisted canonical score ledger">View score</button>
                 <label><span>Move to folder</span><select data-savedmove="${h.id}" title="Move to folder" ${moving ? 'disabled' : ''}>${folderOpts(h)}</select></label>
               </div>
               ${moving ? `<div class="saved-hook-move-state" role="status">Moving…</div>` : ''}
@@ -15279,7 +15362,7 @@ const JarvisRetention = (function () {
         const sourceWarning = SAVED && SAVED.error
             ? `<div style="padding:7px 9px;margin-bottom:8px;border-left:3px solid ${C.red};background:${C.red}0c;color:${C.red};font-size:9px">The server index refresh failed. ${all.length} locally confirmed hook${all.length === 1 ? '' : 's'} remain visible. <button data-savedretry style="border:0;background:none;color:${C.red};font-weight:900;text-decoration:underline;cursor:pointer">Retry</button></div>`
             : '';
-        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length + pending.length} total${pending.length ? ` · ${pending.length} saving` : ''} · click any saved hook for the full read-out</span></div>
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length + pending.length} total${pending.length ? ` · ${pending.length} saving` : ''} · click a card to open it in the editor; View score opens its persisted ledger</span></div>
           ${sourceWarning}${pendingCards}${folderBar}
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;padding:8px;background:${C.card2};border-radius:8px">
             <span style="font-size:9px;color:${C.mute};align-self:center">filter ≥</span>${fbar}
@@ -15311,6 +15394,8 @@ const JarvisRetention = (function () {
         SAVED_MOVES = Object.create(null);
         SAVED_FOLDER_OVERRIDES = Object.create(null);
         SAVEDDETAIL = {};
+        SAVED_EDITOR_DETAIL = Object.create(null);
+        SAVED_EDITOR_OPEN_SEQUENCE++;
         SAVEDCHANNELS = null;
         SAVEDCHANNELDETAIL = {};
         SAVEDCHANNELANALYSIS = {};
@@ -15343,6 +15428,8 @@ const JarvisRetention = (function () {
         st.grindRid = null;
         st.grindBusy = false;
         SAVED_OPEN_DRAIN = null;
+        st.savedEditingId = null;
+        st.savedEditorStage = null;
         st.savedDetailLoading = false;
         st.savedDetailErr = null;
         st.rawUploads = [];

@@ -106,6 +106,8 @@
                 scoreError: '',
                 scoreInputSha256: null,
                 savedHookId: null,
+                mediaState: null,
+                mediaError: '',
                 folderId: null,
                 saveState: 'idle',
                 saveError: '',
@@ -147,6 +149,9 @@
         let draggedPanelIndex = null;
         const saveQueues = new Map();
         const saveTimers = new Map();
+        const savedHookHydrations = new Map();
+        const storyboardHydrations = new Map();
+        const storyboardRecordCache = new Map();
 
         const candidate = () => (
             state.candidates.find(item => item.id === state.selectedCandidateId)
@@ -558,6 +563,7 @@
 
         function renderScoreBar(current, placement) {
             const complete = completeFrames(current);
+            const loadingMedia = current.mediaState === 'loading';
             const frameCount = current.panels.filter(
                 entry => entry.image
             ).length;
@@ -570,12 +576,12 @@
                 : 'data-sb-score-bottom';
             if (placement === 'bottom') {
                 return `<div class="sb-bottom-score">
-                    <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score this opening again' : complete ? 'Score this opening' : `Add ${PANEL_COUNT - frameCount} more frame${PANEL_COUNT - frameCount === 1 ? '' : 's'} to score`}</button>
+                    <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy && !loadingMedia ? '' : 'disabled'}>${loadingMedia ? 'Loading saved frames' : current.score ? 'Score this opening again' : complete ? 'Score this opening' : `Add ${PANEL_COUNT - frameCount} more frame${PANEL_COUNT - frameCount === 1 ? '' : 's'} to score`}</button>
                 </div>`;
             }
             return `<div class="sb-score-dock" data-sb-score-dock="top">
                 <div class="sb-score-summary">
-                    <strong>${current.score ? 'Opening scored' : complete ? 'Ready to score' : `${frameCount}/${PANEL_COUNT} frames ready`}</strong>
+                    <strong>${loadingMedia ? 'Loading saved frames' : current.score ? 'Opening scored' : complete ? 'Ready to score' : `${frameCount}/${PANEL_COUNT} frames ready`}</strong>
                     <span>${scoreLedgerSha(current)
                         ? `Ledger ${esc(scoreLedgerSha(current).slice(0, 12))}...`
                         : complete
@@ -584,10 +590,10 @@
                                 : 'Five frames · visual only'
                             : 'One canonical 21-coordinate score'}</span>
                 </div>
-                <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy ? '' : 'disabled'}>${current.score ? 'Score again' : 'Score opening'}</button>
+                <button type="button" class="is-primary" ${primaryAttribute} ${complete && !state.busy && !loadingMedia ? '' : 'disabled'}>${loadingMedia ? 'Loading frames' : current.score ? 'Score again' : 'Score opening'}</button>
                 ${state.candidates.length > 1 ? `<button type="button" data-sb-batch-score ${state.busy || !state.candidates.some(needsScore) ? 'disabled' : ''}>Score all ready</button>` : ''}
                 ${current.score ? '<button type="button" data-sb-open-score>Open embeddings</button>' : ''}
-                <button type="button" data-sb-save ${hasPersistableContent(current) && !state.busy && current.saveState !== 'saving' ? '' : 'disabled'}>${saveButtonLabel(current)}</button>
+                <button type="button" data-sb-save ${hasPersistableContent(current) && !state.busy && !loadingMedia && current.saveState !== 'saving' ? '' : 'disabled'}>${saveButtonLabel(current)}</button>
             </div>`;
         }
 
@@ -660,7 +666,11 @@
                 </div>
                 <div class="sb-candidate-grid">${state.candidates.map((item, index) => {
                     const selected = item.id === state.selectedCandidateId;
-                    const status = state.busyCandidateId === item.id
+                    const status = item.mediaState === 'loading'
+                        ? 'Loading saved frames'
+                        : item.mediaState === 'error'
+                            ? 'Frames failed'
+                        : state.busyCandidateId === item.id
                         ? 'Processing'
                         : item.score
                             ? 'Scored'
@@ -677,6 +687,7 @@
                         </button>
                         <div class="sb-row-actions">
                             ${item.score ? `<button type="button" data-sb-open-candidate-score="${esc(item.id)}">Embeddings</button>` : ''}
+                            ${item.mediaState === 'error' && item.serverId ? `<button type="button" data-sb-retry-storyboard="${esc(item.serverId)}">Retry frames</button>` : ''}
                             <button type="button" data-sb-duplicate="${esc(item.id)}">Duplicate</button>
                             <button type="button" data-sb-delete-candidate="${esc(item.id)}" ${state.candidates.length === 1 ? 'disabled' : ''}>Remove</button>
                         </div>
@@ -810,7 +821,7 @@
                 </div>
                 ${renderFolderOrganizer(current)}
                 ${state.status ? `<div class="sb-status" role="status"><span></span>${esc(state.status)}</div>` : ''}
-                ${state.error ? `<div class="sb-error" role="alert">${esc(state.error)}<button type="button" data-sb-dismiss-error aria-label="Dismiss error">&times;</button></div>` : ''}
+                ${state.error ? `<div class="sb-error" role="alert">${esc(state.error)}${current.mediaState === 'error' && current.serverId ? `<button type="button" data-sb-retry-storyboard="${esc(current.serverId)}">Retry saved frames</button>` : ''}<button type="button" data-sb-dismiss-error aria-label="Dismiss error">&times;</button></div>` : ''}
                 ${renderComposer(current)}
             </div>`;
         }
@@ -837,7 +848,7 @@
                 || /^data:image\//i.test(value)
                 || /^blob:/i.test(value)
             ) return value;
-            if (/^\/api\/storyboards\/media\//.test(value)) {
+            if (/^\/api\/(?:storyboards\/media|raw\/saved-montage|hooks\/grpo\/montage)\//.test(value)) {
                 let lastStatus = 0;
                 let lastError = null;
                 for (let attempt = 0; attempt < 2; attempt++) {
@@ -1695,6 +1706,7 @@
 
         async function persistCandidateOnce(current) {
             const saveVersion = Number(current.mutationVersion) || 0;
+            const previousServerId = current.serverId;
             const savedSnapshot = {
                 id: current.serverId,
                 expectedRevision: current.serverRevision,
@@ -1722,6 +1734,10 @@
             });
             current.serverId = response.id;
             current.serverRevision = response.revision;
+            if (previousServerId) {
+                storyboardRecordCache.delete(previousServerId);
+            }
+            storyboardRecordCache.delete(response.id);
             current.dirty = (
                 Number(current.mutationVersion) || 0
             ) !== saveVersion;
@@ -1764,7 +1780,11 @@
         }
 
         function scheduleAutoPersist(current) {
-            if (!autoPersistDrafts || !current) return;
+            if (
+                !autoPersistDrafts
+                || !current
+                || current.mediaState === 'loading'
+            ) return;
             cancelScheduledSave(current);
             const timer = window.setTimeout(() => {
                 saveTimers.delete(current.id);
@@ -1819,7 +1839,11 @@
         }
 
         async function autoPersistCandidate(current) {
-            if (!autoPersistDrafts || !hasPersistableContent(current)) {
+            if (
+                !autoPersistDrafts
+                || current && current.mediaState === 'loading'
+                || !hasPersistableContent(current)
+            ) {
                 return null;
             }
             try {
@@ -1835,6 +1859,7 @@
             if (
                 !current
                 || state.busy
+                || current.mediaState === 'loading'
                 || current.saveState === 'saving'
                 || !hasPersistableContent(current)
             ) return;
@@ -1858,92 +1883,175 @@
             }
         }
 
-        async function hydrateStoredCandidate(record) {
-            const current = blankCandidate(record.name || 'Saved storyboard');
-            const warnings = [];
-            current.serverId = record.id;
-            current.serverRevision = record.revision;
-            current.name = record.name || current.name;
-            current.brief = record.brief || '';
-            current.hookText = record.hookText || '';
-            current.model = MODEL_OPTIONS.some(
+        function prepareStoredCandidate(record, current) {
+            const target = current || blankCandidate(
+                record.name || 'Saved storyboard'
+            );
+            target.serverId = record.id;
+            target.serverRevision = record.revision;
+            target.name = record.name || target.name;
+            target.brief = record.brief || '';
+            target.hookText = record.hookText || '';
+            target.model = MODEL_OPTIONS.some(
                 ([value]) => value === record.model
             ) ? record.model : DEFAULT_MODEL;
-            current.stylePreset = (
+            target.stylePreset = (
                 record.stylePreset === ANIMATION_STYLE_ID
                     ? ANIMATION_STYLE_ID
                     : DEFAULT_STYLE_ID
             );
-            current.generationMode = record.generationMode || 'composite';
-            current.selectedPanel = Math.max(0, Math.min(4, Number(record.selectedPanel) || 0));
-            current.composite = record.composite || null;
-            current.references = (await mapLimited(
-                Array.isArray(record.references)
-                    ? record.references
-                    : [],
+            target.generationMode = record.generationMode || 'composite';
+            target.selectedPanel = Math.max(
+                0,
+                Math.min(4, Number(record.selectedPanel) || 0)
+            );
+            target.composite = null;
+            target.references = [];
+            target.panels = Array.from(
+                { length: PANEL_COUNT },
+                (_, index) => {
+                    const stored = record.panels
+                        && record.panels[index] || {};
+                    return {
+                        ...blankPanel(index),
+                        ...stored,
+                        image: null,
+                        strokes: Array.isArray(stored.strokes)
+                            ? stored.strokes
+                            : [],
+                        revisions: Array.isArray(stored.revisions)
+                            ? stored.revisions
+                            : [],
+                        futureRevisions: [],
+                    };
+                }
+            );
+            target.score = null;
+            target.savedHookId = record.savedHookId || null;
+            target.folderId = record.folderId
+                || record.folder
+                || (state.saved.find(
+                    item => item.id === record.id
+                ) || {}).folderId
+                || null;
+            target.saveState = 'saved';
+            target.saveError = '';
+            target.dirty = false;
+            target.pristine = false;
+            target.mutationVersion = 0;
+            target.mediaState = 'loading';
+            target.mediaError = '';
+            target.hydrationWarnings = [];
+            return target;
+        }
+
+        async function hydrateStoredCandidate(record, current, loadToken) {
+            const warnings = [];
+            const mutationVersion = Number(current.mutationVersion) || 0;
+            const scoreMontage = record.score
+                && record.score.score_montage || null;
+            const referenceRows = Array.isArray(record.references)
+                ? record.references
+                : [];
+            const panelRows = Array.from(
+                { length: PANEL_COUNT },
+                (_, index) => record.panels
+                    && record.panels[index] || {}
+            );
+            const mediaJobs = [
+                ...referenceRows.map((reference, index) => ({
+                    type: 'reference',
+                    index,
+                    source: reference.image,
+                    label: `Reference ${index + 1}`,
+                })),
+                ...panelRows.map((storedPanel, index) => ({
+                    type: 'panel',
+                    index,
+                    source: storedPanel.image,
+                    label: `Frame ${index + 1}`,
+                })),
+                ...(scoreMontage && scoreMontage.url ? [{
+                    type: 'score-montage',
+                    index: 0,
+                    source: scoreMontage.url,
+                    label: 'Scored montage',
+                }] : []),
+            ];
+            const loadedMedia = await mapLimited(
+                mediaJobs,
                 4,
-                async (reference, index) => {
+                async job => {
+                    if (!job.source) return { ...job, image: null };
                     try {
                         return {
-                            ...reference,
+                            ...job,
                             image: await portableImageSource(
-                                reference.image
+                                job.source
                             ),
                         };
                     } catch (error) {
                         warnings.push(
-                            `Reference ${index + 1}: ${
-                                error.message || error
-                            }`
+                            `${job.label}: ${error.message || error}`
                         );
-                        return null;
+                        return { ...job, image: null };
                     }
                 }
-            )).filter(Boolean);
-            current.panels = Array.from({ length: PANEL_COUNT }, (_, index) => {
-                const stored = record.panels && record.panels[index] || {};
-                const defaults = blankPanel(index);
-                return {
-                    ...defaults,
-                    ...stored,
-                    strokes: Array.isArray(stored.strokes) ? stored.strokes : [],
-                    revisions: Array.isArray(stored.revisions) ? stored.revisions : [],
-                    futureRevisions: [],
-                };
+            );
+            const referenceImages = new Map();
+            const panelImages = Array(PANEL_COUNT).fill(null);
+            let montageDataUrl = null;
+            loadedMedia.forEach(media => {
+                if (media.type === 'reference') {
+                    referenceImages.set(media.index, media.image);
+                } else if (media.type === 'panel') {
+                    panelImages[media.index] = media.image;
+                } else if (media.type === 'score-montage') {
+                    montageDataUrl = media.image;
+                }
             });
-            await mapLimited(current.panels, 4, async (
-                storedPanel,
-                index
-            ) => {
-                if (!storedPanel.image) return;
+            if (
+                !state.candidates.includes(current)
+                || current.mediaLoadToken !== loadToken
+            ) return current;
+            current.references = referenceRows.map(
+                (reference, index) => ({
+                    ...reference,
+                    image: referenceImages.get(index) || null,
+                })
+            ).filter(reference => !!reference.image);
+            current.panels.forEach((storedPanel, index) => {
+                storedPanel.image = panelImages[index] || null;
+            });
+            if (completeFrames(current)) {
                 try {
-                    storedPanel.image = await portableImageSource(
-                        storedPanel.image
-                    );
+                    await rebuildComposite(current);
                 } catch (error) {
-                    storedPanel.image = null;
                     warnings.push(
-                        `Frame ${index + 1}: ${
-                            error.message || error
-                        }`
+                        `Whole panel: ${error.message || error}`
                     );
-                }
-            });
-            if (record.score && record.score.score_ledger) {
-                const scoreMontage =
-                    record.score.score_montage || null;
-                let montageDataUrl = null;
-                if (scoreMontage && scoreMontage.url) {
-                    try {
-                        montageDataUrl = await portableImageSource(
-                            scoreMontage.url
-                        );
-                    } catch (error) {
-                        warnings.push(
-                            `Scored montage: ${error.message || error}`
-                        );
+                    if (record.composite) {
+                        try {
+                            current.composite = await portableImageSource(
+                                record.composite
+                            );
+                        } catch (compositeError) {
+                            warnings.push(
+                                `Stored whole panel: ${
+                                    compositeError.message
+                                    || compositeError
+                                }`
+                            );
+                        }
                     }
                 }
+            }
+            if (
+                record.score
+                && record.score.score_ledger
+                && (Number(current.mutationVersion) || 0)
+                    === mutationVersion
+            ) {
                 current.score = {
                     ...record.score,
                     title: current.name,
@@ -1952,21 +2060,20 @@
                     montageDataUrl,
                     storyboardScoreMontage: scoreMontage,
                     storyboardCandidateId: current.id,
-                    storyboardFrames: current.panels.map(entry => entry.image),
+                    storyboardFrames: current.panels.map(
+                        entry => entry.image
+                    ),
                     source: 'storyboard-saved',
                 };
             }
-            current.savedHookId = record.savedHookId || null;
-            current.folderId = record.folderId
-                || record.folder
-                || (state.saved.find(item => item.id === record.id) || {}).folderId
-                || null;
-            current.saveState = 'saved';
-            current.saveError = '';
-            current.dirty = false;
-            current.pristine = false;
-            current.mutationVersion = 0;
+            current.mediaState = completeFrames(current)
+                ? 'ready'
+                : 'error';
+            current.mediaError = current.mediaState === 'error'
+                ? 'One or more saved frames could not be restored.'
+                : '';
             current.hydrationWarnings = warnings;
+            current.saveState = current.dirty ? 'idle' : 'saved';
             return current;
         }
 
@@ -2149,49 +2256,170 @@
             paint();
         }
 
-        async function loadStoryboard(id) {
-            if (!id || state.busy) return;
-            state.busy = true;
-            state.status = 'Loading storyboard...';
-            paint();
-            try {
-                const record = await requestJson(`/api/storyboards/${encodeURIComponent(id)}`, { cache: 'no-store' });
-                const loaded = await hydrateStoredCandidate(record);
-                const existing = state.candidates.findIndex(item => item.serverId === loaded.serverId);
-                if (existing >= 0 && state.candidates[existing].dirty) {
-                    throw new Error(
-                        'This storyboard has unsaved edits in the workspace. '
-                            + 'Save or remove that copy before reopening it.'
-                    );
+        function loadStoryboardRecord(id) {
+            const cached = storyboardRecordCache.get(id);
+            if (cached && cached.record) {
+                return Promise.resolve(cached.record);
+            }
+            if (cached && cached.promise) return cached.promise;
+            const request = requestJson(
+                `/api/storyboards/${encodeURIComponent(id)}`,
+                {
+                    cache: 'force-cache',
+                    _timeoutMs: 12000,
+                    _retryDelays: [500],
                 }
-                if (existing >= 0) state.candidates[existing] = loaded;
-                else if (
+            ).then(record => {
+                storyboardRecordCache.set(id, {
+                    record,
+                    touchedAt: Date.now(),
+                });
+                const cachedIds = [...storyboardRecordCache.entries()]
+                    .filter(([, value]) => value && value.record)
+                    .sort((left, right) => (
+                        Number(left[1].touchedAt || 0)
+                        - Number(right[1].touchedAt || 0)
+                    ));
+                while (cachedIds.length > 24) {
+                    storyboardRecordCache.delete(cachedIds.shift()[0]);
+                }
+                return record;
+            }).catch(error => {
+                storyboardRecordCache.delete(id);
+                throw error;
+            });
+            storyboardRecordCache.set(id, {
+                promise: request,
+                touchedAt: Date.now(),
+            });
+            return request;
+        }
+
+        async function loadStoryboard(id) {
+            const key = String(id || '');
+            if (!key) return null;
+            let current = state.candidates.find(
+                item => String(item.serverId || '') === key
+            );
+            if (current && current.dirty) {
+                state.selectedCandidateId = current.id;
+                state.status = '';
+                state.error = 'This storyboard has unsaved edits in the workspace. Save or remove that copy before reopening it.';
+                paint();
+                return null;
+            }
+            if (current && current.mediaState !== 'error') {
+                state.selectedCandidateId = current.id;
+                state.drawEnabled = false;
+                state.error = current.mediaError || '';
+                state.status = current.mediaState === 'loading'
+                    ? `${current.name} is already open. Its saved frames are still loading.`
+                    : `${current.name} is open in the editor.`;
+                paint();
+                return storyboardHydrations.get(key)
+                    || Promise.resolve(current.id);
+            }
+            if (!current) {
+                if (
+                    state.candidates.length >= MAX_CANDIDATES
+                    && !(
+                        state.candidates.length === 1
+                        && replaceableBlank(state.candidates[0])
+                    )
+                ) {
+                    state.error = `Remove a storyboard before opening more than ${MAX_CANDIDATES}.`;
+                    paint();
+                    return null;
+                }
+                const summary = state.saved.find(item => item.id === key);
+                current = blankCandidate(
+                    summary && summary.name || 'Saved storyboard'
+                );
+                current.serverId = key;
+                current.serverRevision = summary && summary.revision || null;
+                current.folderId = summary && (
+                    summary.folderId || summary.folder
+                ) || null;
+                current.pristine = false;
+                current.dirty = false;
+                current.saveState = 'saved';
+                current.mediaState = 'loading';
+                if (
                     state.candidates.length === 1
                     && replaceableBlank(state.candidates[0])
-                ) state.candidates[0] = loaded;
-                else if (state.candidates.length < MAX_CANDIDATES) {
-                    state.candidates.push(loaded);
-                } else {
-                    throw new Error(
-                        `Remove a storyboard before opening more than ${MAX_CANDIDATES}.`
-                    );
-                }
-                state.selectedCandidateId = loaded.id;
-                state.drawEnabled = false;
-                state.status = `${loaded.name} loaded.`;
-                if (loaded.hydrationWarnings.length) {
-                    state.error = (
-                        `${loaded.hydrationWarnings.length} saved image`
-                        + `${loaded.hydrationWarnings.length === 1 ? '' : 's'} could not be restored: `
-                        + loaded.hydrationWarnings.slice(0, 3).join(' | ')
-                    );
-                }
-            } catch (error) {
-                fail(error);
-                return;
+                ) state.candidates[0] = current;
+                else state.candidates.push(current);
+            } else {
+                current.mediaState = 'loading';
+                current.mediaError = '';
             }
-            state.busy = false;
+            state.selectedCandidateId = current.id;
+            state.drawEnabled = false;
+            state.error = '';
+            state.status = `${current.name} is open. Loading its saved frames...`;
             paint();
+            const loadToken = uid('storyboard-load');
+            current.mediaLoadToken = loadToken;
+            const hydration = Promise.resolve().then(async () => {
+                const record = await loadStoryboardRecord(key);
+                if (
+                    !state.candidates.includes(current)
+                    || current.mediaLoadToken !== loadToken
+                ) return current.id;
+                prepareStoredCandidate(record, current);
+                current.mediaLoadToken = loadToken;
+                if (candidate() === current) {
+                    state.status = `${current.name} is open. Loading its five saved frames...`;
+                    state.error = '';
+                    paint();
+                }
+                await hydrateStoredCandidate(
+                    record,
+                    current,
+                    loadToken
+                );
+                if (
+                    !state.candidates.includes(current)
+                    || current.mediaLoadToken !== loadToken
+                ) return current.id;
+                if (candidate() === current) {
+                    state.status = current.mediaState === 'ready'
+                        ? `${current.name} is ready in the editor.`
+                        : `${current.name} opened with incomplete saved media.`;
+                    state.error = current.hydrationWarnings.length
+                        ? (
+                            `${current.hydrationWarnings.length} saved image`
+                            + `${current.hydrationWarnings.length === 1 ? '' : 's'} could not be restored: `
+                            + current.hydrationWarnings.slice(0, 3).join(' | ')
+                        )
+                        : current.mediaError || '';
+                    paint();
+                }
+                return current.id;
+            }).catch(error => {
+                if (
+                    state.candidates.includes(current)
+                    && current.mediaLoadToken === loadToken
+                ) {
+                    current.mediaState = 'error';
+                    current.mediaError = `Saved storyboard failed to load: ${String(
+                        error && error.message || error
+                    )}`.slice(0, 500);
+                    if (candidate() === current) {
+                        state.status = `${current.name} is open, but loading failed.`;
+                        state.error = `${current.mediaError} Select it again to retry.`;
+                        paint();
+                    }
+                    reportError(current.mediaError);
+                }
+                return null;
+            }).finally(() => {
+                if (storyboardHydrations.get(key) === hydration) {
+                    storyboardHydrations.delete(key);
+                }
+            });
+            storyboardHydrations.set(key, hydration);
+            return hydration;
         }
 
         async function uploadPanel(files) {
@@ -2327,10 +2555,27 @@
 
         async function importSavedHook(input) {
             const source = input || {};
-            if (state.busy) {
-                throw new Error(
-                    'Finish the current storyboard operation before editing another saved opening.'
+            const sourceId = String(source.id || '');
+            const alreadyOpen = sourceId && state.candidates.find(item => (
+                String(item.sourceSavedHookId || '') === sourceId
+            ));
+            if (alreadyOpen && alreadyOpen.mediaState === 'error') {
+                state.candidates = state.candidates.filter(
+                    item => item !== alreadyOpen
                 );
+                savedHookHydrations.delete(alreadyOpen.id);
+            } else if (alreadyOpen) {
+                state.selectedCandidateId = alreadyOpen.id;
+                state.status = alreadyOpen.mediaState === 'loading'
+                    ? `${alreadyOpen.name} is already open; its saved frames are still loading.`
+                    : `${alreadyOpen.name} is already open in the editor.`;
+                state.error = alreadyOpen.mediaError || '';
+                paint();
+                return {
+                    candidateId: alreadyOpen.id,
+                    mediaReady: savedHookHydrations.get(alreadyOpen.id)
+                        || Promise.resolve(alreadyOpen.id),
+                };
             }
             const blankSlot = (
                 state.candidates.length === 1
@@ -2341,83 +2586,128 @@
                     `This workbench holds ${MAX_CANDIDATES} storyboards. Remove one before editing another saved opening.`
                 );
             }
-            state.busy = true;
             state.error = '';
-            state.status = 'Preparing an editable revision...';
+            const draft = blankCandidate(
+                String(source.title || 'Saved opening').slice(0, 80)
+            );
+            const promptRows = Array.isArray(source.frames)
+                ? source.frames
+                : [];
+            const frameImages = Array.isArray(source.frameImages)
+                ? source.frameImages.filter(Boolean).slice(0, PANEL_COUNT)
+                : [];
+            draft.brief = String(
+                source.idea || source.title || ''
+            ).slice(0, 3000);
+            draft.hookText = String(source.text || '').slice(0, 2000);
+            draft.sourceSavedHookId = source.id || null;
+            draft.folderId = (
+                enableFolders
+                && state.savedFolders.some(folder => (
+                    String(folder.id) === String(source.folderId || '')
+                ))
+            ) ? source.folderId : null;
+            draft.panels.forEach((frame, index) => {
+                const promptRow = promptRows[index];
+                frame.prompt = String(
+                    typeof promptRow === 'string'
+                        ? promptRow
+                        : promptRow && (
+                            promptRow.prompt
+                            || promptRow.caption
+                            || promptRow.text
+                        ) || ''
+                ).slice(0, 1800);
+            });
+            draft.pristine = false;
+            draft.mediaState = source.montage || frameImages.length
+                ? 'loading'
+                : 'empty';
+            if (blankSlot) state.candidates[0] = draft;
+            else state.candidates.push(draft);
+            state.selectedCandidateId = draft.id;
+            state.drawEnabled = false;
+            state.status = draft.mediaState === 'loading'
+                ? `${draft.name} is open. Loading its five saved frames...`
+                : 'Saved opening text is open. Add or generate frames, then score the revision.';
             paint();
-            try {
-                const draft = blankCandidate(
-                    String(source.title || 'Saved opening').slice(0, 80)
-                );
-                const promptRows = Array.isArray(source.frames)
-                    ? source.frames
-                    : [];
-                draft.brief = String(
-                    source.idea || source.title || ''
-                ).slice(0, 3000);
-                draft.hookText = String(source.text || '').slice(0, 2000);
-                draft.sourceSavedHookId = source.id || null;
-                draft.folderId = (
-                    enableFolders
-                    && state.savedFolders.some(folder => (
-                        String(folder.id) === String(source.folderId || '')
-                    ))
-                ) ? source.folderId : null;
+            if (draft.mediaState !== 'loading') {
+                autoPersistCandidate(draft);
+                return {
+                    candidateId: draft.id,
+                    mediaReady: Promise.resolve(draft.id),
+                };
+            }
+            const mediaReady = Promise.resolve().then(async () => {
+                let images;
                 if (source.montage) {
-                    const frames = await splitStrip(source.montage);
-                    draft.panels = frames.map((image, index) => {
-                        const frame = promptRows[index];
-                        const prompt = typeof frame === 'string'
-                            ? frame
-                            : frame && (
-                                frame.prompt
-                                || frame.caption
-                                || frame.text
-                            ) || '';
-                        return {
-                            ...blankPanel(index),
-                            image,
-                            prompt: String(prompt).slice(0, 1800),
-                            source: 'saved-opening',
-                            relation: 'editable-revision',
-                            sourcePanels: [index],
-                        };
-                    });
-                    draft.composite = await normalizeStoryboardSheet(
-                        source.montage
-                    );
+                    images = await splitStrip(source.montage);
                 } else {
-                    draft.panels.forEach((frame, index) => {
-                        const promptRow = promptRows[index];
-                        frame.prompt = String(
-                            typeof promptRow === 'string'
-                                ? promptRow
-                                : promptRow && (
-                                    promptRow.prompt
-                                    || promptRow.caption
-                                    || promptRow.text
-                                ) || ''
-                        ).slice(0, 1800);
-                    });
+                    images = await Promise.all(frameImages.map(image => (
+                        normalizeImage(
+                            image,
+                            FRAME_WIDTH,
+                            FRAME_HEIGHT,
+                            'cover'
+                        )
+                    )));
                 }
-                draft.pristine = false;
-                if (blankSlot) state.candidates[0] = draft;
-                else state.candidates.push(draft);
-                state.selectedCandidateId = draft.id;
-                state.drawEnabled = false;
-                state.busy = false;
-                state.busyCandidateId = null;
-                state.status = source.montage
-                    ? 'Saved opening imported as an editable revision. Change the text or frame order, then re-score it.'
-                    : 'Saved opening text imported. Add or generate frames, then score the revision.';
-                touchCandidate(draft);
+                if (!state.candidates.includes(draft)) return;
+                draft.panels = Array.from(
+                    { length: PANEL_COUNT },
+                    (_, index) => ({
+                        ...blankPanel(index),
+                        image: images[index] || null,
+                        prompt: draft.panels[index]
+                            && draft.panels[index].prompt || '',
+                        source: images[index]
+                            ? 'saved-opening'
+                            : 'empty',
+                        relation: images[index]
+                            ? 'editable-revision'
+                            : 'new',
+                        sourcePanels: images[index] ? [index] : [],
+                    })
+                );
+                if (!completeFrames(draft)) {
+                    throw new Error(
+                        `Only ${draft.panels.filter(
+                            frame => !!frame.image
+                        ).length} of ${PANEL_COUNT} saved frames loaded.`
+                    );
+                }
+                if (!draft.composite) {
+                    await rebuildComposite(draft);
+                }
+                draft.mediaState = 'ready';
+                draft.mediaError = '';
+                draft.dirty = true;
+                draft.updatedAt = Date.now();
+                if (candidate() === draft) {
+                    state.status = 'Saved opening is ready in the editor as an editable revision. Change the text or frame order, then re-score it.';
+                    state.error = '';
+                }
                 paint();
                 autoPersistCandidate(draft);
                 return draft.id;
-            } catch (error) {
-                fail(error);
+            }).catch(error => {
+                if (!state.candidates.includes(draft)) return;
+                draft.mediaState = 'error';
+                draft.mediaError = `Saved frames failed to load: ${String(
+                    error && error.message || error
+                )}`.slice(0, 500);
+                if (candidate() === draft) {
+                    state.status = `${draft.name} is open, but its saved frames did not load.`;
+                    state.error = `${draft.mediaError} Retry by opening this saved hook again.`;
+                }
+                reportError(draft.mediaError);
+                paint();
                 throw error;
-            }
+            }).finally(() => {
+                savedHookHydrations.delete(draft.id);
+            });
+            savedHookHydrations.set(draft.id, mediaReady);
+            return { candidateId: draft.id, mediaReady };
         }
 
         function cloneCandidate(source) {
@@ -2646,6 +2936,23 @@
                 ).forEach(control => {
                     control.disabled = true;
                 });
+            } else if (
+                candidate()
+                && candidate().mediaState === 'loading'
+            ) {
+                host.querySelectorAll(
+                    'button, input, textarea, select'
+                ).forEach(control => {
+                    const navigationControl = control.matches([
+                        '[data-sb-new]',
+                        '[data-sb-saved-filter]',
+                        '[data-sb-saved-folder]',
+                        '[data-sb-load-saved]',
+                        '[data-sb-select-candidate]',
+                        '[data-sb-delete-candidate]',
+                    ].join(','));
+                    if (!navigationControl) control.disabled = true;
+                });
             }
             if (!state.savedLoaded && !state.savedLoading) loadSaved(false);
         }
@@ -2824,6 +3131,12 @@
                 if (item && item.score && openScore) {
                     Promise.resolve(openScore(item.score)).catch(fail);
                 }
+                return true;
+            }
+            if (button.hasAttribute('data-sb-retry-storyboard')) {
+                loadStoryboard(
+                    button.getAttribute('data-sb-retry-storyboard')
+                );
                 return true;
             }
             if (button.hasAttribute('data-sb-duplicate')) {

@@ -2304,6 +2304,7 @@ const historicalSavedHookId=${JSON.stringify(historicalSavedHookId)};
 const queuedSavedHookId=${JSON.stringify(queuedSavedHookId)};
 const failedSavedHookId=${JSON.stringify(failedSavedHookId)};
 const autoSavedHookId=${JSON.stringify(autoSavedHookId)};
+const channelFreeHighId=${JSON.stringify(channelFreeHighId)};
 const autoSavedHookRow=${JSON.stringify(autoSavedHookRow)};
 const autoSavedHookRecord=${JSON.stringify(autoSavedHookRecord)};
 const historicalUpgradeScore=${JSON.stringify(historicalUpgradeScore)};
@@ -2337,6 +2338,7 @@ window.fetch=function(url,options){
     if(
         p==='/api/raw/saved-montage/'+historicalSavedHookId
         || p==='/api/raw/saved-montage/'+autoSavedHookId
+        || p==='/api/raw/saved-montage/'+channelFreeHighId
     ){
         const b=Uint8Array.from(
             atob('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='),
@@ -3249,7 +3251,9 @@ window.fetch=function(url,options){
                 + 'metadata-only and never re-embed the video'
         );
         await page.locator('[data-savedfolder="all"]:visible').click();
-        await persistedAutomaticScore.click();
+        await page.locator(
+            '[data-savedscore="hk-auto-opened-score"]'
+        ).click();
         await page.locator(
             '[data-saved-detail-state="canonical"]'
         ).waitFor({ state: 'attached' });
@@ -3636,7 +3640,48 @@ window.fetch=function(url,options){
                 + 'value, materialization role, second contract identity, '
                 + `and provenance status: ${JSON.stringify(tamperAudits)}`
         );
-        await historicalSavedHookCard.click();
+        const embedsBeforeEditorOpen = await page.evaluate(() => (
+            window.__fetchCounts['/api/raw/embed-montage'] || 0
+        ));
+        await page.locator(
+            `[data-savedopen="${channelFreeHighId}"]`
+        ).click({ position: { x: 22, y: 22 } });
+        await page.locator('#shorts-storyboard-workbench').waitFor();
+        assert.strictEqual(
+            await page.locator(
+                '.experiment-lab-tab[data-lab-view="score"]'
+            ).getAttribute('aria-selected'),
+            'true',
+            'clicking a saved card must enter the shared Storyboard editor'
+        );
+        await page.waitForFunction(title => {
+            const editor = document.querySelector(
+                '#shorts-storyboard-workbench'
+            );
+            return editor
+                && editor.querySelector('[data-sb-name]')?.value === title
+                && editor.querySelectorAll(
+                    '[data-sb-panel-rail] img'
+                ).length === 5
+                && editor.textContent.includes(
+                    'Saved opening is ready in the editor'
+                );
+        }, channelFreeHigh.record.title);
+        assert.strictEqual(
+            await page.evaluate(() => (
+                window.__fetchCounts['/api/raw/embed-montage'] || 0
+            )),
+            embedsBeforeEditorOpen,
+            'opening a saved video in the editor must hydrate its stored media '
+                + 'without re-embedding it'
+        );
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
+        await historicalSavedHookCard.waitFor();
+        await historicalSavedHookCard.locator(
+            `[data-savedscore="${historicalSavedHookId}"]`
+        ).click();
         await page.locator(
             '.experiment-lab-tab[data-lab-view="hooks"]'
         ).click();
@@ -3644,7 +3689,9 @@ window.fetch=function(url,options){
             `[data-savedopen="${queuedSavedHookId}"]`
         );
         await queuedSavedHookCard.waitFor();
-        await queuedSavedHookCard.click();
+        await queuedSavedHookCard.locator(
+            `[data-savedscore="${queuedSavedHookId}"]`
+        ).click();
         const analysisQueue = page.locator(
             '[data-score-analysis-queue]'
         );
@@ -3767,11 +3814,15 @@ window.fetch=function(url,options){
         );
         await failedSavedHookCard.waitFor();
         await followingSavedHookCard.waitFor();
-        await failedSavedHookCard.click();
+        await failedSavedHookCard.locator(
+            `[data-savedscore="${failedSavedHookId}"]`
+        ).click();
         await page.locator(
             '.experiment-lab-tab[data-lab-view="hooks"]'
         ).click();
-        await followingSavedHookCard.click();
+        await followingSavedHookCard.locator(
+            `[data-savedscore="${channelFreeHighId}"]`
+        ).click();
         await page.waitForFunction(({ failedId, followingId }) => (
             document.querySelector(
                 `[data-score-queue-id="self:${failedId}"]`
@@ -4196,6 +4247,9 @@ window.fetch=function(url,options){
             '[data-shorts-experiment-renderer="shorts-quant-experiment-surface-v1"]'
         ).waitFor();
         await page.locator('[data-savedbank="channels"]').click();
+        if (!await page.getByPlaceholder('or paste a YouTube link…').count()) {
+            await page.locator('[data-rawbuildmode="0"]').first().click();
+        }
         assert.strictEqual(await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder('describe one video idea — Grind tests different hooks for it…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder('or paste a YouTube link…').count(), 1);

@@ -96,10 +96,10 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=13')
+        indexSource.includes('storyboard-workbench.js?v=14')
             && indexSource.indexOf('storyboard-style-presets.js?v=1')
-            < indexSource.indexOf('storyboard-workbench.js?v=13')
-            && indexSource.indexOf('storyboard-workbench.js?v=13')
+            < indexSource.indexOf('storyboard-workbench.js?v=14')
+            && indexSource.indexOf('storyboard-workbench.js?v=14')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the shared style contract and storyboard module must load before '
             + 'the Shorts integration'
@@ -107,7 +107,7 @@ async function main() {
     assert(
         retentionSource.includes('data-auto-image-model')
             && retentionSource.includes('automaticImageModelSelect')
-            && indexSource.includes('jarvis-retention.js?v=auto-hooks-v1'),
+            && indexSource.includes('jarvis-retention.js?v=saved-editor-v1'),
         'Auto and Grind must load the current shared image-model selector'
     );
     assert(
@@ -234,6 +234,9 @@ async function main() {
         let releaseGeneration = null;
         let saveGate = null;
         let releaseSave = null;
+        let storyboardLoadGate = null;
+        let releaseStoryboardLoad = null;
+        let storyboardLoadFailures = 0;
 
         function color(index) {
             return ['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#8b5cf6'][
@@ -390,6 +393,11 @@ async function main() {
                 return { ok: true };
             }
             if (url.startsWith('/api/storyboards/')) {
+                if (storyboardLoadGate) await storyboardLoadGate;
+                if (storyboardLoadFailures > 0) {
+                    storyboardLoadFailures--;
+                    throw new Error('fixture saved storyboard timeout');
+                }
                 const id = decodeURIComponent(url.split('/').pop());
                 if (!stored.has(id)) throw new Error('missing storyboard');
                 return clone(stored.get(id));
@@ -496,6 +504,19 @@ async function main() {
             if (releaseSave) releaseSave();
             saveGate = null;
             releaseSave = null;
+        };
+        window.__holdStoryboardLoad = () => {
+            storyboardLoadGate = new Promise(resolve => {
+                releaseStoryboardLoad = resolve;
+            });
+        };
+        window.__releaseStoryboardLoad = () => {
+            if (releaseStoryboardLoad) releaseStoryboardLoad();
+            storyboardLoadGate = null;
+            releaseStoryboardLoad = null;
+        };
+        window.__failNextStoryboardLoad = () => {
+            storyboardLoadFailures++;
         };
         window.__queueStrips = async count => {
             const files = [];
@@ -1028,13 +1049,56 @@ async function main() {
             `[data-sb-load-saved] option[value="${id}"]`
         )
     ), savedId);
+    await page.click('[data-sb-new]');
+    const originalCandidateId = await page.evaluate(id => (
+        window.__workbench.getState().candidates.find(
+            candidate => candidate.serverId === id
+        ).id
+    ), savedId);
+    await page.click(
+        `[data-sb-delete-candidate="${originalCandidateId}"]`
+    );
+    await page.evaluate(() => window.__failNextStoryboardLoad());
     await page.selectOption('[data-sb-load-saved]', savedId);
+    await page.waitForFunction(id => {
+        const current = window.__workbench.getState().candidates.find(
+            candidate => candidate.serverId === id
+        );
+        return current
+            && current.mediaState === 'error'
+            && /timeout/i.test(current.mediaError);
+    }, savedId);
+    assert.strictEqual(
+        await page.locator('[data-sb-retry-storyboard]').count(),
+        1,
+        'a failed saved load must remain visibly retryable in the editor'
+    );
+    await page.evaluate(() => window.__holdStoryboardLoad());
+    await page.selectOption('[data-sb-load-saved]', savedId);
+    await page.waitForFunction(id => {
+        const state = window.__workbench.getState();
+        const current = state.candidates.find(
+            candidate => candidate.serverId === id
+        );
+        return !state.busy
+            && current
+            && current.mediaState === 'loading'
+            && state.selectedCandidateId === current.id;
+    }, savedId);
+    assert.match(
+        await page.locator('.sb-status').textContent(),
+        /open.*loading/i,
+        'a saved storyboard must enter the editor before its manifest and '
+            + 'images finish loading'
+    );
+    await page.evaluate(() => window.__releaseStoryboardLoad());
     await page.waitForFunction(id => {
         const current = window.__workbench.getState().candidates.find(
             candidate => candidate.serverId === id
         );
         return !window.__workbench.getState().busy
             && current
+            && current.mediaState === 'ready'
             && !!current.score;
     }, savedId);
     await page.click('[data-sb-open-score]');

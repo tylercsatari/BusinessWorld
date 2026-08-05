@@ -292,6 +292,7 @@ function runtimeFor(cloud, options = {}) {
         SAVED_HOOK_INDEX_VERSION:
             displayContract.SAVED_HOOK_INDEX_VERSION,
         SAVED_HOOK_INDEX_KEY: 'raw/saved-hooks/index.json',
+        SAVED_HOOK_INDEX_CACHE_TTL_MS: 1000,
         SAVED_HOOK_MEDIA_ROOT:
             'raw/saved-hooks/media/by-sha256/',
         compactSavedHookBindingPayload:
@@ -342,6 +343,13 @@ ${detailRoute}
 }
 globalThis.__savedHookRuntime = {
     __dispatch,
+    __setView(value) {
+        url.searchParams = {
+            get(name) {
+                return name === 'view' ? value : null;
+            },
+        };
+    },
     canonicalSavedHookRecord,
     decodeSavedHookMontage,
     ensureSavedHookIndexIntegrity,
@@ -705,6 +713,58 @@ async function main() {
         assert.strictEqual(reply.json.evidence_state, 'canonical_bound');
         assert.strictEqual(cloud.writeCount, 0);
     });
+
+    await test(
+        'editor detail validates metadata without downloading montage bytes',
+        async () => {
+            const fixture = canonicalFixture('hkeditorfast');
+            const cloud = new MemoryR2(canonicalSeed(fixture));
+            const runtime = runtimeFor(cloud);
+            runtime.__setView('editor');
+            cloud.resetOperations();
+            const reply = await dispatch(
+                runtime,
+                'GET',
+                `/api/raw/saved-hook/${fixture.record.id}`
+            );
+            assert.strictEqual(reply.status, 200, reply.raw);
+            assert.strictEqual(
+                reply.json.schema,
+                'saved-hook-editor-payload-v1'
+            );
+            assert.strictEqual(reply.json.editor_media.available, true);
+            assert.strictEqual(
+                reply.json.source_of_truth.media_validation_deferred,
+                true
+            );
+            assert(
+                !cloud.downloads.includes(fixture.mediaKey),
+                'the editor metadata path must not download the montage'
+            );
+            assert.strictEqual(cloud.writeCount, 0);
+        }
+    );
+
+    await test(
+        'concurrent saved-hook readers share one bounded index download',
+        async () => {
+            const fixture = canonicalFixture('hkindexcache');
+            const cloud = new MemoryR2(canonicalSeed(fixture));
+            const runtime = runtimeFor(cloud);
+            cloud.resetOperations();
+            await Promise.all([
+                runtime.readSavedHookIndex(),
+                runtime.readSavedHookIndex(),
+                runtime.readSavedHookIndex(),
+            ]);
+            assert.strictEqual(
+                cloud.downloads.filter(
+                    key => key === 'raw/saved-hooks/index.json'
+                ).length,
+                1
+            );
+        }
+    );
 
     await test('canonical JPEG swap is rejected with HTTP 409', async () => {
         const fixture = canonicalFixture('hkjpegswap');

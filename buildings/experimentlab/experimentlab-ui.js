@@ -23,6 +23,7 @@ const ExperimentLabUI = (() => {
         '[data-grindopen]',
         '[data-savedopen]',
         '[data-savededit]',
+        '[data-savedscore]',
         '[data-labteamhook]',
     ].join(',');
     const PRIMARY_VIEW_KEYS = Object.freeze(
@@ -34,6 +35,7 @@ const ExperimentLabUI = (() => {
     let workspace = null;
     let contextHandler = null;
     let scoreReadyHandler = null;
+    let editorOpenHandler = null;
     let mutationObserver = null;
     let activeView = 'create';
     let currentContext = null;
@@ -105,10 +107,15 @@ const ExperimentLabUI = (() => {
 
         contextHandler = event => renderContext(event.detail);
         scoreReadyHandler = event => revealScore(event.detail);
+        editorOpenHandler = event => revealEditor(event.detail);
         workspace.addEventListener('experiment-lab-context', contextHandler);
         workspace.addEventListener(
             'experiment-lab-score-ready',
             scoreReadyHandler
+        );
+        workspace.addEventListener(
+            'experiment-lab-editor-open',
+            editorOpenHandler
         );
         mutationObserver = new MutationObserver(updateActivity);
         mutationObserver.observe(workspace, { childList: true, subtree: true });
@@ -152,6 +159,12 @@ const ExperimentLabUI = (() => {
                     scoreReadyHandler
                 );
             }
+            if (editorOpenHandler) {
+                workspace.removeEventListener(
+                    'experiment-lab-editor-open',
+                    editorOpenHandler
+                );
+            }
         }
         const modal = document.getElementById('modal');
         if (modal) modal.classList.remove('experiment-lab-modal');
@@ -161,6 +174,7 @@ const ExperimentLabUI = (() => {
         workspace = null;
         contextHandler = null;
         scoreReadyHandler = null;
+        editorOpenHandler = null;
         currentContext = null;
     }
 
@@ -314,6 +328,35 @@ const ExperimentLabUI = (() => {
                     'aria-label',
                     `${title} complete score analysis`
                 );
+            });
+        });
+    }
+
+    function revealEditor(detail) {
+        if (!panel || !workspace) return;
+        setView('score', false);
+        const stage = detail && detail.stage || 'loading';
+        const activity = panel.querySelector('[data-lab-activity]');
+        if (activity) {
+            activity.textContent = stage === 'error'
+                ? 'Editor failed to open'
+                : stage === 'ready'
+                    ? 'Saved hook ready'
+                    : stage === 'open'
+                        ? 'Editor open · loading frames'
+                        : 'Opening saved hook';
+        }
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+                if (!workspace) return;
+                const editor = workspace.querySelector(
+                    '#shorts-storyboard-workbench'
+                );
+                if (!editor) return;
+                editor.scrollIntoView({
+                    behavior: stage === 'ready' ? 'smooth' : 'auto',
+                    block: 'start',
+                });
             });
         });
     }

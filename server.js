@@ -2668,6 +2668,7 @@ const SAVED_CHANNEL_INDEX_KEY = SAVED_CHANNEL_ROOT + 'index.json';
 const SAVED_CHANNEL_REQUEST_ROOT = 'shorts/channel-import/requests/';
 const SAVED_CHANNEL_VALIDATION_KEY = SAVED_CHANNEL_ROOT + 'blind-validation.json';
 const SAVED_HOOK_INDEX_KEY = 'raw/saved-hooks/index.json';
+const SAVED_HOOK_INDEX_CACHE_TTL_MS = 1000;
 const SAVED_HOOK_MEDIA_ROOT = 'raw/saved-hooks/media/by-sha256/';
 const STORYBOARD_ROOT = 'raw/storyboards/v1/';
 const STORYBOARD_INDEX_KEY = `${STORYBOARD_ROOT}index.json`;
@@ -5278,29 +5279,54 @@ async function historicalCreatorAdaptiveKeepForecast(
 }
 
 async function readSavedHookIndex() {
-    const buffer = await cloud.downloadFromR2(SAVED_HOOK_INDEX_KEY);
-    if (!buffer) {
-        return {
-            version: 0,
-            hooks: [],
-            folders: [],
-            indexMissing: true,
-        };
+    const now = Date.now();
+    const cached = readSavedHookIndex.cache;
+    if (cached && cached.value && cached.expiresAt > now) {
+        return cached.value;
     }
-    let index;
+    if (cached && cached.promise) return cached.promise;
+    const pending = (async () => {
+        const buffer = await cloud.downloadFromR2(SAVED_HOOK_INDEX_KEY);
+        if (!buffer) {
+            return {
+                version: 0,
+                hooks: [],
+                folders: [],
+                indexMissing: true,
+            };
+        }
+        let index;
+        try {
+            index = JSON.parse(buffer.toString('utf8'));
+        } catch (error) {
+            throw new HttpRequestError(
+                409,
+                'The saved-hook ledger index is not valid JSON. Run the '
+                    + 'offline saved-hook index migration before serving it.',
+                'saved_hook_index_invalid'
+            );
+        }
+        if (!Array.isArray(index.hooks)) index.hooks = [];
+        if (!Array.isArray(index.folders)) index.folders = [];
+        return index;
+    })();
+    readSavedHookIndex.cache = {
+        value: null,
+        expiresAt: 0,
+        promise: pending,
+    };
     try {
-        index = JSON.parse(buffer.toString('utf8'));
+        const index = await pending;
+        readSavedHookIndex.cache = {
+            value: index,
+            expiresAt: Date.now() + SAVED_HOOK_INDEX_CACHE_TTL_MS,
+            promise: null,
+        };
+        return index;
     } catch (error) {
-        throw new HttpRequestError(
-            409,
-            'The saved-hook ledger index is not valid JSON. Run the '
-                + 'offline saved-hook index migration before serving it.',
-            'saved_hook_index_invalid'
-        );
+        readSavedHookIndex.cache = null;
+        throw error;
     }
-    if (!Array.isArray(index.hooks)) index.hooks = [];
-    if (!Array.isArray(index.folders)) index.folders = [];
-    return index;
 }
 
 function savedHookIndexBindingPayload(index) {
@@ -5364,8 +5390,8 @@ const savedHookIndexCas = createR2JsonCasMutator({
     label: 'saved-hook runtime index',
 });
 
-function updateSavedHookIndex(mutator) {
-    return savedHookIndexCas.mutate(async index => {
+async function updateSavedHookIndex(mutator) {
+    const result = await savedHookIndexCas.mutate(async index => {
         await mutator(index);
         const canonicalIds = new Set(
             (index.hooks || []).map(row => String(row.id))
@@ -5375,6 +5401,73 @@ function updateSavedHookIndex(mutator) {
         );
         return index;
     });
+    readSavedHookIndex.cache = null;
+    return result;
+}
+
+function savedHookEditorPayload(stored, evidence, index, id) {
+    const record = stored && typeof stored === 'object'
+        ? stored
+        : {};
+    const canonical = evidence.evidenceClass === 'canonical';
+    const calculatedSha256 = savedHookScoreRecordSha256(record);
+    const recordBindingValid = canonical
+        ? exactSha256(record.score_record_sha256)
+            && record.score_record_sha256 === calculatedSha256
+        : null;
+    const compactSourceValid = canonical
+        ? validateCompactSavedHookSource(evidence.row, record)
+        : null;
+    if (canonical && (!recordBindingValid || !compactSourceValid)) {
+        throw new HttpRequestError(
+            409,
+            'Saved-hook editor source failed canonical record binding.',
+            'saved_hook_editor_source_invalid'
+        );
+    }
+    const scoreDomain = scoreDomainForRecord(record);
+    const hasMontage = !!(
+        record.hasMontage
+        || record.montage_ref
+    );
+    return {
+        schema: 'saved-hook-editor-payload-v1',
+        id: String(record.id || id),
+        title: record.title || evidence.row.title || 'Saved opening',
+        kind: record.kind || evidence.row.kind || 'idea',
+        score_domain: scoreDomain,
+        idea: record.idea || '',
+        text: record.text || '',
+        transcript: record.transcript || '',
+        frames: Array.isArray(record.frames) ? record.frames : [],
+        frame_imgs: Array.isArray(record.frame_imgs)
+            ? record.frame_imgs.slice(0, 5)
+            : [],
+        hasMontage,
+        montage_ref: record.montage_ref || null,
+        savedAt: record.savedAt || evidence.row.savedAt || null,
+        editor_media: {
+            available: hasMontage,
+            url: hasMontage
+                ? `/api/raw/saved-montage/${String(record.id || id)}`
+                : null,
+            frame_count: Array.isArray(record.frame_imgs)
+                ? Math.min(5, record.frame_imgs.length)
+                : 0,
+        },
+        evidence_state: canonical
+            ? 'canonical_bound_metadata'
+            : 'legacy_unbound_evidence',
+        source_of_truth: {
+            index_key: SAVED_HOOK_INDEX_KEY,
+            index_sha256: index.index_sha256,
+            record_key: `raw/saved-hooks/${String(record.id || id)}.json`,
+            score_record_sha256:
+                record.score_record_sha256 || calculatedSha256,
+            evidence_class: evidence.evidenceClass,
+            media_validation_deferred: true,
+        },
+    };
 }
 
 function savedChannelId(channelUrl) {
@@ -12505,6 +12598,22 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 );
             }
             const stored = JSON.parse(b.toString('utf8'));
+            if (url.searchParams.get('view') === 'editor') {
+                const editorPayload = savedHookEditorPayload(
+                    stored,
+                    evidence,
+                    index,
+                    savedOne[1]
+                );
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control':
+                        'private, max-age=30, stale-while-revalidate=300',
+                    'X-Saved-Hook-View': 'editor',
+                });
+                res.end(JSON.stringify(editorPayload));
+                return;
+            }
             const canonicalCandidate =
                 evidence.evidenceClass === 'canonical';
             const scoreDomain = scoreDomainForRecord(stored);
