@@ -13,50 +13,6 @@ const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const SAVED_HOOK_ID_PATTERN = /^hk[a-z0-9]{4,40}$/;
-const EXPLORATION_SUBJECTS = Object.freeze([
-    'a physical skill or human-performance attempt',
-    'an everyday object with an unexpected physical property',
-    'a food or kitchen experiment',
-    'a build or homemade machine',
-    'a science test with visible evidence',
-    'a social or public-reaction experiment',
-    'a race, countdown, or endurance challenge',
-    'a miniature-versus-giant scale comparison',
-    'a vehicle or motion experiment',
-    'an outdoor or wilderness challenge',
-    'a sports or game-rule twist',
-    'an art, music, or creative transformation',
-    'a clothing, body, or wearable test',
-    'a puzzle, illusion, or impossible-seeming demonstration',
-    'a rescue, protection, or durability test',
-    'a chain reaction involving multiple physical objects',
-]);
-const EXPLORATION_MECHANISMS = Object.freeze([
-    'state a concrete objective and immediately expose the stakes',
-    'show a visual impossibility first, then escalate the proof',
-    'compare alternatives and make the viewer need to see the winner',
-    'escalate repeated attempts toward an unexpected failure',
-    'reveal a hidden property through a decisive physical test',
-    'create time pressure with a visible countdown or deadline',
-    'impose one unusual constraint that makes a simple task difficult',
-    'show one meaningful transformation in five causal stages',
-    'build a cause-and-effect chain whose consequence keeps escalating',
-    'show apparent success, then reveal a concrete reversal',
-    'establish a measurable record and attempt to beat it',
-    'open a mystery and progressively resolve it with physical evidence',
-]);
-const EXPLORATION_VISUAL_GRAMMARS = Object.freeze([
-    'move from extreme macro evidence to a wide physical payoff',
-    'use an unmistakable before-and-after progression',
-    'keep one scene and make every panel a new cause-and-effect beat',
-    'move through distinct locations while preserving one continuous goal',
-    'make changing scale the central visual contrast',
-    'use cutaway or exploded physical views to expose how it works',
-    'alternate first-person action with external visual proof',
-    'center one object through a continuous, escalating action',
-    'anchor human reactions to visible evidence rather than expression alone',
-    'make a clean physical comparison without relying on on-screen text',
-]);
 
 function hashPayload(experiment) {
     const payload = { ...(experiment || {}) };
@@ -193,35 +149,6 @@ function requestId(experimentId, index) {
     return `ahb${digest}`;
 }
 
-function explorationTerritories(experimentId, startIndex, count) {
-    const all = [];
-    for (const subject of EXPLORATION_SUBJECTS) {
-        for (const mechanism of EXPLORATION_MECHANISMS) {
-            for (const visualGrammar of EXPLORATION_VISUAL_GRAMMARS) {
-                const assignment = [subject, mechanism, visualGrammar];
-                const rank = crypto.createHash('sha256')
-                    .update(`${experimentId}:${assignment.join('|')}`)
-                    .digest('hex');
-                all.push({ assignment, rank });
-            }
-        }
-    }
-    all.sort((left, right) => left.rank.localeCompare(right.rank));
-    const offset = Math.max(0, Number.parseInt(startIndex, 10) || 0);
-    const length = Math.max(0, Number.parseInt(count, 10) || 0);
-    return Array.from({ length }, (_, index) => {
-        const row = all[(offset + index) % all.length].assignment;
-        return [
-            'Invent one original, self-contained YouTube Short opening in this assigned exploration territory.',
-            `Subject domain: ${row[0]}.`,
-            `Hook mechanism: ${row[1]}.`,
-            `Visual grammar: ${row[2]}.`,
-            'Treat these as loose creative constraints and optimize the actual opening for keep rate.',
-            'Avoid mirrors, reflections, detached shadows, doppelgangers, portals, and generic magical morphing because those concepts are already overrepresented.',
-        ].join(' ');
-    });
-}
-
 function normalizedPremise(value) {
     return String(value || '')
         .toLowerCase()
@@ -311,7 +238,6 @@ module.exports = {
     bindExperiment,
     validateExperiment,
     requestId,
-    explorationTerritories,
     verifiedAttempt,
     summarize,
 };

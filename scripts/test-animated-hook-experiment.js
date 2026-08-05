@@ -33,20 +33,6 @@ assert.strictEqual(experiment.strict_image_model, true);
 assert.strictEqual(new Set(
     experiment.requests.map(request => request.rid)
 ).size, 13);
-const exploration = contract.explorationTerritories(
-    experiment.id,
-    0,
-    104
-);
-assert.strictEqual(exploration.length, 104);
-assert.strictEqual(new Set(exploration).size, 104);
-assert(
-    exploration.every(territory => (
-        territory.includes('Subject domain:')
-        && territory.includes('Hook mechanism:')
-        && territory.includes('Visual grammar:')
-    ))
-);
 
 function attempt(index, score, overrides = {}) {
     return {
@@ -108,8 +94,10 @@ for (const required of [
     'Animated Hook Grind',
     'channel_free_concat_keep_percent',
     'animatedHookExperimentTick',
-    'exploration_territories',
     'minimum_text_embedding_distance: 0.30',
+    'batch_idea_generation: true',
+    'render_concurrency: 2',
+    'hookModelGenerateBatchRetry',
     'animatedHookBatchExperimentStopped',
 ]) {
     assert(
