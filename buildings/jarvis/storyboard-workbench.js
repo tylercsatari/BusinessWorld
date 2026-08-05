@@ -28,6 +28,12 @@
         ['nano-banana', 'Nano Banana'],
         ['nano-banana-pro', 'Nano Banana Pro'],
     ];
+    const PUBLIC_IMAGE_MODELS = Object.freeze(
+        MODEL_OPTIONS.map(([value, label]) => Object.freeze({
+            value,
+            label,
+        }))
+    );
     const DRAW_COLORS = ['#ff3b30', '#ffd60a', '#34c759', '#00c7be', '#0a84ff', '#ffffff'];
 
     function uid(prefix) {
@@ -2974,5 +2980,9 @@
         };
     }
 
-    window.JarvisStoryboardWorkbench = Object.freeze({ create });
+    window.JarvisStoryboardWorkbench = Object.freeze({
+        create,
+        DEFAULT_IMAGE_MODEL: DEFAULT_MODEL,
+        IMAGE_MODELS: PUBLIC_IMAGE_MODELS,
+    });
 }());

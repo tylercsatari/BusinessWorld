@@ -103,6 +103,9 @@ const fivePanelSheet = require(
 const grindExploration = require(
     './buildings/jarvis/grind-exploration'
 );
+const hookPlanOutput = require(
+    './buildings/jarvis/hook-plan-output'
+);
 const animatedHookExperiment = require(
     './buildings/jarvis/animated-hook-experiment'
 );
@@ -14733,16 +14736,26 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const premise = String(body.premise || '').trim().slice(0, 400);
             const invent = !!body.invent || !premise;
             const animation = body.animation === true;
-            const imageModel = String(
+            const requestedImageModel = String(
                 body.imageModel || body.image_model || ''
             ).trim();
-            if (imageModel && !STORY_MODELS[imageModel]) {
+            if (requestedImageModel && !STORY_MODELS[requestedImageModel]) {
                 throw new HttpRequestError(
                     400,
-                    `Unknown image model: ${imageModel}`,
+                    `Unknown image model: ${requestedImageModel}`,
                     'hook_image_model_invalid'
                 );
             }
+            const imageModel = hookPanelModelKey(
+                requestedImageModel
+                || process.env.HOOK_PANEL_MODEL
+                || process.env.HOOK_FRAME_MODEL
+                || STORYBOARD_DEFAULT_MODEL
+            );
+            const strictImageModel = (
+                body.strictImageModel === true
+                || body.strict_image_model === true
+            );
             if (!premise && !invent) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
             const count = Math.max(1, Math.min(parseInt(body.count) || 4, 8));
             // rate guard (endpoint is public): cap the pending queue so it can't be spammed into render costs
@@ -14756,9 +14769,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 animation,
                 render_mode: 'single-panel',
                 image_model: imageModel || null,
-                strict_image_model:
-                    imageModel
-                    && body.strictImageModel === true,
+                strict_image_model: strictImageModel,
                 creator_profile:
                     safeCreatorProfile(body.creatorProfile) || null,
                 ts: Date.now(),
@@ -14798,8 +14809,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 count,
                 animation,
                 render_mode: 'single-panel',
+                image_model: imageModel,
+                strict_image_model: strictImageModel,
             }));   // poll status + group/demo/<rid> for the result
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        } catch (e) { res.writeHead(e.statusCode || 500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message, code: e.code || 'hook_generation_start_failed' })); }
         return;
     }
     const storyboardMediaMatch = pathname.match(
@@ -21758,7 +21771,7 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
 }
 
 // ── Persistent "Generate hook" worker: the fine-tuned idea_r7 model (Replicate, version-direct)
-//    invents idea+frames, Replicate Flux renders them. No 24/7 GPU; no fallback model. ──
+//    writes the hook plan; the selected shared image provider renders one five-panel sheet. ──
 async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing can deadlock the worker
     const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
     try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
@@ -21793,7 +21806,13 @@ setInterval(() => {   // keep-warm window: active session → no re-boots betwee
     if (_hookBusy) return;
     if (_hookLastGen && Date.now() - _hookLastGen < 15 * 60e3) hookWarmPing('keep-warm after generation').catch(() => {});
 }, 45e3);
-async function hookModelGenerate(premise, invent, count, onStatus) {
+async function hookModelGenerate(
+    premise,
+    invent,
+    count,
+    onStatus,
+    options = {}
+) {
     const token = process.env.REPLICATE_API_TOKEN, ver = process.env.REPLICATE_IDEA_VERSION || IDEA_VERSION;
     if (!token) throw new Error('REPLICATE_API_TOKEN not configured — refusing to fall back');
     // Replicate: create a prediction on the model VERSION directly (no deployment needed — deployments
@@ -21817,20 +21836,20 @@ async function hookModelGenerate(premise, invent, count, onStatus) {
         if (onStatus && Date.now() - lastBeat > 10000) { lastBeat = Date.now(); try { await onStatus(p.status, Math.round((Date.now() - t0) / 1000)); } catch (e) {} }
     }
     if (p.status !== 'succeeded') throw new Error('replicate ' + p.status + (p.error ? ': ' + String(p.error).slice(0, 140) : (Date.now() >= deadline ? ' (timed out waiting for GPU)' : '')));
-    let out = p.output;                              // predict.py returns a JSON string {model, attempts}
-    if (typeof out === 'string') { try { out = JSON.parse(out); } catch (e) {} }
-    const j = out || {};
-    const specs = (j.attempts || []).filter(s => s && Array.isArray(s.frames) && s.frames.length === 5)
-        .map(s => ({ premise: (s.premise || premise || '').trim(), frames: s.frames.map(f => String(f)), cohesion_mode: s.cohesion_mode || '', reasoning: s.reasoning || '' }));
-    if (!specs.length) throw new Error('model produced no valid 5-frame ideas');
-    return specs;
+    return hookPlanOutput.parseHookPlans(p.output, {
+        fallbackPremise:
+            options.fallbackPremise == null
+                ? premise
+                : options.fallbackPremise,
+        limit: count,
+    });
 }
 // ── Generation diversity memory: EVERY idea the model has ever generated is text-embedded and
 // remembered (R2 hooks/gen-memory/memory.json, int8-quantized ≈1KB each). Each new batch is
 // over-generated, scored on distance to that whole memory AND to its own siblings, and only the
-// most-novel `count` survive (greedy max-min) — so hammering Generate keeps exploring NEW ideas
-// instead of re-serving variations. A typed premise still steers content (the model conditions
-// on it); novelty only chooses among attempts and pushes future batches away from past ones. ──
+// most-novel `count` survive (greedy max-min) — so blank invention keeps exploring NEW ideas.
+// A typed premise instead uses an immutable seed and only compares sibling hook treatments,
+// because global memory must never push a requested video into a different concept. ──
 const GENMEM_KEY = 'hooks/gen-memory/memory.json';
 const GENMEM_PREMISE_ONLY_KEY =
     'hooks/gen-memory/premise-only-memory.json';
@@ -22185,10 +22204,22 @@ async function renderHookPanelRobust({
 }
 // The idea model samples at temperature — a single malformed generation (truncated JSON, ≠5
 // frames) is NORMAL, not fatal. Retry up to 3×; only infra failures (credit/config) are terminal.
-async function hookModelGenerateRetry(premise, invent, onStatus, onRetry) {
+async function hookModelGenerateRetry(
+    premise,
+    invent,
+    onStatus,
+    onRetry,
+    options = {}
+) {
     let lastErr = '';
     for (let t = 0; t < 3; t++) {
-        try { return (await hookModelGenerate(premise, invent, 1, onStatus))[0]; }
+        try { return (await hookModelGenerate(
+            premise,
+            invent,
+            1,
+            onStatus,
+            options
+        ))[0]; }
         catch (e) {
             lastErr = String(e.message || e);
             if (/credit|billing|spend|402|not configured|refusing/i.test(lastErr)) break;   // real infra failure → stop
@@ -22203,7 +22234,8 @@ async function hookModelGenerateBatchRetry(
     invent,
     count,
     onStatus,
-    onRetry
+    onRetry,
+    options = {}
 ) {
     let lastErr = '';
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -22212,7 +22244,8 @@ async function hookModelGenerateBatchRetry(
                 premise,
                 invent,
                 count,
-                onStatus
+                onStatus,
+                options
             );
         } catch (error) {
             lastErr = String(error.message || error);
@@ -22373,6 +22406,11 @@ async function hookProcessRequest(
         && premise
         && !invent
     );
+    const seededAutoExploration = !!(
+        premise
+        && !invent
+        && !reuseFineTunedSeedPlan
+    );
     const autoSaveContext = await hookBatchOwnerSaveContext(
         options.autoSave
     );
@@ -22411,15 +22449,18 @@ async function hookProcessRequest(
                     autoSaveContext
                     && autoSaveContext.experimentId
                     || null,
-                exploration_strategy: batchIdeaGeneration
-                    ? reuseFineTunedSeedPlan
-                        ? 'score-guided-seed-plan-rerender-v1'
-                        : 'batched-fine-tuned-sampling+global-embedding-distance-v1'
-                    : null,
+                exploration_strategy: reuseFineTunedSeedPlan
+                    ? 'score-guided-seed-plan-rerender-v1'
+                    : seededAutoExploration
+                        ? 'same-video-idea-fine-tuned-hook-batch-v1'
+                        : 'fine-tuned-invention+global-embedding-distance-v1',
                 minimum_text_embedding_distance:
                     Number.isFinite(configuredNovelty)
                         ? configuredNovelty
                         : null,
+                topical_similarity_floor: seededAutoExploration
+                    ? grindExploration.DEFAULTS.topicalSimilarityFloor
+                    : null,
                 novelty_text_mode: noveltyTextMode,
                 hosted: true,
                 queue_lease_fence: queueLeaseFence,
@@ -22453,18 +22494,38 @@ async function hookProcessRequest(
         try { mem = await genMemLoad(noveltyMemoryKey); } catch (e) {}
         memN = mem.length;
         const seenPremises = new Set(
-            mem.map(item => animatedHookExperiment.normalizedPremise(
-                item && (item.pk || item.p)
+            (seededAutoExploration ? [] : mem).map(item => (
+                animatedHookExperiment.normalizedPremise(
+                    item && (item.pk || item.p)
+                )
             )).filter(Boolean)
         );
         const memVecs = mem.map(it => { try { return genVecDec(it.v); } catch (e) { return null; } }).filter(Boolean);
         const accVecs = [];                                   // this batch's accepted ideas
+        const acceptedHookEmbeddings = [];
+        const acceptedHookPremises = [];
+        const rejectedHookPremises = [];
+        let seedEmbedding = null;
+        if (seededAutoExploration) {
+            await stat({
+                stage: 'reasoning',
+                done: 0,
+                n: count,
+                note: 'embedding the immutable video idea before the fine-tuned model writes hook treatments…',
+            });
+            seedEmbedding = await geminiTextEmbed(premise, {
+                required: true,
+                context: 'the Auto video idea',
+            });
+        }
         const NOV_MIN = Number.isFinite(configuredNovelty)
             ? Math.max(0, Math.min(1, configuredNovelty))
             : (premise && !invent) ? NOV_MIN_PREMISE : NOV_MIN_INVENT;
-        const maxTries = batchIdeaGeneration
-            ? count * 3
-            : count + 3;
+        const maxTries = seededAutoExploration
+            ? count * 4
+            : batchIdeaGeneration
+                ? count * 3
+                : count + 3;
         let tries = 0, rejected = 0;
         const specQueue = [];
         if (reuseFineTunedSeedPlan) {
@@ -22505,6 +22566,26 @@ async function hookProcessRequest(
                     note: `idea ${attempts.length + 1}/${count}: ${rstat === 'starting' ? `GPU booting (${t} — a cold start loads the 61GB model, ~2–6 min)` : `the model is thinking (${t})`}` });
             };
             const onRetry = (msg, t) => stat({ stage: 'reasoning', done: attempts.length, n: count, note: `idea ${attempts.length + 1}/${count}: malformed sample — retrying (${t}/3)` });
+            const autoPromptState = seededAutoExploration
+                ? {
+                    ...grindExploration.createState({
+                        threshold: 100,
+                    }),
+                    acceptedCount: acceptedHookEmbeddings.length,
+                    requiredPriorDistance:
+                        acceptedHookEmbeddings.length
+                            ? NOV_MIN_PREMISE
+                            : 0,
+                }
+                : null;
+            const generationPremise = seededAutoExploration
+                ? grindExploration.generationPrompt({
+                    seedPremise: premise,
+                    state: autoPromptState,
+                    priorPremises: acceptedHookPremises,
+                    rejectedPremises: rejectedHookPremises,
+                })
+                : premise;
             try {
                 if (
                     batchIdeaGeneration
@@ -22512,20 +22593,22 @@ async function hookProcessRequest(
                     && !reuseFineTunedSeedPlan
                 ) {
                     specQueue.push(...await hookModelGenerateBatchRetry(
-                        premise,
-                        invent,
+                        generationPremise,
+                        seededAutoExploration ? false : invent,
                         Math.min(8, count - attempts.length),
                         beat,
-                        onRetry
+                        onRetry,
+                        { fallbackPremise: premise }
                     ));
                 }
                 spec = batchIdeaGeneration
                     ? specQueue.shift()
                     : await hookModelGenerateRetry(
-                        premise,
-                        invent,
+                        generationPremise,
+                        seededAutoExploration ? false : invent,
                         beat,
-                        onRetry
+                        onRetry,
+                        { fallbackPremise: premise }
                     );
                 if (!spec) throw new Error('model produced no usable idea');
             }
@@ -22540,6 +22623,9 @@ async function hookProcessRequest(
                 )
             ) {
                 rejected++;
+                if (seededAutoExploration && spec.premise) {
+                    rejectedHookPremises.push(spec.premise);
+                }
                 await stat({
                     stage: 'reasoning',
                     done: attempts.length,
@@ -22563,7 +22649,52 @@ async function hookProcessRequest(
                 );
                 break;
             }
-            // novelty vs the whole memory AND this batch's accepted ideas (embed failure → accept)
+            let autoMeasurement = null;
+            let candidateHookEmbedding = null;
+            if (seededAutoExploration) {
+                candidateHookEmbedding = await geminiTextEmbed(
+                    spec.premise,
+                    {
+                        required: true,
+                        context: 'an Auto hook treatment',
+                    }
+                );
+                autoMeasurement = grindExploration.measureCandidate({
+                    candidateEmbedding: candidateHookEmbedding,
+                    seedEmbedding,
+                    priorEmbeddings: acceptedHookEmbeddings,
+                });
+                const spareTries = (maxTries - tries)
+                    - (count - attempts.length - 1);
+                const outsideTopic = (
+                    autoMeasurement.topicalSimilarity
+                    < autoPromptState.topicalSimilarityFloor
+                );
+                const tooCloseToSibling = (
+                    acceptedHookEmbeddings.length
+                    && autoMeasurement.nearestPriorDistance
+                        < NOV_MIN_PREMISE
+                );
+                if (
+                    outsideTopic
+                    || (tooCloseToSibling && spareTries > 0)
+                ) {
+                    rejected++;
+                    rejectedHookPremises.push(spec.premise);
+                    await stat({
+                        stage: 'reasoning',
+                        done: attempts.length,
+                        n: count,
+                        note: outsideTopic
+                            ? `hook ${attempts.length + 1}/${count} changed the video idea (topic similarity ${autoMeasurement.topicalSimilarity}, need ${autoPromptState.topicalSimilarityFloor}) — regenerating before image spend`
+                            : `hook ${attempts.length + 1}/${count} repeated an earlier treatment (distance ${autoMeasurement.nearestPriorDistance}, need ${NOV_MIN_PREMISE}) — regenerating before image spend`,
+                    });
+                    continue;
+                }
+            }
+            // Blank invention compares against global history. A typed broad
+            // idea compares only against siblings in this batch, so old jobs
+            // can never push the hook into a different video concept.
             let nov = null, near = '';
             const noveltyText = noveltyTextMode === 'premise-only'
                 ? spec.premise
@@ -22575,9 +22706,12 @@ async function hookProcessRequest(
             const q = emb ? Int8Array.from(emb, x => Math.round(x * 127)) : null;
             if (q) {
                 let m = -1, mi = -1;
-                for (let k2 = 0; k2 < memVecs.length; k2++) { const c = genCos(q, memVecs[k2]); if (c > m) { m = c; mi = k2; } }
+                const comparisonMemVecs = seededAutoExploration
+                    ? []
+                    : memVecs;
+                for (let k2 = 0; k2 < comparisonMemVecs.length; k2++) { const c = genCos(q, comparisonMemVecs[k2]); if (c > m) { m = c; mi = k2; } }
                 for (const av of accVecs) { const c = genCos(q, av); if (c > m) { m = c; mi = -2; } }
-                nov = (memVecs.length || accVecs.length) ? Math.round((1 - m) * 1000) / 1000 : 1;
+                nov = (comparisonMemVecs.length || accVecs.length) ? Math.round((1 - m) * 1000) / 1000 : 1;
                 near = mi >= 0 ? (mem[mi].p || '') : (mi === -2 ? '(another idea in this batch)' : '');
                 mem.push({
                     id: rid + '_t' + tries,
@@ -22590,6 +22724,9 @@ async function hookProcessRequest(
                 const spareTries = (maxTries - tries) - (count - attempts.length - 1);
                 if (nov < NOV_MIN && spareTries > 0) {        // too close to something already generated → try again
                     rejected++;
+                    if (seededAutoExploration && spec.premise) {
+                        rejectedHookPremises.push(spec.premise);
+                    }
                     await stat({ stage: 'reasoning', done: attempts.length, n: count,
                         note: `idea ${attempts.length + 1}/${count} came out too close to “${(near || 'a past idea').slice(0, 60)}” (dist ${nov}) — regenerating (${rejected} rejected so far)` });
                     continue;
@@ -22603,9 +22740,22 @@ async function hookProcessRequest(
                     s: 1,
                 });
             }
-            const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
+            if (candidateHookEmbedding) {
+                acceptedHookEmbeddings.push(candidateHookEmbedding);
+                acceptedHookPremises.push(spec.premise);
+            }
+            const a = { k: attempts.length, premise: spec.premise, video_idea: premise || null, hook_treatment: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
                 frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise,
                 cohesion_mode: spec.cohesion_mode || '', novelty: nov, nearest: near,
+                seed_distance: autoMeasurement && autoMeasurement.seedDistance,
+                nearest_prior_distance: autoMeasurement && autoMeasurement.nearestPriorDistance,
+                topical_similarity: autoMeasurement && autoMeasurement.topicalSimilarity,
+                topical_similarity_floor: seededAutoExploration
+                    ? autoPromptState.topicalSimilarityFloor
+                    : null,
+                hook_text_embedding_model: seededAutoExploration
+                    ? 'gemini-embedding-2'
+                    : null,
                 animation: !!animation,
                 render_mode: 'single-panel' };
             attempts.push(a);
@@ -22627,14 +22777,22 @@ async function hookProcessRequest(
                     ) {
                         throw new Error('experiment stopped before render');
                     }
+                    const renderBrief = seededAutoExploration
+                        ? [
+                            `IMMUTABLE VIDEO IDEA (do not change): ${premise}`,
+                            `SELECTED OPENING HOOK TREATMENT: ${spec.premise}`,
+                            'Render five consecutive opening beats for that exact video. The subject, objects, event, experiment, goal, and factual outcome must remain the immutable video idea.',
+                        ].join('\n')
+                        : spec.premise;
                     const panel = await withRenderSlot(
                         () => renderHookPanelRobust({
-                            brief: spec.premise,
+                            brief: renderBrief,
                             hookText: spec.premise,
                             panels: a.frames,
                             animation,
                             imageModel: requestedImageModel,
                             strictImageModel,
+                            providerCallBudget: 1,
                         })
                     );
                     const montageId = `${rid}_${a.k}`;
@@ -22851,6 +23009,11 @@ async function hookProcessRequest(
                 a.status = 'done';
                 await writeGroup(false);
             })());
+        }
+        if (attempts.length < count) {
+            const shortfall = `fine-tuned model produced ${attempts.length}/${count} on-topic, non-repeating hook treatments after ${tries} screened drafts`;
+            if (attempts.length) warns.add(shortfall);
+            else err = err || shortfall;
         }
         await ownership.mutate(
             'persist Shorts hook generation memory',
@@ -24372,14 +24535,16 @@ async function grindProcess(rid, req0, ownership) {
                             generationPrompt,
                             false,
                             beat,
-                            onRetry
+                            onRetry,
+                            { fallbackPremise: premise }
                         )]
                         : await hookModelGenerateBatchRetry(
                             generationPrompt,
                             false,
                             candidateCount,
                             beat,
-                            onRetry
+                            onRetry,
+                            { fallbackPremise: premise }
                         );
                 } catch (error) {
                     err = `idea: ${error.message} (3 tries)`;

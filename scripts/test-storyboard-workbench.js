@@ -96,13 +96,19 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=12')
+        indexSource.includes('storyboard-workbench.js?v=13')
             && indexSource.indexOf('storyboard-style-presets.js?v=1')
-            < indexSource.indexOf('storyboard-workbench.js?v=12')
-            && indexSource.indexOf('storyboard-workbench.js?v=12')
+            < indexSource.indexOf('storyboard-workbench.js?v=13')
+            && indexSource.indexOf('storyboard-workbench.js?v=13')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the shared style contract and storyboard module must load before '
             + 'the Shorts integration'
+    );
+    assert(
+        retentionSource.includes('data-auto-image-model')
+            && retentionSource.includes('automaticImageModelSelect')
+            && indexSource.includes('jarvis-retention.js?v=auto-hooks-v1'),
+        'Auto and Grind must load the current shared image-model selector'
     );
     assert(
         styleSource.includes('FIVE-FRAME CONTINUITY LOCK')

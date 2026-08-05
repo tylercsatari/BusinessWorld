@@ -43,7 +43,7 @@ const JarvisRetention = (function () {
     const SAVED_HOOK_DETAIL_TOTAL_TIMEOUT_MS = 40000;
     const SAVED_HOOK_MEDIA_TIMEOUT_MS = 20000;
     const SAVED_HOOK_SCORER_WAIT_TIMEOUT_MS = 5 * 60e3;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, grindAnimation: false, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, autoImageModel: 'gpt-image-2', grindAnimation: false, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -3996,10 +3996,53 @@ const JarvisRetention = (function () {
             console.error('[storyboard] experiment refresh failed', e);
         }
     }
+    function automaticImageModelContract() {
+        const contract = typeof window !== 'undefined'
+            && window.JarvisStoryboardWorkbench;
+        const models = contract && Array.isArray(contract.IMAGE_MODELS)
+            ? contract.IMAGE_MODELS.filter(model => (
+                model
+                && typeof model.value === 'string'
+                && typeof model.label === 'string'
+            ))
+            : [];
+        const fallback = contract
+            && typeof contract.DEFAULT_IMAGE_MODEL === 'string'
+            ? contract.DEFAULT_IMAGE_MODEL
+            : 'gpt-image-2';
+        return { models, fallback };
+    }
+    function automaticImageModel() {
+        const contract = automaticImageModelContract();
+        if (contract.models.some(model => model.value === st.autoImageModel)) {
+            return st.autoImageModel;
+        }
+        st.autoImageModel = contract.fallback;
+        return st.autoImageModel;
+    }
+    function automaticImageModelSelect(disabled) {
+        const contract = automaticImageModelContract();
+        const selected = automaticImageModel();
+        if (!contract.models.length) {
+            return `<span style="font-size:10px;color:${C.red}">image-model registry unavailable</span>`;
+        }
+        return `<label style="display:inline-flex;align-items:center;gap:6px;font-size:10px;color:${C.mute}"><span>image model</span><select data-auto-image-model aria-label="Image model" ${disabled ? 'disabled' : ''} style="background:${C.bg};border:1px solid ${C.border};color:${C.text};border-radius:7px;padding:6px 8px;font-size:10px">${contract.models.map(model => `<option value="${esc(model.value)}" ${model.value === selected ? 'selected' : ''}>${esc(model.label)}</option>`).join('')}</select></label>`;
+    }
     function expDemoPoll(rid, tries) {
         tries = tries || 0;
         st.expGenT0 = st.expGenT0 || Date.now();
-        rtFetchJson('/api/hooks/demo/status/' + rid, {}, 2).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStat = s || null; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
+        rtFetchJson('/api/hooks/demo/status/' + rid, {}, 2).then(s => {
+            st.expGenStage = (s && s.stage) || 'queued';
+            st.expGenStat = s || null;
+            st.expGenStatErr = (s && s.error) || null;
+            if (s && s.stage === 'done' && s.error && !EXPDEMO[rid]) {
+                EXPDEMO[rid] = { error: prettyGenErr(s.error) };
+                st.expGenBusy = false;
+            }
+            if (st.expGenBusy || EXPDEMO[rid]) rtgUpdateExp();
+        }).catch(error => {
+            st.expGenStatErr = `status retry: ${error.message || error}`;
+        });
         rtFetchJson('/api/hooks/grpo/group/demo/' + rid, {}, 2).then(j => {
             if (j && Array.isArray(j.attempts) && j.attempts.length) {
                 EXPDEMO[rid] = j; rtgUpdateExp();               // render live — hooks + frames stream in
@@ -4014,7 +4057,20 @@ const JarvisRetention = (function () {
             if (j && j.input_id && j.done && !(j.attempts && j.attempts.length)) { EXPDEMO[rid] = { error: prettyGenErr(j.error || 'came back empty') }; st.expGenBusy = false; rtgUpdateExp(); return; }
             if (tries < 300) { setTimeout(() => expDemoPoll(rid, tries + 1), 3000); return; }
             EXPDEMO[rid] = { error: 'Timed out. The model may be scaling up — try again in a moment.' }; st.expGenBusy = false; rtgUpdateExp();
-        }).catch(() => { if (tries < 300) setTimeout(() => expDemoPoll(rid, tries + 1), 3000); });
+        }).catch(error => {
+            if (tries < 300) {
+                st.expGenStatErr = `result retry: ${error.message || error}`;
+                setTimeout(() => expDemoPoll(rid, tries + 1), 3000);
+                return;
+            }
+            EXPDEMO[rid] = {
+                error: prettyGenErr(
+                    `result polling failed: ${error.message || error}`
+                ),
+            };
+            st.expGenBusy = false;
+            rtgUpdateExp();
+        });
     }
     function prettyGenErr(err) {
         const e = String(err || '').toLowerCase();
@@ -4026,17 +4082,20 @@ const JarvisRetention = (function () {
     function expGenSubmit() {
         const inp = window.document.getElementById('exp-gen-input');
         const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
-        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null; st.warmHold = 1;
+        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null; st.expGenLaunchErr = null; st.warmHold = 1;
         window.clearInterval(st._genTick); st._genTick = window.setInterval(() => { if (st.expGenBusy) rtgUpdateExp(); else window.clearInterval(st._genTick); }, 1000);   // live elapsed timer
-        rtFetchJson('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem, animation: st.expGenAnimation === true, creatorProfile: selectedCreatorProfile() }) }, 1)
-            .then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
-            .catch(() => { st.expGenBusy = false; rtgUpdateExp(); });
+        rtFetchJson('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem, animation: st.expGenAnimation === true, imageModel: automaticImageModel(), strictImageModel: true, creatorProfile: selectedCreatorProfile() }) }, 1)
+            .then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenLaunchErr = prettyGenErr(j.error || 'generation request returned no request id'); st.expGenBusy = false; rtgUpdateExp(); } })
+            .catch(error => { st.expGenLaunchErr = prettyGenErr(error.message || error); st.expGenBusy = false; rtgUpdateExp(); });
         rtgUpdateExp();
     }
     function expGenPanel() {
         const bg = C.bg || '#0f172a', n = st.expGenN || 4;
         const STAGES = { queued: 'queued — spinning up the fine-tuned model…', reasoning: 'the fine-tuned model is thinking…', rendering: 'generating one coherent five-panel image…', done: 'done' };
         let result = '';
+        if (!st.expGenRid && st.expGenLaunchErr) {
+            result = `<div style="margin-top:12px;font-size:12px;color:${C.red}">${esc(st.expGenLaunchErr)}</div>`;
+        }
         if (st.expGenRid) {
             const g = EXPDEMO[st.expGenRid];
             if (st.expGenBusy && !g) {
@@ -4047,14 +4106,15 @@ const JarvisRetention = (function () {
                 // per-idea progress dots — ideas stream one at a time now, so this ticks live
                 const ideaDots = Array.from({ length: nTot }, (_, i) => `<span style="color:${i < nDone ? C.green : (i === nDone ? C.cyan : C.mute)};font-weight:800">${i < nDone ? '✓' : (i === nDone ? '⏳' : '○')}</span>`).join(' ');
                 const note = S2.note ? `<div style="font-size:11px;color:${C.cyan};margin-top:6px;line-height:1.5">${esc(S2.note)}</div>` : '';
+                const retryNote = st.expGenStatErr ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.45">Connection/status detail: ${esc(st.expGenStatErr)}. Retrying automatically.</div>` : '';
                 const longHint = (el > 240 && !nDone || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting (first run pulls the model), or your <b>Replicate credit</b> ran out — top up at replicate.com/account/billing.</div>` : '';
                 result = `<div style="margin-top:12px;padding:11px 13px;background:${C.card2};border:1px solid ${C.cyan}44;border-radius:10px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
                       <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating — ideas stream in one at a time</span>
                       <span style="font-size:11px;color:${C.mute};font-variant-numeric:tabular-nums">${elapsed} elapsed</span></div>
                     <div style="font-size:12px">ideas: ${ideaDots} <span style="font-size:10px;color:${C.mute}">(${nDone}/${nTot} — each appears below when written, then one image is split into five panels)</span></div>
-                    ${note}
-                    <div style="font-size:10px;color:${C.mute};margin-top:6px">The first idea also wakes the GPU (~2–3 min cold, seconds warm). Ideas too similar to anything previously generated are rejected and redone — you'll see that here.</div>${longHint}</div>`;
+                    ${note}${retryNote}
+                    <div style="font-size:10px;color:${C.mute};margin-top:6px">The first idea also wakes the GPU (~2–3 min cold, seconds warm). ${st.expGenPrem ? 'Every draft is checked against your immutable video idea and the other treatments in this batch before an image call.' : 'Blank invention is checked against the global idea history before an image call.'}</div>${longHint}</div>`;
             }
             else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
             else if (g && g.attempts && g.attempts.length) {
@@ -4074,8 +4134,13 @@ const JarvisRetention = (function () {
                     const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:${_hardErrs ? '#ef4444' : C.amber};margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame note${a.errs.length > 1 ? 's' : ''} (${_hardErrs ? _hardErrs + ' missing, ' : ''}rest = fallback renders) — hover for details</div>` : '';
                     const keepBadge = a.keep_percentile_0_100 != null ? `<span>together keep <b style="color:${heatCol(a.keep_percentile_0_100 / 100)}">${fmtv(a.keep_percentile_0_100, 1)}th</b></span>` : '';
                     const channelFreeBadge = a.channel_free_concat_keep_percent != null ? `<span>channel-free concat <b style="color:${heatCol(a.channel_free_concat_keep_percent / 100)}">${fmtv(a.channel_free_concat_keep_percent, 1)}%</b></span>` : '';
-                    // novelty = cos-distance of this idea's text embedding from EVERY idea ever generated (memory in R2)
-                    const novBadge = a.novelty != null ? `<span title="${esc('how far this idea sits from every idea previously generated (cosine distance in embedding space — higher = more new)' + (a.nearest ? '. Closest past idea: “' + a.nearest + '”' : ''))}" style="cursor:help">🆕 unique <b style="color:${heatCol(Math.min(1, (a.novelty || 0) * 2.5))}">${(a.novelty || 0).toFixed(2)}</b></span>` : '';
+                    const noveltyMeaning = a.topical_similarity != null
+                        ? 'distance from the nearest other accepted hook treatment in this Auto batch'
+                        : 'distance from every idea previously generated';
+                    const novBadge = a.novelty != null ? `<span title="${esc(`${noveltyMeaning} (cosine distance in embedding space — higher = more new)` + (a.nearest ? '. Closest comparison: “' + a.nearest + '”' : ''))}" style="cursor:help">🆕 unique <b style="color:${heatCol(Math.min(1, (a.novelty || 0) * 2.5))}">${(a.novelty || 0).toFixed(2)}</b></span>` : '';
+                    const topicalBadge = a.topical_similarity != null ? `<span title="Similarity between this hook treatment and the immutable broad video idea. Drafts below the shown floor are rejected before image generation." style="cursor:help;color:${(+a.topical_similarity) >= (+a.topical_similarity_floor || 0) ? C.green : C.red}">same idea <b>${(+a.topical_similarity).toFixed(3)}</b> / ${(+a.topical_similarity_floor).toFixed(3)}</span>` : '';
+                    const priorBadge = a.nearest_prior_distance != null ? `<span title="Cosine distance from the nearest other accepted hook treatment in this Auto batch." style="cursor:help;color:${C.cyan}">sibling ↔ <b>${(+a.nearest_prior_distance).toFixed(3)}</b></span>` : '';
+                    const modelBadge = a.panel_model ? `<span title="The exact selected image model used for the one 45:16 provider image." style="color:${C.mute}">${esc(a.panel_model)} · 1 image call</span>` : '';
                     const frameText = (a.frames && a.frames.length) ? `<details style="margin-top:5px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">the 5 frames</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px">${a.frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div></details>` : '';
                     const actions = (a.frame_imgs && a.frame_imgs.filter(Boolean).length) ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
                         <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ loading…' : (a.score_available ? '◆ Open embeddings' : '◆ Score this hook')}</span>
@@ -4090,25 +4155,29 @@ const JarvisRetention = (function () {
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
                         <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
                       ${frameStrip}${errLine}
-                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${channelFreeBadge}${novBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
+                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${channelFreeBadge}${topicalBadge}${priorBadge}${novBadge}${modelBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
                 }).join('');
                 const _streaming = g.streaming && !g.done;
                 const _doneN = g.attempts.filter(x => x.status === 'done').length;
                 const _el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
                 const _elapsed = _el >= 60 ? `${Math.floor(_el / 60)}m ${_el % 60}s` : `${_el}s`;
-                const _memNote = g.mem_n ? ` · <span title="every idea ever generated is embedded + remembered; ideas too close to any of them are rejected and regenerated" style="cursor:help;color:${C.purple}">🧭 steered away from ${g.mem_n} past ideas</span>` : '';
+                const _memNote = g.exploration_strategy === 'same-video-idea-fine-tuned-hook-batch-v1'
+                    ? ` · <span title="The broad video idea is immutable. Candidate hooks are embedded before rendering; off-topic drafts and repeated sibling treatments are regenerated." style="cursor:help;color:${C.green}">same-idea grounded${g.topical_similarity_floor != null ? ` ≥ ${(+g.topical_similarity_floor).toFixed(3)}` : ''}</span>`
+                    : (g.mem_n ? ` · <span title="blank inventions are embedded and compared with the global generation memory" style="cursor:help;color:${C.purple}">🧭 steered away from ${g.mem_n} past ideas</span>` : '');
                 const _statNote = (_streaming && st.expGenStat && st.expGenStat.note) ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px">${esc(st.expGenStat.note)}</div>` : '';
+                const _statErr = (_streaming && st.expGenStatErr) ? `<div style="font-size:10px;color:${C.amber};margin:-4px 0 8px">Connection/status detail: ${esc(st.expGenStatErr)}. Retrying automatically.</div>` : '';
                 const _warn = g.warn ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}14;border:1px solid ${C.amber}44;border-radius:6px;padding:6px 10px;margin:-2px 0 8px;line-height:1.5">⚠ ${esc(g.warn)}</div>` : '';
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>${_statNote}${_warn}
+                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>${_statNote}${_statErr}${_warn}
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
             } else if (g && g.attempts) { result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">generation came back empty — try again.</div>`; }
         }
         const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one). Each candidate is generated as one coherent 45:16 image, split into five exact 9:16 score frames, then sent through the same embedding pipeline. Any idea <b style="color:${C.purple}">too close to anything it's ever generated is rejected and redone</b>.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— give the fine-tuned idea model a broad video concept (or leave it blank to invent one). It writes five-beat hook treatments first; the selected image model then makes exactly one coherent 45:16 image per treatment, which is split into five exact 9:16 score frames and sent through the canonical embedding pipeline. A typed concept stays immutable while sibling treatments spread out.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
+            ${automaticImageModelSelect(st.expGenBusy)}
             <label style="display:inline-flex;gap:6px;align-items:center;color:${st.expGenAnimation ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-expanimation ${st.expGenAnimation ? 'checked' : ''} ${st.expGenBusy ? 'disabled' : ''} style="accent-color:${C.accent}">Animation</label>
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
           </div>${(!st.expGenBusy && st.warmHold) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px">🔥 holding the GPU warm while you're on this tab — presses stay fast (~15s/idea); it powers down a few minutes after you leave</div>` : ''}${result}</div>`;
@@ -4394,7 +4463,7 @@ const JarvisRetention = (function () {
                 : st.grindChannelFreeThreshold)
             : st.grindThr || 82;
         st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile(), animation: st.grindAnimation === true }) }, 1)
+        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile(), animation: st.grindAnimation === true, imageModel: automaticImageModel() }) }, 1)
             .then(j => {
                 st.grindStarting = 0;
                 if (j.rid) {
@@ -4719,6 +4788,7 @@ const JarvisRetention = (function () {
             <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="describe one video idea — Grind tests different hooks for it…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
             ${targetControl}
             ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
+            ${automaticImageModelSelect(running || st.grindStarting)}
             <label style="display:inline-flex;gap:6px;align-items:center;color:${st.grindAnimation ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-grindanimation ${st.grindAnimation ? 'checked' : ''} ${running ? 'disabled' : ''} style="accent-color:${C.accent}">Animation</label>
             ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? '⏳' : '🎯 Grind'}</span>`}
           </div>
@@ -8696,6 +8766,15 @@ const JarvisRetention = (function () {
         }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindanimation')) {
             st.grindAnimation = e.target.checked === true;
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-auto-image-model')) {
+            const contract = automaticImageModelContract();
+            const requested = String(e.target.value || '');
+            if (contract.models.some(model => model.value === requested)) {
+                st.autoImageModel = requested;
+            }
             rtgUpdateExp();
             return;
         }
