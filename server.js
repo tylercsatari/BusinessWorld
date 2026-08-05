@@ -23175,17 +23175,40 @@ async function animatedHookRequestState(request) {
             ? JSON.parse(statusBytes.toString('utf8'))
             : null;
     } catch (error) {}
+    const provisional = animatedHookExperiment.requestActivity({
+        requestExists,
+        group,
+        status,
+    });
+    let leaseState = null;
+    if (
+        !requestExists
+        && provisional.active
+        && !provisional.terminal
+    ) {
+        try {
+            const inspected = await queueLeaseCoordinator.inspect(
+                QUEUE_LEASE_NAMES.SHORTS_HOOK,
+                request.rid
+            );
+            leaseState = inspected && inspected.state || null;
+        } catch (error) {
+            leaseState = null;
+        }
+    }
+    const activity = animatedHookExperiment.requestActivity({
+        requestExists,
+        group,
+        status,
+        leaseState,
+    });
     return {
         request,
         requestExists,
         group,
         status,
-        seen: !!(requestExists || group || status),
-        active: !!(
-            requestExists
-            || group && group.done !== true
-            || status && status.stage !== 'done'
-        ),
+        leaseState,
+        ...activity,
     };
 }
 
@@ -23283,7 +23306,7 @@ async function animatedHookExperimentTick() {
                 ));
             }
             for (const state of states) {
-                if (!state.seen) {
+                if (!state.seen || state.recoverable) {
                     await ensureAnimatedHookRequest(
                         experiment,
                         state.request
@@ -23291,6 +23314,7 @@ async function animatedHookExperimentTick() {
                     state.requestExists = true;
                     state.active = true;
                     state.seen = true;
+                    state.recoverable = false;
                 }
             }
             const stats = animatedHookExperiment.summarize(

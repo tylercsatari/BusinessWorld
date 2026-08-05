@@ -49,6 +49,50 @@ assert.strictEqual(
     false,
     'the first post-baseline batch should exploit the best near miss'
 );
+assert.deepStrictEqual(
+    contract.requestActivity({
+        requestExists: false,
+        group: { done: false },
+        status: { stage: 'rendering' },
+        leaseState: 'active',
+    }),
+    {
+        terminal: false,
+        recoverable: false,
+        seen: true,
+        active: true,
+    }
+);
+assert.deepStrictEqual(
+    contract.requestActivity({
+        requestExists: false,
+        group: { done: false },
+        status: { stage: 'rendering' },
+        leaseState: 'stale',
+    }),
+    {
+        terminal: false,
+        recoverable: true,
+        seen: true,
+        active: false,
+    },
+    'an expired claimed request must be requeued after a restart'
+);
+assert.deepStrictEqual(
+    contract.requestActivity({
+        requestExists: false,
+        group: { done: true },
+        status: { stage: 'rendering' },
+        leaseState: 'stale',
+    }),
+    {
+        terminal: true,
+        recoverable: false,
+        seen: true,
+        active: false,
+    },
+    'a terminal group must win over stale nonterminal status JSON'
+);
 
 function attempt(index, score, overrides = {}) {
     return {
@@ -238,7 +282,9 @@ for (const required of [
     'rankedVerifiedAttempts',
     'animatedHookExperiment.refinementPriority',
     'animatedHookExperiment.shouldExploreAfterMinimum',
+    'animatedHookExperiment.requestActivity',
     'exploring fresh fine-tuned premises',
+    'state.recoverable',
 ]) {
     assert(
         server.includes(required),

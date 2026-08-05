@@ -245,6 +245,34 @@ function shouldExploreAfterMinimum(experiment) {
     ) === DEFAULT_REFINEMENT_EXPLORATION_CADENCE - 1;
 }
 
+function requestActivity({
+    requestExists = false,
+    group = null,
+    status = null,
+    leaseState = null,
+} = {}) {
+    const terminal = !!(
+        group && group.done === true
+        || status && status.stage === 'done'
+    );
+    const hasRuntimeEvidence = !!(group || status);
+    const pendingRuntime = hasRuntimeEvidence && !terminal;
+    const recoverable = !!(
+        !requestExists
+        && pendingRuntime
+        && ['missing', 'released', 'stale'].includes(leaseState)
+    );
+    return {
+        terminal,
+        recoverable,
+        seen: !!(requestExists || hasRuntimeEvidence),
+        active: !!(
+            requestExists
+            || pendingRuntime && !recoverable
+        ),
+    };
+}
+
 function exactHash(value) {
     return HASH_PATTERN.test(String(value || ''));
 }
@@ -356,6 +384,7 @@ module.exports = {
     requestId,
     refinementPriority,
     shouldExploreAfterMinimum,
+    requestActivity,
     rankedVerifiedAttempts,
     verifiedAttempt,
     summarize,
