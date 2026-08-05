@@ -621,19 +621,49 @@ def validate_shorts_input_manifest(record, expected=None):
         .lower()
         or None
     )
-    score_input = {
-        'schema': 'shorts-score-input-v2',
-        'embedding_input_fingerprint': embedding_fingerprint,
-        'embedding_input': embedding_input,
-        'duration_ms': duration_ms,
-        'creator_profile': creator_profile,
-    }
-    score_input_fingerprint = hashlib.sha256(
-        ledger_json_bytes(score_input)
-    ).hexdigest()
+    declared_score_input_schema = str(
+        manifest.get('score_input_schema') or ''
+    ).strip() or None
     if (
-        manifest.get('score_input_fingerprint')
-            != score_input_fingerprint
+        declared_score_input_schema is not None
+        and declared_score_input_schema not in (
+            'shorts-score-input-v2',
+            'shorts-score-input-v3',
+        )
+    ):
+        errors.append('Shorts score input schema is unsupported')
+    score_input_candidates = [
+        {
+            'schema': 'shorts-score-input-v3',
+            'embedding_input_fingerprint': embedding_fingerprint,
+            'embedding_input': embedding_input,
+            'duration_ms': duration_ms,
+        },
+        {
+            'schema': 'shorts-score-input-v2',
+            'embedding_input_fingerprint': embedding_fingerprint,
+            'embedding_input': embedding_input,
+            'duration_ms': duration_ms,
+            'creator_profile': creator_profile,
+        },
+    ]
+    score_input_fingerprints = {
+        candidate['schema']: hashlib.sha256(
+            ledger_json_bytes(candidate)
+        ).hexdigest()
+        for candidate in score_input_candidates
+        if (
+            declared_score_input_schema is None
+            or candidate['schema'] == declared_score_input_schema
+        )
+    }
+    matched_score_input_schema = next((
+        schema for schema, fingerprint
+        in score_input_fingerprints.items()
+        if manifest.get('score_input_fingerprint') == fingerprint
+    ), None)
+    if (
+        matched_score_input_schema is None
         or manifest.get('input_fingerprint')
             != manifest.get('score_input_fingerprint')
     ):
@@ -667,6 +697,7 @@ def validate_shorts_input_manifest(record, expected=None):
         'montageSha256': montage_sha256,
         'normalizedTranscript': transcript,
         'embeddingFingerprint': embedding_fingerprint,
+        'scoreInputSchema': matched_score_input_schema,
         'scoreInputFingerprint':
             manifest.get('score_input_fingerprint'),
     }

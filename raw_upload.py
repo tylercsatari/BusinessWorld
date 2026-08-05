@@ -1736,6 +1736,7 @@ def _score_input_manifest(
         'cache_write_status': replay_meta.get('cache_write_status'),
         'input_fingerprint': replay_meta.get('input_fingerprint'),
         'score_input_fingerprint': replay_meta.get('input_fingerprint'),
+        'score_input_schema': 'shorts-score-input-v3',
         'embedding_input_fingerprint': replay_meta.get(
             'embedding_input_fingerprint'
         ),

@@ -208,8 +208,56 @@ exact_input_validation = validate_shorts_input_manifest(
 )
 assert exact_input_validation['valid'] is True
 assert (
+    exact_input_validation['scoreInputSchema']
+    == 'shorts-score-input-v2'
+)
+assert (
     exact_input_validation['embeddingFingerprint']
     == embedding_input_fingerprint
+)
+
+score_input_v3 = {
+    'schema': 'shorts-score-input-v3',
+    'embedding_input_fingerprint': embedding_input_fingerprint,
+    'embedding_input': embedding_input,
+    'duration_ms': 4321,
+}
+score_input_fingerprint_v3 = hashlib.sha256(
+    ledger_json_bytes(score_input_v3)
+).hexdigest()
+exact_input_record_v3 = copy.deepcopy(exact_input_record)
+exact_input_record_v3['input_manifest'].update({
+    'creator_profile': None,
+    'requested_creator_profile': 'tyler',
+    'score_input_schema': 'shorts-score-input-v3',
+    'score_input_fingerprint': score_input_fingerprint_v3,
+    'input_fingerprint': score_input_fingerprint_v3,
+})
+exact_input_validation_v3 = validate_shorts_input_manifest(
+    exact_input_record_v3,
+    {
+        'montageBytes': montage_bytes,
+        'text': normalized_text,
+        'durationS': 4.321,
+        'creatorProfile': None,
+    },
+)
+assert exact_input_validation_v3['valid'] is True
+assert (
+    exact_input_validation_v3['scoreInputSchema']
+    == 'shorts-score-input-v3'
+)
+
+unsupported_input_record = copy.deepcopy(exact_input_record_v3)
+unsupported_input_record['input_manifest'][
+    'score_input_schema'
+] = 'shorts-score-input-v99'
+unsupported_input_validation = validate_shorts_input_manifest(
+    unsupported_input_record
+)
+assert unsupported_input_validation['valid'] is False
+assert 'Shorts score input schema is unsupported' in (
+    unsupported_input_validation['errors']
 )
 for expected_override, error_fragment in (
     ({'montageBytes': b'different-jpeg'}, 'montage bytes'),

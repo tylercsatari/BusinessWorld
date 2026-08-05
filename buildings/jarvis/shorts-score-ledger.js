@@ -597,16 +597,42 @@ function validateShortsInputManifest(record, expected = {}) {
     const creatorProfile = String(
         manifest.creator_profile || ''
     ).trim().toLowerCase() || null;
-    const scoreInput = {
-        schema: 'shorts-score-input-v2',
-        embedding_input_fingerprint: embeddingFingerprint,
-        embedding_input: embeddingInput,
-        duration_ms: durationMs,
-        creator_profile: creatorProfile,
-    };
+    const declaredScoreInputSchema = String(
+        manifest.score_input_schema || ''
+    ).trim() || null;
     if (
+        declaredScoreInputSchema
+        && ![
+            'shorts-score-input-v2',
+            'shorts-score-input-v3',
+        ].includes(declaredScoreInputSchema)
+    ) {
+        errors.push('Shorts score input schema is unsupported');
+    }
+    const scoreInputCandidates = [
+        {
+            schema: 'shorts-score-input-v3',
+            embedding_input_fingerprint: embeddingFingerprint,
+            embedding_input: embeddingInput,
+            duration_ms: durationMs,
+        },
+        {
+            schema: 'shorts-score-input-v2',
+            embedding_input_fingerprint: embeddingFingerprint,
+            embedding_input: embeddingInput,
+            duration_ms: durationMs,
+            creator_profile: creatorProfile,
+        },
+    ].filter(candidate => (
+        !declaredScoreInputSchema
+        || candidate.schema === declaredScoreInputSchema
+    ));
+    const matchedScoreInput = scoreInputCandidates.find(candidate => (
         manifest.score_input_fingerprint
-            !== sha256Canonical(scoreInput)
+            === sha256Canonical(candidate)
+    )) || null;
+    if (
+        !matchedScoreInput
         || manifest.input_fingerprint
             !== manifest.score_input_fingerprint
     ) {
@@ -639,6 +665,8 @@ function validateShortsInputManifest(record, expected = {}) {
         montageSha256,
         normalizedTranscript: transcript,
         embeddingFingerprint,
+        scoreInputSchema:
+            matchedScoreInput && matchedScoreInput.schema || null,
         scoreInputFingerprint:
             manifest.score_input_fingerprint || null,
     };

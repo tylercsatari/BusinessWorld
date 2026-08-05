@@ -201,6 +201,115 @@ function shortsBrowserLedgerApi() {
 }
 
 const browserLedgerApi = shortsBrowserLedgerApi();
+
+const exactMontageBytes = Buffer.from('canonical-five-frame-jpeg');
+const exactMontageSha256 = require('crypto')
+    .createHash('sha256')
+    .update(exactMontageBytes)
+    .digest('hex');
+const exactTranscript = 'This is the exact transcript.';
+const exactEmbeddingInput = {
+    schema: 'shorts-embedding-input-v2',
+    montage_sha256: exactMontageSha256,
+    transcript: exactTranscript,
+    channels: {
+        visual: '5-frame-montage',
+        text: 'normalized-transcript',
+        together: '5-frame-montage+normalized-transcript',
+    },
+};
+const exactEmbeddingFingerprint =
+    ledgerContract.sha256Canonical(exactEmbeddingInput);
+function exactInputRecord(scoreInput, manifestPatch = {}) {
+    const scoreInputFingerprint =
+        ledgerContract.sha256Canonical(scoreInput);
+    return {
+        input_manifest: {
+            domain: 'shorts_raw',
+            canonical_montage: {
+                montage_sha256: exactMontageSha256,
+            },
+            transcript_used: true,
+            duration_s: 4.321,
+            creator_profile: null,
+            embedding_input_fingerprint: exactEmbeddingFingerprint,
+            score_input_fingerprint: scoreInputFingerprint,
+            input_fingerprint: scoreInputFingerprint,
+            channels: {
+                text: { text: `  ${exactTranscript}  ` },
+            },
+            ...manifestPatch,
+        },
+    };
+}
+const exactScoreInputV2 = {
+    schema: 'shorts-score-input-v2',
+    embedding_input_fingerprint: exactEmbeddingFingerprint,
+    embedding_input: exactEmbeddingInput,
+    duration_ms: 4321,
+    creator_profile: 'tyler',
+};
+const exactInputRecordV2 = exactInputRecord(
+    exactScoreInputV2,
+    { creator_profile: 'tyler' }
+);
+const exactValidationV2 = ledgerContract.validateShortsInputManifest(
+    exactInputRecordV2,
+    {
+        montageBytes: exactMontageBytes,
+        text: exactTranscript,
+        durationS: 4.321,
+        creatorProfile: 'TYLER',
+    }
+);
+assert.strictEqual(exactValidationV2.valid, true);
+assert.strictEqual(
+    exactValidationV2.scoreInputSchema,
+    'shorts-score-input-v2'
+);
+const exactScoreInputV3 = {
+    schema: 'shorts-score-input-v3',
+    embedding_input_fingerprint: exactEmbeddingFingerprint,
+    embedding_input: exactEmbeddingInput,
+    duration_ms: 4321,
+};
+const exactInputRecordV3 = exactInputRecord(
+    exactScoreInputV3,
+    {
+        score_input_schema: 'shorts-score-input-v3',
+        requested_creator_profile: 'tyler',
+    }
+);
+const exactValidationV3 = ledgerContract.validateShortsInputManifest(
+    exactInputRecordV3,
+    {
+        montageBytes: exactMontageBytes,
+        text: exactTranscript,
+        durationS: 4.321,
+        creatorProfile: null,
+    }
+);
+assert.strictEqual(exactValidationV3.valid, true);
+assert.strictEqual(
+    exactValidationV3.scoreInputSchema,
+    'shorts-score-input-v3'
+);
+const unsupportedInputRecord = JSON.parse(
+    JSON.stringify(exactInputRecordV3)
+);
+unsupportedInputRecord.input_manifest.score_input_schema =
+    'shorts-score-input-v99';
+const unsupportedInputValidation =
+    ledgerContract.validateShortsInputManifest(
+        unsupportedInputRecord
+    );
+assert.strictEqual(unsupportedInputValidation.valid, false);
+assert(
+    unsupportedInputValidation.errors.includes(
+        'Shorts score input schema is unsupported'
+    )
+);
+
 const browserLedgerWithoutWrapper = JSON.parse(JSON.stringify(ledger));
 const browserValidState = browserLedgerApi.shortsLedgerState({
     score_ledger: browserLedgerWithoutWrapper,
