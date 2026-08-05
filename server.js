@@ -21785,6 +21785,8 @@ async function hookModelGenerate(premise, invent, count, onStatus) {
 // instead of re-serving variations. A typed premise still steers content (the model conditions
 // on it); novelty only chooses among attempts and pushes future batches away from past ones. ──
 const GENMEM_KEY = 'hooks/gen-memory/memory.json';
+const GENMEM_PREMISE_ONLY_KEY =
+    'hooks/gen-memory/premise-only-memory.json';
 const GENMEM_CAP = 4000;    // oldest beyond this fall off (≈4MB JSON at the cap)
 const GENMEM_DIM = 768;
 async function geminiTextEmbed(text) {
@@ -21804,12 +21806,12 @@ async function geminiTextEmbed(text) {
 const genVecEnc = v => Buffer.from(Int8Array.from(v, x => Math.max(-127, Math.min(127, Math.round(x * 127)))).buffer).toString('base64');
 const genVecDec = b => { const buf = Buffer.from(b, 'base64'); return new Int8Array(buf.buffer, buf.byteOffset, buf.length); };
 function genCos(a, b) { let d = 0, na = 0, nb = 0; const n = Math.min(a.length, b.length); for (let i = 0; i < n; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; } return d / (Math.sqrt(na * nb) || 1); }
-async function genMemLoad() {
-    try { const b = await cloud.downloadFromR2(GENMEM_KEY); if (b) { const j = JSON.parse(b.toString('utf8')); if (Array.isArray(j.items)) return j.items; } } catch (e) {}
+async function genMemLoad(key = GENMEM_KEY) {
+    try { const b = await cloud.downloadFromR2(key); if (b) { const j = JSON.parse(b.toString('utf8')); if (Array.isArray(j.items)) return j.items; } } catch (e) {}
     return [];
 }
-async function genMemSave(items) {
-    try { await cloud.uploadToR2(GENMEM_KEY, Buffer.from(JSON.stringify({ items: items.slice(-GENMEM_CAP), updated: new Date().toISOString() })), 'application/json'); } catch (e) {}
+async function genMemSave(items, key = GENMEM_KEY) {
+    try { await cloud.uploadToR2(key, Buffer.from(JSON.stringify({ items: items.slice(-GENMEM_CAP), updated: new Date().toISOString() })), 'application/json'); } catch (e) {}
 }
 // Novelty thresholds (calibrated on real gemini-embedding-2 distances 2026-07-02:
 // near-duplicate ideas ≈ 0.13, same-topic-different-idea ≈ 0.30, unrelated ≈ 0.4+).
@@ -22268,6 +22270,12 @@ async function hookProcessRequest(
     ).trim() || null;
     const strictImageModel = options.strictImageModel === true;
     const configuredNovelty = Number(options.minimumNovelty);
+    const noveltyTextMode = options.noveltyTextMode === 'premise-only'
+        ? 'premise-only'
+        : 'premise-and-frames';
+    const noveltyMemoryKey = noveltyTextMode === 'premise-only'
+        ? GENMEM_PREMISE_ONLY_KEY
+        : GENMEM_KEY;
     const batchIdeaGeneration = options.batchIdeaGeneration === true;
     const renderConcurrency = Math.max(
         1,
@@ -22319,6 +22327,7 @@ async function hookProcessRequest(
                     Number.isFinite(configuredNovelty)
                         ? configuredNovelty
                         : null,
+                novelty_text_mode: noveltyTextMode,
                 hosted: true,
                 queue_lease_fence: queueLeaseFence,
             })),
@@ -22347,7 +22356,8 @@ async function hookProcessRequest(
         // Each accepted idea's frames render in the background while the next idea generates.
         // Ideas too close to the diversity memory (everything ever generated) are rejected and
         // regenerated, with the rejection surfaced live in the status line.
-        let mem = []; try { mem = await genMemLoad(); } catch (e) {}
+        let mem = [];
+        try { mem = await genMemLoad(noveltyMemoryKey); } catch (e) {}
         memN = mem.length;
         const memVecs = mem.map(it => { try { return genVecDec(it.v); } catch (e) { return null; } }).filter(Boolean);
         const accVecs = [];                                   // this batch's accepted ideas
@@ -22416,7 +22426,10 @@ async function hookProcessRequest(
             }
             // novelty vs the whole memory AND this batch's accepted ideas (embed failure → accept)
             let nov = null, near = '';
-            const emb = await geminiTextEmbed(spec.premise + '\n' + spec.frames.join('\n'));
+            const noveltyText = noveltyTextMode === 'premise-only'
+                ? spec.premise
+                : spec.premise + '\n' + spec.frames.join('\n');
+            const emb = await geminiTextEmbed(noveltyText);
             if (!emb) warns.add('novelty check unavailable (embedding failed) — ideas accepted without the diversity filter');
             const q = emb ? Int8Array.from(emb, x => Math.round(x * 127)) : null;
             if (q) {
@@ -22681,7 +22694,7 @@ async function hookProcessRequest(
         }
         await ownership.mutate(
             'persist Shorts hook generation memory',
-            () => genMemSave(mem)
+            () => genMemSave(mem, noveltyMemoryKey)
         );                                                    // rejected ideas count too — never re-serve them
         memN = mem.length;
         await Promise.all(renders);
@@ -22978,6 +22991,8 @@ async function hookDemoQueue() {
                                 : null,
                         minimumNovelty:
                             req.minimum_text_embedding_distance,
+                        noveltyTextMode:
+                            req.novelty_text_mode,
                         batchIdeaGeneration:
                             req.batch_idea_generation === true,
                         renderConcurrency:
@@ -23095,6 +23110,9 @@ function animatedHookGenerationRequest(experiment, request) {
         strict_image_model: true,
         creator_profile: null,
         minimum_text_embedding_distance: refinement ? 0.10 : 0.30,
+        novelty_text_mode: refinement
+            ? 'premise-and-frames'
+            : 'premise-only',
         batch_idea_generation: true,
         render_concurrency: 2,
         auto_save: {
