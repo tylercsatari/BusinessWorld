@@ -14093,10 +14093,68 @@ const JarvisRetention = (function () {
         const all = SAVED.hooks;
         const F = st.savedFilt || (st.savedFilt = {});
         // filter on any combination of metrics; sort by the chosen sort metric (default keep)
-        const METRICS = [['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'embed views ≥', 50, 'M'], ['sviews', 'scaled views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
+        const METRICS = [['channelFreeConcat', 'channel-free concat keep', 100, '%'], ['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'embed views ≥', 50, 'M'], ['sviews', 'scaled views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
         const thr = k => F[k] || 0;
+        const channelFreeConcatIdentity = hook => {
+            const identity = hook
+                && hook.derived_identity
+                && hook.derived_identity.channel_free_keep
+                && hook.derived_identity.channel_free_keep.concat;
+            const percentile = identity
+                && identity.percentile100;
+            if (
+                !hook
+                || hook.score_domain !== 'shorts'
+                || hook.predictor_eligible === false
+                || !SHORTS_LEDGER_SHA256.test(
+                    String(hook.score_record_sha256 || '')
+                )
+                || !SHORTS_LEDGER_SHA256.test(
+                    String(hook.score_ledger_sha256 || '')
+                )
+                || !SHORTS_LEDGER_SHA256.test(
+                    String(hook.compact_score_sha256 || '')
+                )
+                || !identity
+                || identity.available !== true
+                || identity.coordinateId
+                    !== 'shorts.channel-free.concat.keep'
+                || !isFinite(+identity.raw)
+                || +identity.raw < 0
+                || +identity.raw > 100
+                || !isFinite(+percentile)
+                || +percentile < 0
+                || +percentile > 100
+                || !SHORTS_LEDGER_SHA256.test(
+                    String(identity.artifactSha256 || '')
+                )
+            ) return null;
+            return {
+                coordinateId: identity.coordinateId,
+                featureKey: 'channel_free.concat.keep',
+                channel: 'channel-free concat',
+                modality: 'visual + text + together vectors',
+                input: 'frozen pooled channel-free concat model; no creator scaling',
+                target: 'keep',
+                value: +identity.raw,
+                valueUnit: 'percent',
+                displayUnit: 'percent',
+                percentile100: +percentile,
+                percentileUnit: SHORTS_PERCENTILE_UNIT,
+                artifactSha256: identity.artifactSha256,
+                scoreRecordSha256: hook.score_record_sha256,
+                baseLedgerSha256: hook.score_ledger_sha256,
+                kind: 'record_bound_channel_free_forecast',
+                sourceKey: 'channel_free.concat.keep',
+                authority: 'record-bound-derived-coordinate',
+                origin: 'canonical-score-record',
+            };
+        };
         const metricIdentity = (hook, key) => {
             if (!hook) return null;
+            if (key === 'channelFreeConcat') {
+                return channelFreeConcatIdentity(hook);
+            }
             const historical = hook.evidence_state
                 === 'legacy_unbound_evidence'
                 ? hook.historical_display
@@ -14135,6 +14193,9 @@ const JarvisRetention = (function () {
         const metricValue = (hook, key) => {
             const identity = metricIdentity(hook, key);
             if (!identity) return null;
+            if (key === 'channelFreeConcat') {
+                return identity.value == null ? null : +identity.value;
+            }
             if (key === 'keep' || key === 'ret5' || key === 'outlier') {
                 return identity.percentile100 == null
                     ? null
@@ -14146,6 +14207,7 @@ const JarvisRetention = (function () {
             return identity.value == null ? null : +identity.value;
         };
         const pass = h => {
+            if (thr('channelFreeConcat') && !(metricValue(h, 'channelFreeConcat') >= thr('channelFreeConcat'))) return false;
             if (thr('keep') && !(metricValue(h, 'keep') >= thr('keep'))) return false;
             if (thr('ret5') && !(metricValue(h, 'ret5') >= thr('ret5'))) return false;
             if (thr('views') && !(metricValue(h, 'views') >= thr('views') * 1e6)) return false;
@@ -14169,7 +14231,7 @@ const JarvisRetention = (function () {
         const fbar = METRICS.map(([k, lab, mx, u]) => `<div style="display:flex;flex-direction:column;gap:1px;min-width:118px">
             <span style="font-size:9px;color:${C.mute}">${lab} ≥ <b style="color:${thr(k) ? C.accent : C.dim}">${thr(k)}${u}</b></span>
             <input type="range" min="0" max="${mx}" value="${thr(k)}" data-savedfilt="${k}" style="width:118px;accent-color:${C.accent}"/></div>`).join('');
-        const SORTS = [['recent', '🕑 recent'], ['oldest', 'oldest'], ['keep', 'keep'], ['ret5', 'ret5'], ['views', 'views'], ['sviews', 'sviews'], ['gt10M', '>10M'], ['outlier', 'outlier']];
+        const SORTS = [['recent', '🕑 recent'], ['oldest', 'oldest'], ['channelFreeConcat', 'channel-free concat keep'], ['keep', 'keep'], ['ret5', 'ret5'], ['views', 'views'], ['sviews', 'sviews'], ['gt10M', '>10M'], ['outlier', 'outlier']];
         const sortSel = SORTS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${lab}</span>`).join('');
         const fcount = id => all.filter(h => id === 'none' ? !h.folder : h.folder === id).length;
         const folderPills = [['all', 'All (' + all.length + ')'], ['none', 'Unfiled (' + fcount('none') + ')']].concat(folders.map(f => [f.id, esc(f.name) + ' (' + fcount(f.id) + ')']));
@@ -14190,17 +14252,20 @@ const JarvisRetention = (function () {
                         )
                         : ''
                 );
-            const canonicalKeepIdentity = metricIdentity(h, 'keep');
-            const kpct = canonicalKeepIdentity
-                && canonicalKeepIdentity.percentile100 != null
-                ? canonicalKeepIdentity.percentile100
+            const previewKey = sortK === 'channelFreeConcat'
+                ? 'channelFreeConcat'
+                : 'keep';
+            const previewIdentity = metricIdentity(h, previewKey);
+            const kpct = previewIdentity
+                && previewIdentity.percentile100 != null
+                ? previewIdentity.percentile100
                 : null;
-            const kraw = canonicalKeepIdentity
-                && canonicalKeepIdentity.value != null
-                ? +canonicalKeepIdentity.value
+            const kraw = previewIdentity
+                && previewIdentity.value != null
+                ? +previewIdentity.value
                 : null;
-            const coordinateId = canonicalKeepIdentity
-                && canonicalKeepIdentity.coordinateId || '';
+            const coordinateId = previewIdentity
+                && previewIdentity.coordinateId || '';
             const liveRevision = SCORECONTRACT && SCORECONTRACT.live
                 && SCORECONTRACT.live.revision_fingerprint || '';
             const storedRevision = h.score_revision_fingerprint
@@ -14223,7 +14288,24 @@ const JarvisRetention = (function () {
             const evidenceLabel = historicalDisplay
                 ? 'Historical display · '
                 : '';
-            const badge = (kpct != null || kraw != null) ? `<span${embeddingIdentityAttrs(canonicalKeepIdentity, `saved:${h.id}`)} title="${esc(canonicalKeepIdentity.sourceKey || coordinateId)} · ${esc(canonicalKeepIdentity.input)} · ${esc(canonicalKeepIdentity.valueUnit)} · ledger ${esc(canonicalKeepIdentity.ledgerSha256)}" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${evidenceLabel}${canonicalKeepIdentity.channel === 'together' ? 'Both' : canonicalKeepIdentity.channel} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${Math.round(kpct)}th ${canonicalKeepIdentity.percentileUnit}`} · ${coordinateLine} · ${canonicalKeepIdentity.ledgerSha256.slice(0, 10)}…</small><small style="display:block;font-size:6.6px;color:${historicalDisplay ? C.amber : revisionColor};font-weight:850">${historicalDisplay ? 'display-only · not predictor-eligible' : `${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}`}</small></span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'No valid persisted score ledger' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
+            const channelFreePreview = previewKey === 'channelFreeConcat';
+            const previewAttrs = channelFreePreview && previewIdentity
+                ? ` data-saved-preview="channelFreeConcat" data-saved-preview-coordinate-id="${esc(coordinateId)}" data-saved-preview-value="${esc(kraw)}" data-saved-preview-percentile-0-100="${esc(kpct)}" data-saved-preview-artifact-sha256="${esc(previewIdentity.artifactSha256)}"`
+                : previewIdentity
+                    ? embeddingIdentityAttrs(previewIdentity, `saved:${h.id}`)
+                    : '';
+            const previewTitle = channelFreePreview && previewIdentity
+                ? `${previewIdentity.sourceKey} · ${previewIdentity.input} · ${previewIdentity.valueUnit} · model ${previewIdentity.artifactSha256}`
+                : previewIdentity
+                    ? `${previewIdentity.sourceKey || coordinateId} · ${previewIdentity.input} · ${previewIdentity.valueUnit} · ledger ${previewIdentity.ledgerSha256}`
+                    : '';
+            const badge = channelFreePreview
+                ? previewIdentity
+                    ? `<span${previewAttrs} title="${esc(previewTitle)}" style="display:block;min-width:0;color:${heatCol((kpct || 0) / 100)}"><small style="display:block;font-size:6.8px;color:${C.dim};font-weight:900;text-transform:uppercase">Channel-free concat keep</small><b style="display:block;font-size:16px;line-height:1.05;margin-top:1px">${fmtv(kraw, 1)}%</b><small style="display:block;font-size:7px;color:${C.faint};font-weight:650;margin-top:2px">${fmtv(kpct, 1)}th corpus percentile</small><small style="display:block;font-size:6.6px;color:${C.cyan};font-weight:850;margin-top:1px">pooled formula · no creator scaling</small></span>`
+                    : `<span data-saved-preview="channelFreeConcat" style="font-size:8.5px;color:${C.mute};font-weight:700">Channel-free concat keep unavailable<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">Re-score once to persist this model output</small></span>`
+                : (kpct != null || kraw != null)
+                    ? `<span${previewAttrs} title="${esc(previewTitle)}" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${evidenceLabel}${previewIdentity.channel === 'together' ? 'Both' : previewIdentity.channel} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${fmtv(kpct, 1)}th ${previewIdentity.percentileUnit}`} · ${coordinateLine} · ${previewIdentity.ledgerSha256.slice(0, 10)}…</small><small style="display:block;font-size:6.6px;color:${historicalDisplay ? C.amber : revisionColor};font-weight:850">${historicalDisplay ? 'display-only · not predictor-eligible' : `${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}`}</small></span>`
+                    : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'No valid persisted score ledger' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
             const sel = st.savedSel === h.id;
             return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
               <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>

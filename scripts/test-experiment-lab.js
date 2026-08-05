@@ -869,6 +869,63 @@ async function main() {
             queuedSavedHookRow.historical_display,
             'second queue fixture must contain a valid historical display'
         );
+        const canonicalChannelFreeSavedHook = (
+            videoIndex,
+            id,
+            title,
+            savedAt
+        ) => {
+            const record = JSON.parse(
+                JSON.stringify(videos[videoIndex].__record)
+            );
+            record.id = id;
+            record.kind = 'scored';
+            record.score_domain = 'shorts';
+            record.title = title;
+            record.text = title;
+            record.savedAt = savedAt;
+            record.hasMontage = true;
+            record.input_manifest = {
+                ...record.input_manifest,
+                domain: 'shorts_raw',
+            };
+            delete record.score_record_sha256;
+            record.score_record_sha256 =
+                displayContract.savedHookScoreRecordSha256(record);
+            const row = displayContract.compactSavedHookRecord(
+                record,
+                { scoreDomain: 'shorts' }
+            );
+            assert.strictEqual(
+                displayContract.validateCompactSavedHookRecord(row),
+                true,
+                'channel-free saved-hook fixture must be a valid '
+                    + 'hash-bound compact row'
+            );
+            return { record, row };
+        };
+        const channelFreeLowId = 'hkchannelconcatchlow';
+        const channelFreeHighId = 'hkchannelconcatchhigh';
+        const channelFreeLow = canonicalChannelFreeSavedHook(
+            1,
+            channelFreeLowId,
+            'Lower channel-free concat opening',
+            Date.now() - 2000
+        );
+        const channelFreeHigh = canonicalChannelFreeSavedHook(
+            18,
+            channelFreeHighId,
+            'Higher channel-free concat opening',
+            Date.now() - 3000
+        );
+        const channelFreeLowOutput = channelFreeLow.row
+            .derived_identity.channel_free_keep.concat;
+        const channelFreeHighOutput = channelFreeHigh.row
+            .derived_identity.channel_free_keep.concat;
+        assert(
+            channelFreeHighOutput.raw > channelFreeLowOutput.raw,
+            'channel-free sort fixtures must have distinct raw forecasts'
+        );
         const historicalUpgradeScore = JSON.parse(
             JSON.stringify(videos[0].__record)
         );
@@ -1729,7 +1786,12 @@ async function main() {
             '/api/retention/channels': { channels: [], active: 'tyler' },
             '/api/indicators/registry': { indicators: [], meta: { targets: [] } },
             '/api/raw/saved-hooks': {
-                hooks: [historicalSavedHookRow, queuedSavedHookRow],
+                hooks: [
+                    historicalSavedHookRow,
+                    queuedSavedHookRow,
+                    channelFreeLow.row,
+                    channelFreeHigh.row,
+                ],
                 folders: [],
             },
             [`/api/raw/saved-hook/${historicalSavedHookId}`]: {
@@ -1748,6 +1810,28 @@ async function main() {
                     valid: null,
                     recorded_sha256: null,
                     calculated_sha256: null,
+                },
+            },
+            [`/api/raw/saved-hook/${channelFreeLowId}`]: {
+                ...channelFreeLow.record,
+                score_record_validation: {
+                    state: 'verified',
+                    valid: true,
+                    recorded_sha256:
+                        channelFreeLow.record.score_record_sha256,
+                    calculated_sha256:
+                        channelFreeLow.record.score_record_sha256,
+                },
+            },
+            [`/api/raw/saved-hook/${channelFreeHighId}`]: {
+                ...channelFreeHigh.record,
+                score_record_validation: {
+                    state: 'verified',
+                    valid: true,
+                    recorded_sha256:
+                        channelFreeHigh.record.score_record_sha256,
+                    calculated_sha256:
+                        channelFreeHigh.record.score_record_sha256,
                 },
             },
             '/api/raw/saved-channels': { channels: [{ id: channelId, name: 'Mobile Risk Channel', url: 'https://youtube.com/@risk', status: 'partial', discovered: 21, completed: 20, failed: 1 }], featureContract },
@@ -3119,6 +3203,112 @@ window.fetch=function(url,options){
             'or paste a YouTube link…'
         ).waitFor();
         await page.locator('.experiment-lab-tab[data-lab-view="hooks"]').click();
+        const channelFreeSort = page.locator(
+            '[data-savedsort="channelFreeConcat"]'
+        );
+        const channelFreeFilter = page.locator(
+            '[data-savedfilt="channelFreeConcat"]'
+        );
+        await channelFreeSort.waitFor();
+        await channelFreeFilter.waitFor();
+        await channelFreeSort.click();
+        await page.waitForFunction(highId => (
+            document.querySelector('[data-savedopen]')
+                ?.getAttribute('data-savedopen') === highId
+        ), channelFreeHighId);
+        const channelFreeHighCard = page.locator(
+            `[data-savedopen="${channelFreeHighId}"]`
+        );
+        const channelFreeLowCard = page.locator(
+            `[data-savedopen="${channelFreeLowId}"]`
+        );
+        const channelFreeHighPreview = channelFreeHighCard.locator(
+            '[data-saved-preview="channelFreeConcat"]'
+        );
+        const channelFreeLowPreview = channelFreeLowCard.locator(
+            '[data-saved-preview="channelFreeConcat"]'
+        );
+        const normalizedChannelFreeCardText = async card => (
+            (await card.innerText())
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase()
+        );
+        assert(
+            (await normalizedChannelFreeCardText(
+                channelFreeHighCard
+            )).includes(
+                `channel-free concat keep ${channelFreeHighOutput.raw.toFixed(1)}%`
+            ),
+            'selected channel-free sorting must put the exact raw forecast '
+                + 'on the saved-hook card'
+        );
+        assert(
+            (await normalizedChannelFreeCardText(
+                channelFreeLowCard
+            )).includes(
+                `channel-free concat keep ${channelFreeLowOutput.raw.toFixed(1)}%`
+            ),
+            'every saved-hook card must preview its own concat forecast '
+                + 'without opening the detail'
+        );
+        assert.deepStrictEqual(
+            await channelFreeHighPreview.evaluate(element => ({
+                coordinateId:
+                    element.dataset.savedPreviewCoordinateId,
+                value: Number(element.dataset.savedPreviewValue),
+                percentile: Number(
+                    element.getAttribute(
+                        'data-saved-preview-percentile-0-100'
+                    )
+                ),
+                artifactSha256:
+                    element.dataset.savedPreviewArtifactSha256,
+            })),
+            {
+                coordinateId: 'shorts.channel-free.concat.keep',
+                value: channelFreeHighOutput.raw,
+                percentile: channelFreeHighOutput.percentile100,
+                artifactSha256:
+                    channelFreeHighOutput.artifactSha256,
+            },
+            'saved-hook preview must expose the exact compact-record '
+                + 'coordinate, value, percentile, and model artifact'
+        );
+        assert.strictEqual(
+            await channelFreeLowPreview.count(),
+            1,
+            'the lower channel-free fixture lost its visible preview'
+        );
+        if (process.env.EXPERIMENT_LAB_SAVED_HOOKS_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(
+                process.env.EXPERIMENT_LAB_SAVED_HOOKS_SCREENSHOT
+            ), { recursive: true });
+            await page.screenshot({
+                path:
+                    process.env.EXPERIMENT_LAB_SAVED_HOOKS_SCREENSHOT,
+                fullPage: false,
+            });
+        }
+        await channelFreeFilter.evaluate((input, threshold) => {
+            input.value = String(threshold);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }, Math.floor(channelFreeHighOutput.raw));
+        await page.waitForFunction(({ highId, lowId }) => (
+            !!document.querySelector(`[data-savedopen="${highId}"]`)
+            && !document.querySelector(`[data-savedopen="${lowId}"]`)
+        ), {
+            highId: channelFreeHighId,
+            lowId: channelFreeLowId,
+        });
+        await channelFreeFilter.evaluate(input => {
+            input.value = '0';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await page.waitForFunction(lowId => (
+            !!document.querySelector(`[data-savedopen="${lowId}"]`)
+        ), channelFreeLowId);
+        await page.locator('[data-savedsort="recent"]').click();
         const historicalSavedHookCard = page.locator(
             `[data-savedopen="${historicalSavedHookId}"]`
         );
