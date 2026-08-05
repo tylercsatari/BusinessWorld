@@ -12,6 +12,12 @@ async function main() {
         path.join(root, 'server.js'),
         'utf8'
     );
+    assert(
+        source.includes('IMMUTABLE VIDEO IDEA (do not change)')
+            && source.includes('brief: immutableRenderBrief')
+            && source.includes('video_idea: premise'),
+        'Grind must pass the immutable video idea through the single-sheet render contract'
+    );
     const start = source.indexOf('function hookPanelModelKey');
     const end = source.indexOf(
         'async function hookModelGenerateRetry',

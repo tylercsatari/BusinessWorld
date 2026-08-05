@@ -23,7 +23,7 @@ const firstMeasurement = measure(first, seed, []);
 
 assert.strictEqual(
     state.strategy,
-    'topic-anchored-proportional-outward-v1'
+    'same-idea-hook-proportional-outward-v2'
 );
 assert.deepStrictEqual(
     exploration.candidateDecision(
@@ -170,9 +170,18 @@ const prompt = exploration.generationPrompt({
     priorPremises: ['Can a robot arm lift a car?'],
     rejectedPremises: ['Can a robot arm lift something heavy?'],
 });
-assert(prompt.includes('ORIGINAL VIDEO REALM: Build a robot arm'));
-assert(prompt.includes('DO NOT REPEAT THESE RENDERED CONCEPTS'));
+assert(prompt.includes('IMMUTABLE VIDEO IDEA: Build a robot arm'));
+assert(prompt.includes('Do not invent a different video concept'));
+assert(prompt.includes('Vary only the hook treatment'));
+assert(prompt.includes('DO NOT REPEAT THESE RENDERED HOOK TREATMENTS'));
 assert(prompt.includes('TOO CLOSE OR OFF-TOPIC'));
+const firstPrompt = exploration.generationPrompt({
+    seedPremise: 'Build a robot arm',
+    state: exploration.createState({ threshold: 90 }),
+});
+assert(firstPrompt.includes('IMMUTABLE VIDEO IDEA: Build a robot arm'));
+assert(firstPrompt.includes('This is the first hook treatment'));
+assert(firstPrompt.includes('exact supplied idea'));
 
 const root = path.resolve(__dirname, '..');
 const serverSource = fs.readFileSync(
@@ -193,8 +202,8 @@ assert(grindSource.includes('grindExploration.measureCandidate'));
 assert(grindSource.includes('grindExploration.selectCandidate'));
 assert(grindSource.includes('grindExploration.recordScore'));
 assert(grindSource.includes('providerCallBudget: 1'));
-assert(grindSource.includes("context: 'the original Grind topic'"));
-assert(grindSource.includes("context: 'a Grind candidate concept'"));
+assert(grindSource.includes("context: 'the immutable Grind video idea'"));
+assert(grindSource.includes("context: 'a Grind candidate hook'"));
 assert(grindSource.includes('scoreMontage('));
 assert(!grindSource.includes('Math.min(0.30'));
 assert(!grindSource.includes('rejected < maxAttempts'));

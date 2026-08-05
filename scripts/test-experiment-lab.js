@@ -559,6 +559,11 @@ async function main() {
             contentType: 'image/gif',
             body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
         }));
+        await page.route('**/api/hooks/grind/montage/**', route => route.fulfill({
+            status: 200,
+            contentType: 'image/gif',
+            body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
+        }));
         await page.route(`${ORIGIN}/__experiment-lab-origin__`, route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><title>Experiment Lab test origin</title>' }));
         // Establish the local origin without loading Business World's global bundles twice.
         await page.goto(`${ORIGIN}/__experiment-lab-origin__`, { waitUntil: 'domcontentloaded' });
@@ -1783,6 +1788,79 @@ async function main() {
                 generationCount: 1,
             },
         ];
+        const grindFixtureRid = 'grindreadoutfixture';
+        const grindCoordinateId = 'shorts.stored.together.keep';
+        const grindScoreFixture = JSON.parse(
+            JSON.stringify(historicalUpgradeScore)
+        );
+        const grindCoordinateEntry = grindScoreFixture.score_ledger.entries
+            .find(entry => (
+                entry.coordinate_id === grindCoordinateId
+                && entry.available === true
+            ));
+        assert(
+            grindCoordinateEntry
+                && Number.isFinite(grindCoordinateEntry.value)
+                && Number.isFinite(grindCoordinateEntry.percentile),
+            'Grind browser fixture requires one exact available ledger coordinate'
+        );
+        const grindAttemptFixture = {
+            k: 0,
+            premise: 'A second hook treatment for the exact same machine idea',
+            status: 'scored',
+            score_verified: true,
+            score_projection_schema:
+                'shorts-grind-score-projection-v1',
+            score_projection_precision: 'source-exact',
+            score_coordinate_id: grindCoordinateId,
+            score_ledger_sha256:
+                grindScoreFixture.score_ledger.ledger_sha256,
+            score_record_sha256:
+                grindScoreFixture.score_record_sha256,
+            score_value: grindCoordinateEntry.value,
+            score_percentile_0_100:
+                grindCoordinateEntry.percentile,
+            score_available: true,
+            score_coordinate_count:
+                grindScoreFixture.score_ledger.entries.length,
+            score_coordinate_available_count:
+                grindScoreFixture.score_ledger.entries.filter(
+                    entry => entry.available === true
+                ).length,
+            score_derived_output_count: 4,
+            frames: [
+                'Establish the machine',
+                'Show the impossible spill test',
+                'Escalate the test',
+                'Withhold the mechanism',
+                'Reveal the result',
+            ],
+            image_provider_call_count: 1,
+            topical_similarity: 0.88,
+            topical_similarity_floor: 0.70,
+            seed_distance: 0.19,
+            min_text_embedding_distance: 0.16,
+        };
+        const grindRunFixture = {
+            rid: grindFixtureRid,
+            premise: 'This machine makes it impossible to spill',
+            status: 'maxed',
+            threshold_coordinate_id: grindCoordinateId,
+            threshold_unit: 'percentile_0_100',
+            threshold_value_0_100: 95,
+            threshold_percentile_0_100: 95,
+            attempt_count: 1,
+            attempts: [grindAttemptFixture],
+            exploration_strategy:
+                'same-idea-hook-proportional-outward-v2',
+            required_seed_embedding_distance: 0.19,
+            minimum_text_embedding_distance: 0.16,
+            topical_similarity_floor: 0.70,
+            rejected_variant_count: 2,
+            render_mode: 'single-panel',
+            run_validation: { valid: true },
+            note: 'One same-idea hook is ready.',
+        };
         const replies = {
             '/buildings/jarvis/saved-channel-feature-contract.json':
                 featureContract,
@@ -1920,7 +1998,17 @@ async function main() {
             },
             '/api/raw/map': rawVisualMap,
             [`/api/raw/saved-channel/${channelId}/resume`]: { ok: true },
-            '/api/hooks/grind/runs': { runs: [] },
+            '/api/hooks/grind/runs': {
+                runs: [{
+                    rid: grindFixtureRid,
+                    premise: grindRunFixture.premise,
+                    status: 'running',
+                }],
+            },
+            [`/api/hooks/grind/run/${grindFixtureRid}`]:
+                grindRunFixture,
+            [`/api/hooks/grind/score/${grindFixtureRid}_0`]:
+                grindScoreFixture,
             '/api/hooks/warmup': { ok: true, fired: false },
         };
         const teamReplies = {
@@ -2440,11 +2528,18 @@ window.fetch=function(url,options){
             })
         ),250));
     }
+    if(p.startsWith('/api/hooks/grind/montage/')){
+        return Promise.resolve(new Response(JSON.stringify({
+            error:'fixture montage is intentionally unavailable'
+        }),{
+            status:503,
+            headers:{'Content-Type':'application/json'}
+        }));
+    }
     if(
         (p.includes('/api/raw/saved-channel/')&&p.includes('/montage/'))
         || p.startsWith('/api/raw/montage/')
         || p.startsWith('/api/hooks/grpo/montage/')
-        || p.startsWith('/api/hooks/grind/montage/')
     ){
         const b=Uint8Array.from(
             atob('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='),
@@ -2551,6 +2646,34 @@ window.fetch=function(url,options){
             console.error('INITIAL ROOT:', (await page.locator('#root').innerText()).slice(0, 1500));
             throw error;
         }
+        await page.locator('[data-grindopen="0"]').waitFor();
+        await page.locator('[data-grindopen="0"]').click();
+        await page.locator(
+            '[data-score-queue-state="ready"]'
+        ).waitFor();
+        await page.locator('[data-canonical-score-analysis]').waitFor();
+        assert.strictEqual(
+            await page.getByText(
+                `${grindAttemptFixture.score_coordinate_available_count}/${grindAttemptFixture.score_coordinate_count} coordinates · 4 channel-free keep outputs`,
+                { exact: true }
+            ).count(),
+            1,
+            'a finished Grind hook must open its complete persisted ledger in the shared score readout'
+        );
+        assert.strictEqual(
+            await page.evaluate(pathname => (
+                window.__fetchCounts[pathname] || 0
+            ), `/api/hooks/grind/score/${grindFixtureRid}_0`),
+            1,
+            'the Grind readout must load its canonical persisted score exactly once'
+        );
+        assert.strictEqual(
+            await page.locator(
+                `[data-score-queue-id="grind:${grindFixtureRid}:0"]`
+            ).count(),
+            1,
+            'the opened Grind hook must remain a reusable analysis-queue item'
+        );
         await page.locator('.experiment-lab-tab[data-lab-view="team"]').click();
         await page.locator(
             `[data-labteamaccount="${teamAccountId}"]`
@@ -4074,7 +4197,7 @@ window.fetch=function(url,options){
         ).waitFor();
         await page.locator('[data-savedbank="channels"]').click();
         assert.strictEqual(await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').count(), 1);
-        assert.strictEqual(await page.getByPlaceholder('describe the topic — the idea model writes grounded hook variants…').count(), 1);
+        assert.strictEqual(await page.getByPlaceholder('describe one video idea — Grind tests different hooks for it…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder('or paste a YouTube link…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder('https://youtube.com/@channel').count(), 1);
         assert.strictEqual(await page.getByText('Save channel + score every Short', { exact: true }).count(), 1);

@@ -4174,6 +4174,21 @@ const JarvisRetention = (function () {
             score_value: attempt.score_value,
             score_percentile_0_100: attempt.score_percentile_0_100,
         };
+        if (attempt.score_projection_schema) {
+            verified.score_projection_schema =
+                attempt.score_projection_schema;
+            verified.score_projection_precision =
+                attempt.score_projection_precision || null;
+        }
+        if (
+            typeof attempt.score_record_sha256 === 'string'
+            && /^[a-f0-9]{64}$/.test(
+                attempt.score_record_sha256
+            )
+        ) {
+            verified.score_record_sha256 =
+                attempt.score_record_sha256;
+        }
         if (channelFreeConcat) {
             verified.score_record_sha256 =
                 attempt.score_record_sha256;
@@ -4225,6 +4240,29 @@ const JarvisRetention = (function () {
             ? '% predicted keep'
             : 'th percentile';
     }
+    function shortsGrindProjectionNumberMatches(
+        canonicalValue,
+        projectedValue,
+        verifiedScore
+    ) {
+        const canonical = Number(canonicalValue);
+        const projected = Number(projectedValue);
+        if (!Number.isFinite(canonical) || !Number.isFinite(projected)) {
+            return false;
+        }
+        if (
+            verifiedScore
+            && verifiedScore.score_projection_schema
+                === 'shorts-grind-score-projection-v1'
+            && verifiedScore.score_projection_precision
+                === 'source-exact'
+        ) return canonical === projected;
+        // Runs written before source-exact projection stored one decimal in
+        // the run snapshot. Their immutable ledger hash still identifies the
+        // full score record, so compare those legacy navigation scalars at
+        // their declared historical precision.
+        return Math.abs(canonical - projected) < 0.050000001;
+    }
     function shortsGrindReadoutMatchesVerifiedScore(readout, verifiedScore) {
         const ledger = readout && readout.score_ledger;
         if (
@@ -4233,6 +4271,17 @@ const JarvisRetention = (function () {
             || typeof ledger !== 'object'
             || ledger.ledger_sha256 !== verifiedScore.score_ledger_sha256
             || !Array.isArray(ledger.entries)
+        ) return false;
+        const recordValidation = readout
+            && readout.score_record_validation;
+        if (
+            verifiedScore.score_record_sha256
+            && (
+                !recordValidation
+                || recordValidation.valid !== true
+                || recordValidation.recorded_sha256
+                    !== verifiedScore.score_record_sha256
+            )
         ) return false;
         if (
             verifiedScore.score_coordinate_id
@@ -4245,9 +4294,16 @@ const JarvisRetention = (function () {
                 concat
                 && concat.coordinateId
                     === verifiedScore.score_coordinate_id
-                && concat.value === verifiedScore.score_value
-                && concat.percentile100
-                    === verifiedScore.score_percentile_0_100
+                && shortsGrindProjectionNumberMatches(
+                    concat.value,
+                    verifiedScore.score_value,
+                    verifiedScore
+                )
+                && shortsGrindProjectionNumberMatches(
+                    concat.percentile100,
+                    verifiedScore.score_percentile_0_100,
+                    verifiedScore
+                )
                 && concat.scoreRecordSha256
                     === verifiedScore.score_record_sha256
                 && concat.model_artifact_sha256
@@ -4263,10 +4319,18 @@ const JarvisRetention = (function () {
             && entry.available === true
             && typeof entry.value === 'number'
             && Number.isFinite(entry.value)
-            && entry.value === verifiedScore.score_value
+            && shortsGrindProjectionNumberMatches(
+                entry.value,
+                verifiedScore.score_value,
+                verifiedScore
+            )
             && typeof entry.percentile === 'number'
             && Number.isFinite(entry.percentile)
-            && entry.percentile === verifiedScore.score_percentile_0_100
+            && shortsGrindProjectionNumberMatches(
+                entry.percentile,
+                verifiedScore.score_percentile_0_100,
+                verifiedScore
+            )
         );
     }
     function shortsGrindUnverifiedMessage(attempt) {
@@ -4361,7 +4425,7 @@ const JarvisRetention = (function () {
                         animation: st.grindAnimation === true,
                         render_mode: 'single-panel',
                         exploration_strategy:
-                            'topic-anchored-proportional-outward-v1',
+                            'same-idea-hook-proportional-outward-v2',
                         required_seed_embedding_distance: 0,
                         minimum_text_embedding_distance: 0,
                         note: 'queued — the worker picks it up within seconds…',
@@ -4381,30 +4445,109 @@ const JarvisRetention = (function () {
             rtgUpdateExp();
             return;
         }
-        st.grindErr = null;
-        st.grindOpening = k; rtgUpdateExp();
-        let openedScore = null;
-        try {
-            const score = await rtFetchJson('/api/hooks/grind/score/' + rid + '_' + k, {}, 3);
-            if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
-            const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
-            score.montage = monUrl.split('base64,').pop();
-            score.source = 'grind'; score.montageDataUrl = monUrl;
-            Object.assign(score, verifiedScore);
-            score.genFrames = (a && a.frames) || [];
-            st.rawUploads.push(score); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            openedScore = score;
-        } catch (e) { st.grindErr = 'open: ' + e.message; }
-        st.grindOpening = null;
-        if (!openedScore) {
+        const queueId = `grind:${rid}:${k}`;
+        const uploads = st.rawUploads || (st.rawUploads = []);
+        let queueIndex = uploads.findIndex(upload => (
+            upload && upload._scoreQueueId === queueId
+        ));
+        if (
+            queueIndex >= 0
+            && rawUploadIsDisplayable(uploads[queueIndex])
+        ) {
+            st.rawUpSel = queueIndex;
+            st.rawSel = null;
+            presentCanonicalScore(uploads[queueIndex], {
+                closeBuilder: true,
+            });
+            return;
+        }
+        if (
+            queueIndex >= 0
+            && uploads[queueIndex]._scoreQueueStatus === 'loading'
+        ) {
+            st.rawUpSel = queueIndex;
             rtgUpdateExp();
             return;
         }
-        presentCanonicalScore(openedScore, { closeBuilder: true });
-        persistExperimentLabScoreInBackground(
-            openedScore,
-            'The grind score is open, but its private saved copy failed'
-        );
+        const placeholder = {
+            _scoreQueueId: queueId,
+            _scoreQueueStatus: 'loading',
+            _scoreQueueDetail:
+                'Loading the complete persisted ledger and validating every embedding coordinate.',
+            title: a && a.premise || 'Grind hook',
+            source: 'grind',
+            generatedRunId: rid,
+            generatedAttemptIndex: k,
+        };
+        if (queueIndex >= 0) uploads[queueIndex] = placeholder;
+        else {
+            uploads.push(placeholder);
+            queueIndex = uploads.length - 1;
+        }
+        st.rawUpSel = queueIndex;
+        st.rawSel = null;
+        st.grindErr = null;
+        st.grindOpenings = st.grindOpenings || {};
+        st.grindOpenings[queueId] = true;
+        st.grindOpening = k;
+        rtgUpdateExp();
+        const scoreUrl = '/api/hooks/grind/score/' + rid + '_' + k;
+        const montageUrl = '/api/hooks/grind/montage/' + rid + '_' + k;
+        try {
+            const score = await rtFetchJson(scoreUrl, {}, 3);
+            if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
+            score.source = 'grind';
+            score.title = a && a.premise || score.title || 'Grind hook';
+            score.transcript = score.transcript
+                || score.text
+                || a && a.premise
+                || '';
+            score.montageDataUrl = authenticatedMediaUrl(montageUrl);
+            Object.assign(score, verifiedScore);
+            score.genFrames = (a && a.frames) || [];
+            score.genFrameImgs = (a && a.frame_imgs) || [];
+            score.generatedRunId = rid;
+            score.generatedAttemptIndex = k;
+            score._scoreQueueId = queueId;
+            score._scoreQueueStatus = 'ready';
+            uploads[queueIndex] = score;
+            st.rawUpSel = queueIndex;
+            st.rawSel = null;
+            presentCanonicalScore(score, { closeBuilder: true });
+            // The canonical ledger is usable without downloading the image a
+            // second time. Hydrate the media in the background for local save
+            // and offline persistence, but never block the full readout.
+            urlToDataUrl(montageUrl, 60000).then(monUrl => {
+                score.montageDataUrl = monUrl;
+                score.montage = monUrl.split('base64,').pop();
+                if (uploads[queueIndex] === score) {
+                    refreshRawUploadPanel();
+                }
+                persistExperimentLabScoreInBackground(
+                    score,
+                    'The grind score is open, but its private saved copy failed'
+                );
+            }).catch(mediaError => {
+                score._uploadWarning =
+                    'The complete embedding readout loaded, but its stored image could not be downloaded: '
+                    + fetchFail(mediaError);
+                if (uploads[queueIndex] === score) {
+                    refreshRawUploadPanel();
+                }
+            });
+        } catch (e) {
+            placeholder._scoreQueueStatus = 'error';
+            placeholder._scoreQueueError = fetchFail(e);
+            placeholder._scoreQueueDetail = placeholder._scoreQueueError;
+            uploads[queueIndex] = placeholder;
+            st.rawUpSel = queueIndex;
+            st.grindErr = 'open: ' + placeholder._scoreQueueError;
+            rtgUpdateExp();
+        } finally {
+            delete st.grindOpenings[queueId];
+            st.grindOpening = null;
+            refreshRawUploadPanel();
+        }
     }
     async function grindSave(k) {
         const rid = st.grindRid; if (!rid) return;
@@ -4501,6 +4644,11 @@ const JarvisRetention = (function () {
                 ? 'historical result · score unverified'
                 : ({ running: '⏳ grinding…', won: '🎯 THRESHOLD CLEARED', stopped: '⏹ stopped', error: '✕ error', deadline: '⏱ time budget spent', maxed: 'attempt budget spent' }[g.status] || g.status);
             const card = a => {
+                const readoutQueueId = `grind:${g.rid}:${a.k}`;
+                const readoutOpening = !!(
+                    st.grindOpenings
+                    && st.grindOpenings[readoutQueueId]
+                );
                 const verifiedScore = shortsGrindVerifiedScore(a);
                 const verifiedDescriptor = verifiedScore
                     ? shortsGrindScoreDescriptor(verifiedScore)
@@ -4534,6 +4682,7 @@ const JarvisRetention = (function () {
                   ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
                   <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
                   ${verifiedScore ? `<div style="font-size:7px;color:${C.faint};margin-top:3px;overflow-wrap:anywhere"><code>${esc(verifiedScore.score_coordinate_id)}</code> · ${esc(verifiedDescriptor.targetUnit)} · target ${esc(verifiedDescriptor.target)} · modality ${esc(verifiedDescriptor.modality)} · input ${esc(verifiedDescriptor.input)} · ${verifiedScore.score_target_unit === 'predicted_keep_percent' ? `pooled percentile ${fmtv(verifiedScore.score_percentile_0_100, 1)}th · score record <code>${verifiedScore.score_record_sha256.slice(0, 12)}…</code> · ` : ''}ledger <code>${verifiedScore.score_ledger_sha256.slice(0, 12)}…</code></div>` : ''}
+                  ${a.score_available === true ? `<div style="font-size:8px;color:${C.green};margin-top:3px">embedded · ${a.score_coordinate_available_count == null ? '' : `${a.score_coordinate_available_count}/`}${a.score_coordinate_count || 21} ledger coordinates + ${a.score_derived_output_count || 4} channel-free outputs</div>` : ''}
                   ${unverifiedMessage ? `<div style="font-size:8px;color:${C.amber};line-height:1.35;margin-top:4px">${esc(unverifiedMessage)}</div>` : ''}
                   <div style="display:flex;gap:5px;margin-top:5px;align-items:center;flex-wrap:wrap">
                     ${a.seed_distance != null ? `<span style="font-size:8.5px;color:${C.purple}" title="Cosine distance from your immutable original topic embedding. This radius is intentionally pushed outward after misses.">seed ↗ ${(+a.seed_distance).toFixed(3)}</span>` : ''}
@@ -4541,7 +4690,7 @@ const JarvisRetention = (function () {
                     ${a.topical_similarity != null ? `<span style="font-size:8.5px;color:${(+a.topical_similarity) < (+a.topical_similarity_floor || 0) ? '#ef4444' : C.green}" title="Similarity to the original topic anchor versus the topical floor. Candidates below the floor are rejected before image generation.">topic ${(+a.topical_similarity).toFixed(3)} / ${(+a.topical_similarity_floor).toFixed(3)}</span>` : ''}
                     ${a.image_provider_call_count != null ? `<span style="font-size:8.5px;color:${a.image_provider_call_count === 1 ? C.green : '#ef4444'}" title="Image-provider calls for this rendered attempt. One call returns the whole 45:16 sheet; the five panels are deterministic crops.">${a.image_provider_call_count} image call</span>` : ''}
                     ${a.vnov != null ? `<span style="font-size:8.5px;color:${C.dim}" title="Descriptive visual-embedding distance from the closest earlier rendered montage. It does not control concept selection.">visual ↔ ${a.vnov.toFixed(3)}</span>` : ''}
-                    ${verifiedScore ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
+                    ${verifiedScore ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${readoutOpening ? 'loading full ledger…' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
                   </div></div>`;
             };
             const runValidation = g.run_validation || null;
@@ -4553,7 +4702,7 @@ const JarvisRetention = (function () {
                 ${runIntegrity}
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered attempts · verified scores ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Every discarded concept failed the outward or topical pre-render selection, or was an unselected sibling in the candidate pool.')}" style="cursor:help">${g.rejected_variant_count || 0} concepts screened before render</span>${g.required_seed_embedding_distance != null ? ` · <span title="minimum cosine distance the next concept must move from the immutable original topic" style="cursor:help;color:${C.purple}">seed ≥ ${(+g.required_seed_embedding_distance).toFixed(3)}</span>` : ''}${g.minimum_text_embedding_distance != null ? ` · <span title="minimum cosine distance the next concept must keep from every rendered concept" style="cursor:help;color:${C.cyan}">prior ≥ ${(+g.minimum_text_embedding_distance).toFixed(3)}</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum cosine similarity every concept must retain to the original topic" style="cursor:help;color:${C.green}">topic ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered hooks for one idea · verified full ledgers ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Every discarded hook failed the outward or same-idea pre-render selection, or was an unselected sibling in the candidate pool.')}" style="cursor:help">${g.rejected_variant_count || 0} hooks screened before render</span>${g.required_seed_embedding_distance != null ? ` · <span title="minimum cosine distance the next hook treatment must move from the original wording" style="cursor:help;color:${C.purple}">seed ≥ ${(+g.required_seed_embedding_distance).toFixed(3)}</span>` : ''}${g.minimum_text_embedding_distance != null ? ` · <span title="minimum cosine distance the next hook must keep from every rendered hook" style="cursor:help;color:${C.cyan}">prior ≥ ${(+g.minimum_text_embedding_distance).toFixed(3)}</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum similarity every hook must retain to the immutable video idea" style="cursor:help;color:${C.green}">same idea ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
@@ -4565,9 +4714,9 @@ const JarvisRetention = (function () {
             ? `<span style="font-size:10px;color:${C.mute}">target ≥</span><input type="number" min="0" max="100" step="0.1" value="${thr}" data-grindcfthr aria-label="Target predicted keep percentage" style="width:70px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 7px;font-size:11px" ${running ? 'disabled' : ''}><span style="font-size:10px;color:${C.accent};font-weight:800">% predicted keep</span>`
             : `<span style="font-size:10px;color:${C.mute}">target ≥ <b style="color:${C.accent}">${thr}</b>th</span><input type="range" min="60" max="97" value="${thr}" data-grindthr style="width:110px;accent-color:${C.accent}" ${running ? 'disabled' : ''}>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— describe the topic; the idea model writes progressively different grounded hooks. Each attempt uses one coherent 45:16 image call, five deterministic 9:16 crops, and the canonical scorer until it clears your selected bar.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— describe one immutable video idea; the fine-tuned model tests progressively different openings for that same idea. It may change phrasing, order, tension, reveal, and visual treatment, but not the underlying subject, event, goal, or outcome. Every rendered hook receives one coherent 45:16 image call, five deterministic 9:16 crops, and the complete canonical embedding ledger.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
-            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="describe the topic — the idea model writes grounded hook variants…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
+            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="describe one video idea — Grind tests different hooks for it…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
             ${targetControl}
             ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
             <label style="display:inline-flex;gap:6px;align-items:center;color:${st.grindAnimation ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-grindanimation ${st.grindAnimation ? 'checked' : ''} ${running ? 'disabled' : ''} style="accent-color:${C.accent}">Animation</label>
@@ -8290,7 +8439,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-grindstop]')) { if (st.grindRid) rtFetch('/api/hooks/grind/stop/' + st.grindRid, { method: 'POST' }).catch(() => {}); return; }
         const gmet = e.target.closest('[data-grindmetric]'); if (gmet) { st.grindMetric = gmet.getAttribute('data-grindmetric'); rtgUpdateExp(); return; }
         const ghr = e.target.closest('[data-grindhours]'); if (ghr) { st.grindHours = +ghr.getAttribute('data-grindhours'); rtgUpdateExp(); return; }
-        const gop = e.target.closest('[data-grindopen]'); if (gop) { if (st.grindOpening == null) grindOpen(+gop.getAttribute('data-grindopen')); return; }
+        const gop = e.target.closest('[data-grindopen]'); if (gop) { grindOpen(+gop.getAttribute('data-grindopen')); return; }
         if (e.target.closest('[data-grindhide]')) { st.grindHide = st.grindHide || {}; if (st.grindRid) st.grindHide[st.grindRid] = 1; st.grindRid = null; GRINDRUN = null; rtgUpdateExp(); return; }
         const gvw = e.target.closest('[data-grindview]'); if (gvw) { const rid = gvw.getAttribute('data-grindview'); st.grindRid = rid; delete (st.grindHide || {})[rid]; grindPoll(rid); rtgUpdateExp(); return; }
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }

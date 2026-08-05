@@ -66,9 +66,9 @@ const score = {
             concat: {
                 coordinate_id: coordinateId,
                 available: true,
-                raw: 78.4,
-                est: 78.4,
-                pctile: 91.2,
+                raw: 78.4567,
+                est: 78.4567,
+                pctile: 91.2345,
                 kind: 'channel_free_keep_rate_percent',
                 model_artifact_sha256: modelSha,
             },
@@ -78,8 +78,16 @@ const score = {
 
 const projection = context.coordinateValue(score, coordinateId);
 assert(projection);
-assert.strictEqual(projection.score_value, 78.4);
-assert.strictEqual(projection.score_percentile_0_100, 91.2);
+assert.strictEqual(
+    projection.score_projection_schema,
+    'shorts-grind-score-projection-v1'
+);
+assert.strictEqual(
+    projection.score_projection_precision,
+    'source-exact'
+);
+assert.strictEqual(projection.score_value, 78.4567);
+assert.strictEqual(projection.score_percentile_0_100, 91.2345);
 assert.strictEqual(
     projection.score_target_unit,
     'predicted_keep_percent'
@@ -87,10 +95,33 @@ assert.strictEqual(
 assert.strictEqual(projection.score_record_sha256, recordSha);
 assert.strictEqual(projection.score_model_artifact_sha256, modelSha);
 assert.strictEqual(context.attemptValid(projection, coordinateId), true);
-assert.strictEqual(context.targetValue(projection, coordinateId), 78.4);
+assert.strictEqual(context.targetValue(projection, coordinateId), 78.4567);
 assert.strictEqual(
     context.targetUnit(coordinateId),
     'predicted_keep_percent'
+);
+
+const storedCoordinateId = 'shorts.stored.together.keep';
+const storedProjection = context.coordinateValue({
+    score_record_sha256: recordSha,
+    score_ledger: {
+        valid: true,
+        ledger_sha256: ledgerSha,
+        entries: [{
+            coordinate_id: storedCoordinateId,
+            source_key: 'together_keep',
+            available: true,
+            value: 82.34567,
+            percentile: 93.21678,
+            provenance: { kind: 'stored' },
+        }],
+    },
+}, storedCoordinateId);
+assert.strictEqual(storedProjection.score_value, 82.34567);
+assert.strictEqual(
+    storedProjection.score_percentile_0_100,
+    93.21678,
+    'the run projection must preserve the canonical ledger value exactly'
 );
 
 assert.strictEqual(
@@ -142,11 +173,11 @@ const belowThreshold = runContext.bindRun({
 });
 assert.strictEqual(runContext.validateRun(belowThreshold).valid, true);
 const belowResponse = runContext.runResponse(belowThreshold);
-assert.strictEqual(belowResponse.best_score.target_value, 78.4);
+assert.strictEqual(belowResponse.best_score.target_value, 78.4567);
 assert.strictEqual(belowResponse.winner_attempt_index, null);
 assert.strictEqual(
     belowResponse.best_score.score_percentile_0_100,
-    91.2,
+    91.2345,
     'the pooled percentile remains visible but must not clear the raw target'
 );
 

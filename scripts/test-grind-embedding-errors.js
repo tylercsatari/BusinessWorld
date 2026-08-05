@@ -31,7 +31,7 @@ async function main() {
     await assert.rejects(
         context.embed('topic', {
             required: true,
-            context: 'the original Grind topic',
+            context: 'the immutable Grind video idea',
         }),
         /GEMINI_API_KEY/
     );

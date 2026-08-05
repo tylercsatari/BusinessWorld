@@ -79,6 +79,29 @@ const validReadout = {
     },
 };
 assert.strictEqual(readoutMatches(validReadout, binding), true);
+assert.strictEqual(readoutMatches({
+    score_ledger: {
+        ...validReadout.score_ledger,
+        entries: [{
+            ...validReadout.score_ledger.entries[0],
+            percentile: 91.544,
+        }],
+    },
+}, binding), true, 'historical one-decimal run projections must open their exact ledger');
+const sourceExactBinding = verifiedScore({
+    ...valid,
+    score_projection_schema: 'shorts-grind-score-projection-v1',
+    score_projection_precision: 'source-exact',
+});
+assert.strictEqual(readoutMatches({
+    score_ledger: {
+        ...validReadout.score_ledger,
+        entries: [{
+            ...validReadout.score_ledger.entries[0],
+            percentile: 91.544,
+        }],
+    },
+}, sourceExactBinding), false, 'new source-exact projections must match exactly');
 assert.strictEqual(readoutMatches(null, binding), false);
 assert.strictEqual(readoutMatches(validReadout, null), false);
 assert.strictEqual(readoutMatches({
@@ -101,6 +124,10 @@ const channelFreeBinding = verifiedScore(channelFree);
 assert(channelFreeBinding);
 assert.strictEqual(channelFreeBinding.score_value, 78.4);
 assert.strictEqual(readoutMatches({
+    score_record_validation: {
+        valid: true,
+        recorded_sha256: channelFree.score_record_sha256,
+    },
     score_ledger: {
         ledger_sha256: valid.score_ledger_sha256,
         entries: [],
@@ -161,5 +188,13 @@ assert.ok(grindSource.includes('required_seed_embedding_distance'));
 assert.ok(grindSource.includes('topical_similarity_floor'));
 assert.ok(grindSource.includes('image_provider_call_count'));
 assert.ok(grindSource.includes('one provider call → one 45:16 sheet'));
+assert.ok(grindSource.includes('same-idea-hook-proportional-outward-v2'));
+assert.ok(grindSource.includes("_scoreQueueStatus: 'loading'"));
+assert.ok(grindSource.includes('complete embedding readout loaded'));
+assert.ok(
+    grindSource.indexOf('presentCanonicalScore(score')
+        < grindSource.indexOf('urlToDataUrl(montageUrl'),
+    'the full ledger must open before optional image hydration'
+);
 
 console.log('shorts grind UI ledger contract: ok');

@@ -1,14 +1,14 @@
 'use strict';
 
-const SCHEMA = 'shorts-grind-exploration-v1';
-const STRATEGY = 'topic-anchored-proportional-outward-v1';
+const SCHEMA = 'shorts-grind-exploration-v2';
+const STRATEGY = 'same-idea-hook-proportional-outward-v2';
 
 const DEFAULTS = Object.freeze({
-    // Existing Gemini calibration in this pipeline places unrelated concepts
-    // around 0.40+ cosine distance. A 0.60 similarity floor keeps candidates
-    // on the topical side of that measured boundary while leaving room to
-    // rotate through distinct mechanisms and visual treatments.
-    topicalSimilarityFloor: 0.60,
+    // Existing Gemini calibration places unrelated concepts around 0.40+
+    // cosine distance. The extra 0.10 margin keeps exploration inside the
+    // same video idea while still allowing materially different hook
+    // phrasing, sequencing, reveals, and visual treatments.
+    topicalSimilarityFloor: 0.70,
     initialPriorDistance: 0.12,
     initialSeedDistance: 0.04,
     priorStepBase: 0.012,
@@ -234,7 +234,7 @@ function candidateRank(state, candidate) {
         : measurement.nearestPriorDistance
             - state.requiredPriorDistance;
     // Stay near the requested outward shell instead of leaping off-topic, then
-    // prefer more separation from already rendered ideas and more topicality.
+    // prefer more separation from prior hook treatments and more topicality.
     return (
         -seedOvershoot
         + 0.2 * priorMargin
@@ -399,7 +399,7 @@ function generationPrompt({
     rejectedPremises = [],
 } = {}) {
     const seed = String(seedPremise || '').trim();
-    if (!state || state.acceptedCount === 0) return seed;
+    if (!state) return seed;
     const prior = priorPremises
         .slice(-6)
         .map((value, index) => `${index + 1}. ${String(value).slice(0, 180)}`);
@@ -407,12 +407,18 @@ function generationPrompt({
         .slice(-4)
         .map((value, index) => `${index + 1}. ${String(value).slice(0, 180)}`);
     return [
-        `ORIGINAL VIDEO REALM: ${seed}`,
-        'Write a new Shorts hook concept for the same central subject, challenge, or experiment.',
-        'Preserve what the original video is fundamentally communicating, but do not paraphrase an earlier hook.',
-        `This is outward exploration round ${state.acceptedCount + 1}. Change the mechanism, stakes, test, reveal, perspective, or visual progression enough to reach a new semantic region.`,
-        `The selection system will require at least ${state.requiredSeedDistance.toFixed(3)} cosine distance from the original wording and ${state.requiredPriorDistance.toFixed(3)} from every rendered concept, while retaining at least ${state.topicalSimilarityFloor.toFixed(3)} similarity to the original realm.`,
-        prior.length ? 'DO NOT REPEAT THESE RENDERED CONCEPTS:' : '',
+        `IMMUTABLE VIDEO IDEA: ${seed}`,
+        'Write a materially different opening hook for this exact same video idea.',
+        'The subject, objects, event, experiment, goal, and factual outcome implied by the original idea are invariants. Do not invent a different video concept, challenge, product, or outcome.',
+        'Vary only the hook treatment: opening question, information order, tension, framing, reveal timing, spoken phrasing, camera perspective, and five-beat visual progression.',
+        'Do not merely paraphrase an earlier hook.',
+        state.acceptedCount === 0
+            ? 'This is the first hook treatment. Establish the exact supplied idea clearly before optimizing its presentation.'
+            : `This is outward hook-exploration round ${state.acceptedCount + 1}. Move into a different presentation region while preserving every invariant of the video idea.`,
+        state.acceptedCount === 0
+            ? `The selection system will retain only a hook with at least ${state.topicalSimilarityFloor.toFixed(3)} similarity to the immutable video idea.`
+            : `The selection system will require at least ${state.requiredSeedDistance.toFixed(3)} cosine distance from the original wording and ${state.requiredPriorDistance.toFixed(3)} from every rendered hook, while retaining at least ${state.topicalSimilarityFloor.toFixed(3)} similarity to the immutable video idea.`,
+        prior.length ? 'DO NOT REPEAT THESE RENDERED HOOK TREATMENTS:' : '',
         ...prior,
         rejected.length ? 'THESE RECENT DRAFTS WERE TOO CLOSE OR OFF-TOPIC:' : '',
         ...rejected,

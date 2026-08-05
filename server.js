@@ -23616,8 +23616,9 @@ setInterval(() => {
 }, 15000);
 
 // ── 🎯 GRIND: loop generate→render→score until a hook clears the user's threshold ──────────
-// The user writes a topic anchor and target. Every loop uses idea_r7 to propose
-// grounded concepts, selects one on a progressively outward semantic shell,
+// The user writes one immutable video idea and target. Every loop uses idea_r7
+// to propose different hook treatments for it, selects one on a progressively
+// outward semantic shell that remains inside the same-idea similarity floor,
 // makes one 45:16 image-provider call, splits it into five deterministic crops,
 // and scores that exact montage on the canonical trained models. The verified
 // score deficit determines the next shell before any further image spend.
@@ -23766,11 +23767,13 @@ function grindCoordinateValue(score, coordinateId) {
             || !exactSha256(score && score.score_record_sha256)
         ) return null;
         return {
+            score_projection_schema:
+                'shorts-grind-score-projection-v1',
+            score_projection_precision: 'source-exact',
             score_coordinate_id: coordinateId,
             score_source_key: `channel_free.concat.keep`,
-            score_value: Math.round(Number(value) * 10) / 10,
-            score_percentile_0_100:
-                Math.round(Number(output.pctile) * 10) / 10,
+            score_value: Number(value),
+            score_percentile_0_100: Number(output.pctile),
             score_kind: output.kind,
             score_ledger_sha256: ledger.ledger_sha256,
             score_record_sha256: score.score_record_sha256,
@@ -23793,13 +23796,16 @@ function grindCoordinateValue(score, coordinateId) {
         || !isFinite(Number(entry.value))
     ) return null;
     return {
+        score_projection_schema:
+            'shorts-grind-score-projection-v1',
+        score_projection_precision: 'source-exact',
         score_coordinate_id: coordinateId,
         score_source_key: entry.source_key || null,
         score_value: Number(entry.value),
         score_percentile_0_100: entry.percentile == null
             || !isFinite(Number(entry.percentile))
             ? null
-            : Math.round(Number(entry.percentile) * 10) / 10,
+            : Number(entry.percentile),
         score_kind: entry.provenance
             && entry.provenance.kind || null,
         score_ledger_sha256: ledger.ledger_sha256,
@@ -23814,6 +23820,17 @@ function grindCoordinateValue(score, coordinateId) {
 
 function shortsGrindAttemptProjectionValid(attempt, coordinateId) {
     if (!attempt || attempt.score_verified !== true) return false;
+    if (
+        Object.prototype.hasOwnProperty.call(
+            attempt,
+            'score_projection_schema'
+        )
+        && (
+            attempt.score_projection_schema
+                !== 'shorts-grind-score-projection-v1'
+            || attempt.score_projection_precision !== 'source-exact'
+        )
+    ) return false;
     const value = Number(attempt.score_value);
     const percentile = Number(attempt.score_percentile_0_100);
     if (
@@ -24289,13 +24306,13 @@ async function grindProcess(rid, req0, ownership) {
     const visPrev = [];   // 48-d pooled VISUAL embeddings of scored attempts — quantified visual variety
     let mem = []; try { mem = await genMemLoad(); } catch (e) {}
     try {
-        note = 'embedding the original topic anchor before concept generation…';
+        note = 'embedding the immutable video idea before hook generation…';
         await write();
         const seedEmbedding = await geminiTextEmbed(
             premise,
             {
                 required: true,
-                context: 'the original Grind topic',
+                context: 'the immutable Grind video idea',
             }
         );
         while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
@@ -24305,10 +24322,10 @@ async function grindProcess(rid, req0, ownership) {
                 break;
             }
             _hookLastGen = Date.now(); _hookLastPing = Date.now();   // grinding IS warmth
-            // 1) Generate concept candidates from the fine-tuned idea model.
+            // 1) Generate hook candidates from the fine-tuned idea model.
             // The first attempt starts directly from the user's seed. Later
             // rounds receive the immutable seed plus explicit outward-shell
-            // requirements and recent concepts to avoid.
+            // requirements and recent hook treatments to avoid.
             let selectedCandidate = null;
             let selectionRound = 0;
             while (
@@ -24338,7 +24355,7 @@ async function grindProcess(rid, req0, ownership) {
                     note = `attempt ${attempts.length + 1}: ${
                         rstat === 'starting'
                             ? `idea-model GPU booting (${elapsed})`
-                            : `writing ${candidateCount} grounded concept${
+                            : `writing ${candidateCount} same-idea hook${
                                 candidateCount === 1 ? '' : 's'
                             } (${elapsed})`
                     }`;
@@ -24375,7 +24392,7 @@ async function grindProcess(rid, req0, ownership) {
                             spec.premise,
                             {
                                 required: true,
-                                context: 'a Grind candidate concept',
+                                context: 'a Grind candidate hook',
                             }
                         );
                         return {
@@ -24439,7 +24456,7 @@ async function grindProcess(rid, req0, ownership) {
                 );
                 note = `attempt ${attempts.length + 1}: screened ${
                     candidates.length
-                } concepts before image spend — ${Object.entries(
+                } hooks before image spend — ${Object.entries(
                     reasonCounts
                 ).map(([reason, count]) => `${reason} ${count}`).join(', ')}; generating farther outward…`;
                 await write();
@@ -24450,7 +24467,7 @@ async function grindProcess(rid, req0, ownership) {
                     ? 'deadline'
                     : 'error';
                 if (status === 'deadline') {
-                    note = 'time budget ended while screening outward concepts; no off-topic or too-similar draft was rendered';
+                    note = 'time budget ended while screening outward hooks; no off-topic or too-similar draft was rendered';
                 } else {
                     err = 'idea exploration stopped before it found a candidate that was both topical and far enough outward; no image call was made for that round';
                 }
@@ -24459,6 +24476,13 @@ async function grindProcess(rid, req0, ownership) {
             const spec = selectedCandidate.spec;
             const emb = selectedCandidate.embedding;
             const measurement = selectedCandidate.measurement;
+            const immutableRenderBrief = [
+                `IMMUTABLE VIDEO IDEA (do not change): ${premise}`,
+                `SELECTED OPENING HOOK TREATMENT: ${spec.premise}`,
+                'Render five consecutive opening beats for that exact video. '
+                    + 'The subject, objects, event, experiment, goal, and '
+                    + 'factual outcome must remain the immutable video idea.',
+            ].join('\n');
             const requirementsBefore =
                 grindExploration.publicState(explorationState);
             ideaEmbeddings.push(emb);
@@ -24473,6 +24497,8 @@ async function grindProcess(rid, req0, ownership) {
             const a = {
                 k: attempts.length,
                 premise: spec.premise,
+                video_idea: premise,
+                hook_treatment: spec.premise,
                 frames: spec.frames,
                 frame_imgs: [null, null, null, null, null],
                 frames_done: 0,
@@ -24497,11 +24523,11 @@ async function grindProcess(rid, req0, ownership) {
                 exploration_strategy:
                     grindExploration.STRATEGY,
                 exploration_before: requirementsBefore,
-                concept_candidate_pool_size:
+                hook_candidate_pool_size:
                     selectedCandidate.candidatePoolSize,
-                concept_selection_round:
+                hook_selection_round:
                     selectedCandidate.selectionRound,
-                concept_embedding_model: 'gemini-embedding-2',
+                hook_text_embedding_model: 'gemini-embedding-2',
                 errs: [],
                 ts: Date.now(),
                 animation,
@@ -24515,7 +24541,7 @@ async function grindProcess(rid, req0, ownership) {
             let panel = null;
             try {
                 panel = await renderHookPanelRobust({
-                    brief: spec.premise,
+                    brief: immutableRenderBrief,
                     hookText: spec.premise,
                     panels: a.frames,
                     animation,
@@ -24628,7 +24654,23 @@ async function grindProcess(rid, req0, ownership) {
                     );
                 }
                 Object.assign(a, coordinateScore);
-                // Visual distance is descriptive. The next concept's outward
+                const scoreEntries = score.score_ledger
+                    && Array.isArray(score.score_ledger.entries)
+                    ? score.score_ledger.entries
+                    : [];
+                a.score_available = true;
+                a.score_artifact_id = `${rid}_${a.k}`;
+                a.score_coordinate_count = scoreEntries.length;
+                a.score_coordinate_available_count = scoreEntries.filter(
+                    entry => entry && entry.available === true
+                ).length;
+                a.score_derived_output_count = 4;
+                a.score_input_fingerprint = score.input_manifest
+                    && (
+                        score.input_manifest.score_input_fingerprint
+                        || score.input_manifest.input_fingerprint
+                    ) || null;
+                // Visual distance is descriptive. The next hook's outward
                 // requirement is controlled only by pre-render idea geometry
                 // and the verified score deficit.
                 const vp = score.emb_preview && score.emb_preview.visual;
@@ -24670,7 +24712,7 @@ async function grindProcess(rid, req0, ownership) {
             } else if (attemptVerified) {
                 note = `attempt ${a.k + 1} scored ${attemptTarget}${targetSuffix} (target ${threshold}${targetSuffix}) — best ${best()}${targetSuffix} · next seed distance ≥ ${explorationState.requiredSeedDistance.toFixed(3)} · next prior distance ≥ ${explorationState.requiredPriorDistance.toFixed(3)} · deficit ${explorationState.scoreDeficit.toFixed(1)}`;
             } else {
-                note = `attempt ${a.k + 1} could not be scored — the next concept still moves outward; seed distance ≥ ${explorationState.requiredSeedDistance.toFixed(3)}, prior distance ≥ ${explorationState.requiredPriorDistance.toFixed(3)}`;
+                note = `attempt ${a.k + 1} could not be scored — the next hook still moves outward while preserving the same idea; seed distance ≥ ${explorationState.requiredSeedDistance.toFixed(3)}, prior distance ≥ ${explorationState.requiredPriorDistance.toFixed(3)}`;
             }
             await write();
         }
