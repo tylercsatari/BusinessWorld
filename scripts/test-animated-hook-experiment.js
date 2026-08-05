@@ -158,10 +158,10 @@ assert.deepStrictEqual(
 );
 assert.strictEqual(
     contract.shouldExploreAfterMinimum(refinementExperiment),
-    false,
-    'one refinement batch should not yet trigger fresh exploration'
+    true,
+    'one refinement batch should trigger the first fresh exploration slot'
 );
-const explorationCadenceExperiment = contract.bindExperiment({
+const firstExplorationExperiment = contract.bindExperiment({
     ...refinementExperiment,
     requests: [
         ...refinementExperiment.requests,
@@ -169,27 +169,19 @@ const explorationCadenceExperiment = contract.bindExperiment({
             rid: contract.requestId('animated-contract-test', 14),
             count: 8,
             created_at_ms: 2500,
-            mode: 'threshold-refinement',
-            seed_premise: 'A second measurable physical test',
-            seed_frames: [
-                'Frame one',
-                'Frame two',
-                'Frame three',
-                'Frame four',
-                'Frame five',
-            ],
+            mode: 'random-exploration',
         },
     ],
 });
 assert.strictEqual(
-    contract.shouldExploreAfterMinimum(explorationCadenceExperiment),
+    contract.shouldExploreAfterMinimum(firstExplorationExperiment),
     true,
-    'two refinement batches should trigger one fresh exploration batch'
+    'the second post-baseline slot should also explore fresh premises'
 );
 const cadenceResetExperiment = contract.bindExperiment({
-    ...explorationCadenceExperiment,
+    ...firstExplorationExperiment,
     requests: [
-        ...explorationCadenceExperiment.requests,
+        ...firstExplorationExperiment.requests,
         {
             rid: contract.requestId('animated-contract-test', 15),
             count: 8,
@@ -201,7 +193,7 @@ const cadenceResetExperiment = contract.bindExperiment({
 assert.strictEqual(
     contract.shouldExploreAfterMinimum(cadenceResetExperiment),
     false,
-    'fresh exploration should reset the two-refinement cadence'
+    'two exploration slots should reset the cadence to refinement'
 );
 const missingRefinementSeed = contract.bindExperiment({
     ...experiment,
