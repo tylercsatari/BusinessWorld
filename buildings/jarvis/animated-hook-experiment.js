@@ -384,6 +384,7 @@ module.exports = {
     bindExperiment,
     validateExperiment,
     requestId,
+    normalizedPremise,
     refinementPriority,
     shouldExploreAfterMinimum,
     requestActivity,

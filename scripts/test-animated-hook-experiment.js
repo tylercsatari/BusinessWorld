@@ -34,6 +34,10 @@ assert.strictEqual(experiment.strict_image_model, true);
 assert.strictEqual(new Set(
     experiment.requests.map(request => request.rid)
 ).size, 13);
+assert.strictEqual(
+    contract.normalizedPremise('  A Hook—With Punctuation!  '),
+    'a hook with punctuation'
+);
 assert(
     contract.refinementPriority(79.8, 1)
         > contract.refinementPriority(76.4, 0),
@@ -275,7 +279,9 @@ for (const required of [
     'animatedHookExperiment.refinementPriority',
     'animatedHookExperiment.shouldExploreAfterMinimum',
     'animatedHookExperiment.requestActivity',
+    'animatedHookExperiment.normalizedPremise',
     'exploring fresh fine-tuned premises',
+    'exactly repeats a prior premise',
     'state.recoverable',
 ]) {
     assert(

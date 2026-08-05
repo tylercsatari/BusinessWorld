@@ -22374,6 +22374,11 @@ async function hookProcessRequest(
         let mem = [];
         try { mem = await genMemLoad(noveltyMemoryKey); } catch (e) {}
         memN = mem.length;
+        const seenPremises = new Set(
+            mem.map(item => animatedHookExperiment.normalizedPremise(
+                item && (item.pk || item.p)
+            )).filter(Boolean)
+        );
         const memVecs = mem.map(it => { try { return genVecDec(it.v); } catch (e) { return null; } }).filter(Boolean);
         const accVecs = [];                                   // this batch's accepted ideas
         const NOV_MIN = Number.isFinite(configuredNovelty)
@@ -22447,6 +22452,27 @@ async function hookProcessRequest(
                 if (!spec) throw new Error('model produced no usable idea');
             }
             catch (e) { err = 'idea: ' + e.message; if (attempts.length) warns.add(`stopped after ${attempts.length}/${count} ideas — ${err}`); break; }  // hard failure (credit / model down) → stop the batch
+            const premiseKey = animatedHookExperiment
+                .normalizedPremise(spec.premise);
+            if (
+                !reuseFineTunedSeedPlan
+                && (
+                    !premiseKey
+                    || seenPremises.has(premiseKey)
+                )
+            ) {
+                rejected++;
+                await stat({
+                    stage: 'reasoning',
+                    done: attempts.length,
+                    n: count,
+                    note: `idea ${attempts.length + 1}/${count} exactly repeats a prior premise — regenerating (${rejected} rejected so far)`,
+                });
+                continue;
+            }
+            if (!reuseFineTunedSeedPlan) {
+                seenPremises.add(premiseKey);
+            }
             if (
                 experimentId
                 && await animatedHookBatchExperimentStopped(
@@ -22475,7 +22501,14 @@ async function hookProcessRequest(
                 for (const av of accVecs) { const c = genCos(q, av); if (c > m) { m = c; mi = -2; } }
                 nov = (memVecs.length || accVecs.length) ? Math.round((1 - m) * 1000) / 1000 : 1;
                 near = mi >= 0 ? (mem[mi].p || '') : (mi === -2 ? '(another idea in this batch)' : '');
-                mem.push({ id: rid + '_t' + tries, t: Date.now(), p: String(spec.premise).slice(0, 140), v: genVecEnc(emb), s: 0 });
+                mem.push({
+                    id: rid + '_t' + tries,
+                    t: Date.now(),
+                    p: String(spec.premise).slice(0, 140),
+                    pk: premiseKey,
+                    v: genVecEnc(emb),
+                    s: 0,
+                });
                 const spareTries = (maxTries - tries) - (count - attempts.length - 1);
                 if (nov < NOV_MIN && spareTries > 0) {        // too close to something already generated → try again
                     rejected++;
@@ -22483,6 +22516,14 @@ async function hookProcessRequest(
                         note: `idea ${attempts.length + 1}/${count} came out too close to “${(near || 'a past idea').slice(0, 60)}” (dist ${nov}) — regenerating (${rejected} rejected so far)` });
                     continue;
                 }
+            } else if (!reuseFineTunedSeedPlan) {
+                mem.push({
+                    id: rid + '_t' + tries,
+                    t: Date.now(),
+                    p: String(spec.premise).slice(0, 140),
+                    pk: premiseKey,
+                    s: 1,
+                });
             }
             const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
                 frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise,
