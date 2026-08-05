@@ -108,7 +108,30 @@ includes(long, "await lqxJob('/api/longquant/thumbs/save', canonicalPayload)", '
 includes(server, "'thumb-save',\n                    saveRunner,\n                    'longform',\n                    quantRequestId(req),\n                    requestFingerprint", 'Long Quant save jobs must be exact-input idempotent');
 includes(shorts, "rtFetchJson('/api/raw/saved-hook/' + id", 'saved hook details must use retrying JSON transport');
 includes(shorts, "rtFetchJson('/api/raw/saved-hooks'", 'saved hook indexes must use retrying JSON transport');
-includes(shorts, 'currentScorerContract(true)', 'opening a saved hook must compare its persisted scorer revision with the live contract');
+const resolveSavedReadPath = shorts.slice(
+    shorts.indexOf('async function resolveSavedScoreQueueEntry('),
+    shorts.indexOf('function boundedSavedScoreQueueResolution(')
+);
+includes(
+    resolveSavedReadPath,
+    'scoreContractEnsure(false);',
+    'opening a persisted score may refresh revision metadata in the background'
+);
+excludes(
+    resolveSavedReadPath,
+    'await currentScorerContract(true)',
+    'a persisted score must not wait for a forced live-contract refresh'
+);
+includes(
+    shorts,
+    'SAVED_HOOK_DETAIL_TOTAL_TIMEOUT_MS',
+    'saved-hook detail loading must have a terminal deadline'
+);
+includes(
+    shorts,
+    'data-savedqueueretry',
+    'saved-hook detail failures must expose an explicit retry control'
+);
 includes(shorts, "'Historical display evidence: the score ledger was '", 'legacy saved hooks must be labeled as unbound display evidence');
 includes(shorts, "'This is a new transient score for an unscored '", 'an unscored saved idea may be evaluated only as an explicit transient result');
 const openSavedReadPath = shorts.slice(

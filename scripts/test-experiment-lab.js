@@ -869,6 +869,22 @@ async function main() {
             queuedSavedHookRow.historical_display,
             'second queue fixture must contain a valid historical display'
         );
+        const failedSavedHookId = 'hkfaileddisplay';
+        const failedSavedHookRecord = JSON.parse(
+            JSON.stringify(historicalSavedHookRecord)
+        );
+        failedSavedHookRecord.id = failedSavedHookId;
+        failedSavedHookRecord.title =
+            'Saved detail failure is visible';
+        failedSavedHookRecord.savedAt = Date.now() - 1500;
+        const failedSavedHookRow =
+            savedHookRuntimeIndex.legacyRow(
+                failedSavedHookRecord
+            );
+        assert(
+            failedSavedHookRow.historical_display,
+            'failed queue fixture must still have a valid index row'
+        );
         const canonicalChannelFreeSavedHook = (
             videoIndex,
             id,
@@ -1789,6 +1805,7 @@ async function main() {
                 hooks: [
                     historicalSavedHookRow,
                     queuedSavedHookRow,
+                    failedSavedHookRow,
                     channelFreeLow.row,
                     channelFreeHigh.row,
                 ],
@@ -2168,6 +2185,7 @@ const teamReplies=${JSON.stringify(teamReplies)};
 const teamAccountId=${JSON.stringify(teamAccountId)};
 const historicalSavedHookId=${JSON.stringify(historicalSavedHookId)};
 const queuedSavedHookId=${JSON.stringify(queuedSavedHookId)};
+const failedSavedHookId=${JSON.stringify(failedSavedHookId)};
 const historicalUpgradeScore=${JSON.stringify(historicalUpgradeScore)};
 window.__historicalTamperFixtures=${
     JSON.stringify(historicalTamperFixtures)
@@ -2396,6 +2414,16 @@ window.fetch=function(url,options){
                 headers:{'Content-Type':'application/json'}
             }
         ));
+    }
+    if(p==='/api/raw/saved-hook/'+failedSavedHookId){
+        return new Promise(resolve=>setTimeout(()=>resolve(
+            new Response(JSON.stringify({
+                error:'fixture saved-hook detail failure'
+            }),{
+                status:500,
+                headers:{'Content-Type':'application/json'}
+            })
+        ),250));
     }
     if(
         (p.includes('/api/raw/saved-channel/')&&p.includes('/montage/'))
@@ -3333,6 +3361,10 @@ window.fetch=function(url,options){
             !historicalSavedHookCardText.includes('No valid persisted'),
             'valid historical ledger was rendered as a missing score'
         );
+        const scorerContractFetchesBeforeSavedOpen =
+            await page.evaluate(() => (
+                window.__fetchCounts['/api/raw/scorer-contract'] || 0
+            ));
         const tamperAudits = await page.evaluate(() => (
             window.__historicalTamperFixtures.map(
                 fixture => (
@@ -3416,6 +3448,14 @@ window.fetch=function(url,options){
             firstId: historicalSavedHookId,
             secondId: queuedSavedHookId,
         });
+        assert.strictEqual(
+            await page.evaluate(() => (
+                window.__fetchCounts['/api/raw/scorer-contract'] || 0
+            )),
+            scorerContractFetchesBeforeSavedOpen,
+            'persisted scores must open from their stored ledger without '
+                + 'forcing a live scorer-contract refresh'
+        );
         const historicalQueueRow = page.locator(
             `[data-score-queue-id="self:${historicalSavedHookId}"]`
         );
@@ -3460,6 +3500,70 @@ window.fetch=function(url,options){
             });
             await page.setViewportSize(queueDesktopViewport);
         }
+        const failedSavedHookCard = page.locator(
+            `[data-savedopen="${failedSavedHookId}"]`
+        );
+        const followingSavedHookCard = page.locator(
+            `[data-savedopen="${channelFreeHighId}"]`
+        );
+        await failedSavedHookCard.waitFor();
+        await followingSavedHookCard.waitFor();
+        await failedSavedHookCard.click();
+        await followingSavedHookCard.click();
+        await page.waitForFunction(({ failedId, followingId }) => (
+            document.querySelector(
+                `[data-score-queue-id="self:${failedId}"]`
+            )?.getAttribute('data-score-queue-state') === 'error'
+            && document.querySelector(
+                `[data-score-queue-id="self:${followingId}"]`
+            )?.getAttribute('data-score-queue-state') === 'ready'
+        ), {
+            failedId: failedSavedHookId,
+            followingId: channelFreeHighId,
+        });
+        const failedQueueRow = page.locator(
+            `[data-score-queue-id="self:${failedSavedHookId}"]`
+        );
+        await failedQueueRow.locator('[data-rawupmark]').click();
+        await page.locator(
+            '[data-saved-detail-state="error"]'
+        ).waitFor({ state: 'attached' });
+        const visibleQueueError = page.locator(
+            '[data-saved-detail-error][role="alert"]'
+        );
+        assert(
+            (await visibleQueueError.innerText()).includes(
+                'fixture saved-hook detail failure'
+            ),
+            'saved-hook detail failures must expose the server error'
+        );
+        const retrySavedHook = page.locator(
+            '[data-saved-detail-state="error"] [data-savedqueueretry]'
+        );
+        await retrySavedHook.waitFor();
+        const failedFetchesBeforeRetry = await page.evaluate(id => (
+            window.__fetchCounts['/api/raw/saved-hook/' + id] || 0
+        ), failedSavedHookId);
+        await retrySavedHook.click();
+        await page.waitForFunction(({ id, count }) => (
+            (window.__fetchCounts['/api/raw/saved-hook/' + id] || 0)
+                > count
+        ), {
+            id: failedSavedHookId,
+            count: failedFetchesBeforeRetry,
+        });
+        await page.waitForFunction(id => (
+            document.querySelector(
+                `[data-score-queue-id="self:${id}"]`
+            )?.getAttribute('data-score-queue-state') === 'error'
+        ), failedSavedHookId);
+        assert.strictEqual(
+            await page.locator(
+                `[data-score-queue-id="self:${channelFreeHighId}"]`
+            ).getAttribute('data-score-queue-state'),
+            'ready',
+            'one failed saved hook must not block the following queued hook'
+        );
         await historicalQueueRow.locator('[data-rawupmark]').click();
         await page.locator(
             '[data-saved-detail-state="historical-read-only"]'

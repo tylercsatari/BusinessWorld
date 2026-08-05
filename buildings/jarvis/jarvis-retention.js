@@ -34,6 +34,11 @@ const JarvisRetention = (function () {
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     let SAVED_OPEN_DRAIN = null;
+    const SAVED_HOOK_DETAIL_TIMEOUT_MS = 15000;
+    const SAVED_HOOK_DETAIL_ATTEMPTS = 2;
+    const SAVED_HOOK_DETAIL_TOTAL_TIMEOUT_MS = 40000;
+    const SAVED_HOOK_MEDIA_TIMEOUT_MS = 20000;
+    const SAVED_HOOK_SCORER_WAIT_TIMEOUT_MS = 5 * 60e3;
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, grindAnimation: false, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
@@ -6994,7 +6999,10 @@ const JarvisRetention = (function () {
                     : state === 'waiting'
                         ? 'The saved media is ready and will score when the active scorer is free.'
                         : 'Loading the saved input and validating its persisted score ledger.');
-        return cardc(`<div data-score-queue-placeholder="${esc(state)}" style="display:flex;gap:11px;align-items:flex-start"><span style="width:10px;height:10px;margin-top:3px;border-radius:50%;background:${color};flex:0 0 auto"></span><div><div style="font-size:12px;font-weight:850;color:${C.text}">${esc(scoreQueueStateLabel(upload))} · ${esc(upload.title || 'Saved opening')}</div><div style="font-size:9px;color:${state === 'error' ? C.red : C.dim};line-height:1.5;margin-top:3px">${esc(message)}</div></div></div>`, 12);
+        const retry = state === 'error' && upload._scoreQueueId
+            ? `<button type="button" data-savedqueueretry="${esc(upload._scoreQueueId)}" style="margin-top:7px;border:1px solid ${C.red};background:${C.red}10;color:${C.red};border-radius:6px;padding:5px 10px;font-size:9px;font-weight:900;cursor:pointer">Retry opening</button>`
+            : '';
+        return cardc(`<div data-score-queue-placeholder="${esc(state)}" style="display:flex;gap:11px;align-items:flex-start"><span style="width:10px;height:10px;margin-top:3px;border-radius:50%;background:${color};flex:0 0 auto"></span><div><div style="font-size:12px;font-weight:850;color:${C.text}">${esc(scoreQueueStateLabel(upload))} · ${esc(upload.title || 'Saved opening')}</div><div style="font-size:9px;color:${state === 'error' ? C.red : C.dim};line-height:1.5;margin-top:3px">${esc(message)}</div>${retry}</div></div>`, 12);
     }
     function publishExperimentLabScoreReady(upload) {
         if (
@@ -8062,6 +8070,21 @@ const JarvisRetention = (function () {
             );
             return;
         }
+        const savedQueueRetry = e.target.closest(
+            '[data-savedqueueretry]'
+        );
+        if (savedQueueRetry) {
+            const key = savedQueueRetry.getAttribute(
+                'data-savedqueueretry'
+            );
+            const item = (st.rawUploads || []).find(upload => (
+                upload && upload._scoreQueueId === key
+            ));
+            if (item && item.savedId) {
+                openSaved(item.savedId, item._scoreQueueOptions);
+            }
+            return;
+        }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) {
             closeSavedDetail();
@@ -8413,10 +8436,43 @@ const JarvisRetention = (function () {
         return c.toDataURL('image/jpeg', 0.9);
     }
     // Fetch an image URL → data-URL (so a generated R2 frame can be composed + embedded).
-    async function urlToDataUrl(u) {
-        const r = await rtFetch(u); if (!r.ok) throw new Error('frame ' + r.status);
-        const b = await r.blob();
-        return await new Promise((res, rej) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); });
+    async function urlToDataUrl(u, timeoutMs) {
+        const boundedTimeout = Math.max(
+            5000,
+            Number(timeoutMs) || 30000
+        );
+        let timer = null;
+        const options = {};
+        if (window.AbortController) {
+            const controller = new window.AbortController();
+            options.signal = controller.signal;
+            timer = window.setTimeout(
+                () => controller.abort(),
+                boundedTimeout
+            );
+        }
+        try {
+            const r = await rtFetch(u, options);
+            if (!r.ok) throw new Error('frame ' + r.status);
+            const b = await r.blob();
+            return await new Promise((res, rej) => {
+                const fr = new window.FileReader();
+                fr.onload = () => res(fr.result);
+                fr.onerror = rej;
+                fr.readAsDataURL(b);
+            });
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw new Error(
+                    `stored image timed out after ${Math.round(
+                        boundedTimeout / 1000
+                    )} seconds`
+                );
+            }
+            throw error;
+        } finally {
+            if (timer) window.clearTimeout(timer);
+        }
     }
     async function montageFromFrameIds(frameIds) {
         const ids = (frameIds || []).filter(Boolean).slice(0, 5);
@@ -8898,7 +8954,9 @@ const JarvisRetention = (function () {
             upload => upload && upload._scoreQueueId === key
         );
         if (index < 0) return null;
-        Object.assign(queue[index], changes || {});
+        Object.assign(queue[index], changes || {}, {
+            _scoreQueueUpdatedAt: Date.now(),
+        });
         syncSavedScoreQueueState();
         if (root && root.isConnected) rtgUpdateExp();
         return queue[index];
@@ -8932,11 +8990,24 @@ const JarvisRetention = (function () {
         });
     }
     async function waitForSavedScorerSlot(entry, requestGeneration) {
+        const startedAt = Date.now();
         while (rawScoreBusy()) {
             if (
                 requestGeneration !== mountGeneration
                 || !(st.rawUploads || []).includes(entry)
             ) return false;
+            if (
+                Date.now() - startedAt
+                    > SAVED_HOOK_SCORER_WAIT_TIMEOUT_MS
+            ) {
+                throw new Error(
+                    'The scorer stayed occupied for five minutes. Retry '
+                    + 'this saved opening after the active score finishes.'
+                );
+            }
+            if (entry._scoreQueueStatus !== 'waiting') {
+                entry._scoreQueueUpdatedAt = Date.now();
+            }
             entry._scoreQueueStatus = 'waiting';
             entry._scoreQueueDetail =
                 'Waiting for the active scorer before processing this unscored saved idea.';
@@ -8960,10 +9031,12 @@ const JarvisRetention = (function () {
         ) {
             const rec = await rtFetchJson('/api/raw/saved-hook/' + id, {
                 cache: 'no-store',
+                _timeoutMs: SAVED_HOOK_DETAIL_TIMEOUT_MS,
+                _retryDelays: [1200],
                 ...(options._labAccount
                     ? { _labAccount: options._labAccount }
                     : {}),
-            }, 4, requestGeneration);
+            }, SAVED_HOOK_DETAIL_ATTEMPTS);
             stored = SAVEDDETAIL[detailCacheKey] = {
                 rec,
                 montage: null,
@@ -8975,6 +9048,12 @@ const JarvisRetention = (function () {
                 delete SAVEDDETAIL[cachedIds.shift()];
             }
         }
+        if (
+            requestGeneration !== mountGeneration
+            || !(st.rawUploads || []).includes(entry)
+            || entry._scoreQueueCancelled === true
+            || scoreQueueState(entry) === 'error'
+        ) return null;
         const rec = stored.rec || {};
         if (
             !rec.historical_display
@@ -8983,7 +9062,12 @@ const JarvisRetention = (function () {
         ) rec.historical_display = indexRow.historical_display;
         const persistedLedgerState = shortsLedgerState(rec);
         if (persistedLedgerState.valid) {
-            const live = await currentScorerContract(true);
+            const live = SCORECONTRACT
+                && !SCORECONTRACT.error
+                && SCORECONTRACT.live || null;
+            // Revision metadata improves the label but is not score evidence.
+            // Never hold a persisted ledger hostage while this refreshes.
+            scoreContractEnsure(false);
             const current = savedHookScoreIsCurrent(
                 rec,
                 live,
@@ -9072,7 +9156,8 @@ const JarvisRetention = (function () {
         if (!montage && rec.hasMontage) {
             try {
                 montage = await urlToDataUrl(
-                    '/api/raw/saved-montage/' + id
+                    '/api/raw/saved-montage/' + id,
+                    SAVED_HOOK_MEDIA_TIMEOUT_MS
                 );
             } catch (error) {}
         }
@@ -9090,10 +9175,17 @@ const JarvisRetention = (function () {
         }
         stored.montage = montage;
         stored.reconstructed = reconstructed;
+        if (
+            requestGeneration !== mountGeneration
+            || !(st.rawUploads || []).includes(entry)
+            || entry._scoreQueueCancelled === true
+            || scoreQueueState(entry) === 'error'
+        ) return null;
         if (!await waitForSavedScorerSlot(entry, requestGeneration)) {
             return null;
         }
         entry._scoreQueueStatus = 'scoring';
+        entry._scoreQueueUpdatedAt = Date.now();
         entry._scoreQueueDetail =
             'Embedding the saved montage and scoring every canonical coordinate.';
         st.rawUploading = true;
@@ -9142,6 +9234,39 @@ const JarvisRetention = (function () {
         );
         return result;
     }
+    function boundedSavedScoreQueueResolution(
+        entry,
+        requestGeneration
+    ) {
+        let timer = null;
+        const deadline = new Promise((resolve, reject) => {
+            timer = window.setTimeout(() => {
+                if (
+                    requestGeneration !== mountGeneration
+                    || !(st.rawUploads || []).includes(entry)
+                    || entry._scoreQueueCancelled === true
+                    || scoreQueueState(entry) === 'error'
+                ) {
+                    resolve(null);
+                    return;
+                }
+                if (
+                    scoreQueueState(entry) === 'loading'
+                ) {
+                    reject(new Error(
+                        'Saved-hook loading timed out. The server did not '
+                        + 'return a validated record in time.'
+                    ));
+                }
+            }, SAVED_HOOK_DETAIL_TOTAL_TIMEOUT_MS);
+        });
+        return Promise.race([
+            resolveSavedScoreQueueEntry(entry, requestGeneration),
+            deadline,
+        ]).finally(() => {
+            if (timer) window.clearTimeout(timer);
+        });
+    }
     function drainSavedScoreQueue() {
         if (SAVED_OPEN_DRAIN) return SAVED_OPEN_DRAIN;
         const requestGeneration = mountGeneration;
@@ -9154,12 +9279,14 @@ const JarvisRetention = (function () {
                 ));
                 if (!entry) break;
                 entry._scoreQueueStatus = 'loading';
+                entry._scoreQueueStartedAt = Date.now();
+                entry._scoreQueueUpdatedAt = Date.now();
                 entry._scoreQueueDetail =
-                    'Loading the saved input and validating its persisted ledger.';
+                    'Loading the saved input and validating its persisted ledger. This step is bounded and will show an error if the server does not answer.';
                 syncSavedScoreQueueState();
                 rtgUpdateExp();
                 try {
-                    const result = await resolveSavedScoreQueueEntry(
+                    const result = await boundedSavedScoreQueueResolution(
                         entry,
                         requestGeneration
                     );
@@ -9167,12 +9294,31 @@ const JarvisRetention = (function () {
                         upload => upload
                             && upload._scoreQueueId === entry._scoreQueueId
                     );
-                    if (index < 0 || !result) continue;
+                    if (index < 0) continue;
+                    if (!result) {
+                        if (scoreQueueState(entry) === 'error') {
+                            continue;
+                        }
+                        updateSavedScoreQueueEntry(
+                            entry._scoreQueueId,
+                            {
+                                _scoreQueueStatus: 'error',
+                                _scoreQueueFailedAt: Date.now(),
+                                _scoreQueueError:
+                                    'The saved-hook loader ended without returning a validated score.',
+                                _scoreQueueDetail:
+                                    'Nothing was silently recalculated. Retry opening this saved hook.',
+                            }
+                        );
+                        continue;
+                    }
                     const completed = {
                         ...result,
                         _scoreQueueId: entry._scoreQueueId,
                         _scoreQueueStatus: 'ready',
                         _scoreQueueCreatedAt: entry._scoreQueueCreatedAt,
+                        _scoreQueueStartedAt: entry._scoreQueueStartedAt,
+                        _scoreQueueUpdatedAt: Date.now(),
                         _scoreQueueCompletedAt: Date.now(),
                         _scoreQueueOptions: entry._scoreQueueOptions,
                     };
@@ -9185,6 +9331,7 @@ const JarvisRetention = (function () {
                 } catch (error) {
                     updateSavedScoreQueueEntry(entry._scoreQueueId, {
                         _scoreQueueStatus: 'error',
+                        _scoreQueueFailedAt: Date.now(),
                         _scoreQueueError: fetchFail(error),
                         _scoreQueueDetail: fetchFail(error),
                     });
@@ -9192,7 +9339,25 @@ const JarvisRetention = (function () {
                 syncSavedScoreQueueState();
                 rtgUpdateExp();
             }
-        })().finally(() => {
+        })().catch(error => {
+            const message = fetchFail(error);
+            (st.rawUploads || []).filter(upload => (
+                upload
+                && upload.source === 'saved-queue'
+                && ['loading', 'waiting', 'scoring'].includes(
+                    scoreQueueState(upload)
+                )
+            )).forEach(upload => {
+                Object.assign(upload, {
+                    _scoreQueueStatus: 'error',
+                    _scoreQueueFailedAt: Date.now(),
+                    _scoreQueueUpdatedAt: Date.now(),
+                    _scoreQueueError: message,
+                    _scoreQueueDetail:
+                        'The queue stopped safely and exposed this error.',
+                });
+            });
+        }).finally(() => {
             SAVED_OPEN_DRAIN = null;
             syncSavedScoreQueueState();
             if (root && root.isConnected) rtgUpdateExp();
@@ -9231,6 +9396,7 @@ const JarvisRetention = (function () {
                 _scoreQueueStatus: 'queued',
                 _scoreQueueDetail: 'Waiting to load this saved opening.',
                 _scoreQueueCreatedAt: Date.now(),
+                _scoreQueueUpdatedAt: Date.now(),
                 _scoreQueueOptions: safeOptions,
             });
             index = uploads.length - 1;
@@ -9239,6 +9405,9 @@ const JarvisRetention = (function () {
                 _scoreQueueStatus: 'queued',
                 _scoreQueueError: null,
                 _scoreQueueDetail: 'Retrying this saved opening.',
+                _scoreQueueUpdatedAt: Date.now(),
+                _scoreQueueRetryCount:
+                    Number(uploads[index]._scoreQueueRetryCount || 0) + 1,
             });
         }
         st.rawUpSel = index;
@@ -9303,7 +9472,11 @@ const JarvisRetention = (function () {
                     ? 'Exact persisted score loaded. Every scalar above comes from this card’s canonical ledger.'
                     : 'No canonical score is selected for this saved hook.';
         const queueError = queued && queued._scoreQueueError;
-        return `<div data-saved-detail-state="${detailState}" style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${esc(msg)}</span><span data-savedclose title="Collapse this analysis" style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>${queueError ? `<div data-saved-detail-error style="font-size:9px;color:${C.red};margin:-5px 0 10px;line-height:1.45">${esc(queueError)}</div>` : ''}`;
+        const retry = detailState === 'error'
+            && queued && queued._scoreQueueId
+            ? `<button type="button" data-savedqueueretry="${esc(queued._scoreQueueId)}" style="border:1px solid ${C.red};background:${C.red}10;color:${C.red};border-radius:6px;padding:5px 10px;font-size:9px;font-weight:900;cursor:pointer;white-space:nowrap">Retry opening</button>`
+            : '';
+        return `<div data-saved-detail-state="${detailState}" style="background:${detailState === 'error' ? C.red : C.accent}14;border:1px solid ${detailState === 'error' ? C.red : C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${detailState === 'error' ? C.red : C.accent};display:flex;justify-content:space-between;align-items:center;gap:10px"><span>${esc(msg)}</span><span style="display:flex;gap:7px;align-items:center">${retry}<span data-savedclose title="Collapse this analysis" style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></span></div>${queueError ? `<div data-saved-detail-error role="alert" style="font-size:9px;color:${C.red};margin:-5px 0 10px;line-height:1.45">${esc(queueError)}</div>` : ''}`;
     }
     function closeSavedDetail() {
         st.rawUpSel = null;
