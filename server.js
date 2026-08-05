@@ -22236,6 +22236,17 @@ async function hookProcessRequest(
         options.imageModel || ''
     ).trim() || null;
     const strictImageModel = options.strictImageModel === true;
+    const explorationTerritories = Array.isArray(
+        options.explorationTerritories
+    )
+        ? options.explorationTerritories
+            .map(value => String(value || '').trim())
+            .filter(Boolean)
+        : [];
+    const configuredNovelty = Number(options.minimumNovelty);
+    const experimentId = String(options.experimentId || '')
+        .replace(/[^a-z0-9_-]/gi, '')
+        .slice(0, 96) || null;
     const autoSaveContext = await hookBatchOwnerSaveContext(
         options.autoSave
     );
@@ -22272,6 +22283,13 @@ async function hookProcessRequest(
                     autoSaveContext
                     && autoSaveContext.experimentId
                     || null,
+                exploration_strategy: explorationTerritories.length
+                    ? 'deterministic-subject-mechanism-visual-territories-v1'
+                    : null,
+                minimum_text_embedding_distance:
+                    Number.isFinite(configuredNovelty)
+                        ? configuredNovelty
+                        : null,
                 hosted: true,
                 queue_lease_fence: queueLeaseFence,
             })),
@@ -22289,21 +22307,52 @@ async function hookProcessRequest(
         memN = mem.length;
         const memVecs = mem.map(it => { try { return genVecDec(it.v); } catch (e) { return null; } }).filter(Boolean);
         const accVecs = [];                                   // this batch's accepted ideas
-        const NOV_MIN = (premise && !invent) ? NOV_MIN_PREMISE : NOV_MIN_INVENT;
-        const maxTries = count + 3;                           // at most 3 regenerations per batch
+        const NOV_MIN = Number.isFinite(configuredNovelty)
+            ? Math.max(0, Math.min(1, configuredNovelty))
+            : (premise && !invent) ? NOV_MIN_PREMISE : NOV_MIN_INVENT;
+        const maxTries = explorationTerritories.length
+            ? count * 3
+            : count + 3;
         let tries = 0, rejected = 0;
         await stat({ stage: 'reasoning', done: 0, n: count, note: 'inventing idea 1/' + count + ' — the first one also wakes the GPU, so it takes the longest…' });
         while (attempts.length < count && tries < maxTries) {
+            if (
+                experimentId
+                && await animatedHookBatchExperimentStopped(
+                    experimentId
+                )
+            ) {
+                err = 'experiment stopped';
+                warns.add(
+                    `stopped after ${attempts.length}/${count} ideas`
+                );
+                break;
+            }
             tries++;
             let spec;
+            const explorationTerritory =
+                explorationTerritories[attempts.length]
+                || premise;
             const beat = (rstat, sec) => {   // live heartbeat while the model call runs — stuck and working look different
                 const t = sec >= 60 ? `${Math.floor(sec / 60)}m ${sec % 60}s` : `${sec}s`;
                 return stat({ stage: 'reasoning', done: attempts.length, n: count, ts: Date.now(),
                     note: `idea ${attempts.length + 1}/${count}: ${rstat === 'starting' ? `GPU booting (${t} — a cold start loads the 61GB model, ~2–6 min)` : `the model is thinking (${t})`}` });
             };
             const onRetry = (msg, t) => stat({ stage: 'reasoning', done: attempts.length, n: count, note: `idea ${attempts.length + 1}/${count}: malformed sample — retrying (${t}/3)` });
-            try { spec = await hookModelGenerateRetry(premise, invent, beat, onRetry); }
+            try { spec = await hookModelGenerateRetry(explorationTerritory, invent, beat, onRetry); }
             catch (e) { err = 'idea: ' + e.message; if (attempts.length) warns.add(`stopped after ${attempts.length}/${count} ideas — ${err}`); break; }  // hard failure (credit / model down) → stop the batch
+            if (
+                experimentId
+                && await animatedHookBatchExperimentStopped(
+                    experimentId
+                )
+            ) {
+                err = 'experiment stopped';
+                warns.add(
+                    `stopped after ${attempts.length}/${count} ideas`
+                );
+                break;
+            }
             // novelty vs the whole memory AND this batch's accepted ideas (embed failure → accept)
             let nov = null, near = '';
             const emb = await geminiTextEmbed(spec.premise + '\n' + spec.frames.join('\n'));
@@ -22328,7 +22377,11 @@ async function hookProcessRequest(
                 frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise,
                 cohesion_mode: spec.cohesion_mode || '', novelty: nov, nearest: near,
                 animation: !!animation,
-                render_mode: 'single-panel' };
+                render_mode: 'single-panel',
+                exploration_territory:
+                    explorationTerritory && explorationTerritory !== premise
+                        ? explorationTerritory
+                        : null };
             attempts.push(a);
             if (q) { accVecs.push(q); mem[mem.length - 1].s = 1; }
             await writeGroup(false);                          // ← the card appears NOW, frames fill in live
@@ -22336,6 +22389,14 @@ async function hookProcessRequest(
                 note: attempts.length < count ? `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its coherent panel renders…` : 'all ideas in — rendering the last coherent panels…' });
             renders.push((async () => {                       // render THIS hook while the next idea generates
                 try {
+                    if (
+                        experimentId
+                        && await animatedHookBatchExperimentStopped(
+                            experimentId
+                        )
+                    ) {
+                        throw new Error('experiment stopped before render');
+                    }
                     const panel = await renderHookPanelRobust({
                         brief: spec.premise,
                         hookText: spec.premise,
@@ -22856,6 +22917,11 @@ async function hookDemoQueue() {
                                 === 'animated-hook-batch-request-v1'
                                 ? req.auto_save
                                 : null,
+                        explorationTerritories:
+                            req.exploration_territories,
+                        minimumNovelty:
+                            req.minimum_text_embedding_distance,
+                        experimentId: req.experiment_id,
                     }
                 );
             } catch (error) {
@@ -22953,6 +23019,12 @@ async function animatedHookRequestState(request) {
 }
 
 function animatedHookGenerationRequest(experiment, request) {
+    const requestIndex = Math.max(
+        0,
+        experiment.requests.findIndex(candidate => (
+            candidate.rid === request.rid
+        ))
+    );
     return {
         schema: 'animated-hook-batch-request-v1',
         schema_version: 1,
@@ -22964,6 +23036,13 @@ function animatedHookGenerationRequest(experiment, request) {
         image_model: experiment.image_model,
         strict_image_model: true,
         creator_profile: null,
+        exploration_territories:
+            animatedHookExperiment.explorationTerritories(
+                experiment.id,
+                requestIndex * experiment.batch_size,
+                request.count
+            ),
+        minimum_text_embedding_distance: 0.30,
         auto_save: {
             owner: true,
             folder_name: experiment.folder_name,
@@ -22972,6 +23051,18 @@ function animatedHookGenerationRequest(experiment, request) {
         experiment_id: experiment.id,
         ts: request.created_at_ms,
     };
+}
+
+async function animatedHookBatchExperimentStopped(experimentId) {
+    if (!experimentId) return false;
+    try {
+        const experiment = await readAnimatedHookExperiment(
+            `${ANIMATED_HOOK_EXPERIMENT_ROOT}${experimentId}.json`
+        );
+        return !experiment || experiment.status !== 'running';
+    } catch (error) {
+        return true;
+    }
 }
 
 async function ensureAnimatedHookRequest(experiment, request) {
