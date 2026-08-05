@@ -5693,6 +5693,15 @@ async function persistCanonicalSavedHook({
     requestId = null,
 }) {
     const input = body && typeof body === 'object' ? body : {};
+    const durationInput = input.dur_s != null
+        ? input.dur_s
+        : input.input_manifest
+        && input.input_manifest.duration_s;
+    const durationSeconds = (
+        durationInput == null
+        || durationInput === ''
+        || !Number.isFinite(Number(durationInput))
+    ) ? null : Number(durationInput);
     if (
         scoreDomain === 'shorts'
         && input.kind === 'scored'
@@ -5730,18 +5739,7 @@ async function persistCanonicalSavedHook({
         text: String(input.text || '').slice(0, 2000),
         idea: String(input.idea || '').slice(0, 4000),
         score_text: String(input.score_text || '').slice(0, 4000),
-        dur_s: Number.isFinite(Number(
-            input.dur_s != null
-                ? input.dur_s
-                : input.input_manifest
-                && input.input_manifest.duration_s
-        ))
-            ? Number(
-                input.dur_s != null
-                    ? input.dur_s
-                    : input.input_manifest.duration_s
-            )
-            : null,
+        dur_s: durationSeconds,
         frames: Array.isArray(input.frames)
             ? input.frames.slice(0, 5).map(
                 frame => String(frame).slice(0, 600)
