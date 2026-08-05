@@ -35,6 +35,12 @@ function normalizedExperiment(input) {
             rid: String(request && request.rid || ''),
             count: Number.parseInt(request && request.count, 10),
             created_at_ms: Number(request && request.created_at_ms) || 0,
+            mode: request && request.mode === 'threshold-refinement'
+                ? 'threshold-refinement'
+                : 'random-exploration',
+            seed_premise: String(
+                request && request.seed_premise || ''
+            ).trim().replace(/\s+/g, ' ').slice(0, 1000) || null,
         }))
         : [];
     return {
@@ -121,6 +127,22 @@ function validateExperiment(experiment) {
                 || request.count < 1
                 || request.count > 8
             ) errors.push('animated hook experiment request count is invalid');
+            if (
+                request.mode === 'threshold-refinement'
+                && !request.seed_premise
+            ) {
+                errors.push(
+                    'animated hook refinement request seed is missing'
+                );
+            }
+            if (
+                request.mode === 'random-exploration'
+                && request.seed_premise
+            ) {
+                errors.push(
+                    'animated hook exploration request has a refinement seed'
+                );
+            }
             if (requestIds.has(request.rid)) {
                 errors.push('animated hook experiment request ids are duplicated');
             }
@@ -184,7 +206,7 @@ function verifiedAttempt(attempt, experiment) {
     );
 }
 
-function summarize(experiment, groups) {
+function rankedVerifiedAttempts(experiment, groups) {
     const attempts = [];
     for (const group of groups || []) {
         for (const attempt of (
@@ -194,10 +216,8 @@ function summarize(experiment, groups) {
         )) attempts.push(attempt);
     }
     const unique = new Map();
-    let failed = 0;
     for (const attempt of attempts) {
         if (!verifiedAttempt(attempt, experiment)) {
-            if (attempt && attempt.status === 'done') failed += 1;
             continue;
         }
         const key = normalizedPremise(attempt.premise);
@@ -208,7 +228,33 @@ function summarize(experiment, groups) {
                 > Number(existing.channel_free_concat_keep_percent)
         ) unique.set(key, attempt);
     }
-    const verified = [...unique.values()];
+    return [...unique.values()].sort((left, right) => (
+        Number(right.channel_free_concat_keep_percent)
+        - Number(left.channel_free_concat_keep_percent)
+    ));
+}
+
+function summarize(experiment, groups) {
+    const attempts = [];
+    for (const group of groups || []) {
+        for (const attempt of (
+            Array.isArray(group && group.attempts)
+                ? group.attempts
+                : []
+        )) attempts.push(attempt);
+    }
+    const verified = rankedVerifiedAttempts(experiment, groups);
+    const verifiedPremises = new Set(
+        verified.map(attempt => normalizedPremise(attempt.premise))
+    );
+    let failed = 0;
+    for (const attempt of attempts) {
+        if (
+            attempt
+            && attempt.status === 'done'
+            && !verifiedAttempt(attempt, experiment)
+        ) failed += 1;
+    }
     const scores = verified.map(attempt => Number(
         attempt.channel_free_concat_keep_percent
     ));
@@ -224,6 +270,7 @@ function summarize(experiment, groups) {
             )
         )).length,
         failed_count: failed,
+        unique_premise_count: verifiedPremises.size,
         highest_score: scores.length
             ? Math.max(...scores)
             : null,
@@ -238,6 +285,7 @@ module.exports = {
     bindExperiment,
     validateExperiment,
     requestId,
+    rankedVerifiedAttempts,
     verifiedAttempt,
     summarize,
 };

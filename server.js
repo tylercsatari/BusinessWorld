@@ -23080,18 +23080,21 @@ async function animatedHookRequestState(request) {
 }
 
 function animatedHookGenerationRequest(experiment, request) {
+    const refinement =
+        request.mode === 'threshold-refinement'
+        && request.seed_premise;
     return {
         schema: 'animated-hook-batch-request-v1',
         schema_version: 1,
-        premise: '',
+        premise: refinement ? request.seed_premise : '',
         count: request.count,
-        invent: true,
+        invent: !refinement,
         animation: true,
         render_mode: 'single-panel',
         image_model: experiment.image_model,
         strict_image_model: true,
         creator_profile: null,
-        minimum_text_embedding_distance: 0.30,
+        minimum_text_embedding_distance: refinement ? 0.10 : 0.30,
         batch_idea_generation: true,
         render_concurrency: 2,
         auto_save: {
@@ -23178,6 +23181,11 @@ async function animatedHookExperimentTick() {
                 experiment,
                 states.map(state => state.group).filter(Boolean)
             );
+            const rankedAttempts =
+                animatedHookExperiment.rankedVerifiedAttempts(
+                    experiment,
+                    states.map(state => state.group).filter(Boolean)
+                );
             experiment.stats = stats;
             const goalMet = (
                 stats.verified_unique_attempts
@@ -23207,6 +23215,61 @@ async function animatedHookExperimentTick() {
                 const requestCount = missing > 0
                     ? Math.ceil(missing / experiment.batch_size)
                     : 1;
+                let refinementSeed = null;
+                if (missing === 0) {
+                    const refinementRounds = new Map();
+                    for (const request of experiment.requests) {
+                        if (
+                            request.mode !== 'threshold-refinement'
+                            || !request.seed_premise
+                        ) continue;
+                        const key = String(request.seed_premise)
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, ' ')
+                            .trim();
+                        refinementRounds.set(
+                            key,
+                            (refinementRounds.get(key) || 0) + 1
+                        );
+                    }
+                    const candidates = rankedAttempts
+                        .filter(attempt => (
+                            Number(
+                                attempt.channel_free_concat_keep_percent
+                            ) < experiment.threshold_value_0_100
+                        ))
+                        .map(attempt => ({
+                            attempt,
+                            key: String(attempt.premise || '')
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]+/g, ' ')
+                                .trim(),
+                        }))
+                        .sort((left, right) => (
+                            (refinementRounds.get(left.key) || 0)
+                            - (refinementRounds.get(right.key) || 0)
+                            || Number(
+                                right.attempt
+                                    .channel_free_concat_keep_percent
+                            ) - Number(
+                                left.attempt
+                                    .channel_free_concat_keep_percent
+                            )
+                        ));
+                    refinementSeed = candidates[0]
+                        && candidates[0].attempt.premise
+                        || null;
+                    if (!refinementSeed) {
+                        experiment.status = 'error';
+                        experiment.error =
+                            'no verified sub-threshold premise is available for refinement';
+                        await writeAnimatedHookExperiment(
+                            key,
+                            experiment
+                        );
+                        continue;
+                    }
+                }
                 const newRequests = [];
                 for (let index = 0; index < requestCount; index++) {
                     const requestIndex =
@@ -23218,6 +23281,10 @@ async function animatedHookExperimentTick() {
                         ),
                         count: experiment.batch_size,
                         created_at_ms: Date.now() + index,
+                        mode: refinementSeed
+                            ? 'threshold-refinement'
+                            : 'random-exploration',
+                        seed_premise: refinementSeed,
                     });
                 }
                 experiment.requests.push(...newRequests);
@@ -23238,6 +23305,13 @@ async function animatedHookExperimentTick() {
                     + `${experiment.minimum_verified_attempts} verified, `
                     + `${stats.winner_count}/`
                     + `${experiment.winner_target} winners`
+                    + (
+                        refinementSeed
+                            ? `; refining “${String(
+                                refinementSeed
+                            ).slice(0, 80)}”`
+                            : ''
+                    )
                 );
             } else {
                 await writeAnimatedHookExperiment(key, experiment);

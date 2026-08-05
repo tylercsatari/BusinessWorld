@@ -21,6 +21,7 @@ const experiment = contract.bindExperiment({
         rid: contract.requestId('animated-contract-test', index),
         count: 8,
         created_at_ms: 1000 + index,
+        mode: 'random-exploration',
     })),
     created_at_ms: 1000,
     updated_at_ms: 1000,
@@ -62,6 +63,42 @@ assert.strictEqual(stats.verified_unique_attempts, 104);
 assert.strictEqual(stats.winner_count, 12);
 assert.strictEqual(stats.saved_count, 104);
 assert.strictEqual(stats.highest_score, 83.1);
+assert.strictEqual(stats.unique_premise_count, 104);
+assert.strictEqual(
+    contract.rankedVerifiedAttempts(
+        experiment,
+        [{ attempts }]
+    )[0].channel_free_concat_keep_percent,
+    83.1
+);
+
+const refinementExperiment = contract.bindExperiment({
+    ...experiment,
+    requests: [
+        ...experiment.requests,
+        {
+            rid: contract.requestId('animated-contract-test', 13),
+            count: 8,
+            created_at_ms: 2000,
+            mode: 'threshold-refinement',
+            seed_premise: 'A measurable physical test',
+        },
+    ],
+});
+assert(contract.validateExperiment(refinementExperiment).valid);
+const missingRefinementSeed = contract.bindExperiment({
+    ...experiment,
+    requests: [{
+        rid: contract.requestId('animated-contract-test', 14),
+        count: 8,
+        created_at_ms: 3000,
+        mode: 'threshold-refinement',
+    }],
+});
+assert.strictEqual(
+    contract.validateExperiment(missingRefinementSeed).valid,
+    false
+);
 
 const duplicateAndInvalid = contract.summarize(experiment, [{
     attempts: [
@@ -94,11 +131,14 @@ for (const required of [
     'Animated Hook Grind',
     'channel_free_concat_keep_percent',
     'animatedHookExperimentTick',
-    'minimum_text_embedding_distance: 0.30',
+    'minimum_text_embedding_distance: refinement ? 0.10 : 0.30',
     'batch_idea_generation: true',
     'render_concurrency: 2',
     'hookModelGenerateBatchRetry',
     'animatedHookBatchExperimentStopped',
+    "request.mode === 'threshold-refinement'",
+    'seed_premise: refinementSeed',
+    'rankedVerifiedAttempts',
 ]) {
     assert(
         server.includes(required),
