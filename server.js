@@ -23333,7 +23333,13 @@ async function animatedHookExperimentTick() {
                     : 1;
                 let refinementSeed = null;
                 let refinementSeedFrames = null;
-                if (missing === 0) {
+                const exploreFreshPremises = (
+                    missing === 0
+                    && animatedHookExperiment.shouldExploreAfterMinimum(
+                        experiment
+                    )
+                );
+                if (missing === 0 && !exploreFreshPremises) {
                     const refinementRounds = new Map();
                     for (const request of experiment.requests) {
                         if (
@@ -23440,6 +23446,8 @@ async function animatedHookExperimentTick() {
                             ? `; refining “${String(
                                 refinementSeed
                             ).slice(0, 80)}”`
+                            : exploreFreshPremises
+                                ? '; exploring fresh fine-tuned premises'
                             : ''
                     )
                 );

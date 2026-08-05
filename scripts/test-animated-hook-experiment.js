@@ -44,6 +44,11 @@ assert(
         < contract.refinementPriority(76.4, 0),
     'the round penalty must eventually force exploration outward'
 );
+assert.strictEqual(
+    contract.shouldExploreAfterMinimum(experiment),
+    false,
+    'the first post-baseline batch should exploit the best near miss'
+);
 
 function attempt(index, score, overrides = {}) {
     return {
@@ -106,6 +111,53 @@ assert(contract.validateExperiment(refinementExperiment).valid);
 assert.deepStrictEqual(
     refinementExperiment.requests.at(-1).seed_frames,
     ['Frame one', 'Frame two', 'Frame three', 'Frame four', 'Frame five']
+);
+assert.strictEqual(
+    contract.shouldExploreAfterMinimum(refinementExperiment),
+    false,
+    'one refinement batch should not yet trigger fresh exploration'
+);
+const explorationCadenceExperiment = contract.bindExperiment({
+    ...refinementExperiment,
+    requests: [
+        ...refinementExperiment.requests,
+        {
+            rid: contract.requestId('animated-contract-test', 14),
+            count: 8,
+            created_at_ms: 2500,
+            mode: 'threshold-refinement',
+            seed_premise: 'A second measurable physical test',
+            seed_frames: [
+                'Frame one',
+                'Frame two',
+                'Frame three',
+                'Frame four',
+                'Frame five',
+            ],
+        },
+    ],
+});
+assert.strictEqual(
+    contract.shouldExploreAfterMinimum(explorationCadenceExperiment),
+    true,
+    'two refinement batches should trigger one fresh exploration batch'
+);
+const cadenceResetExperiment = contract.bindExperiment({
+    ...explorationCadenceExperiment,
+    requests: [
+        ...explorationCadenceExperiment.requests,
+        {
+            rid: contract.requestId('animated-contract-test', 15),
+            count: 8,
+            created_at_ms: 2600,
+            mode: 'random-exploration',
+        },
+    ],
+});
+assert.strictEqual(
+    contract.shouldExploreAfterMinimum(cadenceResetExperiment),
+    false,
+    'fresh exploration should reset the two-refinement cadence'
 );
 const missingRefinementSeed = contract.bindExperiment({
     ...experiment,
@@ -185,6 +237,8 @@ for (const required of [
     '? req.seed_frames',
     'rankedVerifiedAttempts',
     'animatedHookExperiment.refinementPriority',
+    'animatedHookExperiment.shouldExploreAfterMinimum',
+    'exploring fresh fine-tuned premises',
 ]) {
     assert(
         server.includes(required),

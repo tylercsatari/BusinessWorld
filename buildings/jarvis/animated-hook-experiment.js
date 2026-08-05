@@ -11,6 +11,7 @@ const SCHEMA_VERSION = 1;
 const DEFAULT_COORDINATE_ID = 'shorts.channel-free.concat.keep';
 const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 const DEFAULT_REFINEMENT_ROUND_PENALTY = 1.25;
+const DEFAULT_REFINEMENT_EXPLORATION_CADENCE = 3;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const SAVED_HOOK_ID_PATTERN = /^hk[a-z0-9]{4,40}$/;
@@ -207,6 +208,43 @@ function refinementPriority(score, completedRounds) {
     ) - rounds * DEFAULT_REFINEMENT_ROUND_PENALTY;
 }
 
+function shouldExploreAfterMinimum(experiment) {
+    const minimum = Math.max(
+        1,
+        Number.parseInt(
+            experiment && experiment.minimum_verified_attempts,
+            10
+        ) || 1
+    );
+    const batchSize = Math.max(
+        1,
+        Number.parseInt(experiment && experiment.batch_size, 10) || 1
+    );
+    const baselineExplorationBatches = Math.ceil(
+        minimum / batchSize
+    );
+    const requests = Array.isArray(experiment && experiment.requests)
+        ? experiment.requests
+        : [];
+    const refinementBatches = requests.filter(request => (
+        request && request.mode === 'threshold-refinement'
+    )).length;
+    const explorationBatches = requests.filter(request => (
+        !request || request.mode !== 'threshold-refinement'
+    )).length;
+    const postMinimumExplorationBatches = Math.max(
+        0,
+        explorationBatches - baselineExplorationBatches
+    );
+    const postMinimumBatches = (
+        refinementBatches + postMinimumExplorationBatches
+    );
+    return (
+        postMinimumBatches
+        % DEFAULT_REFINEMENT_EXPLORATION_CADENCE
+    ) === DEFAULT_REFINEMENT_EXPLORATION_CADENCE - 1;
+}
+
 function exactHash(value) {
     return HASH_PATTERN.test(String(value || ''));
 }
@@ -312,10 +350,12 @@ module.exports = {
     DEFAULT_COORDINATE_ID,
     DEFAULT_IMAGE_MODEL,
     DEFAULT_REFINEMENT_ROUND_PENALTY,
+    DEFAULT_REFINEMENT_EXPLORATION_CADENCE,
     bindExperiment,
     validateExperiment,
     requestId,
     refinementPriority,
+    shouldExploreAfterMinimum,
     rankedVerifiedAttempts,
     verifiedAttempt,
     summarize,
