@@ -22284,6 +22284,17 @@ async function hookProcessRequest(
     const experimentId = String(options.experimentId || '')
         .replace(/[^a-z0-9_-]/gi, '')
         .slice(0, 96) || null;
+    const seedFrames = Array.isArray(options.seedFrames)
+        ? options.seedFrames
+            .map(frame => String(frame || '').trim())
+            .filter(Boolean)
+            .slice(0, 5)
+        : [];
+    const reuseFineTunedSeedPlan = !!(
+        seedFrames.length === 5
+        && premise
+        && !invent
+    );
     const autoSaveContext = await hookBatchOwnerSaveContext(
         options.autoSave
     );
@@ -22304,7 +22315,9 @@ async function hookProcessRequest(
                 streaming: true,
                 error: (done && !attempts.length) ? err : '',
                 warn: Array.from(warns).join(' · '),
-                model: 'idea_r7 (fine-tuned) + one five-panel image',
+                model: reuseFineTunedSeedPlan
+                    ? 'idea_r7 fine-tuned seed plan (reused) + one five-panel image'
+                    : 'idea_r7 (fine-tuned) + one five-panel image',
                 animation: !!animation,
                 style_preset: animation
                     ? storyboardStylePresets.ANIMATION_STYLE_ID
@@ -22321,7 +22334,9 @@ async function hookProcessRequest(
                     && autoSaveContext.experimentId
                     || null,
                 exploration_strategy: batchIdeaGeneration
-                    ? 'batched-fine-tuned-sampling+global-embedding-distance-v1'
+                    ? reuseFineTunedSeedPlan
+                        ? 'score-guided-seed-plan-rerender-v1'
+                        : 'batched-fine-tuned-sampling+global-embedding-distance-v1'
                     : null,
                 minimum_text_embedding_distance:
                     Number.isFinite(configuredNovelty)
@@ -22369,7 +22384,23 @@ async function hookProcessRequest(
             : count + 3;
         let tries = 0, rejected = 0;
         const specQueue = [];
-        await stat({ stage: 'reasoning', done: 0, n: count, note: 'inventing idea 1/' + count + ' — the first one also wakes the GPU, so it takes the longest…' });
+        if (reuseFineTunedSeedPlan) {
+            specQueue.push(...Array.from({ length: count }, () => ({
+                premise,
+                frames: [...seedFrames],
+                cohesion_mode: 'reused-fine-tuned-seed-plan',
+                reasoning:
+                    'Score-guided visual rerender of a verified fine-tuned seed plan.',
+            })));
+        }
+        await stat({
+            stage: 'reasoning',
+            done: 0,
+            n: count,
+            note: reuseFineTunedSeedPlan
+                ? `reusing the verified fine-tuned plan for ${count} visual treatments…`
+                : 'inventing idea 1/' + count + ' — the first one also wakes the GPU, so it takes the longest…',
+        });
         while (attempts.length < count && tries < maxTries) {
             if (
                 experimentId
@@ -22392,7 +22423,11 @@ async function hookProcessRequest(
             };
             const onRetry = (msg, t) => stat({ stage: 'reasoning', done: attempts.length, n: count, note: `idea ${attempts.length + 1}/${count}: malformed sample — retrying (${t}/3)` });
             try {
-                if (batchIdeaGeneration && !specQueue.length) {
+                if (
+                    batchIdeaGeneration
+                    && !specQueue.length
+                    && !reuseFineTunedSeedPlan
+                ) {
                     specQueue.push(...await hookModelGenerateBatchRetry(
                         premise,
                         invent,
@@ -22429,8 +22464,10 @@ async function hookProcessRequest(
             const noveltyText = noveltyTextMode === 'premise-only'
                 ? spec.premise
                 : spec.premise + '\n' + spec.frames.join('\n');
-            const emb = await geminiTextEmbed(noveltyText);
-            if (!emb) warns.add('novelty check unavailable (embedding failed) — ideas accepted without the diversity filter');
+            const emb = reuseFineTunedSeedPlan
+                ? null
+                : await geminiTextEmbed(noveltyText);
+            if (!emb && !reuseFineTunedSeedPlan) warns.add('novelty check unavailable (embedding failed) — ideas accepted without the diversity filter');
             const q = emb ? Int8Array.from(emb, x => Math.round(x * 127)) : null;
             if (q) {
                 let m = -1, mi = -1;
@@ -22456,7 +22493,11 @@ async function hookProcessRequest(
             if (q) { accVecs.push(q); mem[mem.length - 1].s = 1; }
             await writeGroup(false);                          // ← the card appears NOW, frames fill in live
             await stat({ stage: attempts.length < count ? 'reasoning' : 'rendering', done: attempts.length, n: count,
-                note: attempts.length < count ? `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its coherent panel renders…` : 'all ideas in — rendering the last coherent panels…' });
+                note: attempts.length < count
+                    ? reuseFineTunedSeedPlan
+                        ? `visual treatment ${attempts.length}/${count} queued…`
+                        : `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its coherent panel renders…`
+                    : 'all ideas in — rendering the last coherent panels…' });
             renders.push((async () => {                       // render THIS hook while the next idea generates
                 try {
                     if (
@@ -23047,6 +23088,11 @@ async function hookDemoQueue() {
                         renderConcurrency:
                             req.render_concurrency,
                         experimentId: req.experiment_id,
+                        seedFrames:
+                            req.schema
+                                === 'animated-hook-batch-request-v1'
+                                ? req.seed_frames
+                                : null,
                     }
                 );
             } catch (error) {
@@ -23151,6 +23197,9 @@ function animatedHookGenerationRequest(experiment, request) {
         schema: 'animated-hook-batch-request-v1',
         schema_version: 1,
         premise: refinement ? request.seed_premise : '',
+        seed_frames: refinement && Array.isArray(request.seed_frames)
+            ? request.seed_frames
+            : null,
         count: request.count,
         invent: !refinement,
         animation: true,
@@ -23283,6 +23332,7 @@ async function animatedHookExperimentTick() {
                     ? Math.ceil(missing / experiment.batch_size)
                     : 1;
                 let refinementSeed = null;
+                let refinementSeedFrames = null;
                 if (missing === 0) {
                     const refinementRounds = new Map();
                     for (const request of experiment.requests) {
@@ -23304,6 +23354,8 @@ async function animatedHookExperimentTick() {
                             Number(
                                 attempt.channel_free_concat_keep_percent
                             ) < experiment.threshold_value_0_100
+                            && Array.isArray(attempt.frames)
+                            && attempt.frames.length === 5
                         ))
                         .map(attempt => ({
                             attempt,
@@ -23325,6 +23377,9 @@ async function animatedHookExperimentTick() {
                         ));
                     refinementSeed = candidates[0]
                         && candidates[0].attempt.premise
+                        || null;
+                    refinementSeedFrames = candidates[0]
+                        && [...candidates[0].attempt.frames]
                         || null;
                     if (!refinementSeed) {
                         experiment.status = 'error';
@@ -23352,6 +23407,7 @@ async function animatedHookExperimentTick() {
                             ? 'threshold-refinement'
                             : 'random-exploration',
                         seed_premise: refinementSeed,
+                        seed_frames: refinementSeedFrames,
                     });
                 }
                 experiment.requests.push(...newRequests);

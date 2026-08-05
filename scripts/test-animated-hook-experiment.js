@@ -82,10 +82,21 @@ const refinementExperiment = contract.bindExperiment({
             created_at_ms: 2000,
             mode: 'threshold-refinement',
             seed_premise: 'A measurable physical test',
+            seed_frames: [
+                'Frame one',
+                'Frame two',
+                'Frame three',
+                'Frame four',
+                'Frame five',
+            ],
         },
     ],
 });
 assert(contract.validateExperiment(refinementExperiment).valid);
+assert.deepStrictEqual(
+    refinementExperiment.requests.at(-1).seed_frames,
+    ['Frame one', 'Frame two', 'Frame three', 'Frame four', 'Frame five']
+);
 const missingRefinementSeed = contract.bindExperiment({
     ...experiment,
     requests: [{
@@ -97,6 +108,21 @@ const missingRefinementSeed = contract.bindExperiment({
 });
 assert.strictEqual(
     contract.validateExperiment(missingRefinementSeed).valid,
+    false
+);
+const invalidRefinementFrames = contract.bindExperiment({
+    ...experiment,
+    requests: [{
+        rid: contract.requestId('animated-contract-test', 15),
+        count: 8,
+        created_at_ms: 4000,
+        mode: 'threshold-refinement',
+        seed_premise: 'A measurable physical test',
+        seed_frames: ['Only one frame'],
+    }],
+});
+assert.strictEqual(
+    contract.validateExperiment(invalidRefinementFrames).valid,
     false
 );
 
@@ -143,6 +169,10 @@ for (const required of [
     'mark Shorts hook request claimed',
     "request.mode === 'threshold-refinement'",
     'seed_premise: refinementSeed',
+    'seed_frames: refinementSeedFrames',
+    'score-guided-seed-plan-rerender-v1',
+    'seedFrames:',
+    '? req.seed_frames',
     'rankedVerifiedAttempts',
 ]) {
     assert(

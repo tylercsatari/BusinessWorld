@@ -41,6 +41,12 @@ function normalizedExperiment(input) {
             seed_premise: String(
                 request && request.seed_premise || ''
             ).trim().replace(/\s+/g, ' ').slice(0, 1000) || null,
+            seed_frames: Array.isArray(request && request.seed_frames)
+                ? request.seed_frames
+                    .map(frame => String(frame || '').trim())
+                    .filter(Boolean)
+                    .slice(0, 5)
+                : null,
         }))
         : [];
     return {
@@ -141,6 +147,17 @@ function validateExperiment(experiment) {
             ) {
                 errors.push(
                     'animated hook exploration request has a refinement seed'
+                );
+            }
+            if (
+                request.seed_frames
+                && (
+                    request.mode !== 'threshold-refinement'
+                    || request.seed_frames.length !== 5
+                )
+            ) {
+                errors.push(
+                    'animated hook refinement frames are invalid'
                 );
             }
             if (requestIds.has(request.rid)) {
