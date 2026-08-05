@@ -100,6 +100,9 @@ const storyboardStylePresets = require(
 const fivePanelSheet = require(
     './buildings/jarvis/five-panel-sheet'
 );
+const animatedHookExperiment = require(
+    './buildings/jarvis/animated-hook-experiment'
+);
 const openAIImageProvider = require(
     './buildings/jarvis/openai-image-provider'
 );
@@ -5681,6 +5684,193 @@ function canonicalSavedHookRecord(record, montageBytes) {
     canonical.score_record_sha256 =
         savedHookScoreRecordSha256(canonical);
     return canonical;
+}
+
+async function persistCanonicalSavedHook({
+    body,
+    scoreDomain = 'shorts',
+    labScope = null,
+    requestId = null,
+}) {
+    const input = body && typeof body === 'object' ? body : {};
+    if (
+        scoreDomain === 'shorts'
+        && input.kind === 'scored'
+    ) {
+        const submittedLedgerSha256 =
+            input.score_ledger
+            && input.score_ledger.ledger_sha256;
+        if (
+            !exactSha256(input.score_ledger_sha256)
+            || input.score_ledger_sha256
+                !== submittedLedgerSha256
+        ) {
+            throw new Error(
+                'saved score does not bind the ledger SHA shown '
+                + 'on the selected score card'
+            );
+        }
+    }
+    const id = 'hk' + Date.now().toString(36)
+        + Math.floor(Math.random() * 1e4).toString(36);
+    const montageBytes = decodeSavedHookMontage(input.montage);
+    const rec = canonicalSavedHookRecord({
+        id,
+        savedAt: Date.now(),
+        kind: input.kind === 'scored' ? 'scored' : 'idea',
+        score_domain: scoreDomain,
+        source: String(input.source || '').slice(0, 20),
+        folder: labScope
+            ? null
+            : (
+                String(input.folder || '').slice(0, 40)
+                || null
+            ),
+        title: String(input.title || 'Saved hook').slice(0, 140),
+        text: String(input.text || '').slice(0, 2000),
+        idea: String(input.idea || '').slice(0, 4000),
+        score_text: String(input.score_text || '').slice(0, 4000),
+        dur_s: Number.isFinite(Number(
+            input.dur_s != null
+                ? input.dur_s
+                : input.input_manifest
+                && input.input_manifest.duration_s
+        ))
+            ? Number(
+                input.dur_s != null
+                    ? input.dur_s
+                    : input.input_manifest.duration_s
+            )
+            : null,
+        frames: Array.isArray(input.frames)
+            ? input.frames.slice(0, 5).map(
+                frame => String(frame).slice(0, 600)
+            )
+            : [],
+        frame_imgs: Array.isArray(input.frame_imgs)
+            ? input.frame_imgs.slice(0, 5).map(String)
+            : [],
+        cohesion_mode: String(input.cohesion_mode || '').slice(0, 40),
+        indicators: input.indicators
+            && typeof input.indicators === 'object'
+            ? input.indicators
+            : null,
+        score_ledger: input.score_ledger
+            && typeof input.score_ledger === 'object'
+            ? input.score_ledger
+            : null,
+        long_score_ledger: input.long_score_ledger
+            && typeof input.long_score_ledger === 'object'
+            ? input.long_score_ledger
+            : null,
+        output_contract: input.output_contract
+            && typeof input.output_contract === 'object'
+            ? input.output_contract
+            : null,
+        decision_trace: input.decision_trace
+            && typeof input.decision_trace === 'object'
+            ? input.decision_trace
+            : null,
+        non_authoritative_geometry:
+            input.non_authoritative_geometry
+            && typeof input.non_authoritative_geometry === 'object'
+                ? input.non_authoritative_geometry
+                : null,
+        novelty_provenance: input.novelty_provenance
+            && typeof input.novelty_provenance === 'object'
+            ? input.novelty_provenance
+            : null,
+        channel_free_keep_forecasts:
+            input.channel_free_keep_forecasts
+            && typeof input.channel_free_keep_forecasts === 'object'
+                ? input.channel_free_keep_forecasts
+                : null,
+        visual_keep_forecast: null,
+        creator_adaptive_keep_forecast: null,
+        creator_adaptive_keep_forecast_error: null,
+        channels: input.channels
+            && typeof input.channels === 'object'
+            ? input.channels
+            : null,
+        emb_preview: input.emb_preview
+            && typeof input.emb_preview === 'object'
+            ? input.emb_preview
+            : null,
+        input_manifest: input.input_manifest
+            && typeof input.input_manifest === 'object'
+            ? input.input_manifest
+            : null,
+    }, montageBytes);
+    await writeImmutableSavedHookMedia(
+        rec.montage_ref,
+        montageBytes
+    );
+    const recordKey = `raw/saved-hooks/${id}.json`;
+    await cloud.uploadToR2(
+        recordKey,
+        Buffer.from(JSON.stringify(rec)),
+        'application/json'
+    );
+    try {
+        await updateSavedHookIndex(index => {
+            index.hooks = (index.hooks || []).filter(
+                row => row.id !== id
+            );
+            index.hooks.push(
+                compactSavedHookRecord(rec, { scoreDomain })
+            );
+        });
+    } catch (error) {
+        await cloud.deleteFromR2(recordKey).catch(() => {});
+        throw new Error(
+            `saved-hook index update failed: ${
+                error.message || error
+            }`
+        );
+    }
+    const savedHookActivityEvidence =
+        experimentLabScoreActivityEvidence(rec);
+    await attachExperimentLabItem(
+        labScope,
+        'hooks',
+        id,
+        {
+            ...savedHookActivityEvidence,
+            type: 'hook-saved',
+            title: rec.title,
+            requestId: String(requestId || '') || null,
+            detail: `${rec.kind} · ${rec.source || 'experiment'}`,
+            input: {
+                kind: rec.source || rec.kind,
+                title: rec.title,
+                hasTranscript: !!String(rec.text || '').trim(),
+                montageSha256:
+                    rec.montage_ref
+                    && rec.montage_ref.sha256
+                    || null,
+            },
+            output: {
+                ...(savedHookActivityEvidence.output || {}),
+                kind: 'saved-hook',
+                artifactId: id,
+            },
+        },
+        labScope && input.folder
+            ? { folderId: input.folder }
+            : undefined
+    );
+    return {
+        ok: true,
+        id,
+        record: rec,
+        score_record_sha256: rec.score_record_sha256,
+        score_ledger_sha256:
+            rec.score_ledger
+            && rec.score_ledger.ledger_sha256
+            || rec.long_score_ledger
+            && rec.long_score_ledger.ledger_sha256
+            || null,
+    };
 }
 
 async function savedHookMontageBytes(
@@ -11694,151 +11884,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const scoreDomain = pathname === '/api/raw-long/hook-save'
                 ? 'longquant'
                 : 'shorts';
-            if (
-                scoreDomain === 'shorts'
-                && body.kind === 'scored'
-            ) {
-                const submittedLedgerSha256 =
-                    body.score_ledger
-                    && body.score_ledger.ledger_sha256;
-                if (
-                    !exactSha256(body.score_ledger_sha256)
-                    || body.score_ledger_sha256
-                        !== submittedLedgerSha256
-                ) {
-                    throw new Error(
-                        'saved score does not bind the ledger SHA shown '
-                        + 'on the selected score card'
-                    );
-                }
-            }
-            const id = 'hk' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
-            const montageBytes = decodeSavedHookMontage(body.montage);
-            const rec = canonicalSavedHookRecord({
-                id, savedAt: Date.now(),
-                kind: body.kind === 'scored' ? 'scored' : 'idea',
-                score_domain: scoreDomain,
-                source: String(body.source || '').slice(0, 20),
-                folder: labScope
-                    ? null
-                    : (
-                        String(body.folder || '').slice(0, 40)
-                        || null
-                    ),
-                title: String(body.title || 'Saved hook').slice(0, 140),
-                text: String(body.text || '').slice(0, 2000),
-                idea: String(body.idea || '').slice(0, 4000),
-                score_text:
-                    String(body.score_text || '').slice(0, 4000),
-                dur_s: Number.isFinite(Number(
-                    body.dur_s != null
-                        ? body.dur_s
-                        : body.input_manifest
-                        && body.input_manifest.duration_s
-                ))
-                    ? Number(
-                        body.dur_s != null
-                            ? body.dur_s
-                            : body.input_manifest.duration_s
-                    )
-                    : null,
-                frames: Array.isArray(body.frames) ? body.frames.slice(0, 5).map(f => String(f).slice(0, 600)) : [],
-                frame_imgs: Array.isArray(body.frame_imgs) ? body.frame_imgs.slice(0, 5).map(String) : [],
-                cohesion_mode: String(body.cohesion_mode || '').slice(0, 40),
-                indicators: (body.indicators && typeof body.indicators === 'object') ? body.indicators : null,
-                score_ledger: (body.score_ledger && typeof body.score_ledger === 'object') ? body.score_ledger : null,
-                long_score_ledger: (body.long_score_ledger && typeof body.long_score_ledger === 'object') ? body.long_score_ledger : null,
-                output_contract: (body.output_contract && typeof body.output_contract === 'object') ? body.output_contract : null,
-                decision_trace:
-                    body.decision_trace
-                    && typeof body.decision_trace === 'object'
-                        ? body.decision_trace
-                        : null,
-                non_authoritative_geometry:
-                    body.non_authoritative_geometry
-                    && typeof body.non_authoritative_geometry
-                        === 'object'
-                        ? body.non_authoritative_geometry
-                        : null,
-                novelty_provenance: (body.novelty_provenance && typeof body.novelty_provenance === 'object') ? body.novelty_provenance : null,
-                channel_free_keep_forecasts: (body.channel_free_keep_forecasts && typeof body.channel_free_keep_forecasts === 'object') ? body.channel_free_keep_forecasts : null,
-                visual_keep_forecast: null,
-                creator_adaptive_keep_forecast: null,
-                creator_adaptive_keep_forecast_error: null,
-                channels: (body.channels && typeof body.channels === 'object') ? body.channels : null,
-                emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : null,
-                input_manifest: (body.input_manifest && typeof body.input_manifest === 'object') ? body.input_manifest : null,
-            }, montageBytes);
-            await writeImmutableSavedHookMedia(
-                rec.montage_ref,
-                montageBytes
-            );
-            const recordKey = `raw/saved-hooks/${id}.json`;
-            await cloud.uploadToR2(
-                recordKey,
-                Buffer.from(JSON.stringify(rec)),
-                'application/json'
-            );
-            try {
-                await updateSavedHookIndex(idx => {
-                    idx.hooks = (idx.hooks || []).filter(
-                        row => row.id !== id
-                    );
-                    idx.hooks.push(
-                        compactSavedHookRecord(rec, { scoreDomain })
-                    );
-                });
-            } catch (e) {
-                await cloud.deleteFromR2(recordKey).catch(() => {});
-                throw new Error(`saved-hook index update failed: ${e.message || e}`);
-            }
-            const savedHookActivityEvidence =
-                experimentLabScoreActivityEvidence(rec);
-            await attachExperimentLabItem(
+            const saved = await persistCanonicalSavedHook({
+                body,
+                scoreDomain,
                 labScope,
-                'hooks',
-                id,
-                {
-                    ...savedHookActivityEvidence,
-                    type: 'hook-saved',
-                    title: rec.title,
-                    requestId:
-                        String(
-                            req.headers['x-quant-request-id']
-                            || ''
-                        ) || null,
-                    detail:
-                        `${rec.kind} · ${rec.source || 'experiment'}`,
-                    input: {
-                        kind: rec.source || rec.kind,
-                        title: rec.title,
-                        hasTranscript: !!String(rec.text || '').trim(),
-                        montageSha256:
-                            rec.montage_ref
-                            && rec.montage_ref.sha256
-                            || null,
-                    },
-                    output: {
-                        ...(savedHookActivityEvidence.output || {}),
-                        kind: 'saved-hook',
-                        artifactId: id,
-                    },
-                },
-                labScope && body.folder
-                    ? { folderId: body.folder }
-                    : undefined
-            );
+                requestId:
+                    req.headers['x-quant-request-id'] || null,
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-                ok: true,
-                id,
-                score_record_sha256: rec.score_record_sha256,
+                ok: saved.ok,
+                id: saved.id,
+                score_record_sha256:
+                    saved.score_record_sha256,
                 score_ledger_sha256:
-                    rec.score_ledger
-                    && rec.score_ledger.ledger_sha256
-                    || rec.long_score_ledger
-                    && rec.long_score_ledger.ledger_sha256
-                    || null,
+                    saved.score_ledger_sha256,
             }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -14628,6 +14688,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const premise = String(body.premise || '').trim().slice(0, 400);
             const invent = !!body.invent || !premise;
             const animation = body.animation === true;
+            const imageModel = String(
+                body.imageModel || body.image_model || ''
+            ).trim();
+            if (imageModel && !STORY_MODELS[imageModel]) {
+                throw new HttpRequestError(
+                    400,
+                    `Unknown image model: ${imageModel}`,
+                    'hook_image_model_invalid'
+                );
+            }
             if (!premise && !invent) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
             const count = Math.max(1, Math.min(parseInt(body.count) || 4, 8));
             // rate guard (endpoint is public): cap the pending queue so it can't be spammed into render costs
@@ -14640,6 +14710,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 invent,
                 animation,
                 render_mode: 'single-panel',
+                image_model: imageModel || null,
+                strict_image_model:
+                    imageModel
+                    && body.strictImageModel === true,
                 creator_profile:
                     safeCreatorProfile(body.creatorProfile) || null,
                 ts: Date.now(),
@@ -14665,6 +14739,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             ? storyboardStylePresets.ANIMATION_STYLE_ID
                             : storyboardStylePresets.DEFAULT_STYLE_ID,
                         renderMode: 'single-panel',
+                        imageModel: imageModel || null,
                         creatorProfile:
                             safeCreatorProfile(body.creatorProfile) || null,
                     },
@@ -21908,6 +21983,8 @@ async function renderHookPanelRobust({
     hookText,
     panels,
     animation,
+    imageModel,
+    strictImageModel = false,
 }) {
     const style = storyboardStylePresets.stylePreset(
         animation
@@ -21920,17 +21997,35 @@ async function renderHookPanelRobust({
         panels: fivePanelSheet.normalizePanels(panels, brief || hookText),
         styleContract: style.promptContract,
     });
+    const explicitlyRequested = String(imageModel || '').trim();
+    if (
+        explicitlyRequested
+        && !STORY_MODELS[explicitlyRequested]
+        && !Object.values(STORY_MODELS).some(
+            model => model.slug === explicitlyRequested
+        )
+    ) {
+        throw new Error(
+            `unknown five-panel image model: ${explicitlyRequested}`
+        );
+    }
     const preferred = hookPanelModelKey(
-        process.env.HOOK_PANEL_MODEL
+        explicitlyRequested
+        || process.env.HOOK_PANEL_MODEL
         || process.env.HOOK_FRAME_MODEL
         || 'flux-2-pro'
     );
-    const ladder = [
-        preferred,
-        'flux-2-pro',
-        'seedream-4',
-        'gpt-image-2',
-    ].filter((value, index, values) => values.indexOf(value) === index);
+    const ladder = (strictImageModel
+        ? [preferred]
+        : [
+            preferred,
+            'flux-2-pro',
+            'seedream-4',
+            'gpt-image-2',
+        ]
+    ).filter((value, index, values) => (
+        values.indexOf(value) === index
+    ));
     let lastError = null;
     let flagged = false;
     let providerCalls = 0;
@@ -21972,6 +22067,8 @@ async function renderHookPanelRobust({
                     },
                     fallback: modelIndex > 0,
                     flagged,
+                    requestedModel: preferred,
+                    strictModel: strictImageModel === true,
                 };
             } catch (error) {
                 lastError = error;
@@ -22022,6 +22119,90 @@ async function hookModelGenerateRetry(premise, invent, onStatus, onRetry) {
     }
     throw new Error(lastErr);
 }
+
+async function hookBatchOwnerSaveContext(autoSave) {
+    if (
+        !autoSave
+        || autoSave.owner !== true
+    ) return null;
+    const accounts = await dataStore.getAll('accounts');
+    const owner = accounts.find(auth.isPrimaryOwnerAccount);
+    if (!owner) {
+        throw new Error(
+            'animated hook batch cannot find the primary owner account'
+        );
+    }
+    const scope = {
+        viewer: owner,
+        account: owner,
+        readOnly: false,
+    };
+    await ensureInitialExperimentLabWorkspace(owner);
+    const folderName = String(
+        autoSave.folder_name || 'Animated Hook Grind'
+    ).trim().replace(/\s+/g, ' ').slice(0, 120);
+    let folder = null;
+    await mutateExperimentLabWorkspace(
+        owner,
+        workspace => {
+            folder = experimentLabWorkspace.createFolder(
+                workspace,
+                'hooks',
+                folderName
+            );
+        }
+    );
+    return {
+        scope,
+        folder,
+        experimentId: String(
+            autoSave.experiment_id || ''
+        ).replace(/[^a-z0-9_-]/gi, '').slice(0, 96) || null,
+    };
+}
+
+function generatedHookSavedPayload({
+    score,
+    montage,
+    spec,
+    attempt,
+    folderId,
+}) {
+    return {
+        kind: 'scored',
+        source: 'animated-batch',
+        folder: folderId || null,
+        title: String(spec.premise || 'Animated hook').slice(0, 140),
+        text: String(spec.premise || '').slice(0, 2000),
+        idea: String(spec.premise || '').slice(0, 4000),
+        score_text: String(spec.premise || '').slice(0, 4000),
+        montage: `data:image/jpeg;base64,${montage.toString('base64')}`,
+        frames: Array.isArray(spec.frames) ? spec.frames : [],
+        frame_imgs: Array.isArray(attempt.frame_imgs)
+            ? attempt.frame_imgs
+            : [],
+        cohesion_mode: spec.cohesion_mode || '',
+        indicators: score.indicators || null,
+        score_ledger: score.score_ledger,
+        score_ledger_sha256:
+            score.score_ledger
+            && score.score_ledger.ledger_sha256,
+        output_contract: score.output_contract || null,
+        decision_trace: score.decision_trace || null,
+        non_authoritative_geometry:
+            score.non_authoritative_geometry || null,
+        novelty_provenance: score.novelty_provenance || null,
+        channel_free_keep_forecasts:
+            score.channel_free_keep_forecasts || null,
+        channels: score.channels || null,
+        emb_preview: score.emb_preview || null,
+        input_manifest: score.input_manifest || null,
+        dur_s: score.dur_s != null
+            ? score.dur_s
+            : score.duration,
+    };
+}
+
 async function hookProcessRequest(
     rid,
     premise,
@@ -22029,7 +22210,8 @@ async function hookProcessRequest(
     invent,
     animation,
     creatorProfile,
-    ownership
+    ownership,
+    options = {}
 ) {
     requireQueueLeaseOwnership(
         ownership,
@@ -22052,6 +22234,13 @@ async function hookProcessRequest(
     let attempts = [];
     let err = '';
     let memN = 0;
+    const requestedImageModel = String(
+        options.imageModel || ''
+    ).trim() || null;
+    const strictImageModel = options.strictImageModel === true;
+    const autoSaveContext = await hookBatchOwnerSaveContext(
+        options.autoSave
+    );
     // STREAMING: the group file is rewritten as each idea and coherent panel
     // completes. `done` flips true only after every requested panel finishes.
     const warns = new Set();   // non-fatal problems — surfaced in the UI, never swallowed
@@ -22075,6 +22264,16 @@ async function hookProcessRequest(
                     ? storyboardStylePresets.ANIMATION_STYLE_ID
                     : storyboardStylePresets.DEFAULT_STYLE_ID,
                 render_mode: 'single-panel',
+                requested_image_model: requestedImageModel,
+                strict_image_model: strictImageModel,
+                autosave_folder_id:
+                    autoSaveContext
+                    && autoSaveContext.folder.id
+                    || null,
+                experiment_id:
+                    autoSaveContext
+                    && autoSaveContext.experimentId
+                    || null,
                 hosted: true,
                 queue_lease_fence: queueLeaseFence,
             })),
@@ -22144,6 +22343,8 @@ async function hookProcessRequest(
                         hookText: spec.premise,
                         panels: a.frames,
                         animation,
+                        imageModel: requestedImageModel,
+                        strictImageModel,
                     });
                     const montageId = `${rid}_${a.k}`;
                     const frameIds = panel.frames.map((_, index) => (
@@ -22174,6 +22375,8 @@ async function hookProcessRequest(
                     a.panel_provider = panel.provider;
                     a.style_preset = panel.stylePreset;
                     a.panel_geometry = panel.geometry;
+                    a.requested_image_model = panel.requestedModel;
+                    a.strict_image_model = panel.strictModel;
                     a.errs = a.errs || [];
                     if (panel.fallback) {
                         a.errs.push(
@@ -22237,6 +22440,107 @@ async function hookProcessRequest(
                         channelFreeScore
                             ? channelFreeScore.score_value
                             : null;
+                    if (channelFreeScore) {
+                        a.score_verified = true;
+                        a.score_coordinate_id =
+                            channelFreeScore.score_coordinate_id;
+                        a.score_value = channelFreeScore.score_value;
+                        a.score_percentile_0_100 =
+                            channelFreeScore.score_percentile_0_100;
+                        a.score_target_unit =
+                            channelFreeScore.score_target_unit;
+                        a.score_model_artifact_sha256 =
+                            channelFreeScore
+                                .score_model_artifact_sha256;
+                    } else {
+                        a.score_verified = false;
+                    }
+                    if (autoSaveContext) {
+                        try {
+                            const saved =
+                                await persistCanonicalSavedHook({
+                                    body: generatedHookSavedPayload({
+                                        score,
+                                        montage: panel.montage,
+                                        spec,
+                                        attempt: a,
+                                        folderId:
+                                            autoSaveContext.folder.id,
+                                    }),
+                                    scoreDomain: 'shorts',
+                                    labScope: autoSaveContext.scope,
+                                    requestId: `${rid}:${a.k}`,
+                                });
+                            a.saved_hook_id = saved.id;
+                            a.saved_folder_id =
+                                autoSaveContext.folder.id;
+                            a.saved_score_record_sha256 =
+                                saved.score_record_sha256;
+                            try {
+                                await recordExperimentLabActivity(
+                                    autoSaveContext.scope,
+                                    {
+                                    type: 'hook-generated',
+                                    status: 'complete',
+                                    title: a.premise,
+                                    requestId:
+                                        `${rid}:generated:${a.k}`,
+                                    detail:
+                                        `${a.channel_free_concat_keep_percent}% `
+                                        + 'channel-free concat keep',
+                                    artifactKind: 'hooks',
+                                    artifactId: saved.id,
+                                    saved: true,
+                                    input: {
+                                        kind: 'automatic-invention',
+                                        animation: true,
+                                        imageModel: panel.model,
+                                        renderMode: 'single-panel',
+                                    },
+                                    output: {
+                                        kind: 'saved-hook',
+                                        artifactId: saved.id,
+                                        ledgerSha256:
+                                            saved.score_ledger_sha256,
+                                        scoreRecordSha256:
+                                            saved.score_record_sha256,
+                                        coordinateId:
+                                            SHORTS_GRIND_CHANNEL_FREE_CONCAT,
+                                        predictedKeepPercent:
+                                            a.channel_free_concat_keep_percent,
+                                    },
+                                    }
+                                );
+                            } catch (activityError) {
+                                const activityMessage = String(
+                                    activityError
+                                    && activityError.message
+                                    || activityError
+                                ).slice(0, 180);
+                                a.errs.push(
+                                    `generation activity: FAILED — ${
+                                        activityMessage
+                                    }`
+                                );
+                                warns.add(
+                                    `hook ${a.k + 1} activity failed: ${
+                                        activityMessage.slice(0, 100)
+                                    }`
+                                );
+                            }
+                        } catch (saveError) {
+                            const message = String(
+                                saveError && saveError.message
+                                || saveError
+                            ).slice(0, 220);
+                            a.errs.push(`save: FAILED — ${message}`);
+                            warns.add(
+                                `hook ${a.k + 1} save failed: ${
+                                    message.slice(0, 120)
+                                }`
+                            );
+                        }
+                    }
                 } catch (e) {                                  // NEVER silent: the failure rides the group JSON to the card
                     if (isQueueLeaseOwnershipError(e)) throw e;
                     const lastErr = String(e.message || e).slice(0, 240);
@@ -22544,7 +22848,17 @@ async function hookDemoQueue() {
                     invent,
                     animation,
                     creatorProfile,
-                    ownership
+                    ownership,
+                    {
+                        imageModel: req.image_model,
+                        strictImageModel:
+                            req.strict_image_model === true,
+                        autoSave:
+                            req.schema
+                                === 'animated-hook-batch-request-v1'
+                                ? req.auto_save
+                                : null,
+                    }
                 );
             } catch (error) {
                 console.warn(
@@ -22568,6 +22882,243 @@ async function hookDemoQueue() {
     } finally { _hookBusy = false; }
 }
 setInterval(() => { hookDemoQueue().catch(() => {}); }, 4000);
+
+const ANIMATED_HOOK_EXPERIMENT_ROOT =
+    'hooks/experiments/animated-hook-batch/';
+let _animatedHookExperimentBusy = false;
+
+async function readAnimatedHookExperiment(key) {
+    const bytes = await cloud.downloadFromR2(key);
+    if (!bytes) return null;
+    const value = JSON.parse(bytes.toString('utf8'));
+    const validation = animatedHookExperiment
+        .validateExperiment(value);
+    if (!validation.valid) {
+        throw new Error(
+            `animated hook experiment failed validation: ${
+                validation.errors.join('; ')
+            }`
+        );
+    }
+    return value;
+}
+
+function writeAnimatedHookExperiment(key, experiment) {
+    const bound = animatedHookExperiment.bindExperiment({
+        ...experiment,
+        updated_at_ms: Date.now(),
+    });
+    return cloud.uploadToR2(
+        key,
+        Buffer.from(JSON.stringify(bound)),
+        'application/json'
+    ).then(() => bound);
+}
+
+async function animatedHookRequestState(request) {
+    const [requestExists, groupBytes, statusBytes] =
+        await Promise.all([
+            cloud.existsInR2(
+                `hooks/grpo/requests/${request.rid}.json`
+            ).catch(() => false),
+            cloud.downloadFromR2(
+                `hooks/grpo/demo/groups/${request.rid}.json`
+            ).catch(() => null),
+            cloud.downloadFromR2(
+                `hooks/grpo/demo/status/${request.rid}.json`
+            ).catch(() => null),
+        ]);
+    let group = null;
+    let status = null;
+    try {
+        group = groupBytes
+            ? JSON.parse(groupBytes.toString('utf8'))
+            : null;
+    } catch (error) {}
+    try {
+        status = statusBytes
+            ? JSON.parse(statusBytes.toString('utf8'))
+            : null;
+    } catch (error) {}
+    return {
+        request,
+        requestExists,
+        group,
+        status,
+        seen: !!(requestExists || group || status),
+        active: !!(
+            requestExists
+            || group && group.done !== true
+            || status && status.stage !== 'done'
+        ),
+    };
+}
+
+function animatedHookGenerationRequest(experiment, request) {
+    return {
+        schema: 'animated-hook-batch-request-v1',
+        schema_version: 1,
+        premise: '',
+        count: request.count,
+        invent: true,
+        animation: true,
+        render_mode: 'single-panel',
+        image_model: experiment.image_model,
+        strict_image_model: true,
+        creator_profile: null,
+        auto_save: {
+            owner: true,
+            folder_name: experiment.folder_name,
+            experiment_id: experiment.id,
+        },
+        experiment_id: experiment.id,
+        ts: request.created_at_ms,
+    };
+}
+
+async function ensureAnimatedHookRequest(experiment, request) {
+    await cloud.uploadToR2(
+        `hooks/grpo/requests/${request.rid}.json`,
+        Buffer.from(JSON.stringify(
+            animatedHookGenerationRequest(experiment, request)
+        )),
+        'application/json'
+    );
+}
+
+async function animatedHookExperimentTick() {
+    if (
+        _animatedHookExperimentBusy
+        || !cloud.isR2Ready()
+    ) return;
+    _animatedHookExperimentBusy = true;
+    try {
+        const keys = (
+            await cloud.listR2Keys(
+                ANIMATED_HOOK_EXPERIMENT_ROOT
+            )
+        ).filter(key => key.endsWith('.json'));
+        for (const key of keys) {
+            let experiment;
+            try {
+                experiment = await readAnimatedHookExperiment(key);
+            } catch (error) {
+                console.warn(
+                    'animated hook experiment read failed:',
+                    key,
+                    error.message
+                );
+                continue;
+            }
+            if (experiment.status !== 'running') continue;
+            let states = [];
+            for (
+                let offset = 0;
+                offset < experiment.requests.length;
+                offset += 12
+            ) {
+                states.push(...await Promise.all(
+                    experiment.requests
+                        .slice(offset, offset + 12)
+                        .map(animatedHookRequestState)
+                ));
+            }
+            for (const state of states) {
+                if (!state.seen) {
+                    await ensureAnimatedHookRequest(
+                        experiment,
+                        state.request
+                    );
+                    state.requestExists = true;
+                    state.active = true;
+                    state.seen = true;
+                }
+            }
+            const stats = animatedHookExperiment.summarize(
+                experiment,
+                states.map(state => state.group).filter(Boolean)
+            );
+            experiment.stats = stats;
+            const goalMet = (
+                stats.verified_unique_attempts
+                    >= experiment.minimum_verified_attempts
+                && stats.winner_count >= experiment.winner_target
+            );
+            if (
+                goalMet
+                && !states.some(state => state.active)
+            ) {
+                experiment.status = 'complete';
+                experiment.completed_at_ms = Date.now();
+                await writeAnimatedHookExperiment(key, experiment);
+                console.log(
+                    `animated hook experiment ${experiment.id} complete: `
+                    + `${stats.verified_unique_attempts} verified, `
+                    + `${stats.winner_count} winners`
+                );
+                continue;
+            }
+            if (!states.some(state => state.active)) {
+                const missing = Math.max(
+                    0,
+                    experiment.minimum_verified_attempts
+                        - stats.verified_unique_attempts
+                );
+                const requestCount = missing > 0
+                    ? Math.ceil(missing / experiment.batch_size)
+                    : 1;
+                const newRequests = [];
+                for (let index = 0; index < requestCount; index++) {
+                    const requestIndex =
+                        experiment.requests.length + index;
+                    newRequests.push({
+                        rid: animatedHookExperiment.requestId(
+                            experiment.id,
+                            requestIndex
+                        ),
+                        count: experiment.batch_size,
+                        created_at_ms: Date.now() + index,
+                    });
+                }
+                experiment.requests.push(...newRequests);
+                experiment = await writeAnimatedHookExperiment(
+                    key,
+                    experiment
+                );
+                for (const request of newRequests) {
+                    await ensureAnimatedHookRequest(
+                        experiment,
+                        request
+                    );
+                }
+                console.log(
+                    `animated hook experiment ${experiment.id}: queued `
+                    + `${newRequests.length} batch(es); `
+                    + `${stats.verified_unique_attempts}/`
+                    + `${experiment.minimum_verified_attempts} verified, `
+                    + `${stats.winner_count}/`
+                    + `${experiment.winner_target} winners`
+                );
+            } else {
+                await writeAnimatedHookExperiment(key, experiment);
+            }
+        }
+    } catch (error) {
+        console.warn(
+            'animated hook experiment supervisor failed:',
+            error.message
+        );
+    } finally {
+        _animatedHookExperimentBusy = false;
+    }
+}
+
+setTimeout(() => {
+    animatedHookExperimentTick().catch(() => {});
+}, 12000);
+setInterval(() => {
+    animatedHookExperimentTick().catch(() => {});
+}, 15000);
 
 // ── 🎯 GRIND: loop generate→render→score until a hook clears the user's threshold ──────────
 // The user writes the hook (grounding), sets a target (e.g. keep-rate ≥ 82nd pctile) and a time
