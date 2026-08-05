@@ -23365,8 +23365,15 @@ async function animatedHookExperimentTick() {
                                 .trim(),
                         }))
                         .sort((left, right) => (
-                            (refinementRounds.get(left.key) || 0)
-                            - (refinementRounds.get(right.key) || 0)
+                            animatedHookExperiment.refinementPriority(
+                                right.attempt
+                                    .channel_free_concat_keep_percent,
+                                refinementRounds.get(right.key) || 0
+                            ) - animatedHookExperiment.refinementPriority(
+                                left.attempt
+                                    .channel_free_concat_keep_percent,
+                                refinementRounds.get(left.key) || 0
+                            )
                             || Number(
                                 right.attempt
                                     .channel_free_concat_keep_percent

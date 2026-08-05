@@ -34,6 +34,16 @@ assert.strictEqual(experiment.strict_image_model, true);
 assert.strictEqual(new Set(
     experiment.requests.map(request => request.rid)
 ).size, 13);
+assert(
+    contract.refinementPriority(79.8, 1)
+        > contract.refinementPriority(76.4, 0),
+    'near-threshold candidates should receive proportionally more trials'
+);
+assert(
+    contract.refinementPriority(79.8, 3)
+        < contract.refinementPriority(76.4, 0),
+    'the round penalty must eventually force exploration outward'
+);
 
 function attempt(index, score, overrides = {}) {
     return {
@@ -174,6 +184,7 @@ for (const required of [
     'seedFrames:',
     '? req.seed_frames',
     'rankedVerifiedAttempts',
+    'animatedHookExperiment.refinementPriority',
 ]) {
     assert(
         server.includes(required),

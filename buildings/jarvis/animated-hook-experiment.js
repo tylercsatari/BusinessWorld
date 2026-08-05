@@ -10,6 +10,7 @@ const SCHEMA = 'animated-hook-batch-experiment-v1';
 const SCHEMA_VERSION = 1;
 const DEFAULT_COORDINATE_ID = 'shorts.channel-free.concat.keep';
 const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
+const DEFAULT_REFINEMENT_ROUND_PENALTY = 1.25;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const SAVED_HOOK_ID_PATTERN = /^hk[a-z0-9]{4,40}$/;
@@ -195,6 +196,17 @@ function normalizedPremise(value) {
         .trim();
 }
 
+function refinementPriority(score, completedRounds) {
+    const value = Number(score);
+    const rounds = Math.max(
+        0,
+        Number.parseInt(completedRounds, 10) || 0
+    );
+    return (
+        Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY
+    ) - rounds * DEFAULT_REFINEMENT_ROUND_PENALTY;
+}
+
 function exactHash(value) {
     return HASH_PATTERN.test(String(value || ''));
 }
@@ -299,9 +311,11 @@ module.exports = {
     SCHEMA_VERSION,
     DEFAULT_COORDINATE_ID,
     DEFAULT_IMAGE_MODEL,
+    DEFAULT_REFINEMENT_ROUND_PENALTY,
     bindExperiment,
     validateExperiment,
     requestId,
+    refinementPriority,
     rankedVerifiedAttempts,
     verifiedAttempt,
     summarize,
