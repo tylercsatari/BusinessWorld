@@ -87,15 +87,18 @@ async function liveSummary(experiment) {
         const rows = await Promise.all(
             experiment.requests.slice(offset, offset + 12).map(
                 async request => {
-                    const [queued, group] = await Promise.all([
+                    const [queued, group, status] = await Promise.all([
                         cloud.existsInR2(
                             `hooks/grpo/requests/${request.rid}.json`
                         ).catch(() => false),
                         readJson(
                             `hooks/grpo/demo/groups/${request.rid}.json`
                         ),
+                        readJson(
+                            `hooks/grpo/demo/status/${request.rid}.json`
+                        ),
                     ]);
-                    return { queued, group };
+                    return { queued, group, status };
                 }
             )
         );
@@ -103,8 +106,12 @@ async function liveSummary(experiment) {
             if (row.queued) pending += 1;
             if (row.group) {
                 groups.push(row.group);
-                if (row.group.done !== true) active += 1;
             }
+            if (
+                row.queued
+                || row.group && row.group.done !== true
+                || row.status && row.status.stage !== 'done'
+            ) active += 1;
         }
     }
     return {
