@@ -231,9 +231,29 @@ const ExperimentLabUI = (() => {
                 : accountName;
         }
         if (hookCount) {
-            hookCount.textContent = Number.isFinite(+counts.hooks)
-                ? String(+counts.hooks)
-                : '';
+            const savedHooks = context.savedHooks || null;
+            const savedState = savedHooks && savedHooks.state;
+            if (savedState === 'loading') {
+                hookCount.textContent = '…';
+                hookCount.title = 'Loading your saved-hook library';
+            } else if (savedState === 'error') {
+                hookCount.textContent = '!';
+                hookCount.title = savedHooks.error
+                    || 'Saved-hook library unavailable';
+            } else {
+                const count = savedHooks
+                    && Number.isFinite(+savedHooks.count)
+                    ? +savedHooks.count
+                    : Number.isFinite(+counts.hooks)
+                        ? +counts.hooks
+                        : null;
+                hookCount.textContent = count == null
+                    ? ''
+                    : String(count);
+                hookCount.title = savedState === 'saving'
+                    ? `${savedHooks.pendingCount || 0} saving; ${savedHooks.canonicalCount || 0} saved`
+                    : `${count || 0} saved hook${count === 1 ? '' : 's'}`;
+            }
         }
         if (!teamAccess && activeView === 'team') setView('hooks');
     }

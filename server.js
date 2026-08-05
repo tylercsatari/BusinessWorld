@@ -11889,10 +11889,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 requestId:
                     req.headers['x-quant-request-id'] || null,
             });
+            const compact = compactSavedHookRecord(
+                saved.record,
+                { scoreDomain }
+            );
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 ok: saved.ok,
                 id: saved.id,
+                hook: {
+                    ...compact,
+                    workspace_folder_id:
+                        labScope && body.folder
+                            ? String(body.folder)
+                            : null,
+                },
                 score_record_sha256:
                     saved.score_record_sha256,
                 score_ledger_sha256:

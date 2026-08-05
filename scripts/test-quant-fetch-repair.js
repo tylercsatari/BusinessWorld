@@ -107,7 +107,35 @@ includes(server, 'const scoreRunner = () => longQuantScoreThumbnail(imageBuffer,
 includes(long, "await lqxJob('/api/longquant/thumbs/save', canonicalPayload)", 'Long Quant saves must be durable async jobs');
 includes(server, "'thumb-save',\n                    saveRunner,\n                    'longform',\n                    quantRequestId(req),\n                    requestFingerprint", 'Long Quant save jobs must be exact-input idempotent');
 includes(shorts, "rtFetchJson('/api/raw/saved-hook/' + id", 'saved hook details must use retrying JSON transport');
-includes(shorts, "rtFetchJson('/api/raw/saved-hooks'", 'saved hook indexes must use retrying JSON transport');
+const savedHookIndexPath = shorts.slice(
+    shorts.indexOf('function loadSavedHooks('),
+    shorts.indexOf('function beginSavedHookSave(')
+);
+includes(
+    savedHookIndexPath,
+    'return rtFetchJson(',
+    'saved hook indexes must use retrying JSON transport'
+);
+includes(
+    savedHookIndexPath,
+    "'/api/raw/saved-hooks'",
+    'the shared saved-hook loader must read the canonical index endpoint'
+);
+includes(
+    server,
+    'const compact = compactSavedHookRecord(\n                saved.record,',
+    'a successful saved-hook write must return its exact compact index row'
+);
+includes(
+    shorts,
+    "function savedHookUiState()",
+    'the Saved hooks badge and library must share one client-side store'
+);
+includes(
+    shorts,
+    "data-saved-hook-pending",
+    'a save must be visible in the library before its network write finishes'
+);
 const resolveSavedReadPath = shorts.slice(
     shorts.indexOf('async function resolveSavedScoreQueueEntry('),
     shorts.indexOf('function boundedSavedScoreQueueResolution(')

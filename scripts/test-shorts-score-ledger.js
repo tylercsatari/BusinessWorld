@@ -142,7 +142,7 @@ function shortsBrowserLedgerApi() {
         'buildings/jarvis/jarvis-retention.js'
     );
     const marker =
-        '        getExperimentContext: () => LAB_CONTEXT,';
+        '        getExperimentContext: () => experimentLabContextSnapshot(),';
     const source = fs.readFileSync(uiPath, 'utf8');
     assert(
         source.includes(marker),
@@ -150,7 +150,7 @@ function shortsBrowserLedgerApi() {
     );
     const instrumented = source.replace(
         marker,
-        `        getExperimentContext: () => LAB_CONTEXT,
+        `        getExperimentContext: () => experimentLabContextSnapshot(),
         __test: {
             shortsLedgerState,
             shortsRegisteredCoordinate,

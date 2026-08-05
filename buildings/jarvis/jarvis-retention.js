@@ -34,6 +34,8 @@ const JarvisRetention = (function () {
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     let SAVED_OPEN_DRAIN = null;
+    let SAVED_PENDING = Object.create(null);
+    let SAVED_CONFIRMED = Object.create(null);
     const SAVED_HOOK_DETAIL_TIMEOUT_MS = 15000;
     const SAVED_HOOK_DETAIL_ATTEMPTS = 2;
     const SAVED_HOOK_DETAIL_TOTAL_TIMEOUT_MS = 40000;
@@ -4589,7 +4591,7 @@ const JarvisRetention = (function () {
         scoreContractEnsure();
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; rtFetchJson('/api/indicators/registry', { cache: 'no-store' }, 4).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(e => { EXPREG = { error: fetchFail(e) }; rtgUpdateExp(); }); }
-        if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
+        if (SAVED === null) loadSavedHooks();
         if ((st.savedBank || 'hooks') === 'channels' && SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
         const uploads = st.rawUploads || [];
@@ -4701,7 +4703,11 @@ const JarvisRetention = (function () {
               ${titleRow}
               <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
                 ${displayReadOnly ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">${inspectionReadOnly ? 'Team workspace · read-only' : 'Persisted historical score'}</span>` : ''}
-                ${!displayReadOnly && up.source !== 'saved' && !up.savedId && !up._labAutoSaved ? `<span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span>` : ''}
+                ${!displayReadOnly && up.source !== 'saved' && !up.savedId && !up._labAutoSaved
+                    ? up._labSaveState === 'saving'
+                        ? `<span data-save-in-flight role="status" style="border:1px solid ${C.cyan};background:${C.cyan}12;color:${C.cyan};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">Saving…</span>`
+                        : `<span data-savescored style="cursor:pointer;border:1px solid ${up._labSaveState === 'error' ? C.red : C.accent};background:${up._labSaveState === 'error' ? C.red : C.accent}18;color:${up._labSaveState === 'error' ? C.red : C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${up._labSaveState === 'error' ? 'Retry save' : 'Save this hook'}</span>`
+                    : ''}
               </span></div>
             ${up._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(up._uploadWarning)}</div>` : ''}
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
@@ -7076,6 +7082,248 @@ const JarvisRetention = (function () {
             ...(overrides || {}),
         };
     }
+    function savedHookPendingRows() {
+        return Object.values(SAVED_PENDING || {}).sort((left, right) => (
+            Number(right.savedAt || 0) - Number(left.savedAt || 0)
+        ));
+    }
+    function savedHookCanonicalRows() {
+        const rows = SAVED && Array.isArray(SAVED.hooks)
+            ? SAVED.hooks
+            : [];
+        const merged = new Map();
+        rows.forEach(row => {
+            if (row && row.id) merged.set(String(row.id), row);
+        });
+        Object.values(SAVED_CONFIRMED || {}).forEach(row => {
+            if (row && row.id && !merged.has(String(row.id))) {
+                merged.set(String(row.id), row);
+            }
+        });
+        return Array.from(merged.values()).sort((left, right) => (
+            Number(right.savedAt || 0) - Number(left.savedAt || 0)
+        ));
+    }
+    function savedHookUiState() {
+        const canonicalCount = savedHookCanonicalRows().length;
+        const pendingCount = savedHookPendingRows().length;
+        if (SAVED && SAVED.error) {
+            return {
+                state: canonicalCount || pendingCount ? 'partial' : 'error',
+                count: canonicalCount + pendingCount,
+                canonicalCount,
+                pendingCount,
+                error: SAVED.error,
+            };
+        }
+        if (!SAVED) {
+            return {
+                state: pendingCount ? 'saving' : 'idle',
+                count: pendingCount || null,
+                canonicalCount,
+                pendingCount,
+            };
+        }
+        if (SAVED.loading) {
+            return {
+                state: pendingCount || canonicalCount
+                    ? 'saving'
+                    : 'loading',
+                count: canonicalCount + pendingCount || null,
+                canonicalCount,
+                pendingCount,
+            };
+        }
+        return {
+            state: pendingCount ? 'saving' : 'ready',
+            count: canonicalCount + pendingCount,
+            canonicalCount,
+            pendingCount,
+        };
+    }
+    function experimentLabContextSnapshot() {
+        if (!LAB_CONTEXT) return LAB_CONTEXT;
+        const savedHooks = savedHookUiState();
+        const summary = LAB_CONTEXT.summary || {};
+        const counts = summary.counts || {};
+        return {
+            ...LAB_CONTEXT,
+            savedHooks,
+            summary: {
+                ...summary,
+                counts: {
+                    ...counts,
+                    hooks: savedHooks.count == null
+                        ? counts.hooks
+                        : savedHooks.count,
+                },
+            },
+        };
+    }
+    function notifySavedHookStore(render) {
+        publishExperimentLabContext();
+        const savedLibraryVisible = !!(
+            isExperimentLabSurface()
+            && root
+            && root.dataset
+            && root.dataset.labView === 'hooks'
+        );
+        if (
+            (render !== false || savedLibraryVisible)
+            && root
+            && root.isConnected
+        ) {
+            rtgUpdateExp();
+        }
+    }
+    function acceptSavedHookIndex(index) {
+        const next = index && typeof index === 'object'
+            ? { ...index, loading: 0 }
+            : { hooks: [], folders: [], loading: 0 };
+        if (!Array.isArray(next.hooks)) next.hooks = [];
+        next.hooks.forEach(row => {
+            if (row && row.id) {
+                delete SAVED_CONFIRMED[String(row.id)];
+            }
+        });
+        SAVED = next;
+        notifySavedHookStore(true);
+        return SAVED;
+    }
+    function loadSavedHooks(force) {
+        if (!force && SAVED && (SAVED.loading || !SAVED.error)) {
+            return Promise.resolve(SAVED);
+        }
+        const prior = SAVED && typeof SAVED === 'object'
+            ? SAVED
+            : {};
+        SAVED = {
+            ...prior,
+            hooks: Array.isArray(prior.hooks) ? prior.hooks : [],
+            folders: Array.isArray(prior.folders) ? prior.folders : [],
+            loading: 1,
+            error: null,
+        };
+        publishExperimentLabContext();
+        return rtFetchJson(
+            '/api/raw/saved-hooks',
+            { cache: 'no-store' },
+            4
+        ).then(acceptSavedHookIndex).catch(error => {
+            SAVED = {
+                ...SAVED,
+                loading: 0,
+                error: fetchFail(error),
+            };
+            notifySavedHookStore(true);
+            return SAVED;
+        });
+    }
+    function beginSavedHookSave(payload, upload, render) {
+        const token = `pending:${rtRequestId()}`;
+        SAVED_PENDING[token] = {
+            id: token,
+            title: payload.title || 'Saving hook',
+            kind: payload.kind || 'scored',
+            source: payload.source || 'experiment',
+            folder: payload.folder || null,
+            savedAt: Date.now(),
+            _saveState: 'saving',
+        };
+        if (upload) {
+            upload._labSaveState = 'saving';
+            upload._labSaveError = null;
+            upload._savedMutationId = token;
+        }
+        notifySavedHookStore(render);
+        return token;
+    }
+    function failSavedHookSave(token, upload, error, render) {
+        const pending = SAVED_PENDING[token] || null;
+        delete SAVED_PENDING[token];
+        if (upload) {
+            upload._labSaveState = 'error';
+            upload._labSaveError = String(
+                error && error.message || error
+            ).slice(0, 500);
+            upload._savedMutationId = null;
+        }
+        if (pending) notifySavedHookStore(render);
+    }
+    function completeSavedHookSave(
+        token,
+        upload,
+        response,
+        options
+    ) {
+        const pending = SAVED_PENDING[token] || null;
+        delete SAVED_PENDING[token];
+        const id = response && response.id;
+        const hook = response && response.hook;
+        if (pending && hook && hook.id) {
+            SAVED_CONFIRMED[String(hook.id)] = hook;
+        } else if (pending && id) {
+            SAVED_CONFIRMED[String(id)] = {
+                id,
+                title: pending.title || 'Saved hook',
+                kind: pending.kind || 'scored',
+                source: pending.source || 'experiment',
+                folder: pending.folder || null,
+                savedAt: Date.now(),
+                score_domain: 'shorts',
+                _awaitingCanonicalIndex: true,
+            };
+        }
+        if (upload) {
+            upload.savedId = id;
+            upload._labAutoSaved = options.auto === true;
+            upload._labSaveState = 'saved';
+            upload._labSavedAt = Date.now();
+            upload._savedMutationId = null;
+        }
+        if (pending) notifySavedHookStore(options.render);
+        if (pending && isExperimentLabSurface()) {
+            refreshExperimentLabContext({ render: false });
+        }
+        return id;
+    }
+    async function persistSavedHookPayload(payload, options) {
+        options = options || {};
+        const upload = options.upload || null;
+        const token = beginSavedHookSave(
+            payload,
+            upload,
+            options.render
+        );
+        try {
+            const response = await durableJsonMutation('/api/raw/hook-save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!response || !response.ok || !response.id) {
+                throw new Error(
+                    response && response.error
+                    || 'The private saved-hook write failed.'
+                );
+            }
+            completeSavedHookSave(
+                token,
+                upload,
+                response,
+                options
+            );
+            return response;
+        } catch (error) {
+            failSavedHookSave(
+                token,
+                upload,
+                error,
+                options.render
+            );
+            throw error;
+        }
+    }
     async function persistExperimentLabScore(upload, options) {
         options = options || {};
         if (
@@ -7101,36 +7349,20 @@ const JarvisRetention = (function () {
                 'The complete canonical score ledger could not be persisted.'
             );
         }
-        upload._labSaveState = 'saving';
         upload._labAutoSavePromise = (async () => {
-            const response = await rtFetchJson('/api/raw/hook-save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            }, 1);
-            if (!response || !response.ok || !response.id) {
-                throw new Error(
-                    response && response.error
-                    || 'The private saved-hook write failed.'
-                );
-            }
-            upload.savedId = response.id;
-            upload._labAutoSaved = true;
-            upload._labSaveState = 'saved';
-            upload._labSavedAt = Date.now();
-            SAVED = null;
-            if (options.refreshContext !== false) {
-                refreshExperimentLabContext({ render: false });
-            }
+            const response = await persistSavedHookPayload(
+                payload,
+                {
+                    upload,
+                    auto: options.manual !== true,
+                    render: options.render === true,
+                }
+            );
             return response.id;
         })();
         try {
             return await upload._labAutoSavePromise;
         } catch (error) {
-            upload._labSaveState = 'error';
-            upload._labSaveError = String(
-                error && error.message || error
-            ).slice(0, 500);
             throw error;
         } finally {
             upload._labAutoSavePromise = null;
@@ -7220,21 +7452,11 @@ const JarvisRetention = (function () {
                 'The storyboard has no valid canonical score ledger to save.'
             );
         }
-        const response = await rtFetchJson('/api/raw/hook-save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        }, 1);
-        if (!response || !response.ok) {
-            throw new Error(
-                response && response.error || 'Saved hook write failed.'
-            );
-        }
-        score.savedId = response.id;
-        score._labAutoSaved = isExperimentLabSurface();
-        score._labSaveState = 'saved';
-        SAVED = null;
-        refreshExperimentLabContext({ render: false });
+        const response = await persistSavedHookPayload(payload, {
+            upload: score,
+            auto: isExperimentLabSurface(),
+            render: false,
+        });
         return response;
     }
     function openRawVideoPicker() {
@@ -7472,6 +7694,47 @@ const JarvisRetention = (function () {
             return j;
         }
         throw last || new Error('server unavailable');
+    }
+    async function durableJsonMutation(url, options) {
+        const fetchOptions = scopedFetchOptions({ ...(options || {}) });
+        let timer = null;
+        if (!fetchOptions.signal && window.AbortController) {
+            const controller = new window.AbortController();
+            fetchOptions.signal = controller.signal;
+            timer = window.setTimeout(
+                () => controller.abort(),
+                120000
+            );
+        }
+        try {
+            const response = await fetch(url, fetchOptions);
+            const raw = await response.text();
+            let payload = null;
+            try {
+                payload = raw ? JSON.parse(raw) : null;
+            } catch (error) {}
+            if (!payload) {
+                throw new Error(
+                    `server returned ${response.status} (non-JSON)`
+                );
+            }
+            if (!response.ok || payload.error) {
+                throw new Error(
+                    payload.error || `HTTP ${response.status}`
+                );
+            }
+            return payload;
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw new Error(
+                    'save timed out after 120 seconds; refresh Saved hooks '
+                    + 'before retrying because the server may have completed it'
+                );
+            }
+            throw error;
+        } finally {
+            if (timer) window.clearTimeout(timer);
+        }
     }
     function rtRequestId() {
         try { if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID(); } catch (e) {}
@@ -7793,7 +8056,10 @@ const JarvisRetention = (function () {
             return;
         }
         const scopen = e.target.closest('[data-savedchannelopen]'); if (scopen) { openSavedChannel(scopen.getAttribute('data-savedchannelopen')); return; }
-        if (e.target.closest('[data-savedretry]')) { SAVED = null; rtgUpdateExp(); return; }
+        if (e.target.closest('[data-savedretry]')) {
+            loadSavedHooks(true);
+            return;
+        }
         const screfresh = e.target.closest('[data-savedchannelrefresh]'); if (screfresh) { loadSavedChannelDetail(screfresh.getAttribute('data-savedchannelrefresh'), true).then(() => rtgUpdateExp()); return; }
         const scstop = e.target.closest('[data-savedchannelstop]'); if (scstop) { savedChannelAction(scstop.getAttribute('data-savedchannelstop'), 'stop'); return; }
         const scresume = e.target.closest('[data-savedchannelresume]'); if (scresume) { savedChannelAction(scresume.getAttribute('data-savedchannelresume'), 'resume'); return; }
@@ -8031,7 +8297,7 @@ const JarvisRetention = (function () {
                         a && (a.premise || a.caption)
                         || scored.transcript
                         || '',
-                }));
+                }), { upload: scored });
             } else if (a) {
                 saveHook({
                     kind: 'idea',
@@ -8057,14 +8323,14 @@ const JarvisRetention = (function () {
             const up = selectedRawScoreUpload();
             const payload = scoredHookSavePayload(up);
             if (payload && isExperimentLabSurface()) {
-                persistExperimentLabScore(up).then(id => {
-                    st.savedFlash = id;
-                    rtgUpdateExp();
+                persistExperimentLabScore(up, {
+                    manual: true,
+                    render: true,
                 }).catch(error => {
                     st.rawUpErr = fetchFail(error);
                     rtgUpdateExp();
                 });
-            } else if (payload) saveHook(payload);
+            } else if (payload) saveHook(payload, { upload: up });
             else rawUploadPickerError(
                 'The selected card has no valid canonical score ledger to save.'
             );
@@ -8595,19 +8861,38 @@ const JarvisRetention = (function () {
             'The generated hook score is complete, but its private saved copy failed'
         );
     }
-    async function saveHook(payload) {
+    async function saveHook(payload, options) {
+        options = options || {};
         try {
             const cf = st.savedFolder; if (cf && cf !== 'all' && cf !== 'none') payload = Object.assign({}, payload, { folder: cf });
             if (!payload.montage && payload.frame_imgs && payload.frame_imgs.length) {
                 payload = Object.assign({}, payload, { montage: await montageFromFrameIds(payload.frame_imgs) });
             }
-            const j = await rtFetchJson('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 1);
-            if (j.ok) { st.savedFlash = j.id; SAVED = null; refreshExperimentLabContext(); rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 3500); }
-            else { st.rawUpErr = j.error || 'save failed'; rtgUpdateExp(); }
+            await persistSavedHookPayload(payload, {
+                upload: options.upload || null,
+                render: true,
+            });
         } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function deleteSaved(id) {
-        try { await rtFetchJson('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }, 1); SAVED = null; refreshExperimentLabContext(); rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
+        try {
+            await rtFetchJson('/api/raw/hook-delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            }, 1);
+            delete SAVED_CONFIRMED[String(id)];
+            if (SAVED && Array.isArray(SAVED.hooks)) {
+                SAVED.hooks = SAVED.hooks.filter(
+                    row => String(row.id) !== String(id)
+                );
+            }
+            refreshExperimentLabContext({ render: false });
+            notifySavedHookStore(true);
+        } catch (e) {
+            st.rawUpErr = fetchFail(e);
+            rtgUpdateExp();
+        }
     }
     async function createFolder(name) {
         const normalized = String(name || '').trim();
@@ -14240,7 +14525,9 @@ const JarvisRetention = (function () {
             ? requestedTab
             : 'hooks';
         if (tab !== requestedTab) st.savedBank = tab;
-        const hookCount = (SAVED && SAVED.hooks || []).length, channelCount = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).length;
+        const hookCount = savedHookCanonicalRows().length
+            + savedHookPendingRows().length;
+        const channelCount = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).length;
         const button = (key, label, count) => `<span data-savedbank="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:6px 12px;font-size:12px;font-weight:900">${label} <span style="font-size:9px;color:${tab === key ? C.accent : C.mute}">${count}</span></span>`;
         const teamCount =
             LAB_CONTEXT
@@ -14260,10 +14547,17 @@ const JarvisRetention = (function () {
         return cardc(`<div style="display:flex;gap:4px;overflow-x:auto">${button('hooks', 'Saved hooks', hookCount)}${channelsAllowed ? button('channels', 'Saved channels', channelCount) : ''}${teamButton}</div>`, 6) + panel;
     }
     function savedStrip() {
-        if (!SAVED || SAVED.loading) return cardc(`<div style="padding:18px;text-align:center;color:${C.dim}">Loading saved hooks…</div>`, 10);
-        if (SAVED.error) return cardc(`<div style="padding:14px;font-size:11px;color:#f87171">⚠️ Saved hooks failed to load: ${SAVED.error} <button data-savedretry style="margin-left:8px;padding:3px 10px;border-radius:6px;border:1px solid #f87171;background:none;color:#f87171;cursor:pointer">Retry</button></div>`, 10);
-        if (!(SAVED.hooks || []).length) return cardc(`<div style="padding:14px;color:${C.dim};font-size:10px">No hooks saved yet. Score or generate a hook, then use “Save this hook.”</div>`, 10);
-        const all = SAVED.hooks;
+        const pending = savedHookPendingRows();
+        const all = savedHookCanonicalRows();
+        if ((!SAVED || SAVED.loading) && !pending.length && !all.length) {
+            return cardc(`<div style="padding:18px;text-align:center;color:${C.dim}">Loading saved hooks…</div>`, 10);
+        }
+        if (SAVED && SAVED.error && !pending.length && !all.length) {
+            return cardc(`<div style="padding:14px;font-size:11px;color:#f87171">⚠️ Saved hooks failed to load: ${SAVED.error} <button data-savedretry style="margin-left:8px;padding:3px 10px;border-radius:6px;border:1px solid #f87171;background:none;color:#f87171;cursor:pointer">Retry</button></div>`, 10);
+        }
+        if (!all.length && !pending.length) {
+            return cardc(`<div style="padding:14px;color:${C.dim};font-size:10px">No hooks saved yet. Score or generate a hook, then use “Save this hook.”</div>`, 10);
+        }
         const F = st.savedFilt || (st.savedFilt = {});
         // filter on any combination of metrics; sort by the chosen sort metric (default keep)
         const METRICS = [['channelFreeConcat', 'channel-free concat keep', 100, '%'], ['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'embed views ≥', 50, 'M'], ['sviews', 'scaled views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
@@ -14391,7 +14685,17 @@ const JarvisRetention = (function () {
         };
         const folders = SAVED.folders || [];
         const curF = st.savedFolder || 'all';
-        const inFolder = h => curF === 'all' ? true : curF === 'none' ? !h.folder : h.folder === curF;
+        const hookFolder = hook => hook && (
+            hook.workspace_folder_id
+            || hook.folderId
+            || hook.folder
+            || null
+        );
+        const inFolder = h => curF === 'all'
+            ? true
+            : curF === 'none'
+                ? !hookFolder(h)
+                : hookFolder(h) === curF;
         const sortK = st.savedSort || 'recent';
         const hooks = all.filter(h => pass(h) && inFolder(h));
         if (sortK === 'recent') hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
@@ -14406,13 +14710,18 @@ const JarvisRetention = (function () {
             <input type="range" min="0" max="${mx}" value="${thr(k)}" data-savedfilt="${k}" style="width:118px;accent-color:${C.accent}"/></div>`).join('');
         const SORTS = [['recent', '🕑 recent'], ['oldest', 'oldest'], ['channelFreeConcat', 'channel-free concat keep'], ['keep', 'keep'], ['ret5', 'ret5'], ['views', 'views'], ['sviews', 'sviews'], ['gt10M', '>10M'], ['outlier', 'outlier']];
         const sortSel = SORTS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${lab}</span>`).join('');
-        const fcount = id => all.filter(h => id === 'none' ? !h.folder : h.folder === id).length;
+        const fcount = id => all.filter(h => id === 'none'
+            ? !hookFolder(h)
+            : hookFolder(h) === id).length;
         const folderPills = [['all', 'All (' + all.length + ')'], ['none', 'Unfiled (' + fcount('none') + ')']].concat(folders.map(f => [f.id, esc(f.name) + ' (' + fcount(f.id) + ')']));
         const folderCreator = st.savedFolderEditor
             ? `<div class="saved-hook-folder-create"><input type="text" data-savedfoldername value="${esc(st.savedFolderName || '')}" maxlength="120" placeholder="Folder name" aria-label="New saved-hook folder name"><button type="button" data-savedfoldercreate>Create</button><button type="button" data-savedfoldercancel>Cancel</button></div>`
             : '';
         const folderBar = `<div class="saved-hook-folder-bar"><span class="saved-hook-folder-label">Folder</span>${folderPills.map(([id, lab]) => `<button type="button" data-savedfolder="${id}" aria-pressed="${curF === id}" style="border-color:${curF === id ? C.accent : C.border};background:${curF === id ? C.accent + '22' : 'transparent'};color:${curF === id ? C.accent : C.dim}">${lab}${(id !== 'all' && id !== 'none') ? ` <span data-savedfolderdel="${id}" title="Delete folder" aria-label="Delete folder">×</span>` : ''}</button>`).join('')}<button type="button" data-savedfoldernew aria-expanded="${!!st.savedFolderEditor}">${st.savedFolderEditor ? 'Close' : 'New folder'}</button>${folderCreator}</div>`;
-        const folderOpts = h => `<option value="">📁 —</option>` + folders.map(f => `<option value="${f.id}" ${h.folder === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
+        const pendingCards = pending.length
+            ? `<div data-saved-hook-pending-list role="status" aria-live="polite" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px">${pending.map(row => `<div data-saved-hook-pending="${esc(row.id)}" style="border:1px solid ${C.cyan};background:${C.cyan}0c;border-radius:8px;padding:9px 11px;min-width:180px;max-width:280px"><div style="font-size:8px;color:${C.cyan};font-weight:950;text-transform:uppercase">Saving to your library</div><div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.35;margin-top:3px">${esc(row.title)}</div><div style="font-size:8px;color:${C.dim};margin-top:4px">Writing the canonical score, media, index, and workspace reference…</div></div>`).join('')}</div>`
+            : '';
+        const folderOpts = h => `<option value="">📁 —</option>` + folders.map(f => `<option value="${f.id}" ${hookFolder(h) === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
         const card = h => {
             const thumb = h.hasMontage
                 ? authenticatedMediaUrl(
@@ -14488,9 +14797,11 @@ const JarvisRetention = (function () {
         };
         const shown = hooks.slice(0, SHOW);
         const anyFilt = METRICS.some(([k]) => thr(k));
-        const flash = st.savedFlash ? `<div style="background:${C.green}1e;border:1px solid ${C.green};border-radius:8px;padding:9px 13px;margin-bottom:10px;font-size:12px;color:${C.green};font-weight:800">✅ Saved${(curF !== 'all' && curF !== 'none') ? ' to ' + esc((folders.find(f => f.id === curF) || {}).name || '') : ''}!</div>` : '';
-        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length} total · click any for the full read-out</span></div>
-          ${flash}${folderBar}
+        const sourceWarning = SAVED && SAVED.error
+            ? `<div style="padding:7px 9px;margin-bottom:8px;border-left:3px solid ${C.red};background:${C.red}0c;color:${C.red};font-size:9px">The server index refresh failed. ${all.length} locally confirmed hook${all.length === 1 ? '' : 's'} remain visible. <button data-savedretry style="border:0;background:none;color:${C.red};font-weight:900;text-decoration:underline;cursor:pointer">Retry</button></div>`
+            : '';
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length + pending.length} total${pending.length ? ` · ${pending.length} saving` : ''} · click any saved hook for the full read-out</span></div>
+          ${sourceWarning}${pendingCards}${folderBar}
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;padding:8px;background:${C.card2};border-radius:8px">
             <span style="font-size:9px;color:${C.mute};align-self:center">filter ≥</span>${fbar}
             ${anyFilt ? `<span data-savedfiltclear style="cursor:pointer;font-size:9px;color:${C.dim};text-decoration:underline;align-self:center">clear</span>` : ''}
@@ -14516,6 +14827,8 @@ const JarvisRetention = (function () {
         );
         if (!surfaceChanged) return;
         SAVED = null;
+        SAVED_PENDING = Object.create(null);
+        SAVED_CONFIRMED = Object.create(null);
         SAVEDDETAIL = {};
         SAVEDCHANNELS = null;
         SAVEDCHANNELDETAIL = {};
@@ -14564,7 +14877,6 @@ const JarvisRetention = (function () {
             && LAB_CONTEXT.teamAccess
             ? 'team'
             : 'hooks';
-        if (st.savedBank === next) return true;
         st.savedBank = next;
         if (root && root.isConnected) rtgUpdateExp();
         return true;
@@ -14614,7 +14926,7 @@ const JarvisRetention = (function () {
         root.dispatchEvent(
             new window.CustomEvent(
                 'experiment-lab-context',
-                { detail: LAB_CONTEXT }
+                { detail: experimentLabContextSnapshot() }
             )
         );
     }
@@ -14754,7 +15066,7 @@ const JarvisRetention = (function () {
                 'owner-team-inspection',
             ],
         }),
-        getExperimentContext: () => LAB_CONTEXT,
+        getExperimentContext: () => experimentLabContextSnapshot(),
         setExperimentLabLibraryView,
         __st: () => st,
     };

@@ -920,6 +920,34 @@ async function main() {
             );
             return { record, row };
         };
+        const autoSavedHookId = 'hk-auto-opened-score';
+        const autoSavedHookRecord = JSON.parse(
+            JSON.stringify(videos[0].__record)
+        );
+        autoSavedHookRecord.id = autoSavedHookId;
+        autoSavedHookRecord.title =
+            'Automatically opened YouTube score';
+        autoSavedHookRecord.text = historicalSavedHookRecord.text;
+        autoSavedHookRecord.source = 'youtube';
+        autoSavedHookRecord.savedAt = Date.now() + 1000;
+        autoSavedHookRecord.hasMontage = true;
+        delete autoSavedHookRecord.score_record_sha256;
+        autoSavedHookRecord.score_record_sha256 =
+            displayContract.savedHookScoreRecordSha256(
+                autoSavedHookRecord
+            );
+        const autoSavedHookRow =
+            displayContract.compactSavedHookRecord(
+                autoSavedHookRecord,
+                { scoreDomain: 'shorts' }
+            );
+        assert.strictEqual(
+            displayContract.validateCompactSavedHookRecord(
+                autoSavedHookRow
+            ),
+            true,
+            'auto-saved browser fixture must expose the exact compact row'
+        );
         const channelFreeLowId = 'hkchannelconcatchlow';
         const channelFreeHighId = 'hkchannelconcatchhigh';
         const channelFreeLow = canonicalChannelFreeSavedHook(
@@ -2186,6 +2214,9 @@ const teamAccountId=${JSON.stringify(teamAccountId)};
 const historicalSavedHookId=${JSON.stringify(historicalSavedHookId)};
 const queuedSavedHookId=${JSON.stringify(queuedSavedHookId)};
 const failedSavedHookId=${JSON.stringify(failedSavedHookId)};
+const autoSavedHookId=${JSON.stringify(autoSavedHookId)};
+const autoSavedHookRow=${JSON.stringify(autoSavedHookRow)};
+const autoSavedHookRecord=${JSON.stringify(autoSavedHookRecord)};
 const historicalUpgradeScore=${JSON.stringify(historicalUpgradeScore)};
 window.__historicalTamperFixtures=${
     JSON.stringify(historicalTamperFixtures)
@@ -2257,39 +2288,17 @@ window.fetch=function(url,options){
         && String(options&&options.method||'GET').toUpperCase()==='POST'
     ){
         const savedPayload=JSON.parse(options.body||'{}');
-        const savedId='hk-auto-opened-score';
+        const savedId=autoSavedHookId;
         window.__labAutoSavedScore=savedPayload;
         window.__autoSavedHookId=savedId;
         replies['/api/raw/saved-hooks'].hooks=[
-            {
-                id:savedId,
-                kind:'scored',
-                score_domain:'shorts',
-                source:savedPayload.source||'youtube',
-                title:savedPayload.title||'Saved score',
-                text:savedPayload.text||'',
-                savedAt:Date.now(),
-                hasMontage:true,
-                evidence_state:'canonical_bound',
-                predictor_eligible:true,
-                score_record_sha256:
-                    historicalUpgradeScore.score_record_sha256,
-                score_ledger_sha256:
-                    historicalUpgradeScore.score_ledger.ledger_sha256
-            },
+            autoSavedHookRow,
             ...replies['/api/raw/saved-hooks'].hooks.filter(
                 row=>row.id!==savedId
             )
         ];
         replies['/api/raw/saved-hook/'+savedId]={
-            ...historicalUpgradeScore,
-            ...savedPayload,
-            id:savedId,
-            kind:'scored',
-            source:savedPayload.source||'youtube',
-            title:savedPayload.title||'Saved score',
-            text:savedPayload.text||'',
-            hasMontage:true,
+            ...autoSavedHookRecord,
             evidence_state:'canonical_bound',
             canonical:true,
             predictor_eligible:true,
@@ -2298,9 +2307,9 @@ window.fetch=function(url,options){
                 state:'verified',
                 valid:true,
                 recorded_sha256:
-                    historicalUpgradeScore.score_record_sha256,
+                    autoSavedHookRecord.score_record_sha256,
                 calculated_sha256:
-                    historicalUpgradeScore.score_record_sha256
+                    autoSavedHookRecord.score_record_sha256
             },
             input_binding_validation:{
                 state:'canonical-valid',
@@ -2316,16 +2325,18 @@ window.fetch=function(url,options){
         const response=new Response(JSON.stringify({
             ok:true,
             id:savedId,
-            score_record_sha256:historicalUpgradeScore.score_record_sha256,
+            hook:autoSavedHookRow,
+            score_record_sha256:autoSavedHookRecord.score_record_sha256,
             score_ledger_sha256:
-                historicalUpgradeScore.score_ledger.ledger_sha256
+                autoSavedHookRecord.score_ledger.ledger_sha256
         }),{
             status:200,
             headers:{'Content-Type':'application/json'}
         });
-        return savedPayload.source==='youtube'
-            ? new Promise(resolve=>setTimeout(()=>resolve(response),180))
-            : Promise.resolve(response);
+        return new Promise(resolve=>setTimeout(
+            ()=>resolve(response),
+            savedPayload.source==='youtube' ? 1800 : 180
+        ));
     }
     if(
         p==='/api/storyboards/save'
@@ -2806,6 +2817,58 @@ window.fetch=function(url,options){
             '[data-canonical-score-analysis]'
         );
         await automaticScoreAnalysis.waitFor();
+        await page.waitForFunction(() => (
+            (window.__fetchCounts['/api/raw/hook-save'] || 0) >= 1
+        ));
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
+        const pendingSavedHook = page.locator(
+            '[data-saved-hook-pending]'
+        );
+        await pendingSavedHook.waitFor();
+        assert(
+            (await pendingSavedHook.innerText()).includes(
+                'Automatically opened YouTube score'
+            ),
+            'a save must appear in Saved hooks immediately while its '
+                + 'canonical write is still running'
+        );
+        const immediateSavedHookCount = await page.locator(
+            '[data-savedopen]'
+        ).count();
+        const immediatePendingHookCount = await page.locator(
+            '[data-saved-hook-pending]'
+        ).count();
+        assert.strictEqual(
+            Number(await page.locator(
+                '[data-lab-hook-count]'
+            ).innerText()),
+            immediateSavedHookCount + immediatePendingHookCount,
+            'the Saved hooks badge and visible canonical + pending rows '
+                + 'must use one local source of truth'
+        );
+        const immediateCanonicalSavedHook = page.locator(
+            `[data-savedopen="${autoSavedHookId}"]`
+        );
+        await immediateCanonicalSavedHook.waitFor();
+        assert.strictEqual(
+            await page.locator('[data-saved-hook-pending]').count(),
+            0,
+            'the visible pending row must become the canonical saved row '
+                + 'without navigating away or refreshing the library'
+        );
+        assert.strictEqual(
+            Number(await page.locator(
+                '[data-lab-hook-count]'
+            ).innerText()),
+            await page.locator('[data-savedopen]').count(),
+            'the badge and visible canonical library must stay in sync '
+                + 'when the background write completes'
+        );
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="score"]'
+        ).click();
         await page.evaluate(() => {
             window.__automaticScoreNode = document.querySelector(
                 '[data-canonical-score-analysis]'
@@ -2971,6 +3034,34 @@ window.fetch=function(url,options){
             'the auto-save must persist all 21 coordinates rather than a '
                 + 'summary-only score'
         );
+        await page.waitForFunction(id => (
+            window.JarvisRetention.__st().rawUploads.some(upload => (
+                upload && upload.savedId === id
+            ))
+        ), autoSavedHookId);
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
+        const persistedCanonicalSavedHook = page.locator(
+            `[data-savedopen="${autoSavedHookId}"]`
+        );
+        await persistedCanonicalSavedHook.waitFor();
+        assert.strictEqual(
+            await page.locator('[data-saved-hook-pending]').count(),
+            0,
+            'the pending save row must be replaced by the canonical row'
+        );
+        assert.strictEqual(
+            Number(await page.locator(
+                '[data-lab-hook-count]'
+            ).innerText()),
+            await page.locator('[data-savedopen]').count(),
+            'after save completion the badge and canonical library count '
+                + 'must remain identical'
+        );
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="score"]'
+        ).click();
         const embedCountBeforeReopen = await page.evaluate(() => (
             window.__fetchCounts['/api/raw/embed-montage'] || 0
         ));
@@ -3500,6 +3591,9 @@ window.fetch=function(url,options){
             });
             await page.setViewportSize(queueDesktopViewport);
         }
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
         const failedSavedHookCard = page.locator(
             `[data-savedopen="${failedSavedHookId}"]`
         );
@@ -3509,6 +3603,9 @@ window.fetch=function(url,options){
         await failedSavedHookCard.waitFor();
         await followingSavedHookCard.waitFor();
         await failedSavedHookCard.click();
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
         await followingSavedHookCard.click();
         await page.waitForFunction(({ failedId, followingId }) => (
             document.querySelector(
@@ -3524,7 +3621,18 @@ window.fetch=function(url,options){
         const failedQueueRow = page.locator(
             `[data-score-queue-id="self:${failedSavedHookId}"]`
         );
-        await failedQueueRow.locator('[data-rawupmark]').click();
+        const failedQueueToggle = failedQueueRow.locator(
+            '[data-rawupmark]'
+        );
+        if (
+            await failedQueueToggle.getAttribute('aria-expanded')
+                !== 'true'
+        ) {
+            await failedQueueToggle.click();
+        }
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
         await page.locator(
             '[data-saved-detail-state="error"]'
         ).waitFor({ state: 'attached' });
@@ -3564,6 +3672,9 @@ window.fetch=function(url,options){
             'ready',
             'one failed saved hook must not block the following queued hook'
         );
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="score"]'
+        ).click();
         await historicalQueueRow.locator('[data-rawupmark]').click();
         await page.locator(
             '[data-saved-detail-state="historical-read-only"]'

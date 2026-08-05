@@ -58,8 +58,8 @@ function loadPrivateApi(source, marker, replacement) {
 
 const shortApi = loadPrivateApi(
     SHORT_SOURCE,
-    '        getExperimentContext: () => LAB_CONTEXT,',
-    `        getExperimentContext: () => LAB_CONTEXT,
+    '        getExperimentContext: () => experimentLabContextSnapshot(),',
+    `        getExperimentContext: () => experimentLabContextSnapshot(),
         __releaseConsistency: {
             compactPlotCacheKey: rtCompactPlotCacheKey,
             compactPlotRelease: rtCompactPlotRelease,
