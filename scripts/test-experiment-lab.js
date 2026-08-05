@@ -927,7 +927,8 @@ async function main() {
         autoSavedHookRecord.id = autoSavedHookId;
         autoSavedHookRecord.title =
             'Automatically opened YouTube score';
-        autoSavedHookRecord.text = historicalSavedHookRecord.text;
+        autoSavedHookRecord.text = historicalSavedHookRecord.text
+            || 'Saved fixture transcript for editing.';
         autoSavedHookRecord.source = 'youtube';
         autoSavedHookRecord.savedAt = Date.now() + 1000;
         autoSavedHookRecord.hasMontage = true;
@@ -2245,7 +2246,10 @@ window.fetch=function(url,options){
             )
         });
     }
-    if(p==='/api/raw/saved-montage/'+historicalSavedHookId){
+    if(
+        p==='/api/raw/saved-montage/'+historicalSavedHookId
+        || p==='/api/raw/saved-montage/'+autoSavedHookId
+    ){
         const b=Uint8Array.from(
             atob('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='),
             c=>c.charCodeAt(0)
@@ -3096,8 +3100,10 @@ window.fetch=function(url,options){
         ).waitFor();
         await page.locator('[data-savedfolder="all"]:visible').click();
         await page.locator(
-            '[data-savedmove="hk-auto-opened-score"]:visible'
-        ).selectOption('elf-owner-hooks-1');
+            '[data-saved-drag="hk-auto-opened-score"]:visible'
+        ).dragTo(page.locator(
+            '[data-savedfolderdrop="elf-owner-hooks-1"]:visible'
+        ));
         await page.waitForFunction(() => (
             window.__labFolderRequests.some(request => (
                 request.path === '/api/raw/hook-move'
@@ -3132,6 +3138,42 @@ window.fetch=function(url,options){
             'reopening a saved score must load its persisted ledger and never '
                 + 'invoke the embedding endpoint'
         );
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="hooks"]'
+        ).click();
+        await page.locator(
+            `[data-savededit="${autoSavedHookId}"]:visible`
+        ).click();
+        await page.locator(
+            '.experiment-lab-tab[data-lab-view="score"][aria-selected="true"]'
+        ).waitFor();
+        const editableRevision = page.locator(
+            '#shorts-storyboard-workbench'
+        );
+        await editableRevision.locator(
+            '.sb-panel-tile img'
+        ).first().waitFor();
+        assert.strictEqual(
+            await editableRevision.locator('.sb-panel-tile img').count(),
+            5,
+            'Edit must import the saved visual into the shared five-frame '
+                + 'storyboard editor'
+        );
+        assert.strictEqual(
+            await editableRevision.locator(
+                '[data-sb-hook-text]'
+            ).inputValue(),
+            autoSavedHookRecord.text,
+            'the editable revision must retain the saved spoken text'
+        );
+        assert(
+            (await editableRevision.innerText()).includes(
+                'editable revision'
+            ),
+            'the UI must explain that editing forks a new revision'
+        );
+        await editableRevision.locator('[data-sb-new]').click();
+        await page.locator('[data-rawbuildmode="0"]').first().click();
         await page.locator(
             '.experiment-lab-tab[data-lab-view="score"]'
         ).click();

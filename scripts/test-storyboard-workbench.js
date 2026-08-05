@@ -96,10 +96,10 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=11')
+        indexSource.includes('storyboard-workbench.js?v=12')
             && indexSource.indexOf('storyboard-style-presets.js?v=1')
-            < indexSource.indexOf('storyboard-workbench.js?v=11')
-            && indexSource.indexOf('storyboard-workbench.js?v=11')
+            < indexSource.indexOf('storyboard-workbench.js?v=12')
+            && indexSource.indexOf('storyboard-workbench.js?v=12')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the shared style contract and storyboard module must load before '
             + 'the Shorts integration'
@@ -519,6 +519,7 @@ async function main() {
             }
             window.JarvisUpload.queue.push(files);
         };
+        window.__fixtureStripDataUrl = stripDataUrl;
         const workbench = window.JarvisStoryboardWorkbench.create({
             escapeHtml: value => String(value == null ? '' : value)
                 .replace(/&/g, '&amp;')
@@ -1213,6 +1214,124 @@ async function main() {
         'background persistence must not rebuild the editor or take focus'
     );
 
+    const selectedBeforeRevision = await page.evaluate(() => (
+        window.__workbench.getState().selectedCandidateId
+    ));
+    await page.click(
+        `[data-sb-delete-candidate="${selectedBeforeRevision}"]`
+    );
+    await page.evaluate(async () => {
+        await window.__workbench.importSavedHook({
+            id: 'saved-origin-1',
+            title: 'Editable saved opening',
+            idea: 'A machine is tested in five escalating scenes.',
+            text: 'This machine should not be able to do this.',
+            frames: [0, 1, 2, 3, 4].map(index => ({
+                prompt: `Saved frame prompt ${index + 1}`,
+            })),
+            montage: window.__fixtureStripDataUrl(20),
+        });
+    });
+    await page.waitForFunction(() => {
+        const state = window.__workbench.getState();
+        const current = state.candidates.find(candidate => (
+            candidate.id === state.selectedCandidateId
+        ));
+        return !state.busy
+            && current
+            && current.sourceSavedHookId === 'saved-origin-1'
+            && current.panels.every(panel => !!panel.image);
+    });
+    const importedRevision = await page.evaluate(() => {
+        const state = window.__workbench.getState();
+        const current = state.candidates.find(candidate => (
+            candidate.id === state.selectedCandidateId
+        ));
+        return {
+            sourceSavedHookId: current.sourceSavedHookId,
+            title: current.name,
+            text: current.hookText,
+            prompts: current.panels.map(panel => panel.prompt),
+            score: current.score,
+            savedHookId: current.savedHookId,
+            panelIds: current.panels.map(panel => panel.id),
+        };
+    });
+    assert.strictEqual(
+        importedRevision.sourceSavedHookId,
+        'saved-origin-1'
+    );
+    assert.strictEqual(importedRevision.title, 'Editable saved opening');
+    assert.strictEqual(
+        importedRevision.text,
+        'This machine should not be able to do this.'
+    );
+    assert.deepStrictEqual(
+        importedRevision.prompts,
+        [1, 2, 3, 4, 5].map(index => (
+            `Saved frame prompt ${index}`
+        ))
+    );
+    assert.strictEqual(
+        importedRevision.score,
+        null,
+        'editing must fork a new unscored revision rather than mutate the '
+            + 'saved score artifact'
+    );
+    assert.strictEqual(importedRevision.savedHookId, null);
+    assert.strictEqual(
+        await page.locator('[data-sb-panel-move]').count(),
+        10,
+        'every frame must expose mobile-safe left/right reorder controls'
+    );
+    await page.locator('[data-sb-panel-drag="0"]').dragTo(
+        page.locator('[data-sb-panel-slot="2"]')
+    );
+    await page.waitForFunction(() => (
+        !window.__workbench.getState().busy
+    ));
+    const draggedRevision = await page.evaluate(before => {
+        const state = window.__workbench.getState();
+        const current = state.candidates.find(candidate => (
+            candidate.id === state.selectedCandidateId
+        ));
+        return {
+            panelIds: current.panels.map(panel => panel.id),
+            prompts: current.panels.map(panel => panel.prompt),
+            score: current.score,
+            savedHookId: current.savedHookId,
+            movedWholePanel:
+                current.panels[2].id === before.panelIds[0]
+                && current.panels[2].prompt === before.prompts[0],
+        };
+    }, importedRevision);
+    assert(draggedRevision.movedWholePanel);
+    assert.deepStrictEqual(draggedRevision.panelIds, [
+        importedRevision.panelIds[1],
+        importedRevision.panelIds[2],
+        importedRevision.panelIds[0],
+        importedRevision.panelIds[3],
+        importedRevision.panelIds[4],
+    ]);
+    assert.strictEqual(draggedRevision.score, null);
+    assert.strictEqual(draggedRevision.savedHookId, null);
+    await page.waitForFunction(() => {
+        const state = window.__workbench.getState();
+        const current = state.candidates.find(candidate => (
+            candidate.id === state.selectedCandidateId
+        ));
+        return current && current.saveState === 'saved';
+    });
+    assert.deepStrictEqual(
+        await page.evaluate(() => (
+            window.__calls.saveStoryboard.at(-1).panels.map(
+                panel => panel.prompt
+            )
+        )),
+        draggedRevision.prompts,
+        'background persistence must store the reordered panel sequence'
+    );
+
     await page.screenshot({
         path: path.join(CACHE, 'desktop.png'),
         fullPage: true,
@@ -1221,6 +1340,36 @@ async function main() {
     await page.locator('[data-sb-select-candidate]').first().click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(100);
+    const mobileOrderBefore = await page.evaluate(() => {
+        const state = window.__workbench.getState();
+        const current = state.candidates.find(candidate => (
+            candidate.id === state.selectedCandidateId
+        ));
+        return current.panels.map(panel => panel.id);
+    });
+    await page.click(
+        '[data-sb-panel-index="0"][data-sb-panel-move="1"]'
+    );
+    await page.waitForFunction(() => (
+        !window.__workbench.getState().busy
+    ));
+    assert.deepStrictEqual(
+        await page.evaluate(() => {
+            const state = window.__workbench.getState();
+            const current = state.candidates.find(candidate => (
+                candidate.id === state.selectedCandidateId
+            ));
+            return current.panels.map(panel => panel.id);
+        }),
+        [
+            mobileOrderBefore[1],
+            mobileOrderBefore[0],
+            mobileOrderBefore[2],
+            mobileOrderBefore[3],
+            mobileOrderBefore[4],
+        ],
+        'phone users must be able to reorder frames without HTML drag support'
+    );
     const mobile = await page.evaluate(() => {
         const rail = document.querySelector('[data-sb-panel-rail]');
         const stage = document.querySelector('[data-sb-stage]');

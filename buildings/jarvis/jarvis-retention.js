@@ -36,6 +36,8 @@ const JarvisRetention = (function () {
     let SAVED_OPEN_DRAIN = null;
     let SAVED_PENDING = Object.create(null);
     let SAVED_CONFIRMED = Object.create(null);
+    let SAVED_MOVES = Object.create(null);
+    let SAVED_FOLDER_OVERRIDES = Object.create(null);
     const SAVED_HOOK_DETAIL_TIMEOUT_MS = 15000;
     const SAVED_HOOK_DETAIL_ATTEMPTS = 2;
     const SAVED_HOOK_DETAIL_TOTAL_TIMEOUT_MS = 40000;
@@ -7087,6 +7089,22 @@ const JarvisRetention = (function () {
             Number(right.savedAt || 0) - Number(left.savedAt || 0)
         ));
     }
+    function savedHookFolder(row) {
+        const key = row && row.id != null ? String(row.id) : '';
+        if (
+            key
+            && Object.prototype.hasOwnProperty.call(
+                SAVED_FOLDER_OVERRIDES,
+                key
+            )
+        ) return SAVED_FOLDER_OVERRIDES[key] || null;
+        return row && (
+            row.workspace_folder_id
+            || row.folderId
+            || row.folder
+            || null
+        );
+    }
     function savedHookCanonicalRows() {
         const rows = SAVED && Array.isArray(SAVED.hooks)
             ? SAVED.hooks
@@ -7184,6 +7202,7 @@ const JarvisRetention = (function () {
         next.hooks.forEach(row => {
             if (row && row.id) {
                 delete SAVED_CONFIRMED[String(row.id)];
+                delete SAVED_FOLDER_OVERRIDES[String(row.id)];
             }
         });
         SAVED = next;
@@ -8351,6 +8370,11 @@ const JarvisRetention = (function () {
             }
             return;
         }
+        const savedEdit = e.target.closest('[data-savededit]');
+        if (savedEdit) {
+            editSavedHook(savedEdit.getAttribute('data-savededit'));
+            return;
+        }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) {
             closeSavedDetail();
@@ -8377,6 +8401,7 @@ const JarvisRetention = (function () {
         }
         if (e.target.closest('[data-savedmore]')) { const page = window.innerWidth < 700 ? 20 : 60; st.savedShow = (st.savedShow || page) + page; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedfiltclear]')) { st.savedFilt = {}; rtgUpdateExp(); return; }
+        if (e.target.closest('.saved-hook-card-actions')) return;
         const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
         const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
@@ -8573,6 +8598,85 @@ const JarvisRetention = (function () {
             e.preventDefault();
             createFolder(st.savedFolderName);
         }
+    }
+    function clearSavedHookDragState() {
+        if (!root) return;
+        root.querySelectorAll(
+            '.saved-hook-card.is-dragging, '
+            + '.saved-hook-folder-drop.is-drop-target'
+        ).forEach(element => {
+            element.classList.remove('is-dragging');
+            element.classList.remove('is-drop-target');
+        });
+    }
+    function savedHookDragId(event) {
+        let id = '';
+        try {
+            id = event.dataTransfer.getData(
+                'application/x-businessworld-saved-hook'
+            ) || event.dataTransfer.getData('text/plain');
+        } catch (error) {}
+        return String(id || st.savedHookDragId || '');
+    }
+    function onDragStart(e) {
+        const card = e.target.closest
+            && e.target.closest('[data-saved-drag]');
+        if (!card) return;
+        if (
+            e.target !== card
+            && e.target.closest('button, input, select, textarea')
+        ) {
+            e.preventDefault();
+            return;
+        }
+        const id = String(card.getAttribute('data-saved-drag') || '');
+        if (!id || SAVED_MOVES[id]) {
+            e.preventDefault();
+            return;
+        }
+        st.savedHookDragId = id;
+        card.classList.add('is-dragging');
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData(
+                'application/x-businessworld-saved-hook',
+                id
+            );
+            e.dataTransfer.setData('text/plain', id);
+        }
+    }
+    function onDragOver(e) {
+        const target = e.target.closest
+            && e.target.closest('[data-savedfolderdrop]');
+        if (!target || !savedHookDragId(e)) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        root.querySelectorAll(
+            '.saved-hook-folder-drop.is-drop-target'
+        ).forEach(element => {
+            if (element !== target) {
+                element.classList.remove('is-drop-target');
+            }
+        });
+        target.classList.add('is-drop-target');
+    }
+    function onDrop(e) {
+        const target = e.target.closest
+            && e.target.closest('[data-savedfolderdrop]');
+        if (!target) return;
+        const id = savedHookDragId(e);
+        if (!id) return;
+        e.preventDefault();
+        const folder = target.getAttribute(
+            'data-savedfolderdrop'
+        ) || null;
+        clearSavedHookDragState();
+        st.savedHookDragId = null;
+        moveHook(id, folder);
+    }
+    function onDragEnd() {
+        clearSavedHookDragState();
+        st.savedHookDragId = null;
     }
     async function rtgRawUpload(files) {
         const list = Array.from(files || []).slice(0, 12);   // cap a batch at 12
@@ -8887,6 +8991,7 @@ const JarvisRetention = (function () {
                     row => String(row.id) !== String(id)
                 );
             }
+            delete SAVED_FOLDER_OVERRIDES[String(id)];
             refreshExperimentLabContext({ render: false });
             notifySavedHookStore(true);
         } catch (e) {
@@ -8903,19 +9008,146 @@ const JarvisRetention = (function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: normalized }),
             }, 1);
-            if (j && j.id) st.savedFolder = j.id;
+            if (j && j.id) {
+                st.savedFolder = j.id;
+                if (SAVED) {
+                    const folders = Array.isArray(SAVED.folders)
+                        ? SAVED.folders
+                        : [];
+                    SAVED.folders = [
+                        ...folders.filter(folder => folder.id !== j.id),
+                        { id: j.id, name: j.name || normalized },
+                    ];
+                }
+            }
             st.savedFolderEditor = false;
             st.savedFolderName = '';
-            SAVED = null;
-            refreshExperimentLabContext();
-            rtgUpdateExp();
+            refreshExperimentLabContext({ render: false });
+            notifySavedHookStore(true);
         } catch (e) {
             st.rawUpErr = fetchFail(e);
             rtgUpdateExp();
         }
     }
+    function setSavedHookFolderLocal(id, folder) {
+        const key = String(id || '');
+        if (!key) return;
+        SAVED_FOLDER_OVERRIDES[key] = folder || null;
+    }
     async function moveHook(id, folder) {
-        try { await rtFetchJson('/api/raw/hook-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, folder: folder || null }) }, 1); SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
+        const key = String(id || '');
+        const next = folder || null;
+        const row = savedHookCanonicalRows().find(
+            hook => String(hook.id) === key
+        );
+        if (!row || savedHookFolder(row) === next) return;
+        const previous = savedHookFolder(row);
+        const token = rtRequestId();
+        SAVED_MOVES[key] = { token, folder: next };
+        setSavedHookFolderLocal(key, next);
+        notifySavedHookStore(true);
+        try {
+            await rtFetchJson('/api/raw/hook-move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: key, folder: next }),
+            }, 1);
+            if (
+                SAVED_MOVES[key]
+                && SAVED_MOVES[key].token === token
+            ) {
+                delete SAVED_MOVES[key];
+                notifySavedHookStore(true);
+            }
+        } catch (e) {
+            if (
+                SAVED_MOVES[key]
+                && SAVED_MOVES[key].token === token
+            ) {
+                delete SAVED_MOVES[key];
+                setSavedHookFolderLocal(key, previous);
+                st.rawUpErr = `Move saved hook: ${fetchFail(e)}`;
+                notifySavedHookStore(true);
+            }
+        }
+    }
+    async function editSavedHook(id) {
+        const key = String(id || '');
+        if (!key || st.savedEditingId) return;
+        st.savedEditingId = key;
+        st.rawBuildMode = true;
+        st.rawUpErr = null;
+        rtgUpdateExp();
+        try {
+            const detailKey = savedScoreQueueKey(key, null);
+            let stored = SAVEDDETAIL[detailKey];
+            if (!stored || !stored.rec) {
+                stored = SAVEDDETAIL[detailKey] = {
+                    rec: await rtFetchJson(
+                        `/api/raw/saved-hook/${key}`,
+                        { cache: 'no-store' },
+                        4
+                    ),
+                    montage: null,
+                    reconstructed: false,
+                };
+            }
+            const rec = stored.rec || {};
+            if ((rec.score_domain || 'shorts') !== 'shorts') {
+                throw new Error(
+                    'Only Shorts saved hooks can be edited in this Storyboard workbench.'
+                );
+            }
+            let montage = stored.montage || null;
+            if (!montage && (rec.hasMontage || rec.montage_ref)) {
+                montage = await urlToDataUrl(
+                    `/api/raw/saved-montage/${key}`
+                );
+            }
+            if (
+                !montage
+                && Array.isArray(rec.frame_imgs)
+                && rec.frame_imgs.length
+            ) {
+                montage = await montageFromFrameIds(rec.frame_imgs);
+                stored.reconstructed = true;
+            }
+            stored.montage = montage;
+            const ui = storyboardUI();
+            if (!ui || typeof ui.importSavedHook !== 'function') {
+                throw new Error(
+                    'The Storyboard editor did not load. Reload Experiment Lab and try again.'
+                );
+            }
+            const indexRow = savedHookCanonicalRows().find(
+                hook => String(hook.id) === key
+            );
+            await ui.importSavedHook({
+                id: key,
+                title: rec.title || indexRow && indexRow.title || 'Saved opening',
+                idea: rec.idea || '',
+                text: rec.transcript || rec.text || '',
+                frames: Array.isArray(rec.frames) ? rec.frames : [],
+                montage,
+                folderId: savedHookFolder(indexRow),
+            });
+            st.rawBuildMode = true;
+            st.rawUpErr = null;
+        } catch (error) {
+            st.rawUpErr = `Edit saved hook: ${fetchFail(error)}`;
+        } finally {
+            st.savedEditingId = null;
+            rtgUpdateExp();
+            window.requestAnimationFrame(() => {
+                const workbench = window.document.getElementById(
+                    'shorts-storyboard-workbench'
+                );
+                if (workbench) workbench.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                });
+            });
+        }
     }
     async function deleteFolder(fid) {
         if (!window.confirm('Delete this folder? Hooks inside become Unfiled.')) return;
@@ -14685,17 +14917,11 @@ const JarvisRetention = (function () {
         };
         const folders = SAVED.folders || [];
         const curF = st.savedFolder || 'all';
-        const hookFolder = hook => hook && (
-            hook.workspace_folder_id
-            || hook.folderId
-            || hook.folder
-            || null
-        );
         const inFolder = h => curF === 'all'
             ? true
             : curF === 'none'
-                ? !hookFolder(h)
-                : hookFolder(h) === curF;
+                ? !savedHookFolder(h)
+                : savedHookFolder(h) === curF;
         const sortK = st.savedSort || 'recent';
         const hooks = all.filter(h => pass(h) && inFolder(h));
         if (sortK === 'recent') hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
@@ -14711,17 +14937,22 @@ const JarvisRetention = (function () {
         const SORTS = [['recent', '🕑 recent'], ['oldest', 'oldest'], ['channelFreeConcat', 'channel-free concat keep'], ['keep', 'keep'], ['ret5', 'ret5'], ['views', 'views'], ['sviews', 'sviews'], ['gt10M', '>10M'], ['outlier', 'outlier']];
         const sortSel = SORTS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${lab}</span>`).join('');
         const fcount = id => all.filter(h => id === 'none'
-            ? !hookFolder(h)
-            : hookFolder(h) === id).length;
+            ? !savedHookFolder(h)
+            : savedHookFolder(h) === id).length;
         const folderPills = [['all', 'All (' + all.length + ')'], ['none', 'Unfiled (' + fcount('none') + ')']].concat(folders.map(f => [f.id, esc(f.name) + ' (' + fcount(f.id) + ')']));
         const folderCreator = st.savedFolderEditor
             ? `<div class="saved-hook-folder-create"><input type="text" data-savedfoldername value="${esc(st.savedFolderName || '')}" maxlength="120" placeholder="Folder name" aria-label="New saved-hook folder name"><button type="button" data-savedfoldercreate>Create</button><button type="button" data-savedfoldercancel>Cancel</button></div>`
             : '';
-        const folderBar = `<div class="saved-hook-folder-bar"><span class="saved-hook-folder-label">Folder</span>${folderPills.map(([id, lab]) => `<button type="button" data-savedfolder="${id}" aria-pressed="${curF === id}" style="border-color:${curF === id ? C.accent : C.border};background:${curF === id ? C.accent + '22' : 'transparent'};color:${curF === id ? C.accent : C.dim}">${lab}${(id !== 'all' && id !== 'none') ? ` <span data-savedfolderdel="${id}" title="Delete folder" aria-label="Delete folder">×</span>` : ''}</button>`).join('')}<button type="button" data-savedfoldernew aria-expanded="${!!st.savedFolderEditor}">${st.savedFolderEditor ? 'Close' : 'New folder'}</button>${folderCreator}</div>`;
+        const folderBar = `<div class="saved-hook-folder-bar"><span class="saved-hook-folder-label">Folders</span>${folderPills.map(([id, lab]) => {
+            const drop = id === 'all'
+                ? ''
+                : ` class="saved-hook-folder-drop" data-savedfolderdrop="${id === 'none' ? '' : id}"`;
+            return `<button type="button" data-savedfolder="${id}"${drop} aria-pressed="${curF === id}" style="border-color:${curF === id ? C.accent : C.border};background:${curF === id ? C.accent + '22' : 'transparent'};color:${curF === id ? C.accent : C.dim}">${lab}${(id !== 'all' && id !== 'none') ? ` <span data-savedfolderdel="${id}" title="Delete folder" aria-label="Delete folder">×</span>` : ''}</button>`;
+        }).join('')}<button type="button" data-savedfoldernew aria-expanded="${!!st.savedFolderEditor}">${st.savedFolderEditor ? 'Close' : 'New folder'}</button>${folderCreator}</div>`;
         const pendingCards = pending.length
             ? `<div data-saved-hook-pending-list role="status" aria-live="polite" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px">${pending.map(row => `<div data-saved-hook-pending="${esc(row.id)}" style="border:1px solid ${C.cyan};background:${C.cyan}0c;border-radius:8px;padding:9px 11px;min-width:180px;max-width:280px"><div style="font-size:8px;color:${C.cyan};font-weight:950;text-transform:uppercase">Saving to your library</div><div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.35;margin-top:3px">${esc(row.title)}</div><div style="font-size:8px;color:${C.dim};margin-top:4px">Writing the canonical score, media, index, and workspace reference…</div></div>`).join('')}</div>`
             : '';
-        const folderOpts = h => `<option value="">📁 —</option>` + folders.map(f => `<option value="${f.id}" ${hookFolder(h) === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
+        const folderOpts = h => `<option value="">Unfiled</option>` + folders.map(f => `<option value="${f.id}" ${savedHookFolder(h) === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
         const card = h => {
             const thumb = h.hasMontage
                 ? authenticatedMediaUrl(
@@ -14789,11 +15020,19 @@ const JarvisRetention = (function () {
                     ? `<span${previewAttrs} title="${esc(previewTitle)}" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${evidenceLabel}${previewIdentity.channel === 'together' ? 'Both' : previewIdentity.channel} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${fmtv(kpct, 1)}th ${previewIdentity.percentileUnit}`} · ${coordinateLine} · ${previewIdentity.ledgerSha256.slice(0, 10)}…</small><small style="display:block;font-size:6.6px;color:${historicalDisplay ? C.amber : revisionColor};font-weight:850">${historicalDisplay ? 'display-only · not predictor-eligible' : `${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}`}</small></span>`
                     : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'No valid persisted score ledger' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
             const sel = st.savedSel === h.id;
-            return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
+            const moving = SAVED_MOVES[String(h.id)] || null;
+            const editing = st.savedEditingId === h.id;
+            return `<div class="saved-hook-card${moving ? ' is-moving' : ''}" data-savedopen="${h.id}" data-saved-drag="${h.id}" draggable="true" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:164px;position:relative;cursor:pointer">
               <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>
               ${thumb ? `<img src="${thumb}" style="width:100%;border-radius:5px;display:block;margin-bottom:5px;background:#000" loading="lazy"/>` : ''}
               <div style="font-size:10px;color:${C.text};font-weight:700;line-height:1.3;max-height:39px;overflow:hidden">${esc((h.title || '').slice(0, 75))}</div>
-              <div style="margin-top:4px;display:flex;justify-content:space-between;align-items:center;gap:4px">${badge}${folders.length ? `<select data-savedmove="${h.id}" onclick="event.stopPropagation()" title="move to folder" style="font-size:9px;background:${C.card};color:${C.dim};border:1px solid ${C.border};border-radius:4px;max-width:66px;cursor:pointer">${folderOpts(h)}</select>` : ''}</div></div>`;
+              <div style="margin-top:4px">${badge}</div>
+              <div class="saved-hook-card-actions">
+                <button type="button" data-savededit="${h.id}" ${editing ? 'disabled' : ''} title="Edit this saved opening as a new revision">${editing ? 'Loading…' : 'Edit'}</button>
+                <label><span>Move to folder</span><select data-savedmove="${h.id}" title="Move to folder" ${moving ? 'disabled' : ''}>${folderOpts(h)}</select></label>
+              </div>
+              ${moving ? `<div class="saved-hook-move-state" role="status">Moving…</div>` : ''}
+            </div>`;
         };
         const shown = hooks.slice(0, SHOW);
         const anyFilt = METRICS.some(([k]) => thr(k));
@@ -14829,6 +15068,8 @@ const JarvisRetention = (function () {
         SAVED = null;
         SAVED_PENDING = Object.create(null);
         SAVED_CONFIRMED = Object.create(null);
+        SAVED_MOVES = Object.create(null);
+        SAVED_FOLDER_OVERRIDES = Object.create(null);
         SAVEDDETAIL = {};
         SAVEDCHANNELS = null;
         SAVEDCHANNELDETAIL = {};
@@ -14958,6 +15199,10 @@ const JarvisRetention = (function () {
         }
         if (!root.__rb) {
             root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange); root.addEventListener('keydown', onKeyDown);
+            root.addEventListener('dragstart', onDragStart);
+            root.addEventListener('dragover', onDragOver);
+            root.addEventListener('drop', onDrop);
+            root.addEventListener('dragend', onDragEnd);
             // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing
             const warmPing = quiet =>
                 rtFetchJson(

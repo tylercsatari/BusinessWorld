@@ -138,6 +138,7 @@
         let host = null;
         let activeStroke = null;
         let activePointerId = null;
+        let draggedPanelIndex = null;
         const saveQueues = new Map();
         const saveTimers = new Map();
 
@@ -359,13 +360,19 @@
             return `<div class="sb-panel-rail" data-sb-panel-rail aria-label="Five storyboard frames">${
                 current.panels.map((entry, index) => {
                     const selected = current.selectedPanel === index;
-                    return `<button type="button" class="sb-panel-tile${selected ? ' is-selected' : ''}" data-sb-panel="${index}" aria-label="Select frame ${index + 1}">
-                        <span class="sb-panel-number">${index + 1}</span>
-                        ${entry.image
-                            ? `<img src="${imageSource(entry.image)}" alt="Frame ${index + 1}">`
-                            : `<span class="sb-panel-empty">+</span>`}
-                        <span class="sb-panel-source">${esc(entry.source === 'empty' ? 'empty' : entry.source)}</span>
-                    </button>`;
+                    return `<div class="sb-panel-slot" data-sb-panel-slot="${index}">
+                        <button type="button" class="sb-panel-tile${selected ? ' is-selected' : ''}" data-sb-panel="${index}" data-sb-panel-drag="${index}" draggable="true" aria-label="Select or drag frame ${index + 1}" title="Drag to reorder frame ${index + 1}">
+                            <span class="sb-panel-number">${index + 1}</span>
+                            ${entry.image
+                                ? `<img src="${imageSource(entry.image)}" alt="Frame ${index + 1}">`
+                                : `<span class="sb-panel-empty">+</span>`}
+                            <span class="sb-panel-source">${esc(entry.source === 'empty' ? 'empty' : entry.source)}</span>
+                        </button>
+                        <div class="sb-panel-order-controls" aria-label="Move frame ${index + 1}">
+                            <button type="button" data-sb-panel-move="-1" data-sb-panel-index="${index}" aria-label="Move frame ${index + 1} left" title="Move left" ${index === 0 ? 'disabled' : ''}>&#8592;</button>
+                            <button type="button" data-sb-panel-move="1" data-sb-panel-index="${index}" aria-label="Move frame ${index + 1} right" title="Move right" ${index === current.panels.length - 1 ? 'disabled' : ''}>&#8594;</button>
+                        </div>
+                    </div>`;
                 }).join('')
             }</div>`;
         }
@@ -1013,6 +1020,67 @@
                 current.panels.map(entry => entry.image)
             );
             current.composite = await normalizeStoryboardSheet(combined);
+        }
+
+        async function reorderPanels(fromIndex, toIndex) {
+            const current = candidate();
+            const from = Number(fromIndex);
+            const to = Number(toIndex);
+            if (
+                !current
+                || state.busy
+                || !Number.isInteger(from)
+                || !Number.isInteger(to)
+                || from < 0
+                || to < 0
+                || from >= current.panels.length
+                || to >= current.panels.length
+                || from === to
+            ) return;
+            const snapshot = {
+                panels: current.panels.slice(),
+                selectedPanel: current.selectedPanel,
+                composite: current.composite,
+                score: current.score,
+                scoreError: current.scoreError,
+                scoreInputSha256: current.scoreInputSha256,
+                savedHookId: current.savedHookId,
+            };
+            const selectedId = current.panels[current.selectedPanel]
+                && current.panels[current.selectedPanel].id;
+            const moved = current.panels.splice(from, 1)[0];
+            current.panels.splice(to, 0, moved);
+            current.selectedPanel = Math.max(
+                0,
+                current.panels.findIndex(entry => entry.id === selectedId)
+            );
+            current.composite = null;
+            current.score = null;
+            current.scoreError = '';
+            current.scoreInputSha256 = null;
+            current.savedHookId = null;
+            state.busy = true;
+            state.busyCandidateId = current.id;
+            state.error = '';
+            state.status = `Moving frame ${from + 1} to position ${to + 1}...`;
+            paint();
+            try {
+                await rebuildComposite(current);
+                touchCandidate(current);
+                state.busy = false;
+                state.busyCandidateId = null;
+                state.status = `Frame ${from + 1} moved to position ${to + 1}. Re-score this opening to measure the new sequence.`;
+                paint();
+            } catch (error) {
+                current.panels = snapshot.panels;
+                current.selectedPanel = snapshot.selectedPanel;
+                current.composite = snapshot.composite;
+                current.score = snapshot.score;
+                current.scoreError = snapshot.scoreError;
+                current.scoreInputSha256 = snapshot.scoreInputSha256;
+                current.savedHookId = snapshot.savedHookId;
+                fail(error);
+            }
         }
 
         function panelRevision(target) {
@@ -2251,6 +2319,101 @@
             paint();
         }
 
+        async function importSavedHook(input) {
+            const source = input || {};
+            if (state.busy) {
+                throw new Error(
+                    'Finish the current storyboard operation before editing another saved opening.'
+                );
+            }
+            const blankSlot = (
+                state.candidates.length === 1
+                && replaceableBlank(state.candidates[0])
+            );
+            if (!blankSlot && state.candidates.length >= MAX_CANDIDATES) {
+                throw new Error(
+                    `This workbench holds ${MAX_CANDIDATES} storyboards. Remove one before editing another saved opening.`
+                );
+            }
+            state.busy = true;
+            state.error = '';
+            state.status = 'Preparing an editable revision...';
+            paint();
+            try {
+                const draft = blankCandidate(
+                    String(source.title || 'Saved opening').slice(0, 80)
+                );
+                const promptRows = Array.isArray(source.frames)
+                    ? source.frames
+                    : [];
+                draft.brief = String(
+                    source.idea || source.title || ''
+                ).slice(0, 3000);
+                draft.hookText = String(source.text || '').slice(0, 2000);
+                draft.sourceSavedHookId = source.id || null;
+                draft.folderId = (
+                    enableFolders
+                    && state.savedFolders.some(folder => (
+                        String(folder.id) === String(source.folderId || '')
+                    ))
+                ) ? source.folderId : null;
+                if (source.montage) {
+                    const frames = await splitStrip(source.montage);
+                    draft.panels = frames.map((image, index) => {
+                        const frame = promptRows[index];
+                        const prompt = typeof frame === 'string'
+                            ? frame
+                            : frame && (
+                                frame.prompt
+                                || frame.caption
+                                || frame.text
+                            ) || '';
+                        return {
+                            ...blankPanel(index),
+                            image,
+                            prompt: String(prompt).slice(0, 1800),
+                            source: 'saved-opening',
+                            relation: 'editable-revision',
+                            sourcePanels: [index],
+                        };
+                    });
+                    draft.composite = await normalizeStoryboardSheet(
+                        source.montage
+                    );
+                } else {
+                    draft.panels.forEach((frame, index) => {
+                        const promptRow = promptRows[index];
+                        frame.prompt = String(
+                            typeof promptRow === 'string'
+                                ? promptRow
+                                : promptRow && (
+                                    promptRow.prompt
+                                    || promptRow.caption
+                                    || promptRow.text
+                                ) || ''
+                        ).slice(0, 1800);
+                    });
+                }
+                draft.pristine = false;
+                if (blankSlot) state.candidates[0] = draft;
+                else state.candidates.push(draft);
+                state.selectedCandidateId = draft.id;
+                state.drawEnabled = false;
+                state.busy = false;
+                state.busyCandidateId = null;
+                state.status = source.montage
+                    ? 'Saved opening imported as an editable revision. Change the text or frame order, then re-score it.'
+                    : 'Saved opening text imported. Add or generate frames, then score the revision.';
+                touchCandidate(draft);
+                paint();
+                autoPersistCandidate(draft);
+                return draft.id;
+            } catch (error) {
+                fail(error);
+                throw error;
+            }
+        }
+
         function cloneCandidate(source) {
             const copy = JSON.parse(JSON.stringify(source));
             copy.id = uid('candidate');
@@ -2399,6 +2562,7 @@
             if (host && host !== nextHost) {
                 activeStroke = null;
                 activePointerId = null;
+                draggedPanelIndex = null;
             }
             host = nextHost;
             if (!host) return;
@@ -2408,6 +2572,66 @@
                 rail.addEventListener('scroll', () => {
                     state.railScroll = rail.scrollLeft;
                 }, { passive: true });
+                rail.addEventListener('dragstart', event => {
+                    const tile = event.target.closest(
+                        '[data-sb-panel-drag]'
+                    );
+                    if (!tile || state.busy) {
+                        event.preventDefault();
+                        return;
+                    }
+                    draggedPanelIndex = Number(
+                        tile.getAttribute('data-sb-panel-drag')
+                    );
+                    tile.classList.add('is-dragging');
+                    if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData(
+                            'text/plain',
+                            String(draggedPanelIndex)
+                        );
+                    }
+                });
+                rail.addEventListener('dragover', event => {
+                    const slot = event.target.closest(
+                        '[data-sb-panel-slot]'
+                    );
+                    if (!slot || draggedPanelIndex == null) return;
+                    event.preventDefault();
+                    if (event.dataTransfer) {
+                        event.dataTransfer.dropEffect = 'move';
+                    }
+                    rail.querySelectorAll('.is-drop-target').forEach(
+                        element => element.classList.remove(
+                            'is-drop-target'
+                        )
+                    );
+                    slot.classList.add('is-drop-target');
+                });
+                rail.addEventListener('drop', event => {
+                    const slot = event.target.closest(
+                        '[data-sb-panel-slot]'
+                    );
+                    if (!slot || draggedPanelIndex == null) return;
+                    event.preventDefault();
+                    const from = draggedPanelIndex;
+                    const to = Number(
+                        slot.getAttribute('data-sb-panel-slot')
+                    );
+                    draggedPanelIndex = null;
+                    reorderPanels(from, to);
+                });
+                rail.addEventListener('dragend', () => {
+                    draggedPanelIndex = null;
+                    rail.querySelectorAll(
+                        '.is-dragging, .is-drop-target'
+                    ).forEach(element => {
+                        element.classList.remove(
+                            'is-dragging',
+                            'is-drop-target'
+                        );
+                    });
+                });
             }
             hydrateCanvas();
             if (state.busy) {
@@ -2457,6 +2681,16 @@
             }
             if (button.hasAttribute('data-sb-folder-delete')) {
                 deleteCurrentFolder();
+                return true;
+            }
+            if (button.hasAttribute('data-sb-panel-move')) {
+                const from = Number(
+                    button.getAttribute('data-sb-panel-index')
+                );
+                const delta = Number(
+                    button.getAttribute('data-sb-panel-move')
+                );
+                reorderPanels(from, from + delta);
                 return true;
             }
             if (button.hasAttribute('data-sb-panel')) {
@@ -2734,6 +2968,8 @@
             handleInput,
             handleChange,
             handleKeyDown,
+            importSavedHook,
+            reorderPanels,
             getState: () => state,
         };
     }

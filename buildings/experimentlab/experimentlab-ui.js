@@ -22,6 +22,7 @@ const ExperimentLabUI = (() => {
         '[data-genscore]',
         '[data-grindopen]',
         '[data-savedopen]',
+        '[data-savededit]',
         '[data-labteamhook]',
     ].join(',');
     const PRIMARY_VIEW_KEYS = Object.freeze(

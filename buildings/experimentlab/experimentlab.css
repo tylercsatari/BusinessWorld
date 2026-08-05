@@ -1380,6 +1380,33 @@
     padding: 6px 10px;
 }
 
+.experiment-lab-panel .saved-hook-folder-drop.is-drop-target {
+    border-color: var(--lab-blue) !important;
+    box-shadow: 0 0 0 3px rgba(0, 110, 219, 0.13);
+}
+
+.experiment-lab-panel .saved-hook-card-actions button,
+.experiment-lab-panel .saved-hook-card-actions select {
+    background: #ffffff;
+    border-color: var(--lab-line-strong);
+    border-radius: 8px;
+    color: var(--lab-secondary);
+    min-height: 28px;
+}
+
+.experiment-lab-panel .saved-hook-card-actions button {
+    color: var(--lab-blue);
+}
+
+.experiment-lab-panel .saved-hook-card-actions button:hover,
+.experiment-lab-panel .saved-hook-card-actions select:hover {
+    border-color: var(--lab-blue);
+}
+
+.experiment-lab-panel .saved-hook-move-state {
+    color: var(--lab-blue);
+}
+
 .experiment-lab-panel #shorts-storyboard-workbench .sb-status,
 .experiment-lab-panel #shorts-storyboard-workbench .sb-error {
     margin-top: 10px;
@@ -1538,6 +1565,24 @@
 .experiment-lab-panel #shorts-storyboard-workbench .sb-panel-tile.is-selected {
     border-color: var(--lab-blue);
     box-shadow: 0 0 0 2px rgba(0, 110, 219, 0.14), 0 5px 14px rgba(0, 0, 0, 0.06);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-slot.is-drop-target .sb-panel-tile {
+    border-color: var(--lab-blue);
+    box-shadow: 0 0 0 3px rgba(0, 110, 219, 0.16), 0 5px 14px rgba(0, 0, 0, 0.06);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-order-controls button {
+    background: #ffffff;
+    border-color: var(--lab-line);
+    border-radius: 8px;
+    color: var(--lab-secondary);
+}
+
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-order-controls button:hover:not(:disabled),
+.experiment-lab-panel #shorts-storyboard-workbench .sb-panel-order-controls button:focus-visible {
+    border-color: var(--lab-blue);
+    color: var(--lab-blue);
 }
 
 .experiment-lab-panel #shorts-storyboard-workbench .sb-panel-empty {
