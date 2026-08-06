@@ -265,7 +265,7 @@ assert(prompt.includes('soft targets'));
 assert(prompt.includes('underexplored semantic direction'));
 assert(prompt.includes('Missing either target does not discard'));
 assert(prompt.endsWith(
-    'Return the normal fine-tuned five-beat hook plan. Do not discuss these instructions.'
+    'Return the normal five-beat JSON hook plan. Do not discuss these instructions.'
 ));
 const firstThousandDirections = Array.from(
     { length: 1000 },
@@ -365,7 +365,7 @@ assert(grindSource.includes('scoreMontage('));
 assert(!grindSource.includes('Math.min(0.30'));
 assert(!grindSource.includes('rejected < maxAttempts'));
 assert(!grindSource.includes('both topical and far enough outward'));
-const ideaIndex = grindSource.indexOf('hookModelGenerateRetry(');
+const ideaIndex = grindSource.indexOf('grindPlannerGenerateRetry(');
 const candidateEmbeddingIndex = grindSource.indexOf(
     'grindExploration.measureCandidate'
 );

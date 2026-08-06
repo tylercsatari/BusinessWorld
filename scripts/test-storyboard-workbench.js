@@ -111,7 +111,7 @@ async function main() {
     assert(
         retentionSource.includes('data-auto-image-model')
             && retentionSource.includes('automaticImageModelSelect')
-            && indexSource.includes('jarvis-retention.js?v=canonical-opening-v1'),
+            && indexSource.includes('jarvis-retention.js?v=grind-planner-v1'),
         'Auto and Grind must load the current shared image-model selector'
     );
     assert(

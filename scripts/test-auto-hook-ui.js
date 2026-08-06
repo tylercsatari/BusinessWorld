@@ -128,6 +128,8 @@ async function main() {
         await page.locator('#grind-input').fill(
             'A helmet that survives a flamethrower'
         );
+        const plannerToggle = page.locator('[data-grindfinetuned]');
+        assert.strictEqual(await plannerToggle.isChecked(), true);
         await page.locator('[data-grindstart]').click();
         await page.waitForFunction(() => (
             window.__autoRequests.filter(request => (
@@ -169,6 +171,28 @@ async function main() {
             requests['/api/hooks/grind'].premise,
             'A helmet that survives a flamethrower'
         );
+        assert.strictEqual(
+            requests['/api/hooks/grind'].plannerMode,
+            'fine-tuned'
+        );
+
+        await plannerToggle.uncheck();
+        await page.locator('[data-grindstart]').click();
+        await page.waitForFunction(() => (
+            window.__autoRequests.filter(request => (
+                request.pathname === '/api/hooks/grind'
+            )).length === 2
+        ));
+        const standardRequest = await page.evaluate(() => (
+            window.__autoRequests.filter(request => (
+                request.pathname === '/api/hooks/grind'
+            )).at(-1).body
+        ));
+        assert.strictEqual(standardRequest.plannerMode, 'standard');
+        assert.strictEqual(
+            standardRequest.premise,
+            'A helmet that survives a flamethrower'
+        );
 
         await page.locator('[data-grindmode="elite-corpus"]').click();
         await page.locator('[data-grindelitemetric]').waitFor({
@@ -188,7 +212,7 @@ async function main() {
         await page.waitForFunction(() => (
             window.__autoRequests.filter(request => (
                 request.pathname === '/api/hooks/grind'
-            )).length === 2
+            )).length === 3
         ));
         const eliteRequest = await page.evaluate(() => (
             window.__autoRequests.filter(request => (
@@ -204,6 +228,7 @@ async function main() {
                 channelOriented: eliteRequest.channelOriented,
                 eliteChannelId: eliteRequest.eliteChannelId,
                 animation: eliteRequest.animation,
+                plannerMode: eliteRequest.plannerMode,
             },
             {
                 premise: '',
@@ -213,6 +238,7 @@ async function main() {
                 channelOriented: true,
                 eliteChannelId: 'tyler-channel',
                 animation: true,
+                plannerMode: 'standard',
             }
         );
         const dimensions = await page.evaluate(() => ({

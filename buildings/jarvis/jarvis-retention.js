@@ -46,7 +46,7 @@ const JarvisRetention = (function () {
     const SAVED_HOOK_EDITOR_TIMEOUT_MS = 12000;
     const SAVED_HOOK_MEDIA_TIMEOUT_MS = 20000;
     const SAVED_HOOK_SCORER_WAIT_TIMEOUT_MS = 5 * 60e3;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, autoImageModel: 'gpt-image-2', grindAnimation: false, grindStoppingRid: null, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedEditingId: null, savedEditorStage: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, autoImageModel: 'gpt-image-2', grindAnimation: false, grindUseFineTunedPlanner: true, grindStoppingRid: null, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedEditingId: null, savedEditorStage: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -4577,6 +4577,10 @@ const JarvisRetention = (function () {
                 j._at = Date.now();
                 GRINDRUN = j;
                 if (j.exploration_mode) st.grindMode = j.exploration_mode;
+                if (j.planner_mode) {
+                    st.grindUseFineTunedPlanner =
+                        j.planner_mode !== 'standard';
+                }
                 if (
                     j.status !== 'running'
                     && st.grindStoppingRid === rid
@@ -4678,7 +4682,10 @@ const JarvisRetention = (function () {
                 : st.grindChannelFreeThreshold)
             : st.grindThr || 82;
         st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile(), animation: st.grindAnimation === true, imageModel: automaticImageModel(), explorationMode: eliteMode ? 'elite-corpus' : 'same-idea', eliteMetric: st.grindEliteMetric || 'together_keep_geometry', eliteCutoff: st.grindEliteCutoff == null ? 95 : st.grindEliteCutoff, channelOriented: eliteMode && st.grindEliteChannelOriented === true, eliteChannelId: eliteMode && st.grindEliteChannelOriented ? st.grindEliteChannelId : '' }) }, 1)
+        const plannerMode = st.grindUseFineTunedPlanner === false
+            ? 'standard'
+            : 'fine-tuned';
+        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile(), animation: st.grindAnimation === true, imageModel: automaticImageModel(), plannerMode, explorationMode: eliteMode ? 'elite-corpus' : 'same-idea', eliteMetric: st.grindEliteMetric || 'together_keep_geometry', eliteCutoff: st.grindEliteCutoff == null ? 95 : st.grindEliteCutoff, channelOriented: eliteMode && st.grindEliteChannelOriented === true, eliteChannelId: eliteMode && st.grindEliteChannelOriented ? st.grindEliteChannelId : '' }) }, 1)
             .then(j => {
                 st.grindStarting = 0;
                 if (j.rid) {
@@ -4708,6 +4715,16 @@ const JarvisRetention = (function () {
                         rejected_variant_count: 0,
                         animation: st.grindAnimation === true,
                         render_mode: 'coherent-sheet',
+                        planner_mode:
+                            j.planner_mode || plannerMode,
+                        planner_provider:
+                            j.planner_provider || null,
+                        planner_model:
+                            j.planner_model || null,
+                        planner_inspiration_metric:
+                            j.planner_inspiration_metric || null,
+                        planner_inspiration_cutoff_percentile:
+                            j.planner_inspiration_cutoff_percentile || null,
                         exploration_strategy:
                             'same-idea-hook-directional-frontier-v3',
                         exploration_mode:
@@ -4912,7 +4929,25 @@ const JarvisRetention = (function () {
                 score_target_unit:
                     verifiedScore.score_target_unit
                     || 'percentile_0_100',
-                generation_lineage: a && a.exploration_mode
+                generation_lineage: a && a.planner_mode
+                    === 'standard' ? {
+                        schema: 'standard-hook-planner-lineage-v1',
+                        planner_mode: a.planner_mode,
+                        provider: a.planner_provider || 'openai',
+                        model: a.planner_model || null,
+                        index_content_sha256:
+                            a.planner_inspiration_index_content_sha256,
+                        source_metric:
+                            a.planner_inspiration_metric,
+                        source_cutoff_percentile:
+                            a.planner_inspiration_cutoff_percentile,
+                        sources: a.planner_sources || [],
+                        mechanism_hypothesis:
+                            a.planner_mechanism_hypothesis || null,
+                        evidence_role:
+                            a.planner_source_role
+                            || 'frozen_embedding_retrieval_generation_inspiration_only',
+                    } : a && a.exploration_mode
                     === 'elite-corpus' ? {
                         schema: 'elite-hook-generation-lineage-v1',
                         exploration_mode: a.exploration_mode,
@@ -4938,7 +4973,11 @@ const JarvisRetention = (function () {
     function grindPanel() {
         grindEnsure();
         const eliteMode = st.grindMode === 'elite-corpus';
-        if (eliteMode) eliteCorpusEnsure(false);
+        const useFineTunedPlanner =
+            st.grindUseFineTunedPlanner !== false;
+        if (eliteMode || !useFineTunedPlanner) {
+            eliteCorpusEnsure(false);
+        }
         const bg = C.bg || '#0f172a', metric = st.grindMetric || 'keep', hours = st.grindHours || 3;
         const channelFree = metric === 'channelFreeConcat';
         const thr = channelFree
@@ -4952,6 +4991,9 @@ const JarvisRetention = (function () {
         const selectedTargetUnit = channelFree
             ? 'predicted_keep_percent'
             : 'percentile_0_100';
+        const selectedPlannerLabel = useFineTunedPlanner
+            ? 'Fine-tuned hook model'
+            : 'Standard exploration model';
         const eliteMetric = st.grindEliteMetric
             || 'together_keep_geometry';
         const eliteCutoff = st.grindEliteCutoff == null
@@ -5008,6 +5050,12 @@ const JarvisRetention = (function () {
             runHtml = `<div style="font-size:10px;color:${C.mute};margin-top:8px">📁 previous run: “${esc((last.premise || '').slice(0, 60))}” — ${esc(lastStatus)} · ${lastBest == null ? 'no verified score' : `best ${fmtv(lastBest, 1)}${esc(lastSuffix)} vs ${fmtv(lastThreshold, 1)}${esc(lastSuffix)}`} <span data-grindview="${esc(last.rid)}" style="cursor:pointer;color:${C.cyan};text-decoration:underline">view</span></div>`;
         }
         if (g) {
+            const runPlannerMode = g.planner_mode === 'standard'
+                ? 'standard'
+                : 'fine-tuned';
+            const runPlannerLabel = runPlannerMode === 'standard'
+                ? 'standard exploration model'
+                : 'fine-tuned hook model';
             const mine = !!((st.grindMine || {})[g.rid]);
             const foreign = !mine ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}14;border:1px solid ${C.amber}44;border-radius:6px;padding:6px 10px;margin:8px 0 0;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>📎 this run was <b>already going</b> when you opened the tab (started earlier or from another window) — this page did NOT launch it. Its hook: “${esc((g.premise || '').slice(0, 70))}”</span><span data-grindhide style="cursor:pointer;color:${C.dim};font-weight:800">✕ hide</span></div>` : '';
             const atts = (g.attempts || []).slice().reverse();
@@ -5091,11 +5139,17 @@ const JarvisRetention = (function () {
                             )
                             : ''
                     );
-                const eliteSources = Array.isArray(a.elite_sources)
-                    ? a.elite_sources
-                    : [];
+                const plannerSources = Array.isArray(a.planner_sources)
+                    && a.planner_sources.length
+                    ? a.planner_sources
+                    : Array.isArray(a.elite_sources)
+                        ? a.elite_sources
+                        : [];
                 const eliteSourceCard = source => `<a href="https://www.youtube.com/shorts/${encodeURIComponent(source.id)}" target="_blank" rel="noopener" title="Open source Short" style="display:block;width:84px;flex:0 0 84px;text-decoration:none;color:${C.text}"><img src="https://i.ytimg.com/vi/${encodeURIComponent(source.id)}/mqdefault.jpg" loading="lazy" style="width:84px;height:47px;object-fit:cover;border-radius:4px;background:#000"><span style="display:block;font-size:7.5px;line-height:1.25;margin-top:2px;max-height:29px;overflow:hidden">${esc(source.title || source.opening || source.id)}</span><span style="display:block;font-size:7px;color:${C.mute}">${fmtv(source.source_percentile, 1)}th · cluster ${source.cluster_24 == null ? '—' : esc(source.cluster_24)}${source.semantic_similarity == null ? '' : ` · sim ${fmtv(source.semantic_similarity, 3)}`}${source.channel_centroid_similarity == null ? '' : ` · channel ${fmtv(source.channel_centroid_similarity, 3)}`} · ${source.embedding_available ? 'corpus vector' : 'saved-ledger fallback'}</span></a>`;
-                const eliteEvidence = !eliteSources.length ? '' : `<details style="margin-top:5px;border-top:1px solid ${C.border};padding-top:4px"><summary style="cursor:pointer;font-size:8.5px;color:${C.accent};font-weight:800">${eliteSources.length} elite source${eliteSources.length === 1 ? '' : 's'} combined · trace lineage</summary><div style="display:flex;gap:5px;overflow-x:auto;padding-top:5px">${eliteSources.map(eliteSourceCard).join('')}</div>${a.elite_mechanism_hypothesis && a.elite_mechanism_hypothesis.text ? `<div style="font-size:7.5px;color:${C.dim};line-height:1.35;margin-top:4px">Hypothesis, not a causal result: ${esc(a.elite_mechanism_hypothesis.text)}</div>` : ''}<div style="font-size:7px;color:${C.faint};margin-top:3px">Source geometry chose evidence only. This generated hook still had to earn its own canonical ledger score.</div></details>`;
+                const plannerHypothesis =
+                    a.planner_mechanism_hypothesis
+                    || a.elite_mechanism_hypothesis;
+                const eliteEvidence = !plannerSources.length ? '' : `<details style="margin-top:5px;border-top:1px solid ${C.border};padding-top:4px"><summary style="cursor:pointer;font-size:8.5px;color:${C.accent};font-weight:800">${plannerSources.length} elite source${plannerSources.length === 1 ? '' : 's'} used as planner inspiration · trace lineage</summary><div style="display:flex;gap:5px;overflow-x:auto;padding-top:5px">${plannerSources.map(eliteSourceCard).join('')}</div>${plannerHypothesis && plannerHypothesis.text ? `<div style="font-size:7.5px;color:${C.dim};line-height:1.35;margin-top:4px">Hypothesis, not a causal result: ${esc(plannerHypothesis.text)}</div>` : ''}<div style="font-size:7px;color:${C.faint};margin-top:3px">Source geometry chose evidence only for generation. This generated hook still had to earn its own canonical ledger score.</div></details>`;
                 const spokenText = a.transcript || a.caption || '';
                 const transcriptEvidence = a.transcript_provenance || null;
                 const transcriptDetail = spokenText
@@ -5144,9 +5198,10 @@ const JarvisRetention = (function () {
                 && runValidation.valid === true
                 ? ''
                 : `<div style="font-size:9px;color:${C.amber};background:${C.amber}12;border:1px solid ${C.amber}55;padding:6px 8px;margin-bottom:7px">Historical or invalid run metadata is read-only. Its old score aliases are deliberately excluded from ranking and threshold decisions.${runValidation && (runValidation.errors || []).length ? ` ${esc(runValidation.errors.join('; '))}` : ''}</div>`;
-            const retrieval = g.elite_semantic_retrieval;
+            const retrieval = g.planner_inspiration_retrieval
+                || g.elite_semantic_retrieval;
             const eliteRetrievalNotice =
-                g.exploration_mode !== 'elite-corpus' || !retrieval
+                !retrieval
                     ? ''
                     : `<div style="font-size:8px;color:${retrieval.error ? C.amber : C.dim};background:${retrieval.error ? C.amber + '10' : C.card2};border:1px solid ${retrieval.error ? C.amber + '55' : C.border};padding:5px 7px;margin-bottom:7px;line-height:1.4">Retrieval path: ${retrieval.query_available ? 'semantic query vector' : 'no query vector'} · ${retrieval.centroid_available ? `${retrieval.centroid_member_count || 0}-video channel centroid` : 'no channel centroid'} · ${retrieval.embedding_candidate_count || 0}/${retrieval.candidate_count || 0} eligible sources have frozen corpus vectors.${retrieval.fallback ? ` Fallback: ${esc(retrieval.fallback)}.` : ''}${retrieval.error ? ` Semantic retrieval degraded: ${esc(retrieval.error)}.` : ''} Source selection remains non-causal and cannot alter the canonical final score.</div>`;
             runHtml = `${foreign}<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
@@ -5154,7 +5209,7 @@ const JarvisRetention = (function () {
                 ${eliteRetrievalNotice}
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered hooks for one idea · verified full ledgers ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.exploration_mode === 'elite-corpus' ? `<b style="color:${C.accent}">elite ${esc(g.elite_metric || '')} ≥ ${fmtv(g.elite_cutoff_percentile, 1)}th · ${g.elite_channel_oriented ? esc(g.elite_channel_name || 'channel-oriented') : 'global corpus'} · ${g.elite_source_pool_count || 0} source candidates</b> · ` : ''}${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Discarded hooks were off-topic, semantic duplicates, or lower-ranked siblings in the same directional batch.')}" style="cursor:help">${g.rejected_variant_count || 0} hooks screened before render</span>${g.prompt_search_strategy ? ` · <span title="Generation-only exhaustive lattice; it guides each batch but never changes the score." style="cursor:help;color:${C.accent}">prompt directions ${g.prompt_search_cursor || 0}/${g.prompt_lattice_size || '—'}</span>` : ''}${seedTarget != null ? ` · <span title="${directionalStrategy ? 'soft radial objective; a nearby candidate can still win by opening a new semantic direction' : 'legacy minimum seed distance'}" style="cursor:help;color:${C.purple}">${directionalStrategy ? 'radius target' : 'legacy seed ≥'} ${(+seedTarget).toFixed(3)}</span>` : ''}${priorTarget != null ? ` · <span title="${directionalStrategy ? 'soft pairwise-spacing objective, not a rejection threshold' : 'legacy minimum prior distance'}" style="cursor:help;color:${C.cyan}">${directionalStrategy ? 'spacing target' : 'legacy prior ≥'} ${(+priorTarget).toFixed(3)}</span>` : ''}${duplicateFloor != null ? ` · <span title="only candidates inside this near-identical cosine-distance floor are rejected as duplicates" style="cursor:help;color:${C.amber}">duplicate &lt; ${(+duplicateFloor).toFixed(3)}</span>` : ''}${g.directional_exploration_pressure != null ? ` · <span title="share of the target score still missing; larger deficits put more selector weight on underexplored angular directions" style="cursor:help;color:${C.accent}">direction pressure ${fmtv((+g.directional_exploration_pressure) * 100, 0)}%</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum similarity every hook must retain to the immutable video idea" style="cursor:help;color:${C.green}">same idea ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered hooks for one idea · <b style="color:${runPlannerMode === 'standard' ? C.accent : C.purple}">${esc(runPlannerLabel)}</b>${g.planner_model ? ` · ${esc(g.planner_model)}` : ''} · verified full ledgers ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.exploration_mode === 'elite-corpus' ? `<b style="color:${C.accent}">elite ${esc(g.elite_metric || '')} ≥ ${fmtv(g.elite_cutoff_percentile, 1)}th · ${g.elite_channel_oriented ? esc(g.elite_channel_name || 'channel-oriented') : 'global corpus'} · ${g.elite_source_pool_count || 0} source candidates</b> · ` : ''}${runPlannerMode === 'standard' ? `<b style="color:${C.accent}">inspiration ${esc(g.planner_inspiration_metric || 'embedding geometry')} ≥ ${fmtv(g.planner_inspiration_cutoff_percentile, 1)}th · ${g.planner_inspiration_source_pool_count || 0} source candidates</b> · ` : ''}${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Discarded hooks were off-topic, semantic duplicates, or lower-ranked siblings in the same directional batch.')}" style="cursor:help">${g.rejected_variant_count || 0} hooks screened before render</span>${g.prompt_search_strategy ? ` · <span title="Generation-only exhaustive lattice; it guides each batch but never changes the score." style="cursor:help;color:${C.accent}">prompt directions ${g.prompt_search_cursor || 0}/${g.prompt_lattice_size || '—'}</span>` : ''}${seedTarget != null ? ` · <span title="${directionalStrategy ? 'soft radial objective; a nearby candidate can still win by opening a new semantic direction' : 'legacy minimum seed distance'}" style="cursor:help;color:${C.purple}">${directionalStrategy ? 'radius target' : 'legacy seed ≥'} ${(+seedTarget).toFixed(3)}</span>` : ''}${priorTarget != null ? ` · <span title="${directionalStrategy ? 'soft pairwise-spacing objective, not a rejection threshold' : 'legacy minimum prior distance'}" style="cursor:help;color:${C.cyan}">${directionalStrategy ? 'spacing target' : 'legacy prior ≥'} ${(+priorTarget).toFixed(3)}</span>` : ''}${duplicateFloor != null ? ` · <span title="only candidates inside this near-identical cosine-distance floor are rejected as duplicates" style="cursor:help;color:${C.amber}">duplicate &lt; ${(+duplicateFloor).toFixed(3)}</span>` : ''}${g.directional_exploration_pressure != null ? ` · <span title="share of the target score still missing; larger deficits put more selector weight on underexplored angular directions" style="cursor:help;color:${C.accent}">direction pressure ${fmtv((+g.directional_exploration_pressure) * 100, 0)}%</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum similarity every hook must retain to the immutable video idea" style="cursor:help;color:${C.green}">same idea ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
                   ${running ? `<button type="button" data-grindstop ${stopping ? 'disabled' : ''} style="cursor:${stopping ? 'wait' : 'pointer'};border:1px solid #ef4444;background:transparent;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800;opacity:${stopping ? '.65' : '1'}">${stopping ? 'Stopping…' : 'Stop'}</button>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
@@ -5166,7 +5221,7 @@ const JarvisRetention = (function () {
             ? `<span style="font-size:10px;color:${C.mute}">target ≥</span><input type="number" min="0" max="100" step="0.1" value="${thr}" data-grindcfthr aria-label="Target predicted keep percentage" style="width:70px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 7px;font-size:11px" ${running ? 'disabled' : ''}><span style="font-size:10px;color:${C.accent};font-weight:800">% predicted keep</span>`
             : `<span style="font-size:10px;color:${C.mute}">target ≥ <b style="color:${C.accent}">${thr}</b>th</span><input type="range" min="60" max="97" value="${thr}" data-grindthr style="width:110px;accent-color:${C.accent}" ${running ? 'disabled' : ''}>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">${eliteMode ? 'Elite corpus explorer' : 'Grind to a threshold'} <span style="font-size:10px;color:${C.mute};font-weight:600">— ${eliteMode ? 'retrieve already-embedded elite openings, combine diversified presentation mechanisms, and generate fresh branches until one clears the canonical target. Leave the idea blank for broad invention, or enter a realm to constrain every branch.' : 'describe one immutable video idea; the fine-tuned model tests progressively different openings for that same idea. It may change phrasing, order, tension, reveal, and visual treatment, but not the underlying subject, event, goal, or outcome.'} Every rendered hook receives one coherent 45:16 image call, five deterministic 9:16 crops, and the complete canonical embedding ledger.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">${eliteMode ? 'Elite corpus explorer' : 'Grind to a threshold'} <span style="font-size:10px;color:${C.mute};font-weight:600">— ${eliteMode ? 'retrieve already-embedded elite openings, combine diversified presentation mechanisms, and generate fresh branches until one clears the canonical target. Leave the idea blank for broad invention, or enter a realm to constrain every branch.' : `describe one immutable video idea; the ${useFineTunedPlanner ? 'fine-tuned hook model' : 'standard exploration model, guided by high-scoring frozen embedding examples'} tests progressively different openings for that same idea. It may change phrasing, order, tension, reveal, and visual treatment, but not the underlying subject, event, goal, or outcome.`} Every rendered hook receives one coherent 45:16 image call, five deterministic 9:16 crops, and the complete canonical embedding ledger.</span></div>
           <div style="display:flex;gap:6px;margin-top:9px;align-items:center">${modePill('same-idea', 'Same-idea grind')}${modePill('elite-corpus', 'Elite corpus explorer')}</div>
           ${eliteControls}
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
@@ -5174,10 +5229,11 @@ const JarvisRetention = (function () {
             ${targetControl}
             ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
             ${automaticImageModelSelect(running || st.grindStarting)}
+            <label title="On uses Tyler's fine-tuned Replicate idea model. Off uses a general OpenAI planner with frozen high-scoring embedding retrieval; all downstream selection, image generation, scoring, and stopping stay identical." style="display:inline-flex;gap:6px;align-items:center;color:${useFineTunedPlanner ? C.purple : C.accent};font-size:10px;font-weight:800;cursor:${running ? 'default' : 'pointer'}"><input type="checkbox" data-grindfinetuned ${useFineTunedPlanner ? 'checked' : ''} ${running ? 'disabled' : ''} style="accent-color:${useFineTunedPlanner ? C.purple : C.accent}">Use fine-tuned LLM</label>
             <label style="display:inline-flex;gap:6px;align-items:center;color:${st.grindAnimation ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-grindanimation ${st.grindAnimation ? 'checked' : ''} ${running ? 'disabled' : ''} style="accent-color:${C.accent}">Animation</label>
             ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? 'working…' : (eliteMode ? 'Explore' : 'Grind')}</span>`}
           </div>
-          <div style="font-size:8px;color:${C.faint};margin-top:5px">Threshold coordinate: <code style="color:${C.dim}">${esc(selectedCoordinateId)}</code> · unit <code style="color:${C.dim}">${esc(selectedTargetUnit)}</code>. ${channelFree ? 'This compares the frozen pooled model’s actual predicted keep percentage; the separate pooled percentile is shown only as context.' : 'This compares the coordinate’s corpus percentile.'} No creator scale factor or modality fallback is substituted.${eliteMode ? ' Elite source ranks are retrieval evidence only; they cannot clear this threshold.' : ''}</div>
+          <div style="font-size:8px;color:${C.faint};margin-top:5px">Planner: <b style="color:${useFineTunedPlanner ? C.purple : C.accent}">${esc(selectedPlannerLabel)}</b>. ${useFineTunedPlanner ? 'Only candidate writing uses the fine-tuned model.' : 'The standard model receives rotating high-scoring corpus references and measured search directions; references are inspiration only and never contribute to the score.'} Threshold coordinate: <code style="color:${C.dim}">${esc(selectedCoordinateId)}</code> · unit <code style="color:${C.dim}">${esc(selectedTargetUnit)}</code>. ${channelFree ? 'This compares the frozen pooled model’s actual predicted keep percentage; the separate pooled percentile is shown only as context.' : 'This compares the coordinate’s corpus percentile.'} No creator scale factor or modality fallback is substituted.${eliteMode ? ' Elite source ranks are retrieval evidence only; they cannot clear this threshold.' : ''}</div>
           ${st.grindErr ? `<div style="font-size:10px;color:#ef4444;margin-top:6px">${esc(st.grindErr)}</div>` : ''}
           ${runHtml}</div>`;
     }
@@ -9292,6 +9348,12 @@ const JarvisRetention = (function () {
         }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindanimation')) {
             st.grindAnimation = e.target.checked === true;
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindfinetuned')) {
+            st.grindUseFineTunedPlanner = e.target.checked === true;
+            if (!st.grindUseFineTunedPlanner) eliteCorpusEnsure(false);
             rtgUpdateExp();
             return;
         }

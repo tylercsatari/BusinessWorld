@@ -891,7 +891,7 @@ function generationPrompt({
         ...prior,
         rejected.length ? 'RECENT DRAFTS NOT SELECTED FOR RENDER:' : '',
         ...rejected,
-        'Return the normal fine-tuned five-beat hook plan. Do not discuss these instructions.',
+        'Return the normal five-beat JSON hook plan. Do not discuss these instructions.',
     ].filter(Boolean).join('\n').slice(0, 4000);
 }
 

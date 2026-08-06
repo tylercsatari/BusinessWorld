@@ -722,7 +722,7 @@ function generationPrompt({
         seed
             ? 'The new hook must remain inside the immutable video realm, even as its treatment moves outward.'
             : 'Synthesize one coherent new premise, then commit to it for all five beats.',
-        'Return the normal fine-tuned five-beat hook plan only.',
+        'Return the normal five-beat JSON hook plan only.',
         evidence ? `RETRIEVED EVIDENCE:\n${evidence}` : '',
     ].filter(Boolean).join('\n').slice(0, 6500);
 }

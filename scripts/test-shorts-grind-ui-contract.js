@@ -184,6 +184,9 @@ assert.ok(grindSource.includes('score_percentile_0_100: verifiedScore.score_perc
 assert.ok(grindSource.includes('shorts.channel-free.concat.keep'));
 assert.ok(grindSource.includes('predicted_keep_percent'));
 assert.ok(grindSource.includes('data-grindanimation'));
+assert.ok(grindSource.includes('data-grindfinetuned'));
+assert.ok(grindSource.includes('plannerMode,'));
+assert.ok(grindSource.includes('standard exploration model'));
 assert.ok(grindSource.includes('target_seed_embedding_distance'));
 assert.ok(grindSource.includes('target_prior_embedding_distance'));
 assert.ok(grindSource.includes('duplicate_embedding_distance_floor'));

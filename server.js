@@ -103,6 +103,9 @@ const fivePanelSheet = require(
 const grindExploration = require(
     './buildings/jarvis/grind-exploration'
 );
+const grindPlanner = require(
+    './buildings/jarvis/grind-planner'
+);
 const eliteHookExplorer = require(
     './buildings/jarvis/elite-hook-explorer'
 );
@@ -14508,6 +14511,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const explorationMode = body.explorationMode === 'elite-corpus'
                 ? 'elite-corpus'
                 : 'same-idea';
+            const plannerMode = grindPlanner.normalizeMode(
+                body.plannerMode || body.planner_mode
+            );
+            if (
+                plannerMode === grindPlanner.STANDARD_MODE
+                && !process.env.OPENAI_API_KEY
+            ) {
+                throw new HttpRequestError(
+                    503,
+                    'The standard exploration model is not configured on this server.',
+                    'standard_hook_planner_unavailable'
+                );
+            }
             if (!premise && explorationMode !== 'elite-corpus') {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
@@ -14591,7 +14607,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 || process.env.HOOK_FRAME_MODEL
                 || STORYBOARD_DEFAULT_MODEL
             );
-            // one grind at a time: it monopolises the GPU + spends real money per attempt
+            // One grind at a time: every accepted attempt spends on transcript,
+            // one image call, embeddings, and canonical scoring. Planner choice
+            // changes only the candidate writer.
             try {
                 const pend = ((await cloud.listR2Keys('hooks/grind/requests/')) || []).filter(k => k.endsWith('.json'));
                 if (pend.length) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'a grind is already queued' })); return; }
@@ -14633,6 +14651,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 8,
                 Math.max(0.25, Number.parseFloat(body.hours) || 3)
             );
+            const plannerDescriptor = grindPlanner.publicDescriptor(
+                plannerMode,
+                standardHookPlannerModel()
+            );
+            const plannerInspirationMetric =
+                grindPlanner.sourceMetricForCoordinate(coordinateId);
+            const plannerInspirationCutoff =
+                grindPlanner.STANDARD_SOURCE_CUTOFF_PERCENTILE;
             await cloud.uploadToR2(`hooks/grind/requests/${rid}.json`, Buffer.from(JSON.stringify({
                 schema: 'shorts-grind-request-v3',
                 schema_version: 3,
@@ -14646,6 +14672,17 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 render_mode: 'coherent-sheet',
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
+                planner_mode: plannerMode,
+                planner_provider: plannerDescriptor.provider,
+                planner_model: plannerDescriptor.model,
+                planner_inspiration_metric:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationMetric
+                        : null,
+                planner_inspiration_cutoff_percentile:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationCutoff
+                        : null,
                 exploration_strategy: grindExploration.STRATEGY,
                 ...(eliteRequest || {
                     exploration_mode: explorationMode,
@@ -14667,7 +14704,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                 ? '% predicted keep'
                                 : 'th percentile'
                         } `
-                        + `· up to ${maxAttempts} attempts`,
+                        + `· up to ${maxAttempts} attempts`
+                        + ` · ${plannerDescriptor.label}`,
                     saved: false,
                 }
             );
@@ -14685,6 +14723,17 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 render_mode: 'coherent-sheet',
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
+                planner_mode: plannerMode,
+                planner_provider: plannerDescriptor.provider,
+                planner_model: plannerDescriptor.model,
+                planner_inspiration_metric:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationMetric
+                        : null,
+                planner_inspiration_cutoff_percentile:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationCutoff
+                        : null,
                 exploration_strategy: grindExploration.STRATEGY,
                 exploration_mode: explorationMode,
                 ...(eliteRequest || {}),
@@ -14909,6 +14958,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             j.threshold_value_0_100,
                         animation: j.animation === true,
                         render_mode: j.render_mode || null,
+                        planner_mode:
+                            grindPlanner.normalizeMode(j.planner_mode),
+                        planner_provider:
+                            j.planner_provider || null,
+                        planner_model:
+                            j.planner_model || null,
+                        planner_inspiration_metric:
+                            j.planner_inspiration_metric || null,
+                        planner_inspiration_cutoff_percentile:
+                            j.planner_inspiration_cutoff_percentile || null,
+                        planner_inspiration_source_pool_count:
+                            j.planner_inspiration_source_pool_count || null,
+                        planner_inspiration_index_content_sha256:
+                            j.planner_inspiration_index_content_sha256 || null,
                         exploration_mode:
                             j.exploration_mode || 'same-idea',
                         elite_metric: j.elite_metric || null,
@@ -22095,6 +22158,136 @@ async function hookModelGenerate(
         treatment_source: 'five_generated_beats',
     }));
 }
+
+function standardHookPlannerModel() {
+    return String(
+        process.env.SHORTS_STANDARD_HOOK_MODEL
+        || process.env.OPENAI_CHAT_MODEL
+        || 'gpt-4o'
+    ).trim();
+}
+
+function standardHookPlannerError(response, payload) {
+    const source = payload && payload.error || {};
+    const providerCode = String(
+        source.code || source.type || 'request_failed'
+    );
+    const error = new Error(
+        String(source.message || '').trim()
+        || `OpenAI standard hook planner failed (HTTP ${response.status}).`
+    );
+    error.providerStatus = response.status;
+    error.statusCode = response.status >= 500 ? 502 : response.status;
+    error.code = `STANDARD_HOOK_PLANNER_${providerCode
+        .replace(/[^a-z0-9_]+/gi, '_')
+        .toUpperCase()}`;
+    if (
+        providerCode === 'insufficient_quota'
+        || /credit|billing|spend limit/i.test(error.message)
+    ) {
+        error.statusCode = 402;
+        error.code = 'STANDARD_HOOK_PLANNER_OUT_OF_CREDITS';
+    }
+    return error;
+}
+
+async function standardHookModelGenerate(
+    generationPrompt,
+    invent,
+    count,
+    onStatus,
+    options = {}
+) {
+    if (!process.env.OPENAI_API_KEY) {
+        const error = new Error(
+            'OpenAI standard hook planner is not configured on this server.'
+        );
+        error.statusCode = 503;
+        error.code = 'STANDARD_HOOK_PLANNER_KEY_MISSING';
+        error.permanent = true;
+        throw error;
+    }
+    if (options.shouldStop && await options.shouldStop()) {
+        throw stoppedHookGenerationError(
+            'standard hook planning was stopped by the user'
+        );
+    }
+    const startedAt = Date.now();
+    if (onStatus) await onStatus('starting', 0);
+    const model = String(
+        options.standardModel || standardHookPlannerModel()
+    ).trim();
+    const response = await fetchT(
+        'https://api.openai.com/v1/chat/completions',
+        {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model,
+                messages: grindPlanner.standardMessages({
+                    generationPrompt,
+                    count,
+                    invent,
+                }),
+                temperature: 1,
+                max_tokens: Math.min(
+                    6000,
+                    900 + Math.max(1, Number(count) || 1) * 700
+                ),
+                response_format: { type: 'json_object' },
+            }),
+        },
+        120000
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+        throw standardHookPlannerError(response, payload);
+    }
+    const content = payload
+        && payload.choices
+        && payload.choices[0]
+        && payload.choices[0].message
+        && payload.choices[0].message.content;
+    const parsed = _extractJsonObject(content);
+    if (!parsed) {
+        const error = new Error(
+            'OpenAI standard hook planner returned no valid JSON plan.'
+        );
+        error.code = 'STANDARD_HOOK_PLANNER_INVALID_JSON';
+        error.retryable = true;
+        throw error;
+    }
+    if (options.shouldStop && await options.shouldStop()) {
+        throw stoppedHookGenerationError(
+            'standard hook planning was stopped by the user'
+        );
+    }
+    const plans = grindPlanner.parseStandardPlans(parsed, {
+        fallbackPremise:
+            options.fallbackPremise == null
+                ? generationPrompt
+                : options.fallbackPremise,
+        count,
+    });
+    if (plans.length < Math.max(1, Number(count) || 1)) {
+        const error = new Error(
+            `OpenAI standard hook planner returned ${plans.length}/${count} required plans.`
+        );
+        error.code = 'STANDARD_HOOK_PLANNER_INCOMPLETE';
+        error.retryable = true;
+        throw error;
+    }
+    if (onStatus) {
+        await onStatus(
+            'succeeded',
+            Math.round((Date.now() - startedAt) / 1000)
+        );
+    }
+    return plans;
+}
 // ── Generation diversity memory: EVERY idea the model has ever generated is text-embedded and
 // remembered (R2 hooks/gen-memory/memory.json, int8-quantized ≈1KB each). Each new batch is
 // over-generated, scored on distance to that whole memory AND to its own siblings, and only the
@@ -23221,6 +23414,111 @@ async function hookModelGenerateResilient(
                 )
                 : null,
         }
+    );
+}
+
+async function standardHookModelGenerateResilient(
+    premise,
+    invent,
+    count,
+    onStatus,
+    onRetry,
+    options = {}
+) {
+    const retryDeadlineAtMs = Number(options.retryDeadlineAtMs);
+    const hasRetryDeadline = options.retryDeadlineAtMs != null
+        && Number.isFinite(retryDeadlineAtMs);
+    return providerResilience.retryTransient(
+        () => standardHookModelGenerate(
+            premise,
+            invent,
+            count,
+            onStatus,
+            options
+        ),
+        {
+            maxAttempts: hasRetryDeadline ? 100000 : 4,
+            deadlineAtMs: hasRetryDeadline
+                ? retryDeadlineAtMs
+                : null,
+            shouldStop: options.shouldStop,
+            onRetry: onRetry
+                ? (error, attempt) => onRetry(
+                    providerResilience.errorMessage(error),
+                    attempt
+                )
+                : null,
+        }
+    );
+}
+
+function grindPlannerGenerateResilient(
+    plannerMode,
+    premise,
+    invent,
+    count,
+    onStatus,
+    onRetry,
+    options = {}
+) {
+    if (grindPlanner.normalizeMode(plannerMode)
+        === grindPlanner.STANDARD_MODE) {
+        return standardHookModelGenerateResilient(
+            premise,
+            invent,
+            count,
+            onStatus,
+            onRetry,
+            options
+        );
+    }
+    return hookModelGenerateResilient(
+        premise,
+        invent,
+        count,
+        onStatus,
+        onRetry,
+        options
+    );
+}
+
+async function grindPlannerGenerateRetry(
+    plannerMode,
+    premise,
+    invent,
+    onStatus,
+    onRetry,
+    options = {}
+) {
+    const plans = await grindPlannerGenerateResilient(
+        plannerMode,
+        premise,
+        invent,
+        1,
+        onStatus,
+        onRetry,
+        options
+    );
+    return plans[0];
+}
+
+function grindPlannerGenerateBatchRetry(
+    plannerMode,
+    premise,
+    invent,
+    count,
+    onStatus,
+    onRetry,
+    options = {}
+) {
+    return grindPlannerGenerateResilient(
+        plannerMode,
+        premise,
+        invent,
+        count,
+        onStatus,
+        onRetry,
+        options
     );
 }
 
@@ -25306,6 +25604,24 @@ function validateShortsGrindRun(run) {
             errors.push('grind run schema is not canonical');
         }
         if (
+            run.planner_mode != null
+            && ![
+                'fine-tuned',
+                'standard',
+            ].includes(run.planner_mode)
+        ) {
+            errors.push('grind planner mode is invalid');
+        }
+        if (
+            run.planner_mode === 'standard'
+            && (
+                run.planner_provider !== 'openai'
+                || !String(run.planner_model || '').trim()
+            )
+        ) {
+            errors.push('standard grind planner provenance is incomplete');
+        }
+        if (
             !shortsGrindCoordinateValid(
                 run.threshold_coordinate_id
             )
@@ -25449,6 +25765,7 @@ function shortsGrindResumableRun(run, {
     targetUnit,
     threshold,
     explorationMode,
+    plannerMode,
     animation,
     imageModel,
 } = {}) {
@@ -25465,6 +25782,8 @@ function shortsGrindResumableRun(run, {
         ) > 1e-9
         || String(run.exploration_mode || 'same-idea')
             !== explorationMode
+        || grindPlanner.normalizeMode(run.planner_mode)
+            !== grindPlanner.normalizeMode(plannerMode)
         || String(run.requested_premise || '')
             !== String(requestedPremise || '')
         || (run.animation === true) !== animation
@@ -25643,6 +25962,18 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
     const explorationMode = req0.exploration_mode === 'elite-corpus'
         ? 'elite-corpus'
         : 'same-idea';
+    const plannerMode = grindPlanner.normalizeMode(
+        req0.planner_mode || req0.plannerMode
+    );
+    const plannerDescriptor = grindPlanner.publicDescriptor(
+        plannerMode,
+        req0.planner_model || standardHookPlannerModel()
+    );
+    if (plannerMode === grindPlanner.STANDARD_MODE) {
+        // A standard-planner Grind must not keep Replicate's fine-tuned GPU
+        // warm on its own behalf.
+        _hookLastGen = 0;
+    }
     const eliteMetric = eliteHookExplorer.metricId(
         req0.elite_metric
     );
@@ -25685,6 +26016,21 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
         ? requestedCoordinate
         : `shorts.stored.together.${legacyMetric}`;
     const targetUnit = shortsGrindTargetUnit(coordinateId);
+    const plannerInspirationMetric = eliteHookExplorer.metricId(
+        req0.planner_inspiration_metric
+        || grindPlanner.sourceMetricForCoordinate(coordinateId)
+    );
+    const plannerInspirationCutoff = Math.max(
+        eliteHookExplorer.MIN_INDEX_PERCENTILE,
+        Math.min(
+            99.9,
+            Number.isFinite(Number(
+                req0.planner_inspiration_cutoff_percentile
+            ))
+                ? Number(req0.planner_inspiration_cutoff_percentile)
+                : grindPlanner.STANDARD_SOURCE_CUTOFF_PERCENTILE
+        )
+    );
     const threshold = Math.max(
         targetUnit === 'predicted_keep_percent' ? 0 : 50,
         Math.min(
@@ -25726,6 +26072,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
         targetUnit,
         threshold,
         explorationMode,
+        plannerMode,
         animation,
         imageModel,
     });
@@ -25768,6 +26115,15 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
             attempts.length === 1 ? '' : 's'
         } and the exact outward-exploration state...`
         : '';
+    const usesPlannerInspiration =
+        explorationMode === 'elite-corpus'
+        || plannerMode === grindPlanner.STANDARD_MODE;
+    const inspirationMetric = explorationMode === 'elite-corpus'
+        ? eliteMetric
+        : plannerInspirationMetric;
+    const inspirationCutoff = explorationMode === 'elite-corpus'
+        ? eliteCutoff
+        : plannerInspirationCutoff;
     let eliteRetrieval = null;
     let eliteBootstrapSpec = null;
     let eliteBootstrapSources = null;
@@ -25851,6 +26207,45 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     grindExploration.publicState(explorationState),
                 exploration_strategy:
                     grindExploration.STRATEGY,
+                planner_mode: plannerMode,
+                planner_provider: plannerDescriptor.provider,
+                planner_model: plannerDescriptor.model,
+                planner_inspiration_metric:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationMetric
+                        : null,
+                planner_inspiration_cutoff_percentile:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationCutoff
+                        : null,
+                planner_inspiration_source_pool_count:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                    && eliteRetrieval
+                        ? eliteRetrieval.eligible.length
+                        : null,
+                planner_inspiration_index_content_sha256:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                    && eliteRetrieval
+                        ? eliteRetrieval.index.content_sha256
+                        : null,
+                planner_inspiration_retrieval:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                    && eliteRetrieval ? {
+                        candidate_count:
+                            eliteRetrieval.semantic.candidate_count,
+                        embedding_candidate_count:
+                            eliteRetrieval.semantic.embedding_candidate_count,
+                        centroid_member_count:
+                            eliteRetrieval.semantic.centroid_member_count,
+                        query_available:
+                            eliteRetrieval.semantic.query_available === true,
+                        centroid_available:
+                            eliteRetrieval.semantic.centroid_available === true,
+                        fallback:
+                            eliteRetrieval.semantic.fallback || null,
+                        error:
+                            eliteRetrieval.semantic.error || null,
+                    } : null,
                 prompt_search_strategy:
                     grindExploration.PROMPT_SCHEMA,
                 prompt_search_cursor:
@@ -25870,19 +26265,29 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 elite_channel_oriented: eliteChannelOriented,
                 elite_channel_id: eliteChannelId || null,
                 elite_channel_name:
-                    eliteRetrieval && eliteRetrieval.channel
+                    explorationMode === 'elite-corpus'
+                    && eliteRetrieval && eliteRetrieval.channel
                         ? eliteRetrieval.channel.name
-                        : req0.elite_channel_name || null,
+                        : explorationMode === 'elite-corpus'
+                            ? req0.elite_channel_name || null
+                            : null,
                 elite_index_content_sha256:
-                    eliteRetrieval
+                    explorationMode === 'elite-corpus'
+                    && eliteRetrieval
                         ? eliteRetrieval.index.content_sha256
-                        : req0.elite_index_content_sha256 || null,
+                        : explorationMode === 'elite-corpus'
+                            ? req0.elite_index_content_sha256 || null
+                            : null,
                 elite_source_pool_count:
-                    eliteRetrieval
+                    explorationMode === 'elite-corpus'
+                    && eliteRetrieval
                         ? eliteRetrieval.eligible.length
-                        : req0.elite_source_pool_count || null,
+                        : explorationMode === 'elite-corpus'
+                            ? req0.elite_source_pool_count || null
+                            : null,
                 elite_semantic_retrieval:
-                    eliteRetrieval ? {
+                    explorationMode === 'elite-corpus'
+                    && eliteRetrieval ? {
                         candidate_count:
                             eliteRetrieval.semantic.candidate_count,
                         embedding_candidate_count:
@@ -25960,16 +26365,22 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
         return;
     }
     try {
-        if (explorationMode === 'elite-corpus') {
-            note = 'loading the frozen elite corpus and its exact source lineage…';
+        if (usesPlannerInspiration) {
+            note = plannerMode === grindPlanner.STANDARD_MODE
+                ? 'loading high-scoring frozen embedding evidence for the standard exploration model…'
+                : 'loading the frozen elite corpus and its exact source lineage…';
             await write();
             const eliteIndex = await resilientGrindStep(
                 'elite corpus loading',
                 () => loadEliteHookCorpusReady()
             );
-            if (
+            const expectedInspirationIndexSha =
                 req0.elite_index_content_sha256
-                && req0.elite_index_content_sha256
+                || resumableRun
+                    && resumableRun.planner_inspiration_index_content_sha256;
+            if (
+                expectedInspirationIndexSha
+                && expectedInspirationIndexSha
                     !== eliteIndex.content_sha256
             ) {
                 throw new Error(
@@ -25979,10 +26390,12 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
             const bootstrapPool = eliteHookExplorer.eligibleRows(
                 eliteIndex,
                 {
-                    metric: eliteMetric,
-                    cutoff: eliteCutoff,
+                    metric: inspirationMetric,
+                    cutoff: inspirationCutoff,
                     channelId: eliteChannelId,
-                    channelOriented: eliteChannelOriented,
+                    channelOriented:
+                        explorationMode === 'elite-corpus'
+                        && eliteChannelOriented,
                 }
             );
             if (!bootstrapPool.length) {
@@ -25990,10 +26403,10 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     'no source videos meet the selected elite cutoff and scope'
                 );
             }
-            if (!premise) {
+            if (!premise && explorationMode === 'elite-corpus') {
                 eliteBootstrapSources = eliteHookExplorer.selectSources({
                     rows: bootstrapPool,
-                    metric: eliteMetric,
+                    metric: inspirationMetric,
                     query: '',
                     limit: 4,
                     attemptIndex: 0,
@@ -26007,7 +26420,8 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     channelOriented: eliteChannelOriented,
                     attemptIndex: 0,
                 });
-                eliteBootstrapSpec = await hookModelGenerateRetry(
+                eliteBootstrapSpec = await grindPlannerGenerateRetry(
+                    plannerMode,
                     bootstrapPrompt,
                     true,
                     (modelStatus, seconds) => {
@@ -26027,6 +26441,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                             || 'A surprising visual experiment',
                         retryDeadlineAtMs: deadline,
                         shouldStop: checkStopped,
+                        standardModel: plannerDescriptor.model,
                     }
                 );
                 premise = String(
@@ -26034,23 +26449,28 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 ).trim().slice(0, 500);
                 if (!premise) {
                     throw new Error(
-                        'the fine-tuned planner returned no elite video premise'
+                        'the selected hook planner returned no elite video premise'
                     );
                 }
             }
-            note = eliteChannelOriented
+            note = explorationMode === 'elite-corpus'
+                && eliteChannelOriented
                 ? 'building a semantic query from the video realm and this channel’s elite opening family…'
-                : 'locating semantically relevant elite examples across the full corpus…';
+                : plannerMode === grindPlanner.STANDARD_MODE
+                    ? 'locating semantically relevant high-scoring openings for generation-only inspiration…'
+                    : 'locating semantically relevant elite examples across the full corpus…';
             await write();
             eliteRetrieval = await resilientGrindStep(
                 'elite semantic retrieval',
                 () => prepareEliteHookRetrieval({
                     index: eliteIndex,
                     premise,
-                    metric: eliteMetric,
-                    cutoff: eliteCutoff,
+                    metric: inspirationMetric,
+                    cutoff: inspirationCutoff,
                     channelId: eliteChannelId,
-                    channelOriented: eliteChannelOriented,
+                    channelOriented:
+                        explorationMode === 'elite-corpus'
+                        && eliteChannelOriented,
                 })
             );
         }
@@ -26156,8 +26576,13 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 note = 'stopped by you';
                 break;
             }
-            _hookLastGen = Date.now(); _hookLastPing = Date.now();   // grinding IS warmth
-            // 1) Generate hook candidates from the fine-tuned idea model.
+            if (plannerMode === grindPlanner.FINE_TUNED_MODE) {
+                _hookLastGen = Date.now();
+                _hookLastPing = Date.now();
+            }
+            // 1) Generate hook candidates with the explicitly selected
+            // planner. Selection, rendering, scoring, and stopping remain
+            // identical across planner modes.
             // The first attempt starts directly from the user's seed. Later
             // rounds rotate structural searches, then select the strongest
             // underexplored direction inside the immutable topic boundary.
@@ -26197,7 +26622,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     selectionRound,
                     promptRecipe,
                 });
-                const eliteRoundSources = explorationMode === 'elite-corpus'
+                const eliteRoundSources = usesPlannerInspiration
                     ? (
                         eliteBootstrapSpec
                         && attempts.length === 0
@@ -26205,7 +26630,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                             ? eliteBootstrapSources
                             : eliteHookExplorer.selectSources({
                                 rows: eliteRetrieval.eligible,
-                                metric: eliteMetric,
+                                metric: inspirationMetric,
                                 semanticResults:
                                     eliteRetrieval.semantic.results,
                                 query: premise,
@@ -26217,7 +26642,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                             })
                     )
                     : [];
-                const corpusGenerationPrompt = explorationMode === 'elite-corpus'
+                const corpusGenerationPrompt = usesPlannerInspiration
                     ? eliteHookExplorer.generationPrompt({
                         seedPremise: premise,
                         sources: eliteRoundSources,
@@ -26238,17 +26663,19 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                         : `${sec}s`;
                     note = `attempt ${attempts.length + 1}: ${
                         rstat === 'recovering'
-                            ? `status check was interrupted; resuming the same idea-model prediction (${elapsed})`
+                            ? `planner request was interrupted; resuming the same candidate batch (${elapsed})`
                             : rstat === 'starting'
-                            ? `idea-model GPU booting (${elapsed})`
+                            ? plannerMode === grindPlanner.FINE_TUNED_MODE
+                                ? `fine-tuned planner GPU booting (${elapsed})`
+                                : `standard exploration model started (${elapsed})`
                             : `writing ${candidateCount} same-idea hook${
                                 candidateCount === 1 ? '' : 's'
-                            }${promptRecipe ? ` in ${promptRecipe.id}` : ''} (${elapsed})`
+                            } with ${plannerDescriptor.label.toLowerCase()}${promptRecipe ? ` in ${promptRecipe.id}` : ''} (${elapsed})`
                     }`;
                     return write();
                 };
                 const onRetry = (message, retry) => {
-                    note = `attempt ${attempts.length + 1}: idea-model request${promptRecipe ? ` for ${promptRecipe.id}` : ''} did not complete — retrying (${retry}) without ending the run · ${message.slice(0, 60)}`;
+                    note = `attempt ${attempts.length + 1}: ${plannerDescriptor.label.toLowerCase()} request${promptRecipe ? ` for ${promptRecipe.id}` : ''} did not complete — retrying (${retry}) without ending the run · ${message.slice(0, 60)}`;
                     return write();
                 };
                 let specs;
@@ -26261,7 +26688,8 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                         specs = [eliteBootstrapSpec];
                         eliteBootstrapSpec = null;
                     } else specs = candidateCount === 1
-                        ? [await hookModelGenerateRetry(
+                        ? [await grindPlannerGenerateRetry(
+                            plannerMode,
                             generationPrompt,
                             false,
                             beat,
@@ -26270,9 +26698,11 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                                 fallbackPremise: premise,
                                 retryDeadlineAtMs: deadline,
                                 shouldStop: checkStopped,
+                                standardModel: plannerDescriptor.model,
                             }
                         )]
-                        : await hookModelGenerateBatchRetry(
+                        : await grindPlannerGenerateBatchRetry(
+                            plannerMode,
                             generationPrompt,
                             false,
                             candidateCount,
@@ -26282,6 +26712,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                                 fallbackPremise: premise,
                                 retryDeadlineAtMs: deadline,
                                 shouldStop: checkStopped,
+                                standardModel: plannerDescriptor.model,
                             }
                         );
                 } catch (error) {
@@ -26299,7 +26730,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                         break;
                     }
                     if (providerResilience.isPermanentError(error)) {
-                        err = `idea: ${error.message}`;
+                        err = `planner: ${error.message}`;
                         status = 'error';
                         break;
                     }
@@ -26374,7 +26805,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                                 : `${promptRecipe.id}: ${promptRecipe.summary}`,
                         eliteSources: eliteRoundSources,
                         eliteHypothesis:
-                            explorationMode === 'elite-corpus'
+                            usesPlannerInspiration
                                 ? eliteHookExplorer.mechanismHypothesis(
                                     eliteRoundSources
                                 )
@@ -26519,6 +26950,9 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     selectedCandidate.candidatePoolSize,
                 hook_selection_round:
                     selectedCandidate.selectionRound,
+                planner_mode: plannerMode,
+                planner_provider: plannerDescriptor.provider,
+                planner_model: plannerDescriptor.model,
                 hook_text_embedding_model: 'gemini-embedding-2',
                 hook_text_embedding_artifact:
                     hookTextEmbeddingArtifact,
@@ -26530,6 +26964,31 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     explorationMode === 'elite-corpus'
                         ? selectedCandidate.eliteSources || []
                         : [],
+                planner_sources:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? selectedCandidate.eliteSources || []
+                        : [],
+                planner_mechanism_hypothesis:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? selectedCandidate.eliteHypothesis || null
+                        : null,
+                planner_inspiration_metric:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationMetric
+                        : null,
+                planner_inspiration_cutoff_percentile:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerInspirationCutoff
+                        : null,
+                planner_inspiration_index_content_sha256:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                    && eliteRetrieval
+                        ? eliteRetrieval.index.content_sha256
+                        : null,
+                planner_source_role:
+                    plannerMode === grindPlanner.STANDARD_MODE
+                        ? plannerDescriptor.sourceRole
+                        : null,
                 elite_mechanism_hypothesis:
                     selectedCandidate.eliteHypothesis || null,
                 elite_metric:
@@ -26974,6 +27433,20 @@ async function grindQueue() {
                                     : 1,
                             exploration_mode:
                                 req0.exploration_mode || 'same-idea',
+                            planner_mode:
+                                grindPlanner.normalizeMode(
+                                    req0.planner_mode
+                                    || req0.plannerMode
+                                ),
+                            planner_provider:
+                                req0.planner_provider || null,
+                            planner_model:
+                                req0.planner_model || null,
+                            planner_inspiration_metric:
+                                req0.planner_inspiration_metric || null,
+                            planner_inspiration_cutoff_percentile:
+                                req0.planner_inspiration_cutoff_percentile
+                                || null,
                             elite_metric:
                                 req0.elite_metric || null,
                             elite_cutoff_percentile:
