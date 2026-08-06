@@ -1,7 +1,9 @@
 'use strict';
 
-const SCHEMA = 'shorts-grind-exploration-v2';
-const STRATEGY = 'same-idea-hook-proportional-outward-v2';
+const SCHEMA = 'shorts-grind-exploration-v3';
+const STRATEGY = 'same-idea-hook-directional-frontier-v3';
+const LEGACY_SCHEMA = 'shorts-grind-exploration-v2';
+const LEGACY_STRATEGY = 'same-idea-hook-proportional-outward-v2';
 
 const DEFAULTS = Object.freeze({
     // Existing Gemini calibration places unrelated concepts around 0.40+
@@ -9,8 +11,12 @@ const DEFAULTS = Object.freeze({
     // same video idea while still allowing materially different hook
     // phrasing, sequencing, reveals, and visual treatments.
     topicalSimilarityFloor: 0.70,
-    initialPriorDistance: 0.12,
-    initialSeedDistance: 0.04,
+    // Only near-identical semantic vectors are rejected. The wider spacing
+    // target is deliberately soft so a nearby hook in a new direction can be
+    // rendered instead of getting trapped behind an expanding scalar shell.
+    duplicateDistanceFloor: 0.02,
+    initialPriorTarget: 0.12,
+    initialSeedTarget: 0.04,
     priorStepBase: 0.012,
     priorStepFromDeficit: 0.06,
     seedStepBase: 0.006,
@@ -97,6 +103,59 @@ function cosineDistance(left, right) {
     return similarity == null ? null : 1 - similarity;
 }
 
+function directionFromSeed(vector, seedVector) {
+    const candidate = normalizedVector(vector);
+    const seed = normalizedVector(seedVector);
+    if (!candidate || !seed || candidate.length !== seed.length) {
+        return null;
+    }
+    let projection = 0;
+    for (let index = 0; index < candidate.length; index++) {
+        projection += candidate[index] * seed[index];
+    }
+    projection = clamp(projection, -1, 1);
+    const residual = candidate.map((value, index) => (
+        value - projection * seed[index]
+    ));
+    const residualNorm = Math.sqrt(residual.reduce(
+        (total, value) => total + value * value,
+        0
+    ));
+    if (residualNorm <= 1e-10) return null;
+    return residual.map(value => value / residualNorm);
+}
+
+function directionSignature(direction, bitCount = 12) {
+    const vector = normalizedVector(direction);
+    if (!vector) return null;
+    const bits = clamp(
+        Math.floor(finiteNumber(bitCount, 12)),
+        4,
+        24
+    );
+    let signature = 0;
+    for (let bit = 0; bit < bits; bit++) {
+        let projection = 0;
+        for (let index = 0; index < vector.length; index++) {
+            let hash = (
+                Math.imul(bit + 1, 0x9e3779b1)
+                ^ Math.imul(index + 1, 0x85ebca6b)
+            ) >>> 0;
+            hash ^= hash >>> 16;
+            hash = Math.imul(hash, 0x7feb352d) >>> 0;
+            hash ^= hash >>> 15;
+            projection += vector[index] * (
+                hash & 1 ? 1 : -1
+            );
+        }
+        if (projection >= 0) signature |= 1 << bit;
+    }
+    return signature.toString(16).padStart(
+        Math.ceil(bits / 4),
+        '0'
+    );
+}
+
 function configOf(input = {}) {
     const topicalSimilarityFloor = clamp(
         finiteNumber(
@@ -108,13 +167,17 @@ function configOf(input = {}) {
     );
     return Object.freeze({
         topicalSimilarityFloor,
-        initialPriorDistance: Math.max(0, finiteNumber(
-            input.initialPriorDistance,
-            DEFAULTS.initialPriorDistance
+        duplicateDistanceFloor: Math.max(0, finiteNumber(
+            input.duplicateDistanceFloor,
+            DEFAULTS.duplicateDistanceFloor
         )),
-        initialSeedDistance: Math.max(0, finiteNumber(
-            input.initialSeedDistance,
-            DEFAULTS.initialSeedDistance
+        initialPriorTarget: Math.max(0, finiteNumber(
+            input.initialPriorTarget ?? input.initialPriorDistance,
+            DEFAULTS.initialPriorTarget
+        )),
+        initialSeedTarget: Math.max(0, finiteNumber(
+            input.initialSeedTarget ?? input.initialSeedDistance,
+            DEFAULTS.initialSeedTarget
         )),
         priorStepBase: Math.max(0, finiteNumber(
             input.priorStepBase,
@@ -164,8 +227,10 @@ function createState({ threshold, config } = {}) {
         rejectionReasons: Object.freeze({}),
         bestScore: null,
         scoreDeficit: target,
-        requiredPriorDistance: 0,
-        requiredSeedDistance: 0,
+        targetPriorDistance: 0,
+        targetSeedDistance: 0,
+        duplicateDistanceFloor: resolvedConfig.duplicateDistanceFloor,
+        explorationPressure: 1,
         maxObservedSeedDistance: 0,
         lastPriorExpansion: 0,
         lastSeedExpansion: 0,
@@ -179,11 +244,13 @@ function createState({ threshold, config } = {}) {
 
 function restoreState(snapshot, { threshold, config } = {}) {
     const base = createState({ threshold, config });
-    if (
-        !snapshot
-        || snapshot.schema !== SCHEMA
-        || snapshot.strategy !== STRATEGY
-    ) return base;
+    const current = snapshot
+        && snapshot.schema === SCHEMA
+        && snapshot.strategy === STRATEGY;
+    const legacy = snapshot
+        && snapshot.schema === LEGACY_SCHEMA
+        && snapshot.strategy === LEGACY_STRATEGY;
+    if (!current && !legacy) return base;
     const reasons = {};
     Object.entries(snapshot.rejection_reasons || {}).forEach(
         ([reason, count]) => {
@@ -214,15 +281,41 @@ function restoreState(snapshot, { threshold, config } = {}) {
             0,
             base.threshold - (bestScore == null ? 0 : bestScore)
         )),
-        requiredPriorDistance: round(clamp(
-            finiteNumber(snapshot.required_prior_distance, 0),
+        targetPriorDistance: round(clamp(
+            finiteNumber(
+                snapshot.target_prior_distance
+                    ?? snapshot.required_prior_distance,
+                0
+            ),
             0,
             base.topicalGeometryPriorLimit
         )),
-        requiredSeedDistance: round(clamp(
-            finiteNumber(snapshot.required_seed_distance, 0),
+        targetSeedDistance: round(clamp(
+            finiteNumber(
+                snapshot.target_seed_distance
+                    ?? snapshot.required_seed_distance,
+                0
+            ),
             0,
             base.topicalGeometrySeedLimit
+        )),
+        duplicateDistanceFloor: round(Math.max(
+            0,
+            finiteNumber(
+                snapshot.duplicate_distance_floor,
+                base.duplicateDistanceFloor
+            )
+        )),
+        explorationPressure: round(clamp(
+            finiteNumber(
+                snapshot.exploration_pressure,
+                Math.max(
+                    0,
+                    base.threshold - (bestScore == null ? 0 : bestScore)
+                ) / Math.max(1, base.threshold)
+            ),
+            0,
+            1
         )),
         maxObservedSeedDistance: round(clamp(
             finiteNumber(
@@ -260,8 +353,12 @@ function measureCandidate({
         });
     }
     const topicalSimilarity = cosine(candidate, seed);
+    const seedDirection = directionFromSeed(candidate, seed);
+    const seedAngleRadians = Math.acos(clamp(topicalSimilarity, -1, 1));
     let nearestPriorDistance = null;
     let nearestPriorIndex = null;
+    let nearestPriorDirectionalDistance = null;
+    let nearestPriorDirectionalIndex = null;
     priorEmbeddings.forEach((prior, index) => {
         const distance = cosineDistance(candidate, prior);
         if (
@@ -274,16 +371,46 @@ function measureCandidate({
             nearestPriorDistance = distance;
             nearestPriorIndex = index;
         }
+        const priorDirection = directionFromSeed(prior, seed);
+        if (seedDirection && priorDirection) {
+            const directionalSimilarity = cosine(
+                seedDirection,
+                priorDirection
+            );
+            const directionalDistance = Math.acos(
+                clamp(directionalSimilarity, -1, 1)
+            ) / Math.PI;
+            if (
+                nearestPriorDirectionalDistance == null
+                || directionalDistance
+                    < nearestPriorDirectionalDistance
+            ) {
+                nearestPriorDirectionalDistance = directionalDistance;
+                nearestPriorDirectionalIndex = index;
+            }
+        }
     });
     return Object.freeze({
         available: true,
-        topicalSimilarity: round(topicalSimilarity),
-        seedDistance: round(1 - topicalSimilarity),
+        topicalSimilarity: round(topicalSimilarity, 6),
+        seedDistance: round(1 - topicalSimilarity, 6),
+        seedAngleDegrees: round(seedAngleRadians * 180 / Math.PI, 2),
+        directionAvailable: !!seedDirection,
+        directionSignature: directionSignature(seedDirection),
         nearestPriorDistance:
             nearestPriorDistance == null
                 ? null
-                : round(nearestPriorDistance),
+                : round(nearestPriorDistance, 6),
         nearestPriorIndex,
+        nearestPriorDirectionalDistance:
+            nearestPriorDirectionalDistance == null
+                ? null
+                : round(nearestPriorDirectionalDistance, 6),
+        nearestPriorDirectionalAngleDegrees:
+            nearestPriorDirectionalDistance == null
+                ? null
+                : round(nearestPriorDirectionalDistance * 180, 2),
+        nearestPriorDirectionalIndex,
     });
 }
 
@@ -306,45 +433,101 @@ function candidateDecision(state, measurement) {
     if (state.acceptedCount === 0) {
         return Object.freeze({ accepted: true, reason: 'seed_attempt' });
     }
-    if (measurement.seedDistance < state.requiredSeedDistance) {
-        return Object.freeze({
-            accepted: false,
-            reason: 'not_far_enough_from_seed',
-        });
-    }
     if (
         measurement.nearestPriorDistance == null
-        || measurement.nearestPriorDistance
-            < state.requiredPriorDistance
     ) {
         return Object.freeze({
             accepted: false,
-            reason: 'too_close_to_rendered_idea',
+            reason: 'prior_geometry_unavailable',
         });
     }
-    return Object.freeze({ accepted: true, reason: 'outward_candidate' });
+    if (
+        measurement.nearestPriorDistance
+            < state.duplicateDistanceFloor
+    ) {
+        return Object.freeze({
+            accepted: false,
+            reason: 'semantic_duplicate',
+        });
+    }
+    return Object.freeze({
+        accepted: true,
+        reason: 'directional_frontier_candidate',
+    });
 }
 
 function candidateRank(state, candidate) {
     const measurement = candidate.measurement;
-    const seedOvershoot = Math.max(
+    if (state.acceptedCount === 0) {
+        return Object.freeze({
+            total: 1,
+            radial: 1,
+            directional: 1,
+            pairwise: 1,
+            radialWeight: 0,
+            directionalWeight: 0,
+            pairwiseWeight: 0,
+        });
+    }
+    const pressure = clamp(state.explorationPressure, 0, 1);
+    const radialLimit = Math.max(
+        1e-9,
+        state.topicalGeometrySeedLimit
+    );
+    const radialFit = 1 - clamp(
+        Math.abs(
+            measurement.seedDistance - state.targetSeedDistance
+        ) / radialLimit,
         0,
-        measurement.seedDistance - state.requiredSeedDistance
+        1
     );
-    const priorMargin = measurement.nearestPriorDistance == null
-        ? 0
-        : measurement.nearestPriorDistance
-            - state.requiredPriorDistance;
-    // Stay near the requested outward shell instead of leaping off-topic, then
-    // prefer more separation from prior hook treatments and more topicality.
-    return (
-        -seedOvershoot
-        + 0.2 * priorMargin
-        + 0.05 * (
-            measurement.topicalSimilarity
-            - state.topicalSimilarityFloor
-        )
+    const radialReach = clamp(
+        measurement.seedDistance / radialLimit,
+        0,
+        1
     );
+    const radial = 0.7 * radialFit + 0.3 * radialReach;
+    const directional = measurement.nearestPriorDirectionalDistance == null
+        ? 1
+        : clamp(measurement.nearestPriorDirectionalDistance, 0, 1);
+    const priorTarget = Math.max(
+        state.duplicateDistanceFloor,
+        state.targetPriorDistance
+    );
+    const pairwise = measurement.nearestPriorDistance == null
+        ? 1
+        : priorTarget <= state.duplicateDistanceFloor
+            ? 1
+            : clamp(
+                (
+                    measurement.nearestPriorDistance
+                    - state.duplicateDistanceFloor
+                ) / (
+                    priorTarget - state.duplicateDistanceFloor
+                ),
+                0,
+                1
+            );
+    // A larger score miss shifts weight toward unexplored azimuths. The
+    // proportional radial target still moves outward, but it is an objective,
+    // never a gate. Weights sum to one for every pressure value.
+    const directionalWeight = 0.45 + 0.20 * pressure;
+    const radialWeight = 0.40 - 0.10 * pressure;
+    const pairwiseWeight = 0.15 - 0.10 * pressure;
+    return Object.freeze({
+        total: round(
+            directionalWeight * directional
+            + radialWeight * radial
+            + pairwiseWeight * pairwise,
+            6
+        ),
+        radial: round(radial, 6),
+        directional: round(directional, 6),
+        pairwise: round(pairwise, 6),
+        radialWeight: round(radialWeight, 6),
+        directionalWeight: round(directionalWeight, 6),
+        pairwiseWeight: round(pairwiseWeight, 6),
+    });
 }
 
 function selectCandidate(state, candidates) {
@@ -354,12 +537,16 @@ function selectCandidate(state, candidates) {
                 state,
                 candidate && candidate.measurement
             );
+            const rankComponents = decision.accepted
+                ? candidateRank(state, candidate)
+                : null;
             return {
                 ...candidate,
                 sourceIndex: index,
                 decision,
-                rank: decision.accepted
-                    ? candidateRank(state, candidate)
+                rankComponents,
+                rank: rankComponents
+                    ? rankComponents.total
                     : Number.NEGATIVE_INFINITY,
             };
         });
@@ -367,6 +554,13 @@ function selectCandidate(state, candidates) {
         .filter(candidate => candidate.decision.accepted)
         .sort((left, right) => (
             right.rank - left.rank
+            || finiteNumber(
+                right.measurement.nearestPriorDirectionalDistance,
+                -1
+            ) - finiteNumber(
+                left.measurement.nearestPriorDirectionalDistance,
+                -1
+            )
             || left.sourceIndex - right.sourceIndex
         ))[0] || null;
     return Object.freeze({
@@ -429,6 +623,7 @@ function recordScore(state, score, evidence = {}) {
             acceptedCount: nextAcceptedCount,
             bestScore,
             scoreDeficit: 0,
+            explorationPressure: 0,
             maxObservedSeedDistance,
             lastPriorExpansion: 0,
             lastSeedExpansion: 0,
@@ -442,19 +637,19 @@ function recordScore(state, score, evidence = {}) {
         state.config.seedStepBase
         + state.config.seedStepFromDeficit * deficitRatio
     );
-    const requiredPriorDistance = Math.min(
+    const targetPriorDistance = Math.min(
         state.topicalGeometryPriorLimit,
         state.acceptedCount === 0
-            ? state.config.initialPriorDistance + priorExpansion
-            : state.requiredPriorDistance + priorExpansion
+            ? state.config.initialPriorTarget + priorExpansion
+            : state.targetPriorDistance + priorExpansion
     );
-    const requiredSeedDistance = Math.min(
+    const targetSeedDistance = Math.min(
         state.topicalGeometrySeedLimit,
         Math.max(
-            state.requiredSeedDistance,
+            state.targetSeedDistance,
             maxObservedSeedDistance,
             state.acceptedCount === 0
-                ? state.config.initialSeedDistance
+                ? state.config.initialSeedTarget
                 : 0
         ) + seedExpansion
     );
@@ -463,9 +658,10 @@ function recordScore(state, score, evidence = {}) {
         acceptedCount: nextAcceptedCount,
         bestScore,
         scoreDeficit: round(scoreDeficit),
+        explorationPressure: round(deficitRatio),
         maxObservedSeedDistance: round(maxObservedSeedDistance),
-        requiredPriorDistance: round(requiredPriorDistance),
-        requiredSeedDistance: round(requiredSeedDistance),
+        targetPriorDistance: round(targetPriorDistance),
+        targetSeedDistance: round(targetSeedDistance),
         lastPriorExpansion: round(priorExpansion),
         lastSeedExpansion: round(seedExpansion),
     });
@@ -480,8 +676,10 @@ function publicState(state) {
         rejection_reasons: { ...state.rejectionReasons },
         best_score: state.bestScore,
         score_deficit: state.scoreDeficit,
-        required_prior_distance: state.requiredPriorDistance,
-        required_seed_distance: state.requiredSeedDistance,
+        target_prior_distance: state.targetPriorDistance,
+        target_seed_distance: state.targetSeedDistance,
+        duplicate_distance_floor: state.duplicateDistanceFloor,
+        exploration_pressure: state.explorationPressure,
         farthest_rendered_seed_distance:
             state.maxObservedSeedDistance,
         prior_expansion_step: state.lastPriorExpansion,
@@ -509,7 +707,13 @@ function generationPrompt({
     const rejected = rejectedPremises
         .slice(-8)
         .map((value, index) => `${index + 1}. ${String(value).slice(0, 120)}`);
-    const assignment = outwardAssignments(selectionRound, 1)[0];
+    const globalSearchRound = Math.max(
+        1,
+        state.acceptedCount
+            + Math.max(1, Number.parseInt(selectionRound, 10) || 1)
+            - 1
+    );
+    const assignment = outwardAssignments(globalSearchRound, 1)[0];
     return [
         `IMMUTABLE VIDEO IDEA: ${seed}`,
         'Write a materially different opening hook for this exact same video idea.',
@@ -517,7 +721,7 @@ function generationPrompt({
         'Vary only the hook treatment: opening question, information order, tension, framing, reveal timing, spoken phrasing, camera perspective, and five-beat visual progression.',
         'Do not merely paraphrase an earlier hook.',
         state.acceptedCount > 0
-            ? `OUTWARD SEARCH ROUND ${Math.max(1, Number.parseInt(selectionRound, 10) || 1)} STRUCTURAL ASSIGNMENT: ${assignment}. Return exactly one normal five-beat plan; the provider independently samples the other candidates.`
+            ? `OUTWARD SEARCH ROUND ${globalSearchRound} STRUCTURAL ASSIGNMENT: ${assignment}. Return exactly one normal five-beat plan; the provider independently samples the other candidates.`
             : '',
         state.acceptedCount > 0
             ? 'Keep only nouns required to identify the immutable subject, object, event, goal, and outcome. Change the sentence skeleton, opening speech act, information order, and visual causality. Do not reuse the prior hook question or reveal.'
@@ -527,10 +731,10 @@ function generationPrompt({
             : `This is outward hook-exploration round ${state.acceptedCount + 1}. Move into a different presentation region while preserving every invariant of the video idea.`,
         state.acceptedCount === 0
             ? `The selection system will retain only a hook with at least ${state.topicalSimilarityFloor.toFixed(3)} similarity to the immutable video idea.`
-            : `The selection system will require at least ${state.requiredSeedDistance.toFixed(3)} cosine distance from the original wording and ${state.requiredPriorDistance.toFixed(3)} from every rendered hook, while retaining at least ${state.topicalSimilarityFloor.toFixed(3)} similarity to the immutable video idea.`,
+            : `Selection will favor an underexplored semantic direction and use ${state.targetSeedDistance.toFixed(3)} seed distance plus ${state.targetPriorDistance.toFixed(3)} prior spacing as soft targets. Missing either target does not discard a topical new direction. Only drafts below ${state.topicalSimilarityFloor.toFixed(3)} topical similarity or within ${state.duplicateDistanceFloor.toFixed(3)} duplicate distance of a rendered hook are rejected.`,
         prior.length ? 'DO NOT REPEAT THESE RENDERED HOOK TREATMENTS:' : '',
         ...prior,
-        rejected.length ? 'THESE RECENT DRAFTS WERE TOO CLOSE OR OFF-TOPIC:' : '',
+        rejected.length ? 'RECENT DRAFTS NOT SELECTED FOR RENDER:' : '',
         ...rejected,
         'Return the normal fine-tuned five-beat hook plan. Do not discuss these instructions.',
     ].filter(Boolean).join('\n').slice(0, 3500);
@@ -542,6 +746,8 @@ module.exports = Object.freeze({
     DEFAULTS,
     cosine,
     cosineDistance,
+    directionFromSeed,
+    directionSignature,
     createState,
     restoreState,
     measureCandidate,

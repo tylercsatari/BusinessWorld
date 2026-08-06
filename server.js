@@ -22582,6 +22582,30 @@ async function prepareEliteHookRetrieval({
 }
 const genVecEnc = v => Buffer.from(Int8Array.from(v, x => Math.max(-127, Math.min(127, Math.round(x * 127)))).buffer).toString('base64');
 const genVecDec = b => { const buf = Buffer.from(b, 'base64'); return new Int8Array(buf.buffer, buf.byteOffset, buf.length); };
+function exactTextEmbeddingBuffer(vector) {
+    const values = Array.from(vector || [], Number);
+    if (!values.length || values.some(value => !Number.isFinite(value))) {
+        throw new Error('text embedding is invalid');
+    }
+    const buffer = Buffer.allocUnsafe(values.length * 8);
+    values.forEach((value, index) => {
+        buffer.writeDoubleLE(value, index * 8);
+    });
+    return buffer;
+}
+function exactTextEmbeddingFromBuffer(input, expectedLength) {
+    const buffer = Buffer.from(input || []);
+    if (!buffer.length || buffer.length % 8) return null;
+    const length = buffer.length / 8;
+    if (
+        Number.isFinite(Number(expectedLength))
+        && length !== Number(expectedLength)
+    ) return null;
+    const values = Array.from({ length }, (_, index) => (
+        buffer.readDoubleLE(index * 8)
+    ));
+    return values.every(Number.isFinite) ? values : null;
+}
 function genCos(a, b) { let d = 0, na = 0, nb = 0; const n = Math.min(a.length, b.length); for (let i = 0; i < n; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; } return d / (Math.sqrt(na * nb) || 1); }
 async function genMemLoad(key = GENMEM_KEY) {
     try { const b = await cloud.downloadFromR2(key); if (b) { const j = JSON.parse(b.toString('utf8')); if (Array.isArray(j.items)) return j.items; } } catch (e) {}
@@ -23625,9 +23649,13 @@ async function hookProcessRequest(
                         threshold: 100,
                     }),
                     acceptedCount: acceptedHookEmbeddings.length,
-                    requiredPriorDistance:
+                    targetPriorDistance:
                         acceptedHookEmbeddings.length
                             ? NOV_MIN_PREMISE
+                            : 0,
+                    targetSeedDistance:
+                        acceptedHookEmbeddings.length
+                            ? grindExploration.DEFAULTS.initialSeedTarget
                             : 0,
                 }
                 : null;
@@ -23822,7 +23850,10 @@ async function hookProcessRequest(
                 frames_done: 0, status: 'writing-transcript', reasoning: spec.reasoning || '', caption: '', transcript: '',
                 cohesion_mode: spec.cohesion_mode || '', novelty: nov, nearest: near,
                 seed_distance: autoMeasurement && autoMeasurement.seedDistance,
+                seed_angle_degrees: autoMeasurement && autoMeasurement.seedAngleDegrees,
+                direction_signature: autoMeasurement && autoMeasurement.directionSignature,
                 nearest_prior_distance: autoMeasurement && autoMeasurement.nearestPriorDistance,
+                nearest_prior_directional_angle_degrees: autoMeasurement && autoMeasurement.nearestPriorDirectionalAngleDegrees,
                 topical_similarity: autoMeasurement && autoMeasurement.topicalSimilarity,
                 topical_similarity_floor: seededAutoExploration
                     ? autoPromptState.topicalSimilarityFloor
@@ -25680,10 +25711,14 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 note,
                 rejected_variant_count:
                     explorationState.rejectedCount,
-                minimum_text_embedding_distance:
-                    explorationState.requiredPriorDistance,
-                required_seed_embedding_distance:
-                    explorationState.requiredSeedDistance,
+                target_prior_embedding_distance:
+                    explorationState.targetPriorDistance,
+                target_seed_embedding_distance:
+                    explorationState.targetSeedDistance,
+                duplicate_embedding_distance_floor:
+                    explorationState.duplicateDistanceFloor,
+                directional_exploration_pressure:
+                    explorationState.explorationPressure,
                 topical_similarity_floor:
                     explorationState.topicalSimilarityFloor,
                 score_deficit:
@@ -25914,16 +25949,63 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 index += 1
             ) {
                 const priorPremise = acceptedPremises[index];
-                const priorEmbedding = await resilientGrindStep(
-                    'prior-hook embedding restoration',
-                    () => geminiTextEmbed(
-                        priorPremise,
-                        {
-                            required: true,
-                            context: 'a restored Grind hook treatment',
-                        }
-                    )
+                const priorAttempt = attempts[index] || {};
+                const embeddingArtifact = String(
+                    priorAttempt.hook_text_embedding_artifact
+                    || `hooks/grind/embeddings/${rid}_${index}.f64`
                 );
+                let priorEmbedding = null;
+                try {
+                    const persistedEmbedding = await cloud.downloadFromR2(
+                        embeddingArtifact
+                    );
+                    if (
+                        exactSha256(
+                            priorAttempt.hook_text_embedding_sha256
+                        )
+                        && quantJobIdentity.sha256Buffer(
+                            persistedEmbedding
+                        ) !== priorAttempt.hook_text_embedding_sha256
+                    ) {
+                        throw new Error(
+                            'persisted hook embedding hash mismatch'
+                        );
+                    }
+                    priorEmbedding = exactTextEmbeddingFromBuffer(
+                        persistedEmbedding,
+                        seedEmbedding.length
+                    );
+                } catch (error) {}
+                if (!priorEmbedding) {
+                    priorEmbedding = await resilientGrindStep(
+                        'prior-hook embedding restoration',
+                        () => geminiTextEmbed(
+                            priorPremise,
+                            {
+                                required: true,
+                                context: 'a restored Grind hook treatment',
+                            }
+                        )
+                    );
+                    const backfilledEmbedding =
+                        exactTextEmbeddingBuffer(priorEmbedding);
+                    await ownership.mutate(
+                        'backfill exact Grind hook embedding',
+                        () => cloud.uploadToR2(
+                            embeddingArtifact,
+                            backfilledEmbedding,
+                            'application/octet-stream'
+                        )
+                    );
+                    priorAttempt.hook_text_embedding_artifact =
+                        embeddingArtifact;
+                    priorAttempt.hook_text_embedding_sha256 =
+                        quantJobIdentity.sha256Buffer(
+                            backfilledEmbedding
+                        );
+                    priorAttempt.hook_text_embedding_dimension =
+                        priorEmbedding.length;
+                }
                 ideaEmbeddings.push(priorEmbedding);
                 const memoryId = `${rid}_${index}`;
                 if (!mem.some(item => item && item.id === memoryId)) {
@@ -25947,8 +26029,8 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
             _hookLastGen = Date.now(); _hookLastPing = Date.now();   // grinding IS warmth
             // 1) Generate hook candidates from the fine-tuned idea model.
             // The first attempt starts directly from the user's seed. Later
-            // rounds receive the immutable seed plus explicit outward-shell
-            // requirements and recent hook treatments to avoid.
+            // rounds rotate structural searches, then select the strongest
+            // underexplored direction inside the immutable topic boundary.
             let selectedCandidate = null;
             let selectionRound = 0;
             while (
@@ -26142,6 +26224,15 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                         ...selection.selected,
                         candidatePoolSize: candidates.length,
                         selectionRound,
+                        structuralAssignment:
+                            explorationState.acceptedCount === 0
+                                ? 'seed treatment: establish the supplied idea before directional exploration'
+                                : grindExploration.outwardAssignments(
+                                    explorationState.acceptedCount
+                                        + selectionRound
+                                        - 1,
+                                    1
+                                )[0],
                         eliteSources: eliteRoundSources,
                         eliteHypothesis:
                             explorationMode === 'elite-corpus'
@@ -26164,7 +26255,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     candidates.length
                 } hooks before image spend — ${Object.entries(
                     reasonCounts
-                ).map(([reason, count]) => `${reason} ${count}`).join(', ')}; generating farther outward…`;
+                ).map(([reason, count]) => `${reason} ${count}`).join(', ')}; rotating to another semantic direction…`;
                 await write();
             }
             if (status !== 'running') break;
@@ -26173,9 +26264,9 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     ? 'deadline'
                     : 'error';
                 if (status === 'deadline') {
-                    note = 'time budget ended while screening outward hooks; no off-topic or too-similar draft was rendered';
+                    note = 'time budget ended while screening directions; no topical nonduplicate draft was available for the next image call';
                 } else {
-                    err = 'idea exploration stopped before it found a candidate that was both topical and far enough outward; no image call was made for that round';
+                    err = 'idea exploration stopped before it found a topical nonduplicate candidate; no image call was made for that round';
                 }
                 break;
             }
@@ -26191,6 +26282,20 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
             ].join('\n');
             const requirementsBefore =
                 grindExploration.publicState(explorationState);
+            const hookTextEmbeddingArtifact =
+                `hooks/grind/embeddings/${rid}_${attempts.length}.f64`;
+            const hookTextEmbeddingBuffer =
+                exactTextEmbeddingBuffer(emb);
+            const hookTextEmbeddingSha256 =
+                quantJobIdentity.sha256Buffer(hookTextEmbeddingBuffer);
+            await ownership.mutate(
+                'store exact Grind hook embedding',
+                () => cloud.uploadToR2(
+                    hookTextEmbeddingArtifact,
+                    hookTextEmbeddingBuffer,
+                    'application/octet-stream'
+                )
+            );
             ideaEmbeddings.push(emb);
             acceptedPremises.push(spec.premise);
             (selectedCandidate.eliteSources || []).forEach(source => {
@@ -26227,14 +26332,34 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     measurement.nearestPriorDistance,
                 nearest_prior_attempt:
                     measurement.nearestPriorIndex,
+                seed_angle_degrees:
+                    measurement.seedAngleDegrees,
+                direction_signature:
+                    measurement.directionSignature,
+                nearest_prior_directional_distance:
+                    measurement.nearestPriorDirectionalDistance,
+                nearest_prior_directional_angle_degrees:
+                    measurement.nearestPriorDirectionalAngleDegrees,
+                nearest_prior_directional_attempt:
+                    measurement.nearestPriorDirectionalIndex,
                 topical_similarity:
                     measurement.topicalSimilarity,
                 topical_similarity_floor:
                     explorationState.topicalSimilarityFloor,
-                required_seed_distance:
-                    explorationState.requiredSeedDistance,
-                required_prior_distance:
-                    explorationState.requiredPriorDistance,
+                target_seed_distance:
+                    explorationState.targetSeedDistance,
+                target_prior_distance:
+                    explorationState.targetPriorDistance,
+                duplicate_distance_floor:
+                    explorationState.duplicateDistanceFloor,
+                directional_exploration_pressure:
+                    explorationState.explorationPressure,
+                directional_frontier_score:
+                    selectedCandidate.rank,
+                directional_frontier_components:
+                    selectedCandidate.rankComponents,
+                structural_search_assignment:
+                    selectedCandidate.structuralAssignment,
                 exploration_strategy:
                     grindExploration.STRATEGY,
                 exploration_before: requirementsBefore,
@@ -26243,6 +26368,11 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 hook_selection_round:
                     selectedCandidate.selectionRound,
                 hook_text_embedding_model: 'gemini-embedding-2',
+                hook_text_embedding_artifact:
+                    hookTextEmbeddingArtifact,
+                hook_text_embedding_sha256:
+                    hookTextEmbeddingSha256,
+                hook_text_embedding_dimension: emb.length,
                 exploration_mode: explorationMode,
                 elite_sources:
                     explorationMode === 'elite-corpus'
@@ -26431,9 +26561,9 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                         score.input_manifest.score_input_fingerprint
                         || score.input_manifest.input_fingerprint
                     ) || null;
-                // Visual distance is descriptive. The next hook's outward
-                // requirement is controlled only by pre-render idea geometry
-                // and the verified score deficit.
+                // Visual distance is descriptive. Text-space radius and
+                // direction are selected before rendering; score deficit only
+                // changes the next soft frontier objective.
                 const vp = score.emb_preview && score.emb_preview.visual;
                 if (vp && vp.length) {
                     let vm = -1; for (const pv of visPrev) { const c = genCos(vp, pv); if (c > vm) vm = c; }
@@ -26460,10 +26590,12 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
             a.exploration_after =
                 grindExploration.publicState(explorationState);
             a.score_deficit_after = explorationState.scoreDeficit;
-            a.next_required_seed_distance =
-                explorationState.requiredSeedDistance;
-            a.next_required_prior_distance =
-                explorationState.requiredPriorDistance;
+            a.next_target_seed_distance =
+                explorationState.targetSeedDistance;
+            a.next_target_prior_distance =
+                explorationState.targetPriorDistance;
+            a.next_directional_exploration_pressure =
+                explorationState.explorationPressure;
             const targetSuffix = targetUnit === 'predicted_keep_percent'
                 ? '% predicted keep'
                 : 'th percentile';
@@ -26471,9 +26603,9 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 status = 'won';
                 note = `attempt ${a.k + 1} cleared the bar: ${attemptTarget}${targetSuffix} ≥ ${threshold}${targetSuffix}`;
             } else if (attemptVerified) {
-                note = `attempt ${a.k + 1} scored ${attemptTarget}${targetSuffix} (target ${threshold}${targetSuffix}) — best ${best()}${targetSuffix} · next seed distance ≥ ${explorationState.requiredSeedDistance.toFixed(3)} · next prior distance ≥ ${explorationState.requiredPriorDistance.toFixed(3)} · deficit ${explorationState.scoreDeficit.toFixed(1)}`;
+                note = `attempt ${a.k + 1} scored ${attemptTarget}${targetSuffix} (target ${threshold}${targetSuffix}) — best ${best()}${targetSuffix} · next soft radius target ${explorationState.targetSeedDistance.toFixed(3)} · spacing target ${explorationState.targetPriorDistance.toFixed(3)} · directional pressure ${(explorationState.explorationPressure * 100).toFixed(0)}% · deficit ${explorationState.scoreDeficit.toFixed(1)}`;
             } else {
-                note = `attempt ${a.k + 1} could not be scored — the next hook still moves outward while preserving the same idea; seed distance ≥ ${explorationState.requiredSeedDistance.toFixed(3)}, prior distance ≥ ${explorationState.requiredPriorDistance.toFixed(3)}`;
+                note = `attempt ${a.k + 1} could not be scored — the next batch still searches an underexplored semantic direction while preserving the same idea; soft radius target ${explorationState.targetSeedDistance.toFixed(3)}, spacing target ${explorationState.targetPriorDistance.toFixed(3)}`;
             }
             await write();
         }
@@ -26650,10 +26782,28 @@ async function grindQueue() {
                             rejected_variant_count: resumeRun
                                 ? resumeRun.rejected_variant_count || 0
                                 : 0,
-                            minimum_text_embedding_distance:
+                            target_prior_embedding_distance:
                                 resumeRun
-                                    ? resumeRun.minimum_text_embedding_distance
-                                    : 0.12,
+                                    ? resumeRun.target_prior_embedding_distance
+                                        ?? resumeRun.minimum_text_embedding_distance
+                                        ?? 0
+                                    : 0,
+                            target_seed_embedding_distance:
+                                resumeRun
+                                    ? resumeRun.target_seed_embedding_distance
+                                        ?? resumeRun.required_seed_embedding_distance
+                                        ?? 0
+                                    : 0,
+                            duplicate_embedding_distance_floor:
+                                resumeRun
+                                    ? resumeRun.duplicate_embedding_distance_floor
+                                        ?? grindExploration.DEFAULTS.duplicateDistanceFloor
+                                    : grindExploration.DEFAULTS.duplicateDistanceFloor,
+                            directional_exploration_pressure:
+                                resumeRun
+                                    ? resumeRun.directional_exploration_pressure
+                                        ?? 1
+                                    : 1,
                             exploration_mode:
                                 req0.exploration_mode || 'same-idea',
                             elite_metric:

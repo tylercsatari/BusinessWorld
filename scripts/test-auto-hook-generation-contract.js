@@ -36,7 +36,9 @@ assert(
     auto.includes("'same-video-idea-fine-tuned-hook-batch-v1'")
         && auto.includes('seededAutoExploration ? [] : mem')
         && auto.includes('topicalSimilarity')
-        && auto.includes('requiredPriorDistance'),
+        && auto.includes('targetPriorDistance')
+        && auto.includes('direction_signature')
+        && auto.includes('nearest_prior_directional_angle_degrees'),
     'seeded Auto must stay on the immutable video idea and diversify siblings'
 );
 assert(

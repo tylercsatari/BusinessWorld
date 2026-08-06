@@ -529,7 +529,12 @@ async function main() {
     assert(index.includes("makeClickable(g, 'Experiment Lab')"), '3D Experiment Lab is not registered as clickable');
     assert(index.includes("'Experiment Lab': experimentLab"), 'Experiment Lab is absent from persistent building lookup');
 
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+        headless: true,
+        executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+            || undefined,
+    });
     try {
         const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
         page.on('pageerror', error => console.error('PAGE ERROR:', error.stack || error.message));
@@ -1839,7 +1844,11 @@ async function main() {
             topical_similarity: 0.88,
             topical_similarity_floor: 0.70,
             seed_distance: 0.19,
-            min_text_embedding_distance: 0.16,
+            seed_angle_degrees: 35.9,
+            nearest_prior_distance: 0.16,
+            direction_signature: '7a3',
+            nearest_prior_directional_angle_degrees: 74.2,
+            directional_frontier_score: 0.81,
         };
         const grindRunFixture = {
             rid: grindFixtureRid,
@@ -1852,9 +1861,11 @@ async function main() {
             attempt_count: 1,
             attempts: [grindAttemptFixture],
             exploration_strategy:
-                'same-idea-hook-proportional-outward-v2',
-            required_seed_embedding_distance: 0.19,
-            minimum_text_embedding_distance: 0.16,
+                'same-idea-hook-directional-frontier-v3',
+            target_seed_embedding_distance: 0.19,
+            target_prior_embedding_distance: 0.16,
+            duplicate_embedding_distance_floor: 0.02,
+            directional_exploration_pressure: 0.58,
             topical_similarity_floor: 0.70,
             rejected_variant_count: 2,
             render_mode: 'single-panel',

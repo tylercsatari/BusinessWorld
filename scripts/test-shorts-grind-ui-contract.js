@@ -184,11 +184,19 @@ assert.ok(grindSource.includes('score_percentile_0_100: verifiedScore.score_perc
 assert.ok(grindSource.includes('shorts.channel-free.concat.keep'));
 assert.ok(grindSource.includes('predicted_keep_percent'));
 assert.ok(grindSource.includes('data-grindanimation'));
-assert.ok(grindSource.includes('required_seed_embedding_distance'));
+assert.ok(grindSource.includes('target_seed_embedding_distance'));
+assert.ok(grindSource.includes('target_prior_embedding_distance'));
+assert.ok(grindSource.includes('duplicate_embedding_distance_floor'));
+assert.ok(grindSource.includes('directional_exploration_pressure'));
+assert.ok(grindSource.includes('direction_signature'));
+assert.ok(grindSource.includes('nearest_prior_directional_angle_degrees'));
+assert.ok(grindSource.includes('directional_frontier_score'));
+assert.ok(grindSource.includes('radius target'));
+assert.ok(grindSource.includes('angular gap'));
 assert.ok(grindSource.includes('topical_similarity_floor'));
 assert.ok(grindSource.includes('image_provider_call_count'));
 assert.ok(grindSource.includes('one provider call → one 45:16 sheet'));
-assert.ok(grindSource.includes('same-idea-hook-proportional-outward-v2'));
+assert.ok(grindSource.includes('same-idea-hook-directional-frontier-v3'));
 assert.ok(grindSource.includes("_scoreQueueStatus: 'loading'"));
 assert.ok(grindSource.includes('complete embedding readout loaded'));
 assert.ok(
