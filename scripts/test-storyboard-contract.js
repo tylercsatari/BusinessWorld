@@ -132,6 +132,46 @@ assert(
     'the animation style must persist inside the immutable storyboard revision'
 );
 assert.notStrictEqual(animatedDocument.revision, document.revision);
+const transcriptDocument = bindDocument({
+    ...document,
+    id: 'sbtranscript01',
+    transcriptBeatAlignment: ['one', 'two', 'three', 'four', 'five'],
+    transcriptProvenance: {
+        schema: 'shorts-opening-transcript-writer-v1',
+        provider: 'openai',
+        model: 'fixture-writer',
+        provider_call_count: 1,
+        source_population_count: 208,
+        example_count: 1,
+        source_join: 'aligned timestamps to measured outcomes',
+        source_window: 'exact first five seconds',
+        examples: [{
+            video_id: 'example1234',
+            actual_keep_rate_percent: 87.3,
+            measured_window_seconds: 5,
+            transcript: 'Measured opening example.',
+            transcript_source: 'youtube-auto-captions',
+        }],
+        structural_examples_only: true,
+        scoring_text_input: true,
+    },
+});
+assert.deepStrictEqual(
+    transcriptDocument.transcriptBeatAlignment,
+    ['one', 'two', 'three', 'four', 'five']
+);
+assert.strictEqual(
+    transcriptDocument.transcriptProvenance.source_population_count,
+    208
+);
+assert.strictEqual(
+    transcriptDocument.transcriptProvenance.examples[0].transcript_source,
+    'youtube-auto-captions'
+);
+assert(
+    validateDocument(transcriptDocument).valid,
+    'the generated transcript and measured-example lineage must survive canonical persistence'
+);
 assert.strictEqual(
     Object.prototype.hasOwnProperty.call(
         document.panels[0],

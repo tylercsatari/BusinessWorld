@@ -1,0 +1,1256 @@
+{
+  "schema": "shorts-measured-opening-examples-v1",
+  "selection": "all Tyler videos with aligned first-five-second word timestamps; outcome labels are joined separately at runtime",
+  "source": "Promise Lab hook-timing word timestamps joined to retention_table by video id",
+  "count": 208,
+  "examples": [
+    {
+      "video_id": "_4uNCXnSjCs",
+      "measured_window_seconds": 5,
+      "transcript": "this is me hooked up to a lie detector and you've never seen someone beat it the way I'm about to because to",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "_9rBMihjT4g",
+      "measured_window_seconds": 5,
+      "transcript": "In order to solve Mr. Beast's one million dollar crossword, my first thought was to test every word in the",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "-V-LELEKkX0",
+      "measured_window_seconds": 5,
+      "transcript": "this might change the world i destroyed 97 trees to build a primitive survival shelter in the forest and",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "0ApFSNYQJ_w",
+      "measured_window_seconds": 5,
+      "transcript": "I turned a burger into a 1 inch cube to see how many I could eat and if it would fill me up as",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "0B4RW7hTluE",
+      "measured_window_seconds": 5,
+      "transcript": "Have you ever wondered what it feels like to stand in a circle for 24 hours straight? Well, I wanted to try and",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "0e-Qt1CCD6c",
+      "measured_window_seconds": 5,
+      "transcript": "I had the idea to take this viral $2500 basketball and turn it into a shoe sole",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "1d_UGNUXwjk",
+      "measured_window_seconds": 5,
+      "transcript": "I spent $200 on this material to 3D print my own shoes and walk 50,000",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "1k4VQ23I6s0",
+      "measured_window_seconds": 5,
+      "transcript": "This is a shock collar. If I run too slow, it shocks me, and I'm going to use it to try and beat my marathon",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "1nyPaqv9vJo",
+      "measured_window_seconds": 5,
+      "transcript": "This is an Iron Man helmet sprayed with an indestructible material. However, although it survived",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "2DplvqP9YKs",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to make the best Doctor Octopus costume in history to get people's reactions out in public, but I",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "2RrNqRd96yM",
+      "measured_window_seconds": 5,
+      "transcript": "This guy needed to hold his breath for over four minutes or he wouldn't survive. And I wanted to see if I could survive",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "2Wl2rdYegus",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if it was actually true that if you fell asleep in a metronome Factory you would lose your sense of",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "3m5V703Iywg",
+      "measured_window_seconds": 5,
+      "transcript": "When I discovered pineapples were fireproof, I bought 50 pineapples to make an entire suit",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "3ZniDRt0XF8",
+      "measured_window_seconds": 5,
+      "transcript": "Less than 0.1% of people can solve a Rubik's Cube underwater, so I wanted to",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "4JZemHo8ED0",
+      "measured_window_seconds": 5,
+      "transcript": "I've always wondered what it felt like to jump on the moon so I decided to strap myself to this giant crane",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "4sKESQfYAw0",
+      "measured_window_seconds": 5,
+      "transcript": "Make the world's best drink? This actually turned out way better than I thought. My first thought was",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "4T27oxLkGKg",
+      "measured_window_seconds": 5,
+      "transcript": "beat Markiplier's hundred thousand steps in a day you won't believe how hard this is to make this",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "5dKJC3Qo_WQ",
+      "measured_window_seconds": 5,
+      "transcript": "I turned my little sister into a professional chef using the world's most advanced smart glasses",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "5mlkXeO-sAA",
+      "measured_window_seconds": 5,
+      "transcript": "This is what I looked like a year ago and what all the challenges last year did to my body.",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "5QcF10qhmTo",
+      "measured_window_seconds": 5,
+      "transcript": "Today I had a two hour plane ride. So naturally I wanted to see how many pushups I could do before I landed.",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "5YB7G0W6Gno",
+      "measured_window_seconds": 5,
+      "transcript": "since Oobleck is extremely impact absorbent I wanted to make the world's most impact absorbing",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "63qC8qioJFk",
+      "measured_window_seconds": 5,
+      "transcript": "this is a batman helmet covered with an indestructible coating but is it fireproof",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "6R6uuNPB6Yg",
+      "measured_window_seconds": 5,
+      "transcript": "This is a viral clip of a tire rolling down a hill because apparently it does something really cool,",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "6U6hbEpFwHQ",
+      "measured_window_seconds": 5,
+      "transcript": "Walk 100,000 steps in a day and see if you reach another city? At first, I thought this would be easy because",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "6yqytZtKv2w",
+      "measured_window_seconds": 5,
+      "transcript": "try the World's Strongest Man diet and see what it does to your body this is what I looked like before and I",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "71WirGaf7oM",
+      "measured_window_seconds": 5,
+      "transcript": "Apparently scuba diving is way harder than you think. So I wanted to give it a try and ended up seeing something amazing.",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "7cI1co-3ORE",
+      "measured_window_seconds": 5,
+      "transcript": "Yesterday, I finally got a single arm working on my Dr. Octopus suit after three months of work.",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "7cK8O7nl0ms",
+      "measured_window_seconds": 5,
+      "transcript": "This is called Ultra Instinct, which gives you superhuman reaction times, and I wanted to learn it for myself. I",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "8IfnIIpbm2E",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to make a song out of a million volts of electricity so I started with this mini Tesla coil",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "8lDFzVul1YA",
+      "measured_window_seconds": 5,
+      "transcript": "I locked my little sister in solitary confinement for five days straight and this got crazy. For the first few hours",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "8TVp2FwJJzQ",
+      "measured_window_seconds": 5,
+      "transcript": "This is slime, and I wanted to walk 10,000 steps in it to see if it was comfier than",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "8v2ZKGNYrbI",
+      "measured_window_seconds": 5,
+      "transcript": "This is day two of showing you my life until you believe it's real. And there's a very good reason why I live the way I do. I woke up and",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "95nL_vGLsh4",
+      "measured_window_seconds": 5,
+      "transcript": "Sticking my arm under this high-powered laser is extremely dangerous, but I still wanted to see what would happen. So",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "9vgP1J5T2GE",
+      "measured_window_seconds": 5,
+      "transcript": "this twelve hundred and fifty dollar sheet of silicone mimics gecko skin to literally stick to",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "9XbWlZdQqvY",
+      "measured_window_seconds": 5,
+      "transcript": "i filled these shoes with oobleck a special liquid that becomes solid when you hit it because since it's so good",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "9YJu4fhgNVE",
+      "measured_window_seconds": 5,
+      "transcript": "bench press a hundred pounds under water i wanted to see if this would be easier than land but i was",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "a1CoSXBAhiY",
+      "measured_window_seconds": 5,
+      "transcript": "Paint your car Vantablack and see if it disappears at night? This is $500 of the blackest",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "A1hNcdAUfy8",
+      "measured_window_seconds": 5,
+      "transcript": "is called The Impossible push a two minute push-up where you go one minute down and one minute up and I wanted to try",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "ABk9vNwR940",
+      "measured_window_seconds": 5,
+      "transcript": "Apparently in Dubai, it's so clean, you can walk around anywhere in white socks and they won't get dirty, so...",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "aE9jKLck_cI",
+      "measured_window_seconds": 5,
+      "transcript": "This is an indestructible chest plate, but can it save my life? Starting with a bat",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "AruyXSqIxek",
+      "measured_window_seconds": 5,
+      "transcript": "walk a marathon in a walmart let's see if i get kicked out at first it was easy but i quickly",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "aTraR5yPYvw",
+      "measured_window_seconds": 5,
+      "transcript": "you'd probably think six hours of meditation is easy because that's what i thought but it couldn't be farther from the truth meditation",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "auQoo8y8tV4",
+      "measured_window_seconds": 5,
+      "transcript": "When I press this button, it launches a super powerful hidden blade. But how powerful actually",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "aw0xPqf11iY",
+      "measured_window_seconds": 5,
+      "transcript": "make a song while going skydiving I called the skydiving place and asked if I could bring a microphone they wouldn't",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "baNK3QlE0qo",
+      "measured_window_seconds": 5,
+      "transcript": "when I discovered o is super impact absorbent I spent $180 to make oble",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "BkSE_Y0rQH8",
+      "measured_window_seconds": 5,
+      "transcript": "Go on a date with your celebrity crush? I can't believe this happened. This is Andrea Botez,",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "BlYsm0nShHA",
+      "measured_window_seconds": 5,
+      "transcript": "this is a fake muscle and I wanted to see how much it could make me lift I needed to strap it to my arm",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "C24VKpDZVC4",
+      "measured_window_seconds": 5,
+      "transcript": "spend 24 hours in a vanta black room and see if you get night vision this is the world's",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "cCFHw_gvu5Y",
+      "measured_window_seconds": 5,
+      "transcript": "when I discovered oo is actually super impact resistant I decided to use it to make a pair",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "cFueNhx1FVk",
+      "measured_window_seconds": 5,
+      "transcript": "meet a youtuber at a professional boxing match this might be one of the hardest challenges i've ever done so to do",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "cGgMpHL6uNE",
+      "measured_window_seconds": 5,
+      "transcript": "When I hit 3 million subscribers, I'm gonna see if I can survive a flamethrower. Wait, wait, not yet! Because in",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "CgkdvZsamXk",
+      "measured_window_seconds": 5,
+      "transcript": "I've always wanted to become a superhero, so I spent $3,000 to build something to help me jump higher than",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "cj0TdYb3Ggw",
+      "measured_window_seconds": 5,
+      "transcript": "break the world record for most push-ups in 30 seconds apparently the world record",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "Cj4zrmEaZJs",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if there was anything I could do to look more attractive. So I did some research and discovered three",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "CysDxfwsJfE",
+      "measured_window_seconds": 5,
+      "transcript": "this is a military training technique where your hands and feet are tied together and you need to grab the mask at the",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "d8J74Wk3a7w",
+      "measured_window_seconds": 5,
+      "transcript": "Can this magnet that claims to hold 400 pounds let me climb buildings?",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "dBePGNYRK_4",
+      "measured_window_seconds": 5,
+      "transcript": "Live without water and I'll give you a billion followers! To make this even harder, I decided to do a",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "DbUKvfz5Vzs",
+      "measured_window_seconds": 5,
+      "transcript": "I decided to leave this X-Shot Insanity with a thousand rounds of ammunition in the middle of a field to see",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "DibL2SzHFfs",
+      "measured_window_seconds": 5,
+      "transcript": "Here's how I did the impossible. A while ago I did 6 hours in the stairmaster and a lot of you thought I was faking. Well the world",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "DRnaH1F1D4A",
+      "measured_window_seconds": 5,
+      "transcript": "make a song using an Aztec death whistle this is the most terrifying sound I've",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "dRXJVlwEUjY",
+      "measured_window_seconds": 5,
+      "transcript": "this is The Rock's most viral cheat Meal which is apparently the best French toast you'll ever have",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "E0zB3sM6lmo",
+      "measured_window_seconds": 5,
+      "transcript": "This fabric claims to be bulletproof and is so cutting edge, you can't even buy it yet. So I flew",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "E6jUDBSTXLs",
+      "measured_window_seconds": 5,
+      "transcript": "When this person hydraulic pressed a burger, I wondered what would happen if you pressed one into a one",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ERaUBLvZgVA",
+      "measured_window_seconds": 5,
+      "transcript": "I was disappointed to find out Mr. Beast's new toy he came out with doesn't really do much. So I gave myself",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ETbatz38OTA",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if I would qualify for the U.S. Marines. So this is my friend Sean, and not only were we going to try",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "EXYyNkXb5VY",
+      "measured_window_seconds": 5,
+      "transcript": "These are the world's first 3D printed socks. And I wanted to walk 50,000",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "F2naRHJWBM0",
+      "measured_window_seconds": 5,
+      "transcript": "this is just regular gum and i wanted to see if eating an entire pack a day would actually make",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "fAQrJWYvYJ4",
+      "measured_window_seconds": 5,
+      "transcript": "one of the hardest skills in the world is breaking a board with a one-inch punch but this did not go how i wanted",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "FFhAxjCpKs4",
+      "measured_window_seconds": 5,
+      "transcript": "spend the night in an abandoned bomb shelter? something terrifying happened to make this as",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "fGgEJGfXmeI",
+      "measured_window_seconds": 5,
+      "transcript": "walk 50,000 steps Barefoot and see what happens to your feet this is what they look like before",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "FogW1ZnoUIw",
+      "measured_window_seconds": 5,
+      "transcript": "When I discovered a 1,000 degree ball couldn't burn through a pineapple skin, I bought 10 pineapples",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "FyGnGRyEsOU",
+      "measured_window_seconds": 5,
+      "transcript": "Make the best chocolate bar in the world? I have no idea how I pulled this off. It started with an idea that",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "fYjswbeyjoA",
+      "measured_window_seconds": 5,
+      "transcript": "These are 60-pound weighted shoes, which I wore for five days to see if it would make me run faster,",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "FYOA_pSBNSc",
+      "measured_window_seconds": 5,
+      "transcript": "these are kangaroo shoes which apparently can make you jump higher and run faster and I decided to wear them",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ge3qqbgVzAo",
+      "measured_window_seconds": 5,
+      "transcript": "I finally finished my superhero arm that allows me to lift more than humanly possible, but how",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "GFCJd_djkIU",
+      "measured_window_seconds": 5,
+      "transcript": "every crazy thing I built in 2025. I started by building an arm that gives you superhuman",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ggHmecIgFFU",
+      "measured_window_seconds": 5,
+      "transcript": "When I finally put on my Dr. Octopus suit after three months of work, I realized I'd made the biggest",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "gGwtd7HruTQ",
+      "measured_window_seconds": 5,
+      "transcript": "Yesterday, I held a nine minute plank. For me, that was a new record. So today,",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "GsmKo1dAQ8c",
+      "measured_window_seconds": 5,
+      "transcript": "You're not going to believe this. Vector cereal is scamming you. I don't even know how this is legal. I used to eat Vector like all",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "GuxoGIpWe_Y",
+      "measured_window_seconds": 5,
+      "transcript": "Train like Cristiano Ronaldo? I've never seen someone train like this. I woke up at",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "gW7LHN9nTrY",
+      "measured_window_seconds": 5,
+      "transcript": "These are the world's first indestructible spray-on shoes, but what can they actually protect me from?",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "gx-qYIkelpI",
+      "measured_window_seconds": 5,
+      "transcript": "I decided to turn a jet engine into an automatic walking machine to try and outsmart an app that apparently",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "h_l5s9Eua4w",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to try getting attacked by a dog. So this is a professional dog trainer and he was going to show me how to do",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "H-prxfgs590",
+      "measured_window_seconds": 5,
+      "transcript": "Train like the world's best football player? See if you can guess who it is by the end of the video. My day started",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "H30G5fvk5dk",
+      "measured_window_seconds": 5,
+      "transcript": "I made a real life grappling gun, but can it hold my weight? Starting with 15 pounds,",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Hc1xBWmCSNw",
+      "measured_window_seconds": 5,
+      "transcript": "This is the world's blackest fabric, which I wanted to use to cover an Iron Man mask and see if it",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "hcrXJ-FgMqU",
+      "measured_window_seconds": 5,
+      "transcript": "This is a $30,000 meteorite hammer which I took up on a crane to see how much damage",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "hl8EGBlRFp8",
+      "measured_window_seconds": 5,
+      "transcript": "This is a real life Minecraft bucket, which I wanted to try and sneak into the movie theater, but this",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "HUIwE621e4g",
+      "measured_window_seconds": 5,
+      "transcript": "Make someone go viral in 24 hours? Let's see if my strategy works. This is",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "hxgHUglfa9c",
+      "measured_window_seconds": 5,
+      "transcript": "Host the world's most extreme water fight? This is a thousand dollars, and whoever survives the longest",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "IDdmtvRHrhk",
+      "measured_window_seconds": 5,
+      "transcript": "this is day five of showing you my life until you believe it's real and today has terrified me for a long time i've been training",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "ikGj7hkLUoQ",
+      "measured_window_seconds": 5,
+      "transcript": "Break a world record with no practice? I might know how to do this. This exercise is called a visa. It's one",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "INgyFoyN5Po",
+      "measured_window_seconds": 5,
+      "transcript": "I'm a terrible cook. My dad, however, is a really good cook. So I decided to hire a professional chef for",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "iOHK3UfD-pE",
+      "measured_window_seconds": 5,
+      "transcript": "First thing I did was",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "iQG4dWvrjx0",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to learn the hardest song on the piano but only using my mind and I guarantee you've heard the song before my",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "iRRDeYgK-w4",
+      "measured_window_seconds": 5,
+      "transcript": "English or Spanish? The world record for longest time standing still",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "IvVJ9RUPcaw",
+      "measured_window_seconds": 5,
+      "transcript": "This is an egg with an indestructible coating. But at what height does it break? I tested",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "iYF9MC1gQ_A",
+      "measured_window_seconds": 5,
+      "transcript": "these are real life Goku shoes which weigh almost 60 lb and I wanted to walk 10,000 steps",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "izk6_tAOQBc",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to shatter my personal record of 1,000 pull-ups. So today I set out to double it",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "j1U6gMrPuHc",
+      "measured_window_seconds": 5,
+      "transcript": "I finally made a 1-in burger Cube to see what it tasted like but making it was way harder than you'd",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "jYSmtVw8D5k",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if it was possible to improve my punch using this. First, I tested how strong my",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "k0ziXE9FfpY",
+      "measured_window_seconds": 5,
+      "transcript": "this is the world's strongest gum and I wanted to see what it could do to my jawline",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "K80tQmd9gCc",
+      "measured_window_seconds": 5,
+      "transcript": "This carnival game allows you to win $100 if you could hang for two minutes. So I wanted to see how",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "kCOh7czQ5fo",
+      "measured_window_seconds": 5,
+      "transcript": "It would rotate around my wrist and shoot a million fireballs at once. But could this actually work",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "KoY_nOFbjos",
+      "measured_window_seconds": 5,
+      "transcript": "Apparently you could improve your eyesight by doing these eye exercises, but I didn't believe it so I decided",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "KTopfMtwdvw",
+      "measured_window_seconds": 5,
+      "transcript": "this is a giant rubber band ball which I noticed is surprisingly bouncy so I decided to build a pair of rubber band",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "KtOXHbdLLyg",
+      "measured_window_seconds": 5,
+      "transcript": "This guy put a smoke bomb in a box to see if he could dye a pair of shoes and it actually worked. So I built",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Kw2f_ozAkqk",
+      "measured_window_seconds": 5,
+      "transcript": "These $400 shoes are apparently banned from the Olympics for being too good, so I decided to run",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "KwLGygg4ZLQ",
+      "measured_window_seconds": 5,
+      "transcript": "This guy made real-life spring shoes, but I was disappointed because since the design was terrible, when he",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Kzc04OPQek0",
+      "measured_window_seconds": 5,
+      "transcript": "is me absolutely dying after 15 minutes on the stairmask so I decided to do the impossible",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "kzXgd9X7_To",
+      "measured_window_seconds": 5,
+      "transcript": "This is the world's most advanced exoskeleton. Wa, that's crazy. But I wanted to see",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "L_e38EvxD_8",
+      "measured_window_seconds": 5,
+      "transcript": "I'm giving my friends my credit card, and their job is to scare me because they know my biggest fear. That's it. I know nothing",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "L4nObY4c9fU",
+      "measured_window_seconds": 5,
+      "transcript": "I made real life invincible armor that's literally made from a material used in bulletproof",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "lBvkUzbsH4Y",
+      "measured_window_seconds": 5,
+      "transcript": "This is 10,000 calories, and I was going to try and eat and burn them all in a day, one of the hardest",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "M1aiYur7Qns",
+      "measured_window_seconds": 5,
+      "transcript": "This is a real $2,000 meteorite, but what's actually inside? Since it didn't break by",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Mdz0XPa1bTs",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if I could randomly beat a record with no previous training my record for doing 30",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "Me-8Hr-srFI",
+      "measured_window_seconds": 5,
+      "transcript": "When I discovered oobleck is extremely impact resistant I bought 10 pounds of cornstarch",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "mhV_8X-7jfU",
+      "measured_window_seconds": 5,
+      "transcript": "Day 3 of showing you my life until you believe it's real. Some of you were surprised I only had one meal a day with like",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "MMUUKNkJT6w",
+      "measured_window_seconds": 5,
+      "transcript": "Is it possible to make an arm that can lift a hundred pounds? There were three steps, starting with",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Mq5pDLKSTFg",
+      "measured_window_seconds": 5,
+      "transcript": "When I pressed this burger into a two and a half inch cube, I wanted to see how hard it would be to make it smaller. But",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "mQ9H3MnZtMk",
+      "measured_window_seconds": 5,
+      "transcript": "This is a bodybuilder's first meal after a show, and I wanted to see if it was actually as good as it looks. So in order",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "mqqtTY48PRg",
+      "measured_window_seconds": 5,
+      "transcript": "this guy's offering $11,000 to look like him so I hired a professional makeup artist to see how similar",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "mREQAuthBXs",
+      "measured_window_seconds": 5,
+      "transcript": "you can get good at rock climbing in 24 hours i'll be shocked is it really that hard i wanted to see",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "nCKxsEbRTLQ",
+      "measured_window_seconds": 5,
+      "transcript": "this is 300 layers of cardboard but can it save my life to find out i started with 10",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ncPwIkvxPe4",
+      "measured_window_seconds": 5,
+      "transcript": "Everyone is born with only two innate fears. Loud noises and the fear of falling. So in order to take this to the",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "NDrttrTvydU",
+      "measured_window_seconds": 5,
+      "transcript": "I decided to walk 50,000 steps in this $1,000 bionic exoskeleton to",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "NjpzWyJ-N18",
+      "measured_window_seconds": 5,
+      "transcript": "i wanted to see if fencing is actually the world's hardest sport so i headed down to a fencing club to try and master",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "NNYEvXdXkG4",
+      "measured_window_seconds": 5,
+      "transcript": "this is someone with gelatin in their hair and it's almost impossible to take out but apparently can actually make",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "o1hVZCzcOYM",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see how dangerous my flaming Ghost Rider skull actually was and since",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "O3ckYjBqf2g",
+      "measured_window_seconds": 5,
+      "transcript": "This is a shock collar which I spent days connecting to this water bottle so that if I drink too",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "o5A9tC2e_mU",
+      "measured_window_seconds": 5,
+      "transcript": "Make the hardest puzzle in the world? I literally got a permanent tattoo for this. This is",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "OIaH0uZXgkQ",
+      "measured_window_seconds": 5,
+      "transcript": "this is day four of showing me my life until you believe it's real today i had a bit of a lazy day i didn't hit the gym started off with some",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "OJ1USrYYioQ",
+      "measured_window_seconds": 5,
+      "transcript": "I finally finished the best working Dr. Octopus suit in history,",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "oOce-8y8Ijg",
+      "measured_window_seconds": 5,
+      "transcript": "This is someone with a real life iron fist. So I decided to practice iron fist training for",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "PaffT8WDjK4",
+      "measured_window_seconds": 5,
+      "transcript": "These shoes are hooked up to a shock collar that will electrocute me if I stop moving to force",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "PfoSGjTgoWA",
+      "measured_window_seconds": 5,
+      "transcript": "Run a marathon drunk? I made a huge mistake while doing this. The only reason why I'm doing",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "PjQKsbylrFg",
+      "measured_window_seconds": 5,
+      "transcript": "it's been four hours into the water fight we've brought out a thousand water balloons paul what's your plan my plan",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "PKf0A9GSKFA",
+      "measured_window_seconds": 5,
+      "transcript": "train like the world's greatest chess player and see if your brain explodes I woke up at 9am",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "PRhRAofJH5E",
+      "measured_window_seconds": 5,
+      "transcript": "I said if my fireproof Batman helmet got a 100,000 likes, I'd wear it. And it got 200. 3",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "pSFSTonEYqM",
+      "measured_window_seconds": 5,
+      "transcript": "this is a one thousand dollar bionic exoskeleton designed to give you superhuman performance",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "pWeSGrP6Xf4",
+      "measured_window_seconds": 5,
+      "transcript": "this mask might just make me run faster than humanly possible and is so simple I'm surprised",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "pxWXdGFno50",
+      "measured_window_seconds": 5,
+      "transcript": "How many chocolate bars does it take to stop a bullet? Starting with one, it went right",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "q6Iiv0BUS2k",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if I could actually play Minecraft in real life and discovered something crazy at first",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "q7pvG7fhJMI",
+      "measured_window_seconds": 5,
+      "transcript": "go barefoot for a week and see if it actually does what they say it does apparently this does something crazy",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "qIZSBfvNRec",
+      "measured_window_seconds": 5,
+      "transcript": "these are the top three most painful challenges I've ever done coming at number three is when I spend",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "QL1h_e09IUU",
+      "measured_window_seconds": 5,
+      "transcript": "These super strong magnetic pads would let me climb up buildings if it weren't for one problem. You can see",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "QR-xRVflnDY",
+      "measured_window_seconds": 5,
+      "transcript": "These shoes have extremely powerful magnets inside that let you stick to walls. But the problem is they stick",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "qSrNei3qVy8",
+      "measured_window_seconds": 5,
+      "transcript": "What happens if I put ocean water under a solar death ray? Could I make clean drinking water for",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "QXhiaDKcPwU",
+      "measured_window_seconds": 5,
+      "transcript": "This is the world's blackest fabric, and for my Halloween costume, I need to make it fireproof. So",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "r_TA0gHtp_M",
+      "measured_window_seconds": 5,
+      "transcript": "what you see here is a pair of three thousand dollar custom built automatic jumping shoes and after months of",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "r10C2HhuDrc",
+      "measured_window_seconds": 5,
+      "transcript": "i gave myself one week to become amazing at rock climbing this is what it looked like at the start and if you've never heard of rock",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "r6gdosSpV1w",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to make the world's coolest Halloween costume that actually works in real life, and see if you can",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ra6mcC1iNNg",
+      "measured_window_seconds": 5,
+      "transcript": "I just discovered pineapples are fireproof. So I wanted to build a pineapple suit, but I needed to figure out exactly",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "RLOFobyQ9Aw",
+      "measured_window_seconds": 5,
+      "transcript": "Let your chinchilla control your life for 24 hours? My first thought was to have him pick between",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "RlRfZ37JRyM",
+      "measured_window_seconds": 5,
+      "transcript": "Is it possible to make a better chocolate bar than Mr. Beast? It started with an idea that I had a couple",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "RS0vtNpoyzE",
+      "measured_window_seconds": 5,
+      "transcript": "When I discovered elephant's toothpaste can explode super quickly, I decided to use it to make a rocket",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "S9k_7EJLTe4",
+      "measured_window_seconds": 5,
+      "transcript": "write a song while running a marathon is that even possible to pull this off i would have to write",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "ScAX7E8JqhY",
+      "measured_window_seconds": 5,
+      "transcript": "I challenged myself to eat like Walter Hudson the world's fattest man and this is probably the",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "Sn1WY3b0xlo",
+      "measured_window_seconds": 5,
+      "transcript": "showing you my life until you believe it's real when i woke up on saturday i felt really sad but then i remembered that i have control",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "SwPfEj7ErJI",
+      "measured_window_seconds": 5,
+      "transcript": "This is KSI, who apparently has one of the craziest daily routines I wanted to try. So I woke up at 9am",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "sZGbhhKgr34",
+      "measured_window_seconds": 5,
+      "transcript": "How many layers of carbon fiber would this indestructible chest plate need in order to stop a",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "T6B5fygr7Ms",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see how hard it would be to build a house from nothing in the middle of a forest so we started by cutting down some trees a",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "THugIsO-TWo",
+      "measured_window_seconds": 5,
+      "transcript": "I recently got this high-powered laser, and I was curious to see how dangerous it is by sticking my hand",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "tk7zjZ6eoFc",
+      "measured_window_seconds": 5,
+      "transcript": "I saw a ping pong table and decided to play for 8 hours straight to see what would happen. And this probably",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "TtRS6sjkZ4A",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to make the coolest Halloween costume ever to get people's reactions at a party, and it",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Tw0wfRTyouU",
+      "measured_window_seconds": 5,
+      "transcript": "I just rented this entire stadium to see if these shoes can actually make me a superhuman. These shoes",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "UAxWpvsOC50",
+      "measured_window_seconds": 5,
+      "transcript": "Walk 100,000 steps on the StairMaster? Watch what this put me through. I was terrified",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "UBjvkiW7fjc",
+      "measured_window_seconds": 5,
+      "transcript": "I forced Jarvis to solve Mr. Beast's $1 Super Bowl puzzle and almost immediately",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "ulq-tJdiLog",
+      "measured_window_seconds": 5,
+      "transcript": "this pill makes Sour things taste sweet and I bought the world's most sour candy to see",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "UmCT36lJy0c",
+      "measured_window_seconds": 5,
+      "transcript": "This guy called me fat, so I decided to become a pro bodybuilder, but here's why I might have made a huge",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "URrMQS-pm4E",
+      "measured_window_seconds": 5,
+      "transcript": "This is an indestructible Batman suit, but can it stop a bullet? Starting with a bat,",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "uRrUc9Dtk7E",
+      "measured_window_seconds": 5,
+      "transcript": "I finally finished my real life Dr. Octopus suit to see how much they could actually lift.",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "uw8FiiU0G_M",
+      "measured_window_seconds": 5,
+      "transcript": "Solve this riddle in five minutes and win $100. One of these switches turns on this light, but you don't",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "uzAJMmF1gVY",
+      "measured_window_seconds": 5,
+      "transcript": "This is the world's largest humansiz hamster wheel that I made to try and win a walking",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "v3hwQvOZ9ZM",
+      "measured_window_seconds": 5,
+      "transcript": "how much Oobleck can stop a bullet this actually kind of terrified me I started by filling a 1ot",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "va-_PBS-mqE",
+      "measured_window_seconds": 5,
+      "transcript": "When I realized Lamborghinis made the coolest sound ever, I decided to borrow my friends",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "vCCISOzJaxQ",
+      "measured_window_seconds": 5,
+      "transcript": "I believe anyone can become a successful content creator, and let me show you how. Believe it or not, up until a few weeks ago,",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Vi8GxTLINc4",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if it was possible to hold my breath for four minutes underwater in a cage in the middle of the ocean surrounded",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "vr0jlvXY-dA",
+      "measured_window_seconds": 5,
+      "transcript": "i just failed let me explain a while ago i told you guys i was gonna start a million dollar business and show you guys the",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "vSIUXHqC924",
+      "measured_window_seconds": 5,
+      "transcript": "This guy became the world's fastest tree climber by using a special pair of shoes. And I wanted to see how",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "VswpIsVMjMI",
+      "measured_window_seconds": 5,
+      "transcript": "This is a 3D printed Iron Man chest plate, but as you can see, it's got a huge problem. Since",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "vUEvjasrfOI",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if these viral $3,000 shoes can make me jump higher by pressing",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "VUKNtccgdRE",
+      "measured_window_seconds": 5,
+      "transcript": "This is a $200 laser, and you can see against a cardboard box, it burns",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "vvLnmLTEh64",
+      "measured_window_seconds": 5,
+      "transcript": "walk 50 000 steps in a day and see what happens to make this even more interesting i wanted",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "vw0yBKVy9cs",
+      "measured_window_seconds": 5,
+      "transcript": "Can I survive David Goggins daily routine using the world's most advanced exoskeleton? There were six",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "vwli8lumtSs",
+      "measured_window_seconds": 5,
+      "transcript": "how many magnets does it take to make me float in order to test this i used these high",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "wcEbNGgC3RU",
+      "measured_window_seconds": 5,
+      "transcript": "I designed a suit to make you lift more than humanly possible. However, since the fake muscles I",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "Wd9SKCFMrkg",
+      "measured_window_seconds": 5,
+      "transcript": "take a mr beast challenge to the next level now my first thought was just to make a circle and trap 10",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "wSDVGGqLmfA",
+      "measured_window_seconds": 5,
+      "transcript": "Probably wondering what my life is like as an influencer when I'm not posting. And it's busier than you think. I started my day off",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "wuc8hXPUmJg",
+      "measured_window_seconds": 5,
+      "transcript": "this is me filling an entire box with colored smoke to try and dye a white suit but since",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "XfdXalkAdqc",
+      "measured_window_seconds": 5,
+      "transcript": "when I discovered this unbreakable wine glass could get shot with an arrow without getting destroyed I",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "XOaEowMhZXk",
+      "measured_window_seconds": 5,
+      "transcript": "Do an impossible workout only you can do? This is my friend Paul who is going to try this with me and I created",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "xq2r0I8om3U",
+      "measured_window_seconds": 5,
+      "transcript": "I wanted to see if wearing an ab stimulator for an hour every day would actually give me a six-pack. So this is what",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "XSM3_ctSlLM",
+      "measured_window_seconds": 5,
+      "transcript": "Make the world's best Valentine's Day gift? This actually turned out way better than I thought. I wanted to make the",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "y3J3B5TvV9Y",
+      "measured_window_seconds": 5,
+      "transcript": "this is the English Channel and less than 0.1% of people have ever been able to swim across so",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "y3luO47HcNw",
+      "measured_window_seconds": 5,
+      "transcript": "I asked Chad TPT to control my life for a day and what it made me do was crazy at 10 am",
+      "transcript_source": "youtube-auto-captions"
+    },
+    {
+      "video_id": "Y8giuNlsJUI",
+      "measured_window_seconds": 5,
+      "transcript": "this is a professional hypnotist and i wanted him to hypnotize me to break a literal record which i've never",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "YFNOSHumPZc",
+      "measured_window_seconds": 5,
+      "transcript": "this is 3d printed batman armor wait it's already but can i make it bulletproof",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "YfQcNK_q-_4",
+      "measured_window_seconds": 5,
+      "transcript": "This is pancake art and I wanted to learn how to make it. So I got some pancake mix and the first thing I needed to do",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "YJf5esh2gYE",
+      "measured_window_seconds": 5,
+      "transcript": "When I discovered I could fall seven feet onto this little balloon of oobleck without injuring myself,",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ykChFKNfwAE",
+      "measured_window_seconds": 5,
+      "transcript": "These are 26 different shoes and I'm gonna run a full marathon switching them out at every mile to see",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ytS625TBqd4",
+      "measured_window_seconds": 5,
+      "transcript": "This is me two years ago trying to overcome my biggest fear of doing a backflip on the ground. Eventually, I got it",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "yV6VEhsNIFk",
+      "measured_window_seconds": 5,
+      "transcript": "Right now, I'm in the middle of this forest, and the only thing I have with me is this X-Shot blaster.",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "YzoGoSUdv7k",
+      "measured_window_seconds": 5,
+      "transcript": "Make a song using a laser as an instrument? Is this even possible? This is a dangerous high-powered",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "z5ffGZE9fDU",
+      "measured_window_seconds": 5,
+      "transcript": "This is Andrea Botez, who's my celebrity crush. If I beat her at chess, I win a date. You haven't",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ZmJFjzVdUXs",
+      "measured_window_seconds": 5,
+      "transcript": "Can this $1,000 bionic exoskeleton help me run for 10 hours straight? Let's see how far",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "zoJECFeZ5O8",
+      "measured_window_seconds": 5,
+      "transcript": "Make the world's most painful shoes? Why would I do that? My first thought was to make it out of wood. So",
+      "transcript_source": "local-whisper"
+    },
+    {
+      "video_id": "ZqqOca_H99w",
+      "measured_window_seconds": 5,
+      "transcript": "Listen to Baby Shark for 24 hours straight and see if you go crazy? I brought out my Soundcore",
+      "transcript_source": "local-whisper"
+    }
+  ]
+}

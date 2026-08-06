@@ -462,6 +462,27 @@
     resize: vertical;
 }
 
+.sb-transcript-evidence {
+    background: var(--sb-panel-2);
+    border: 1px solid var(--sb-line);
+    border-radius: 7px;
+    color: var(--sb-dim);
+    font-size: 9px;
+    line-height: 1.5;
+    margin-top: 8px;
+    padding: 7px 9px;
+}
+
+.sb-transcript-evidence summary {
+    color: var(--sb-text);
+    cursor: pointer;
+    font-weight: 800;
+}
+
+.sb-transcript-evidence p {
+    margin: 6px 0 0;
+}
+
 .sb-generation-bar {
     align-items: center;
     display: flex;

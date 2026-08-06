@@ -21,6 +21,16 @@ assert(
     contract.length > 4000,
     'the animation preset must operationalize the style in sufficient detail'
 );
+assert(
+    !contract.includes('watermarks, split screens, comic panels'),
+    'the animation style must not contradict the required five-column sheet'
+);
+assert(
+    contract.includes(
+        'required five-column storyboard sheet is the only allowed'
+    ),
+    'the animation exclusions must explicitly preserve the sheet contract'
+);
 [
     'RECURRING HUMAN CHARACTER BIBLE',
     'OBJECT BIBLE',

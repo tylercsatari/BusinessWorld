@@ -94,6 +94,8 @@
                 name: name || 'Untitled opening',
                 brief: '',
                 hookText: '',
+                transcriptBeatAlignment: [],
+                transcriptProvenance: null,
                 editPrompt: '',
                 model: DEFAULT_MODEL,
                 stylePreset: DEFAULT_STYLE_ID,
@@ -552,11 +554,26 @@
             const wordCount = transcript
                 ? transcript.split(/\s+/).filter(Boolean).length
                 : 0;
+            const provenance = current.transcriptProvenance;
+            const generated = !!(
+                provenance
+                && provenance.provider
+                && provenance.provider !== 'user'
+            );
+            const evidence = generated
+                ? `<details class="sb-transcript-evidence">
+                    <summary>Transcript evidence</summary>
+                    <p>Written separately by ${esc(provenance.model || provenance.provider)} from ${Number(provenance.example_count) || 0} measured high-keep openings selected from ${Number(provenance.source_population_count) || 0} joined Tyler videos. These examples supply structure only; this transcript is the exact text sent to scoring.</p>
+                    <p>${esc(provenance.source_window || '')}</p>
+                </details>`
+                : '';
             return `<section class="sb-workflow-section sb-transcript-review" data-sb-section="transcript" data-sb-transcript-review>
                 ${renderWorkflowHeader(
                     3,
-                    'Add spoken text',
-                    'Optional spoken words',
+                    generated ? 'Generated spoken opening' : 'Add spoken text',
+                    generated
+                        ? 'Separate transcript call, grounded in measured openings'
+                        : 'Optional: supply exact spoken words before generation',
                     wordCount
                         ? `${wordCount} word${wordCount === 1 ? '' : 's'}`
                         : 'Visual only'
@@ -564,8 +581,9 @@
                 <div class="sb-workflow-section-body sb-transcript-review-body">
                     <label class="sb-transcript-field">
                         <span>Spoken transcript (optional)</span>
-                        <textarea rows="4" data-sb-hook-text data-sb-focus="hook-text" placeholder="Type exactly what is spoken, or leave blank for visual only.">${esc(current.hookText || '')}</textarea>
+                        <textarea rows="4" data-sb-hook-text data-sb-focus="hook-text" placeholder="Type exact spoken words, or leave blank and Generate will write the opening separately.">${esc(current.hookText || '')}</textarea>
                     </label>
+                    ${evidence}
                 </div>
             </section>`;
         }
@@ -1284,7 +1302,8 @@
                 model: current.model,
                 stylePreset: current.stylePreset,
                 brief: current.brief,
-                hookText: '',
+                hookText: current.hookText,
+                writeTranscript: !current.hookText.trim(),
                 panels: current.panels.map(entry => entry.prompt),
                 refs: compositeReferences(current),
                 layout: {
@@ -1311,6 +1330,14 @@
                 prompt: current.panels[index].prompt,
             }));
             current.composite = sheet;
+            current.hookText = String(
+                result.transcript || current.hookText || ''
+            ).slice(0, 2000);
+            current.transcriptBeatAlignment = Array.isArray(
+                result.transcriptBeatAlignment
+            ) ? result.transcriptBeatAlignment.slice(0, PANEL_COUNT) : [];
+            current.transcriptProvenance =
+                result.transcriptProvenance || null;
         }
 
         async function generateAll() {
@@ -1528,6 +1555,10 @@
                 frames: scoringFrames,
                 montage,
                 creatorProfile: creatorProfile(),
+                transcriptBeatAlignment:
+                    current.transcriptBeatAlignment,
+                transcriptProvenance:
+                    current.transcriptProvenance,
             });
             if (!result || !result.score_ledger || !result.score_ledger.ledger_sha256) {
                 throw new Error(`${current.name} did not return a canonical score ledger.`);
@@ -1729,6 +1760,10 @@
                 name: current.name,
                 brief: current.brief,
                 hookText: current.hookText,
+                transcriptBeatAlignment:
+                    current.transcriptBeatAlignment,
+                transcriptProvenance:
+                    current.transcriptProvenance,
                 model: current.model,
                 stylePreset: current.stylePreset,
                 generationMode: current.generationMode,
@@ -1828,6 +1863,13 @@
                 folder: artifact && artifact.folder !== undefined
                     ? artifact.folder
                     : current.folderId,
+                transcript_beat_alignment:
+                    current.transcriptBeatAlignment,
+                transcript_provenance:
+                    current.transcriptProvenance,
+                opening_contract:
+                    'canonical-complete-hook-opening-v1',
+                style_preset: current.stylePreset,
             });
             const savedHookId = saved && saved.id || null;
             score.savedId = savedHookId;
@@ -1908,6 +1950,11 @@
             target.name = record.name || target.name;
             target.brief = record.brief || '';
             target.hookText = record.hookText || '';
+            target.transcriptBeatAlignment = Array.isArray(
+                record.transcriptBeatAlignment
+            ) ? record.transcriptBeatAlignment.slice(0, PANEL_COUNT) : [];
+            target.transcriptProvenance =
+                record.transcriptProvenance || null;
             target.model = MODEL_OPTIONS.some(
                 ([value]) => value === record.model
             ) ? record.model : DEFAULT_MODEL;
@@ -3211,6 +3258,8 @@
             }
             if (target.hasAttribute('data-sb-hook-text')) {
                 current.hookText = String(target.value || '').slice(0, 2000);
+                current.transcriptBeatAlignment = [];
+                current.transcriptProvenance = null;
                 invalidateScore(current);
                 return true;
             }

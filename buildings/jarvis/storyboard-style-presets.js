@@ -79,10 +79,13 @@
             + 'change wardrobe, recolor or rebuild a prop, replace the setting, '
             + 'or reset physical state between panels unless the user explicitly '
             + 'requests that change.',
-        'EXCLUSIONS: no captions, subtitles, logos, interface elements, numbers, '
-            + 'watermarks, split screens, comic panels, line art, visible mesh '
+        'EXCLUSIONS INSIDE EACH REQUIRED FRAME: no captions, subtitles, logos, '
+            + 'interface elements, numbers, watermarks, nested split-screen '
+            + 'composition, comic-book styling, line art, visible mesh '
             + 'wireframes, photoreal human faces, skin pores, detailed hair, '
-            + 'crowds, background clutter, or unrequested branded products.',
+            + 'crowds, background clutter, or unrequested branded products. '
+            + 'The required five-column storyboard sheet is the only allowed '
+            + 'multi-panel structure and must always remain intact.',
     ].join('\n');
 
     const PRESETS = Object.freeze({

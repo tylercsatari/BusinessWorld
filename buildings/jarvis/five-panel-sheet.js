@@ -44,6 +44,11 @@ function buildPrompt({
         'Every column is a complete vertical 9:16 image. Arrange the five '
             + 'columns left to right in chronological order with no gutter, '
             + 'overlap, inset, or unequal spacing.',
+        'This must not be one panoramic composition. At 20%, 40%, 60%, and '
+            + '80% of the canvas width, make an immediate hard shot cut into '
+            + 'the next complete vertical composition. No subject, camera '
+            + 'view, background composition, or action may continue through '
+            + 'one of those boundaries.',
         'Maintain the exact same people, faces, wardrobe, objects, location, '
             + 'lighting logic, and visual style whenever they recur.',
         'Keep every subject inside its own column. Never let one composition '

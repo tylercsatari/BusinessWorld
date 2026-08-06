@@ -20,8 +20,13 @@ async function main() {
     );
     assert.strictEqual(
         (source.match(/generateFivePanelStoryboard\(/g) || []).length,
+        2,
+        'only the canonical opening boundary may call the low-level renderer'
+    );
+    assert.strictEqual(
+        (source.match(/generateCanonicalHookOpening\(/g) || []).length,
         4,
-        'manual Storyboard, Auto, and Grind must call the one canonical renderer'
+        'manual Storyboard, Auto, and Grind must call one complete-opening method'
     );
     assert(!source.includes('renderHookPanelRobust'));
     const start = source.indexOf('function hookPanelModelKey');
@@ -36,6 +41,8 @@ async function main() {
     let failProvider = false;
     let promptInput = null;
     let providerInput = null;
+    let sourceWidth = 2880;
+    let sourceHeight = 1024;
     const context = vm.createContext({
         Buffer,
         process: { env: {} },
@@ -60,12 +67,18 @@ async function main() {
             ANIMATION_STYLE_ID: 'animation',
             DEFAULT_STYLE_ID: 'default',
             stylePreset(id) {
-                return { id, promptContract: 'style' };
+                return {
+                    id,
+                    promptContract:
+                        id === 'animation'
+                            ? 'FIVE-FRAME CONTINUITY LOCK'
+                            : '',
+                };
             },
         },
         storyboardSheetPrompt(input) {
             promptInput = input;
-            return 'single sheet prompt';
+            return `single sheet prompt ${input.styleContract || ''}`;
         },
         storyboardSheetGeometry() {
             return {
@@ -74,6 +87,7 @@ async function main() {
             };
         },
         fivePanelSheet: {
+            PANEL_COUNT: 5,
             normalizePanels(panels) {
                 return panels;
             },
@@ -99,11 +113,20 @@ async function main() {
             return 'data:image/jpeg;base64,eA==';
         },
         decodeStoryboardDataImage() {
-            return { bytes: Buffer.from('sheet') };
+            return {
+                bytes: Buffer.from('sheet'),
+                width: sourceWidth,
+                height: sourceHeight,
+                extension: 'jpg',
+                mediaType: 'image/jpeg',
+            };
+        },
+        shortsTranscriptWriter: {
+            CONTRACT_SCHEMA: 'shorts-opening-transcript-writer-v1',
         },
     });
     vm.runInContext(
-        `${source.slice(start, end)}\nthis.render = generateFivePanelStoryboard;`,
+        `${source.slice(start, end)}\nthis.render = generateFivePanelStoryboard; this.opening = generateCanonicalHookOpening;`,
         context
     );
 
@@ -134,6 +157,55 @@ async function main() {
 
     providerCalls = 0;
     splitCalls = 0;
+    const opening = await context.opening({
+        brief: 'test',
+        videoIdea: 'test machine',
+        hookTreatment: 'test its limits',
+        transcript: 'This machine should never spill, so I pushed it.',
+        panels: ['1', '2', '3', '4', '5'],
+        stylePreset: 'animation',
+        imageModel: 'gpt-image-2',
+        strictImageModel: true,
+        providerCallBudget: 1,
+    });
+    assert.strictEqual(providerCalls, 1);
+    assert.strictEqual(splitCalls, 1);
+    assert.strictEqual(
+        opening.openingContract,
+        'canonical-complete-hook-opening-v1'
+    );
+    assert.strictEqual(
+        opening.transcript,
+        'This machine should never spill, so I pushed it.'
+    );
+    assert.strictEqual(opening.stylePreset, 'animation');
+
+    providerCalls = 0;
+    splitCalls = 0;
+    sourceWidth = 1024;
+    sourceHeight = 1792;
+    await assert.rejects(
+        context.render({
+            brief: 'test',
+            panels: ['1', '2', '3', '4', '5'],
+            stylePreset: 'default',
+            imageModel: 'gpt-image-2',
+            strictImageModel: true,
+            providerCallBudget: 1,
+        }),
+        /single-frame image instead of the required wide five-panel sheet/
+    );
+    assert.strictEqual(providerCalls, 1);
+    assert.strictEqual(
+        splitCalls,
+        0,
+        'a one-frame provider result must never be split and accepted'
+    );
+
+    providerCalls = 0;
+    splitCalls = 0;
+    sourceWidth = 2880;
+    sourceHeight = 1024;
     failProvider = true;
     await assert.rejects(
         context.render({

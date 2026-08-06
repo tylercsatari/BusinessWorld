@@ -109,6 +109,9 @@ const eliteHookExplorer = require(
 const hookPlanOutput = require(
     './buildings/jarvis/hook-plan-output'
 );
+const shortsTranscriptWriter = require(
+    './buildings/jarvis/shorts-transcript-writer'
+);
 const animatedHookExperiment = require(
     './buildings/jarvis/animated-hook-experiment'
 );
@@ -5851,6 +5854,28 @@ async function persistCanonicalSavedHook({
             ? input.frame_imgs.slice(0, 5).map(String)
             : [],
         cohesion_mode: String(input.cohesion_mode || '').slice(0, 40),
+        opening_contract:
+            String(input.opening_contract || '').slice(0, 80) || null,
+        style_preset:
+            String(input.style_preset || '').slice(0, 80) || null,
+        transcript_beat_alignment:
+            Array.isArray(input.transcript_beat_alignment)
+                ? input.transcript_beat_alignment.slice(0, 5).map(
+                    value => String(value || '').slice(0, 300)
+                )
+                : null,
+        transcript_provenance:
+            input.transcript_provenance
+            && typeof input.transcript_provenance === 'object'
+            && !Array.isArray(input.transcript_provenance)
+                ? input.transcript_provenance
+                : null,
+        panel_geometry:
+            input.panel_geometry
+            && typeof input.panel_geometry === 'object'
+            && !Array.isArray(input.panel_geometry)
+                ? input.panel_geometry
+                : null,
         indicators: input.indicators
             && typeof input.indicators === 'object'
             ? input.indicators
@@ -15385,6 +15410,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 name: body.name,
                 brief: body.brief,
                 hookText: body.hookText,
+                transcriptBeatAlignment:
+                    body.transcriptBeatAlignment,
+                transcriptProvenance:
+                    body.transcriptProvenance,
                 model: STORY_MODELS[body.model]
                     ? body.model
                     : STORYBOARD_DEFAULT_MODEL,
@@ -15584,46 +15613,75 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const refs = await storyboardGenerationReferences(
                 Array.isArray(body.refs) ? body.refs : []
             );
-            const renderRequest = canonicalFivePanelStoryboardRequest({
-                brief,
-                hookText,
-                panels,
-                stylePreset: body.stylePreset,
-                imageModel: model,
-                strictImageModel: true,
-                providerCallBudget: 1,
-                references: refs.materialized,
-                referenceDescriptions: refs.descriptions,
-                referenceRelation: refs.materialized.length
-                    ? 'compose'
-                    : 'new',
-            });
-            const provider = STORY_MODELS[
-                renderRequest.preferredModel
-            ].provider || 'replicate';
+            const style = storyboardStylePresets.stylePreset(
+                body.stylePreset
+            );
+            const provider = STORY_MODELS[model].provider || 'replicate';
+            const transcriptEvidenceIdentity = hookText
+                ? null
+                : shortsTranscriptWriter.sourceExamples().map(example => ({
+                    video_id: example.id,
+                    actual_keep_rate_percent: example.keepRate,
+                    measured_window_seconds:
+                        example.measuredWindowSeconds,
+                    transcript: example.transcript,
+                }));
             const requestFingerprint = quantRequestFingerprint(
                 'raw-storyboard-generate',
                 'shorts',
                 {
-                    model: renderRequest.preferredModel,
-                    prompt: renderRequest.prompt,
+                    model,
+                    brief,
+                    panels,
+                    transcript_mode: hookText
+                        ? 'supplied'
+                        : shortsTranscriptWriter.CONTRACT_SCHEMA,
+                    supplied_transcript: hookText || null,
+                    transcript_model: hookText
+                        ? null
+                        : String(
+                            process.env.SHORTS_TRANSCRIPT_MODEL
+                            || process.env.OPENAI_CHAT_MODEL
+                            || 'gpt-4o'
+                        ).trim(),
+                    transcript_evidence_sha256:
+                        transcriptEvidenceIdentity
+                            ? sha256Bytes(canonicalJsonBytes(
+                                transcriptEvidenceIdentity
+                            ))
+                            : null,
+                    style_preset: style.id,
                     reference_identities: refs.identities,
                     geometry: storyboardSheetGeometry(
-                        renderRequest.preferredModel
+                        model
                     ),
                 },
                 storyboardGenerationIdentity(
-                    renderRequest.preferredModel,
+                    model,
                     'coherent-sheet',
-                    renderRequest.stylePreset
+                    style.id
                 )
             );
             const jobId = quantJobSubmit(
                 'raw-storyboard-generate',
                 async () => {
-                    const rendered = await generateFivePanelStoryboard(
-                        renderRequest
-                    );
+                    const rendered = await generateCanonicalHookOpening({
+                        brief,
+                        videoIdea: brief,
+                        hookTreatment: brief,
+                        transcript: hookText,
+                        writeTranscript: !hookText,
+                        panels,
+                        stylePreset: style.id,
+                        imageModel: model,
+                        strictImageModel: true,
+                        providerCallBudget: 1,
+                        references: refs.materialized,
+                        referenceDescriptions: refs.descriptions,
+                        referenceRelation: refs.materialized.length
+                            ? 'compose'
+                            : 'new',
+                    });
                     const sourceMedia = storyboardMediaReference(
                         rendered.source,
                         rendered.sourceType
@@ -15673,7 +15731,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         renderCallCount:
                             rendered.geometry.render_call_count,
                         renderContract:
-                            'canonical-five-panel-storyboard-request-v1',
+                            rendered.openingContract,
+                        transcript: rendered.transcript,
+                        transcriptBeatAlignment:
+                            rendered.transcriptBeatAlignment,
+                        transcriptProvenance:
+                            rendered.transcriptProvenance,
                         requestFingerprint,
                     };
                 },
@@ -15698,11 +15761,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         brief: brief || null,
                         hookText: hookText || null,
                         panelPrompts: panels,
-                        model: renderRequest.preferredModel,
+                        model,
                         provider,
-                        stylePreset: renderRequest.stylePreset,
+                        stylePreset: style.id,
                         referenceCount:
                             refs.identities.length,
+                        transcriptMode: hookText
+                            ? 'supplied'
+                            : shortsTranscriptWriter.CONTRACT_SCHEMA,
                     },
                     saved: false,
                 });
@@ -22638,6 +22704,37 @@ function canonicalFivePanelStoryboardRequest({
     });
 }
 
+function verifiedStoryboardSheetSource(decoded) {
+    const width = Number(decoded && decoded.width);
+    const height = Number(decoded && decoded.height);
+    const ratio = width / height;
+    const minimumSupportedSheetRatio = (21 / 9) * 0.98;
+    if (
+        !Number.isFinite(width)
+        || !Number.isFinite(height)
+        || width < 1
+        || height < 1
+        || !Number.isFinite(ratio)
+        || ratio < minimumSupportedSheetRatio
+    ) {
+        const error = new Error(
+            'the image provider returned a single-frame image instead of '
+                + 'the required wide five-panel sheet'
+        );
+        error.code = 'STORYBOARD_SHEET_SOURCE_GEOMETRY_INVALID';
+        error.statusCode = 422;
+        throw error;
+    }
+    return {
+        width,
+        height,
+        aspectRatio: Math.round(ratio * 10000) / 10000,
+        requiredMinimumAspectRatio:
+            Math.round(minimumSupportedSheetRatio * 10000) / 10000,
+        verifiedWideSheet: true,
+    };
+}
+
 // Every whole-storyboard path ends here. Fine-tuned models may plan the hook
 // and five beats upstream, but they cannot choose a separate image prompt,
 // animation contract, renderer, or splitting implementation.
@@ -22679,10 +22776,25 @@ async function generateFivePanelStoryboard(input) {
                     image,
                     'generated five-panel hook sheet'
                 );
+                const sourceGeometry = verifiedStoryboardSheetSource(decoded);
                 const split = await fivePanelSheet.splitImage(
                     decoded.bytes,
                     { env: RAW_PY_ENV }
                 );
+                if (
+                    !Array.isArray(split.frames)
+                    || split.frames.length !== fivePanelSheet.PANEL_COUNT
+                    || !split.geometry
+                    || split.geometry.render_call_count !== 1
+                ) {
+                    const error = new Error(
+                        'the canonical sheet splitter did not return exactly '
+                            + 'five deterministic frames'
+                    );
+                    error.code = 'STORYBOARD_SHEET_SPLIT_INVALID';
+                    error.statusCode = 500;
+                    throw error;
+                }
                 return {
                     source: decoded.bytes,
                     frames: split.frames,
@@ -22698,10 +22810,12 @@ async function generateFivePanelStoryboard(input) {
                     sourceType: {
                         extension: decoded.extension,
                         mediaType: decoded.mediaType,
+                        ...sourceGeometry,
                     },
                     geometry: {
                         ...storyboardSheetGeometry(model),
                         ...split.geometry,
+                        source_geometry: sourceGeometry,
                         provider_call_count: providerCalls,
                     },
                     fallback: modelIndex > 0,
@@ -22747,6 +22861,223 @@ async function generateFivePanelStoryboard(input) {
         failure.statusCode = lastError.statusCode;
     }
     throw failure;
+}
+
+function shortsTranscriptProviderError(response, payload) {
+    const source = payload && payload.error || {};
+    const providerCode = String(
+        source.code || source.type || 'request_failed'
+    );
+    const error = new Error(
+        String(source.message || '').trim()
+        || `OpenAI transcript generation failed (HTTP ${response.status}).`
+    );
+    error.statusCode = response.status >= 500 ? 502 : response.status;
+    error.code = `SHORTS_TRANSCRIPT_${providerCode
+        .replace(/[^a-z0-9_]+/gi, '_')
+        .toUpperCase()}`;
+    if (
+        providerCode === 'insufficient_quota'
+        || /credit|billing|spend limit/i.test(error.message)
+    ) {
+        error.statusCode = 402;
+        error.code = 'SHORTS_TRANSCRIPT_OUT_OF_CREDITS';
+    }
+    return error;
+}
+
+async function generateShortsOpeningTranscript({
+    videoIdea,
+    hookTreatment,
+    panels,
+} = {}) {
+    if (!process.env.OPENAI_API_KEY) {
+        const error = new Error(
+            'OpenAI transcript generation is not configured on this server.'
+        );
+        error.statusCode = 503;
+        error.code = 'SHORTS_TRANSCRIPT_KEY_MISSING';
+        throw error;
+    }
+    const examples = shortsTranscriptWriter.sourceExamples();
+    const sourcePopulation = shortsTranscriptWriter.sourcePopulation();
+    if (examples.length < 3) {
+        const error = new Error(
+            'fewer than three measured Tyler opening examples are available'
+        );
+        error.statusCode = 503;
+        error.code = 'SHORTS_TRANSCRIPT_EXAMPLES_UNAVAILABLE';
+        throw error;
+    }
+    const messages = shortsTranscriptWriter.buildMessages({
+        videoIdea,
+        hookTreatment,
+        panels,
+        examples,
+    });
+    const model = String(
+        process.env.SHORTS_TRANSCRIPT_MODEL
+        || process.env.OPENAI_CHAT_MODEL
+        || 'gpt-4o'
+    ).trim();
+    const response = await fetchT(
+        'https://api.openai.com/v1/chat/completions',
+        {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model,
+                messages,
+                temperature: 0.35,
+                max_tokens: 1200,
+                response_format: { type: 'json_object' },
+            }),
+        },
+        120000
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+        throw shortsTranscriptProviderError(response, payload);
+    }
+    const content = payload
+        && payload.choices
+        && payload.choices[0]
+        && payload.choices[0].message
+        && payload.choices[0].message.content;
+    const parsed = shortsTranscriptWriter.parseResult(
+        _extractJsonObject(content)
+    );
+    const exampleEvidence = examples.map(example => ({
+        video_id: example.id,
+        actual_keep_rate_percent: example.keepRate,
+        measured_window_seconds: example.measuredWindowSeconds,
+        transcript: example.transcript,
+        transcript_source: example.transcriptSource,
+    }));
+    return {
+        ...parsed,
+        provenance: {
+            schema: shortsTranscriptWriter.CONTRACT_SCHEMA,
+            provider: 'openai',
+            model,
+            provider_call_count: 1,
+            source_population_count: sourcePopulation.length,
+            example_count: examples.length,
+            example_selection:
+                'highest actual Tyler keep rate, deterministic descending order',
+            source_join:
+                'retention-study retention_table video id to aligned Promise Lab word timestamps',
+            source_window:
+                'exact words whose aligned start timestamps occur before 5.000 seconds',
+            examples: exampleEvidence,
+            examples_sha256: sha256Bytes(canonicalJsonBytes(
+                exampleEvidence
+            )),
+            structural_examples_only: true,
+            scoring_text_input: true,
+        },
+    };
+}
+
+function suppliedOpeningTranscript(transcript) {
+    return {
+        transcript: String(transcript || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 2000),
+        beatAlignment: ['', '', '', '', ''],
+        provenance: {
+            schema: shortsTranscriptWriter.CONTRACT_SCHEMA,
+            provider: 'user',
+            model: null,
+            provider_call_count: 0,
+            example_count: 0,
+            structural_examples_only: false,
+            scoring_text_input: true,
+        },
+    };
+}
+
+// This is the only initial-opening boundary used by Storyboard, Auto, Grind,
+// and Elite exploration. Upstream models may alter the context, but not the
+// image renderer, style contract, sheet geometry, split, or transcript writer.
+async function generateCanonicalHookOpening({
+    brief,
+    videoIdea,
+    hookTreatment,
+    transcript,
+    writeTranscript = true,
+    panels,
+    stylePreset,
+    imageModel,
+    strictImageModel = true,
+    providerCallBudget = 1,
+    references = [],
+    referenceDescriptions = [],
+    referenceRelation,
+} = {}) {
+    const normalizedPanels = fivePanelSheet.normalizePanels(
+        panels,
+        hookTreatment || brief || videoIdea
+    );
+    const transcriptResult = String(transcript || '').trim()
+        ? suppliedOpeningTranscript(transcript)
+        : writeTranscript === false
+            ? suppliedOpeningTranscript('')
+            : await generateShortsOpeningTranscript({
+                videoIdea: videoIdea || brief || hookTreatment,
+                hookTreatment: hookTreatment || brief || videoIdea,
+                panels: normalizedPanels,
+            });
+    const requestedStyle = storyboardStylePresets.stylePreset(stylePreset);
+    const rendered = await generateFivePanelStoryboard({
+        brief: brief || hookTreatment || videoIdea,
+        // Transcript writing and visual rendering are deliberately separate.
+        // The generated spoken line is scored with the pixels but never
+        // silently rewrites the user's visual scene.
+        hookText: '',
+        panels: normalizedPanels,
+        stylePreset: requestedStyle.id,
+        imageModel,
+        strictImageModel,
+        providerCallBudget,
+        references,
+        referenceDescriptions,
+        referenceRelation,
+    });
+    const valid = !!(
+        rendered
+        && rendered.frames
+        && rendered.frames.length === fivePanelSheet.PANEL_COUNT
+        && rendered.geometry
+        && rendered.geometry.provider_call_count === 1
+        && rendered.geometry.render_call_count === 1
+        && rendered.sourceType
+        && rendered.sourceType.verifiedWideSheet === true
+        && rendered.stylePreset === requestedStyle.id
+        && (
+            requestedStyle.id !== storyboardStylePresets.ANIMATION_STYLE_ID
+            || rendered.prompt.includes('FIVE-FRAME CONTINUITY LOCK')
+        )
+    );
+    if (!valid) {
+        const error = new Error(
+            'canonical complete-opening render contract was not satisfied'
+        );
+        error.code = 'CANONICAL_HOOK_OPENING_INVALID';
+        error.statusCode = 500;
+        throw error;
+    }
+    return {
+        ...rendered,
+        transcript: transcriptResult.transcript,
+        transcriptBeatAlignment: transcriptResult.beatAlignment,
+        transcriptProvenance: transcriptResult.provenance,
+        openingContract: 'canonical-complete-hook-opening-v1',
+    };
 }
 // The idea model samples at temperature — a single malformed generation (truncated JSON, ≠5
 // frames) is NORMAL, not fatal. Retry up to 3×; only infra failures (credit/config) are terminal.
@@ -22856,20 +23187,34 @@ function generatedHookSavedPayload({
     attempt,
     folderId,
 }) {
+    const transcript = String(
+        attempt && attempt.transcript || spec.premise || ''
+    ).trim().slice(0, 2000);
     return {
         kind: 'scored',
         source: 'animated-batch',
         folder: folderId || null,
         title: String(spec.premise || 'Animated hook').slice(0, 140),
-        text: String(spec.premise || '').slice(0, 2000),
+        text: transcript,
+        transcript,
         idea: String(spec.premise || '').slice(0, 4000),
-        score_text: String(spec.premise || '').slice(0, 4000),
+        score_text: transcript,
         montage: `data:image/jpeg;base64,${montage.toString('base64')}`,
         frames: Array.isArray(spec.frames) ? spec.frames : [],
         frame_imgs: Array.isArray(attempt.frame_imgs)
             ? attempt.frame_imgs
             : [],
         cohesion_mode: spec.cohesion_mode || '',
+        opening_contract:
+            attempt && attempt.opening_contract || null,
+        transcript_beat_alignment:
+            attempt && attempt.transcript_beat_alignment || null,
+        transcript_provenance:
+            attempt && attempt.transcript_provenance || null,
+        style_preset:
+            attempt && attempt.style_preset || null,
+        panel_geometry:
+            attempt && attempt.panel_geometry || null,
         indicators: score.indicators || null,
         score_ledger: score.score_ledger,
         score_ledger_sha256:
@@ -23291,7 +23636,7 @@ async function hookProcessRequest(
                 acceptedHookPremises.push(spec.premise);
             }
             const a = { k: attempts.length, premise: spec.premise, video_idea: premise || null, hook_treatment: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
-                frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise,
+                frames_done: 0, status: 'writing-transcript', reasoning: spec.reasoning || '', caption: '', transcript: '',
                 cohesion_mode: spec.cohesion_mode || '', novelty: nov, nearest: near,
                 seed_distance: autoMeasurement && autoMeasurement.seedDistance,
                 nearest_prior_distance: autoMeasurement && autoMeasurement.nearestPriorDistance,
@@ -23331,9 +23676,10 @@ async function hookProcessRequest(
                         ].join('\n')
                         : spec.premise;
                     const panel = await withRenderSlot(
-                        () => generateFivePanelStoryboard({
+                        () => generateCanonicalHookOpening({
                             brief: renderBrief,
-                            hookText: spec.premise,
+                            videoIdea: premise || spec.premise,
+                            hookTreatment: spec.premise,
                             panels: a.frames,
                             stylePreset: animation
                                 ? storyboardStylePresets.ANIMATION_STYLE_ID
@@ -23343,6 +23689,13 @@ async function hookProcessRequest(
                             providerCallBudget: 1,
                         })
                     );
+                    a.transcript = panel.transcript;
+                    a.caption = panel.transcript;
+                    a.transcript_beat_alignment =
+                        panel.transcriptBeatAlignment;
+                    a.transcript_provenance =
+                        panel.transcriptProvenance;
+                    a.opening_contract = panel.openingContract;
                     const montageId = `${rid}_${a.k}`;
                     const frameIds = panel.frames.map((_, index) => (
                         `${montageId}_${index}`
@@ -23390,7 +23743,7 @@ async function hookProcessRequest(
                     await writeGroup(false);
                     const score = await scoreMontage(
                         panel.montage,
-                        spec.premise,
+                        panel.transcript,
                         premise || spec.premise,
                         creatorProfile
                     );
@@ -23545,10 +23898,13 @@ async function hookProcessRequest(
                 } catch (e) {                                  // NEVER silent: the failure rides the group JSON to the card
                     if (isQueueLeaseOwnershipError(e)) throw e;
                     const lastErr = String(e.message || e).slice(0, 240);
-                    const failedStage = a.frames_done
-                        === fivePanelSheet.PANEL_COUNT
-                        ? 'score'
-                        : 'five-panel image';
+                    const failedStage = /^SHORTS_TRANSCRIPT_/.test(
+                        String(e && e.code || '')
+                    )
+                        ? 'spoken transcript'
+                        : a.frames_done === fivePanelSheet.PANEL_COUNT
+                            ? 'score'
+                            : 'five-panel image';
                     a.errs = a.errs || [];
                     a.errs.push(
                         `${failedStage}: FAILED — ${lastErr}`
@@ -25425,7 +25781,9 @@ async function grindProcess(rid, req0, ownership) {
                 frames: spec.frames,
                 frame_imgs: [null, null, null, null, null],
                 frames_done: 0,
-                status: 'rendering',
+                status: 'writing-transcript',
+                transcript: '',
+                caption: '',
                 nov: measurement.nearestPriorDistance == null
                     ? 1
                     : measurement.nearestPriorDistance,
@@ -25488,14 +25846,15 @@ async function grindProcess(rid, req0, ownership) {
                 score_verified: false,
             };
             attempts.push(a);
-            note = `attempt ${a.k + 1}: generating one coherent five-panel image…`;
+            note = `attempt ${a.k + 1}: writing the spoken opening from measured high-keep examples, then generating one coherent five-panel image…`;
             await write();
             // 3) one 45:16 provider image, then deterministic 9:16 crops.
             let panel = null;
             try {
-                panel = await generateFivePanelStoryboard({
+                panel = await generateCanonicalHookOpening({
                     brief: immutableRenderBrief,
-                    hookText: spec.premise,
+                    videoIdea: premise,
+                    hookTreatment: spec.premise,
                     panels: a.frames,
                     stylePreset: animation
                         ? storyboardStylePresets.ANIMATION_STYLE_ID
@@ -25536,6 +25895,13 @@ async function grindProcess(rid, req0, ownership) {
                     ])
                 );
                 a.frame_imgs = frameIds;
+                a.transcript = panel.transcript;
+                a.caption = panel.transcript;
+                a.transcript_beat_alignment =
+                    panel.transcriptBeatAlignment;
+                a.transcript_provenance =
+                    panel.transcriptProvenance;
+                a.opening_contract = panel.openingContract;
                 a.frames_done = fivePanelSheet.PANEL_COUNT;
                 a.panel_sheet_id = montageId;
                 a.panel_model = panel.model;
@@ -25558,8 +25924,11 @@ async function grindProcess(rid, req0, ownership) {
                 }
             } catch (e) {
                 if (isQueueLeaseOwnershipError(e)) throw e;
+                const stage = /^SHORTS_TRANSCRIPT_/.test(
+                    String(e && e.code || '')
+                ) ? 'spoken transcript' : 'five-panel image';
                 a.errs.push(
-                    `five-panel image: FAILED on its single provider call — ${
+                    `${stage}: FAILED — ${
                         String(e.message || e).slice(0, 220)
                     }`
                 );
@@ -25573,7 +25942,7 @@ async function grindProcess(rid, req0, ownership) {
                 }
                 const score = await scoreMontage(
                     panel.montage,
-                    spec.premise,
+                    panel.transcript,
                     premise,
                     creatorProfile
                 );

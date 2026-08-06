@@ -123,6 +123,7 @@ async function main() {
             'A helmet that survives a flamethrower'
         );
         await page.locator('[data-expgenn="2"]').click();
+        await page.locator('[data-expanimation]').check();
         await page.locator('[data-expgen]').click();
         await page.locator('#grind-input').fill(
             'A helmet that survives a flamethrower'
@@ -148,6 +149,8 @@ async function main() {
                     requests['/api/hooks/generate'].imageModel,
                 strictImageModel:
                     requests['/api/hooks/generate'].strictImageModel,
+                animation:
+                    requests['/api/hooks/generate'].animation,
             },
             {
                 premise: 'A helmet that survives a flamethrower',
@@ -155,6 +158,7 @@ async function main() {
                 invent: false,
                 imageModel: 'flux-2-pro',
                 strictImageModel: true,
+                animation: true,
             }
         );
         assert.strictEqual(

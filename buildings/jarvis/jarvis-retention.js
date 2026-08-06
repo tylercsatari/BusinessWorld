@@ -4082,7 +4082,7 @@ const JarvisRetention = (function () {
     }
     function prettyGenErr(err) {
         const e = String(err || '').toLowerCase();
-        if (e.indexOf('insufficient credit') >= 0 || e.indexOf('credit') >= 0 || e.indexOf('spend limit') >= 0 || e.indexOf('billing') >= 0) return '⚠ Your Replicate credit ran out — top up at replicate.com/account/billing, then generation works again.';
+        if (e.indexOf('insufficient credit') >= 0 || e.indexOf('credit') >= 0 || e.indexOf('spend limit') >= 0 || e.indexOf('billing') >= 0) return 'The configured generation provider is out of credits or has reached its spend limit. Top up the provider named in the detailed error, then retry.';
         if (e.indexOf('not configured') >= 0) return 'The fine-tuned model endpoint isn\'t configured (REPLICATE_API_TOKEN).';
         if (e.indexOf('429') >= 0) return '⚠ Rate-limited on Replicate — wait a moment and try again.';
         return err ? ('Generation failed: ' + err) : 'Generation came back empty — try again.';
@@ -4115,7 +4115,7 @@ const JarvisRetention = (function () {
                 const ideaDots = Array.from({ length: nTot }, (_, i) => `<span style="color:${i < nDone ? C.green : (i === nDone ? C.cyan : C.mute)};font-weight:800">${i < nDone ? '✓' : (i === nDone ? '⏳' : '○')}</span>`).join(' ');
                 const note = S2.note ? `<div style="font-size:11px;color:${C.cyan};margin-top:6px;line-height:1.5">${esc(S2.note)}</div>` : '';
                 const retryNote = st.expGenStatErr ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.45">Connection/status detail: ${esc(st.expGenStatErr)}. Retrying automatically.</div>` : '';
-                const longHint = (el > 240 && !nDone || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting (first run pulls the model), or your <b>Replicate credit</b> ran out — top up at replicate.com/account/billing.</div>` : '';
+                const longHint = (el > 240 && !nDone || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. The fine-tuned planner may be cold-starting, or the transcript/image provider may be rate-limited or out of credits. The exact provider error will appear here.</div>` : '';
                 result = `<div style="margin-top:12px;padding:11px 13px;background:${C.card2};border:1px solid ${C.cyan}44;border-radius:10px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
                       <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating — ideas stream in one at a time</span>
@@ -4154,6 +4154,14 @@ const JarvisRetention = (function () {
                     const priorBadge = a.nearest_prior_distance != null ? `<span title="Cosine distance from the nearest other accepted hook treatment in this Auto batch." style="cursor:help;color:${C.cyan}">sibling ↔ <b>${(+a.nearest_prior_distance).toFixed(3)}</b></span>` : '';
                     const modelBadge = a.panel_model ? `<span title="The exact selected image model used for the one 45:16 provider image." style="color:${C.mute}">${esc(a.panel_model)} · 1 image call</span>` : '';
                     const frameText = (a.frames && a.frames.length) ? `<details style="margin-top:5px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">the 5 frames</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px">${a.frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div></details>` : '';
+                    const spokenText = a.transcript || a.caption || '';
+                    const transcriptEvidence = a.transcript_provenance || null;
+                    const transcriptLine = spokenText
+                        ? `<div style="font-size:10px;color:${C.text};line-height:1.5;margin-top:7px;padding:6px 7px;border-left:2px solid ${C.accent};background:${C.bg}"><b style="color:${C.accent}">Spoken:</b> ${esc(spokenText)}</div>`
+                        : '';
+                    const transcriptTrace = transcriptEvidence
+                        ? `<details style="margin-top:5px"><summary style="font-size:9px;color:${C.mute};cursor:pointer">transcript source · ${esc(transcriptEvidence.model || transcriptEvidence.provider || 'writer')}</summary><div style="font-size:8.5px;color:${C.dim};line-height:1.45;margin-top:4px">Separate text call · ${Number(transcriptEvidence.example_count) || 0} measured high-keep examples from ${Number(transcriptEvidence.source_population_count) || 0} joined Tyler videos · exact output used for embedding and scoring.</div></details>`
+                        : '';
                     const actions = (a.frame_imgs && a.frame_imgs.filter(Boolean).length) ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
                         <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ loading…' : (a.score_available ? '◆ Open embeddings' : '◆ Score this hook')}</span>
                         <span data-gensave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">💾 Save idea</span>
@@ -4162,12 +4170,13 @@ const JarvisRetention = (function () {
                     const cardStat = a.status === 'done'
                         ? (nMiss ? `<span style="color:${C.amber};font-size:9px;font-weight:800;white-space:nowrap">✓ ${nOk}/5 (${nMiss} missing)</span>`
                                 : `<span style="color:${nNote ? C.amber : C.green};font-size:9px;font-weight:800;white-space:nowrap" ${nNote ? `title="${esc((a.errs || []).join('\n'))}"` : ''}>✓ one sheet → 5 crops${nNote ? ' *' : ''}</span>`)
-                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ ${a.status === 'scoring' ? 'embedding + scoring' : 'one sheet image call'}</span>`;
+                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ ${a.status === 'scoring' ? 'embedding + scoring' : a.status === 'writing-transcript' ? 'writing spoken opening' : 'one sheet image call'}</span>`;
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
                         <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
                       ${frameStrip}${errLine}
-                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${channelFreeBadge}${topicalBadge}${priorBadge}${novBadge}${modelBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
+                      ${transcriptLine}
+                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${channelFreeBadge}${topicalBadge}${priorBadge}${novBadge}${modelBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${transcriptTrace}${frameText}${actions}</div>`;
                 }).join('');
                 const _streaming = g.streaming && !g.done;
                 const _doneN = g.attempts.filter(x => x.status === 'done').length;
@@ -4613,7 +4622,7 @@ const JarvisRetention = (function () {
             score.title = a && a.premise || score.title || 'Grind hook';
             score.transcript = score.transcript
                 || score.text
-                || a && a.premise
+                || a && (a.transcript || a.caption || a.premise)
                 || '';
             score.montageDataUrl = authenticatedMediaUrl(montageUrl);
             Object.assign(score, verifiedScore);
@@ -4699,9 +4708,15 @@ const JarvisRetention = (function () {
                     || (GRINDRUN && GRINDRUN.premise)
                     || 'Grind hook',
                 text:
-                    (a && a.premise)
+                    (a && (a.transcript || a.caption || a.premise))
                     || (GRINDRUN && GRINDRUN.premise)
                     || '',
+                transcript_provenance:
+                    a && a.transcript_provenance || null,
+                transcript_beat_alignment:
+                    a && a.transcript_beat_alignment || null,
+                opening_contract:
+                    a && a.opening_contract || null,
                 frames: (a && a.frames) || [],
                 indicators: score.indicators,
                 score_ledger: score.score_ledger,
@@ -4892,10 +4907,16 @@ const JarvisRetention = (function () {
                     : [];
                 const eliteSourceCard = source => `<a href="https://www.youtube.com/shorts/${encodeURIComponent(source.id)}" target="_blank" rel="noopener" title="Open source Short" style="display:block;width:84px;flex:0 0 84px;text-decoration:none;color:${C.text}"><img src="https://i.ytimg.com/vi/${encodeURIComponent(source.id)}/mqdefault.jpg" loading="lazy" style="width:84px;height:47px;object-fit:cover;border-radius:4px;background:#000"><span style="display:block;font-size:7.5px;line-height:1.25;margin-top:2px;max-height:29px;overflow:hidden">${esc(source.title || source.opening || source.id)}</span><span style="display:block;font-size:7px;color:${C.mute}">${fmtv(source.source_percentile, 1)}th · cluster ${source.cluster_24 == null ? '—' : esc(source.cluster_24)}${source.semantic_similarity == null ? '' : ` · sim ${fmtv(source.semantic_similarity, 3)}`}${source.channel_centroid_similarity == null ? '' : ` · channel ${fmtv(source.channel_centroid_similarity, 3)}`} · ${source.embedding_available ? 'corpus vector' : 'saved-ledger fallback'}</span></a>`;
                 const eliteEvidence = !eliteSources.length ? '' : `<details style="margin-top:5px;border-top:1px solid ${C.border};padding-top:4px"><summary style="cursor:pointer;font-size:8.5px;color:${C.accent};font-weight:800">${eliteSources.length} elite source${eliteSources.length === 1 ? '' : 's'} combined · trace lineage</summary><div style="display:flex;gap:5px;overflow-x:auto;padding-top:5px">${eliteSources.map(eliteSourceCard).join('')}</div>${a.elite_mechanism_hypothesis && a.elite_mechanism_hypothesis.text ? `<div style="font-size:7.5px;color:${C.dim};line-height:1.35;margin-top:4px">Hypothesis, not a causal result: ${esc(a.elite_mechanism_hypothesis.text)}</div>` : ''}<div style="font-size:7px;color:${C.faint};margin-top:3px">Source geometry chose evidence only. This generated hook still had to earn its own canonical ledger score.</div></details>`;
+                const spokenText = a.transcript || a.caption || '';
+                const transcriptEvidence = a.transcript_provenance || null;
+                const transcriptDetail = spokenText
+                    ? `<div style="font-size:8.5px;color:${C.text};line-height:1.4;margin-top:5px;padding-left:5px;border-left:2px solid ${C.accent}"><b style="color:${C.accent}">Spoken:</b> ${esc(spokenText)}</div>${transcriptEvidence ? `<details style="margin-top:3px"><summary style="cursor:pointer;font-size:7.5px;color:${C.mute}">transcript evidence</summary><div style="font-size:7px;color:${C.dim};line-height:1.35;margin-top:2px">${esc(transcriptEvidence.model || transcriptEvidence.provider || 'writer')} · ${Number(transcriptEvidence.example_count) || 0} measured examples · this exact transcript was scored.</div></details>` : ''}`
+                    : '';
                 return `<div style="border:2px solid ${win ? C.green : C.border};border-radius:9px;padding:7px;background:${C.card2};width:250px;flex-shrink:0">
                   <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:10px;font-weight:800;color:${win ? C.green : C.dim}">#${a.k + 1}${win ? ' 🎯 WINNER' : ''}</span>${pctBadge}</div>
                   ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
                   <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
+                  ${transcriptDetail}
                   ${eliteEvidence}
                   ${verifiedScore ? `<div style="font-size:7px;color:${C.faint};margin-top:3px;overflow-wrap:anywhere"><code>${esc(verifiedScore.score_coordinate_id)}</code> · ${esc(verifiedDescriptor.targetUnit)} · target ${esc(verifiedDescriptor.target)} · modality ${esc(verifiedDescriptor.modality)} · input ${esc(verifiedDescriptor.input)} · ${verifiedScore.score_target_unit === 'predicted_keep_percent' ? `pooled percentile ${fmtv(verifiedScore.score_percentile_0_100, 1)}th · score record <code>${verifiedScore.score_record_sha256.slice(0, 12)}…</code> · ` : ''}ledger <code>${verifiedScore.score_ledger_sha256.slice(0, 12)}…</code></div>` : ''}
                   ${a.score_available === true ? `<div style="font-size:8px;color:${C.green};margin-top:3px">embedded · ${a.score_coordinate_available_count == null ? '' : `${a.score_coordinate_available_count}/`}${a.score_coordinate_count || 21} ledger coordinates + ${a.score_derived_output_count || 4} channel-free outputs</div>` : ''}
@@ -7797,6 +7818,10 @@ const JarvisRetention = (function () {
         result.source = 'storyboard';
         result.title = input.title || result.title || 'Storyboard opening';
         result.transcript = input.text || result.transcript || '';
+        result.transcript_beat_alignment =
+            input.transcriptBeatAlignment || null;
+        result.transcript_provenance =
+            input.transcriptProvenance || null;
         result.montageDataUrl = input.montage;
         result.storyboardCandidateId = input.id;
         const uploads = st.rawUploads || (st.rawUploads = []);
@@ -8672,7 +8697,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-grindhide]')) { st.grindHide = st.grindHide || {}; if (st.grindRid) st.grindHide[st.grindRid] = 1; st.grindRid = null; GRINDRUN = null; rtgUpdateExp(); return; }
         const gvw = e.target.closest('[data-grindview]'); if (gvw) { const rid = gvw.getAttribute('data-grindview'); st.grindRid = rid; delete (st.grindHide || {})[rid]; grindPoll(rid); rtgUpdateExp(); return; }
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
-        const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
+        const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.transcript || a.caption || a.premise || ''); } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) {
             const k = +gsv.getAttribute('data-gensave');
             const g = EXPDEMO[st.expGenRid];
@@ -8703,7 +8728,7 @@ const JarvisRetention = (function () {
                         || scored.title
                         || 'Generated hook').slice(0, 80),
                     text:
-                        a && (a.premise || a.caption)
+                        a && (a.transcript || a.caption || a.premise)
                         || scored.transcript
                         || '',
                 }), { upload: scored });
@@ -8713,10 +8738,15 @@ const JarvisRetention = (function () {
                     source: 'generated',
                     title:
                         (a.premise || a.caption || 'idea').slice(0, 80),
-                    text: a.premise || a.caption || '',
+                    text: a.transcript || a.caption || a.premise || '',
                     frames: a.frames || [],
                     frame_imgs: a.frame_imgs || [],
                     cohesion_mode: a.cohesion_mode || '',
+                    transcript_provenance:
+                        a.transcript_provenance || null,
+                    transcript_beat_alignment:
+                        a.transcript_beat_alignment || null,
+                    opening_contract: a.opening_contract || null,
                 });
             }
             return;
@@ -9320,7 +9350,10 @@ const JarvisRetention = (function () {
                 await scoreGenerated(
                     attempt.k,
                     attempt.frame_imgs,
-                    attempt.premise || attempt.caption || '',
+                    attempt.transcript
+                        || attempt.caption
+                        || attempt.premise
+                        || '',
                     {
                         rid,
                         present: index === 0,
@@ -9369,6 +9402,18 @@ const JarvisRetention = (function () {
                 j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), creatorProfile: selectedCreatorProfile(), async: true }) });
             }
             j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
+            j.transcript = j.transcript
+                || j.text
+                || a && (a.transcript || a.caption)
+                || text
+                || '';
+            j.text = j.transcript;
+            j.transcript_provenance =
+                a && a.transcript_provenance || null;
+            j.transcript_beat_alignment =
+                a && a.transcript_beat_alignment || null;
+            j.opening_contract =
+                a && a.opening_contract || null;
             j.generatedRunId = rid;
             j.generatedAttemptIndex = k;
             st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;

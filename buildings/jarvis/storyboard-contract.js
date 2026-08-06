@@ -156,6 +156,66 @@ function cleanReference(value) {
     };
 }
 
+function cleanTranscriptProvenance(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+    return {
+        schema: cleanText(value.schema, 80),
+        provider: cleanText(value.provider, 40),
+        model: cleanText(value.model, 80) || null,
+        provider_call_count: Math.max(
+            0,
+            Math.floor(finiteNumber(value.provider_call_count, 0))
+        ),
+        source_population_count: Math.max(
+            0,
+            Math.floor(finiteNumber(value.source_population_count, 0))
+        ),
+        example_count: Math.max(
+            0,
+            Math.floor(finiteNumber(value.example_count, 0))
+        ),
+        example_selection:
+            cleanText(value.example_selection, 300) || null,
+        source_join: cleanText(value.source_join, 300) || null,
+        source_window: cleanText(value.source_window, 300) || null,
+        examples: (Array.isArray(value.examples) ? value.examples : [])
+            .slice(0, 24)
+            .map(example => ({
+                video_id: cleanText(example && example.video_id, 32),
+                actual_keep_rate_percent: finiteNumber(
+                    example && example.actual_keep_rate_percent,
+                    0
+                ),
+                measured_window_seconds: Math.max(
+                    0,
+                    finiteNumber(
+                        example && example.measured_window_seconds,
+                        0
+                    )
+                ),
+                transcript: cleanText(
+                    example && example.transcript,
+                    500
+                ),
+                transcript_source:
+                    cleanText(
+                        example && example.transcript_source,
+                        80
+                    ) || null,
+            }))
+            .filter(example => example.video_id && example.transcript),
+        examples_sha256:
+            exactSha256(value.examples_sha256)
+                ? value.examples_sha256
+                : null,
+        structural_examples_only:
+            value.structural_examples_only === true,
+        scoring_text_input: value.scoring_text_input === true,
+    };
+}
+
 function bindScoreInput(value) {
     const panelMediaSha256s = Array.isArray(
         value && value.panel_media_sha256s
@@ -444,6 +504,21 @@ function bindDocument(value) {
         createdAt: Math.max(0, finiteNumber(value.createdAt, Date.now())),
         updatedAt: Math.max(0, finiteNumber(value.updatedAt, Date.now())),
     };
+    if (Array.isArray(value.transcriptBeatAlignment)) {
+        document.transcriptBeatAlignment = Array.from(
+            { length: PANEL_COUNT },
+            (_, index) => cleanText(
+                value.transcriptBeatAlignment[index],
+                300
+            )
+        );
+    }
+    const transcriptProvenance = cleanTranscriptProvenance(
+        value.transcriptProvenance
+    );
+    if (transcriptProvenance) {
+        document.transcriptProvenance = transcriptProvenance;
+    }
     if (!ID_PATTERN.test(document.id)) {
         throw new Error('storyboard id is invalid');
     }

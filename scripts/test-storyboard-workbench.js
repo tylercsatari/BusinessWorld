@@ -96,10 +96,10 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=14')
-            && indexSource.indexOf('storyboard-style-presets.js?v=1')
-            < indexSource.indexOf('storyboard-workbench.js?v=14')
-            && indexSource.indexOf('storyboard-workbench.js?v=14')
+        indexSource.includes('storyboard-workbench.js?v=15')
+            && indexSource.indexOf('storyboard-style-presets.js?v=2')
+            < indexSource.indexOf('storyboard-workbench.js?v=15')
+            && indexSource.indexOf('storyboard-workbench.js?v=15')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the shared style contract and storyboard module must load before '
             + 'the Shorts integration'
@@ -107,7 +107,7 @@ async function main() {
     assert(
         retentionSource.includes('data-auto-image-model')
             && retentionSource.includes('automaticImageModelSelect')
-            && indexSource.includes('jarvis-retention.js?v=saved-editor-v1'),
+            && indexSource.includes('jarvis-retention.js?v=canonical-opening-v1'),
         'Auto and Grind must load the current shared image-model selector'
     );
     assert(
@@ -428,9 +428,30 @@ async function main() {
                         `SHEET ${index + 1}`
                     )),
                     renderContract:
-                        'canonical-five-panel-storyboard-request-v1',
+                        'canonical-complete-hook-opening-v1',
                     providerCallCount: 1,
                     renderCallCount: 1,
+                    transcript:
+                        'This machine cannot spill, so I pushed it until it failed.',
+                    transcriptBeatAlignment: [
+                        'This machine',
+                        'cannot spill',
+                        'I pushed it',
+                        'until it',
+                        'failed',
+                    ],
+                    transcriptProvenance: {
+                        schema: 'shorts-opening-transcript-writer-v1',
+                        provider: 'openai',
+                        model: 'fixture-transcript-model',
+                        provider_call_count: 1,
+                        source_population_count: 208,
+                        example_count: 12,
+                        source_window: 'first five measured seconds',
+                        examples: [],
+                        structural_examples_only: true,
+                        scoring_text_input: true,
+                    },
                 };
             }
             if (url === '/api/storyboards/panel') {
@@ -755,6 +776,9 @@ async function main() {
             generateCalls: window.__calls.generate.length,
             panelCount: state.candidates[0].panels.length,
             sources: state.candidates[0].panels.map(panel => panel.source),
+            transcript: state.candidates[0].hookText,
+            transcriptProvenance:
+                state.candidates[0].transcriptProvenance,
             payload: window.__calls.generate[0],
         };
     });
@@ -769,6 +793,11 @@ async function main() {
     );
     assert.strictEqual(coherent.payload.panels.length, 5);
     assert.strictEqual(
+        coherent.payload.writeTranscript,
+        true,
+        'blank spoken text must trigger the separate transcript writer'
+    );
+    assert.strictEqual(
         coherent.payload.brief,
         'A spill-proof machine is tested across five escalating scenes.'
     );
@@ -776,6 +805,20 @@ async function main() {
         coherent.payload.hookText,
         '',
         'spoken text must not silently steer whole-panel generation'
+    );
+    assert.strictEqual(
+        coherent.transcript,
+        'This machine cannot spill, so I pushed it until it failed.',
+        'the separately written spoken opening must populate the editor'
+    );
+    assert.strictEqual(
+        coherent.transcriptProvenance.example_count,
+        12,
+        'the workbench must retain transcript evidence for persistence and review'
+    );
+    assert.match(
+        await page.locator('[data-sb-transcript-review]').textContent(),
+        /12 measured high-keep openings/
     );
     assert.deepStrictEqual(
         coherent.payload.layout,

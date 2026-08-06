@@ -211,7 +211,7 @@ const ideaIndex = grindSource.indexOf('hookModelGenerateRetry(');
 const candidateEmbeddingIndex = grindSource.indexOf(
     'grindExploration.measureCandidate'
 );
-const renderIndex = grindSource.indexOf('generateFivePanelStoryboard({');
+const renderIndex = grindSource.indexOf('generateCanonicalHookOpening({');
 const scoreIndex = grindSource.indexOf('scoreMontage(');
 const expansionIndex = grindSource.indexOf(
     'grindExploration.recordScore'
