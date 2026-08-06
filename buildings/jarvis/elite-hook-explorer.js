@@ -411,6 +411,8 @@ function buildIndex({
                 : null,
             navigation_payload_sha256:
                 savedChannelIndex && savedChannelIndex.payloadSha256 || null,
+            snapshot_policy:
+                'pinned_at_materialization_not_live_invalidated',
         },
         metric_definitions: SOURCE_METRICS,
         metric_counts: metricCounts,
@@ -422,9 +424,12 @@ function buildIndex({
             final_generated_score_source:
                 'persisted canonical Shorts score ledger only',
             causal_claim: false,
+            runtime_rebuild: false,
             note:
                 'Corpus geometry and observed views select diverse source evidence only. '
-                + 'They never clear a generated hook threshold.',
+                + 'They never clear a generated hook threshold. Saved-channel membership '
+                + 'is a pinned source snapshot and is refreshed only by the explicit '
+                + 'build:elite-hook-corpus maintenance command.',
         },
     };
     return bindIndex(payload);

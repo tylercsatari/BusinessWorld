@@ -156,6 +156,7 @@ assert(prompt.includes('SOURCE 1'));
 const summary = elite.publicSummary(index);
 assert.equal(summary.minimum_index_percentile, 80);
 assert.equal(summary.channels[0].corpus_match_count, 2);
+assert.equal(summary.governance.runtime_rebuild, false);
 const tampered = JSON.parse(JSON.stringify(index));
 tampered.rows[0].title = 'tampered';
 assert.equal(elite.validateIndex(tampered).valid, false);
@@ -179,6 +180,10 @@ const authSource = fs.readFileSync(path.join(root, 'auth.js'), 'utf8');
     serverSource.includes(fragment),
     `server is missing elite contract fragment: ${fragment}`
 ));
+assert(
+    !serverSource.includes('rebuildEliteHookCorpus'),
+    'the live server must never launch the memory-heavy corpus builder'
+);
 [
     'Elite corpus explorer',
     'data-grindelitemetric',

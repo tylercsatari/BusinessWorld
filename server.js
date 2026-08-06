@@ -22129,7 +22129,6 @@ async function geminiTextEmbed(text, options = {}) {
 }
 let _eliteHookCorpusCache = null;
 let _eliteHookCorpusPromise = null;
-let _eliteHookCorpusBuildPromise = null;
 async function loadEliteHookCorpus(options = {}) {
     if (_eliteHookCorpusCache && options.force !== true) {
         return _eliteHookCorpusCache;
@@ -22184,20 +22183,6 @@ async function loadEliteHookCorpus(options = {}) {
             error.code = 'elite_hook_corpus_stale';
             throw error;
         }
-        const savedChannelIndexBytes = await cloud.downloadFromR2(
-            eliteHookExplorer.SAVED_CHANNEL_INDEX_KEY
-        );
-        if (
-            !savedChannelIndexBytes
-            || sha256Bytes(savedChannelIndexBytes)
-                !== index.saved_channels_source.index_sha256
-        ) {
-            const error = new Error(
-                'Elite hook corpus is stale relative to the saved-channel index.'
-            );
-            error.code = 'elite_hook_corpus_stale';
-            throw error;
-        }
         _eliteHookCorpusCache = index;
         return index;
     })();
@@ -22207,69 +22192,8 @@ async function loadEliteHookCorpus(options = {}) {
         _eliteHookCorpusPromise = null;
     }
 }
-
-function rebuildEliteHookCorpus() {
-    if (_eliteHookCorpusBuildPromise) return _eliteHookCorpusBuildPromise;
-    _eliteHookCorpusBuildPromise = new Promise((resolve, reject) => {
-        const script = path.join(
-            __dirname,
-            'scripts/build-elite-hook-corpus.js'
-        );
-        const child = spawn(
-            process.execPath,
-            ['--max-old-space-size=1536', script, '--write'],
-            {
-                env: process.env,
-                stdio: ['ignore', 'pipe', 'pipe'],
-            }
-        );
-        let stdout = '';
-        let stderr = '';
-        const timeout = setTimeout(() => {
-            try { child.kill('SIGKILL'); } catch (_) {}
-            reject(new Error('elite corpus rebuild timed out'));
-        }, 12 * 60e3);
-        child.stdout.on('data', chunk => {
-            stdout += chunk;
-            if (stdout.length > 30000) stdout = stdout.slice(-30000);
-        });
-        child.stderr.on('data', chunk => {
-            stderr += chunk;
-            if (stderr.length > 30000) stderr = stderr.slice(-30000);
-        });
-        child.once('error', error => {
-            clearTimeout(timeout);
-            reject(error);
-        });
-        child.once('close', code => {
-            clearTimeout(timeout);
-            if (code !== 0) {
-                reject(new Error(
-                    (stderr.trim().split('\n').pop()
-                        || `elite corpus rebuild exited ${code}`).slice(-500)
-                ));
-                return;
-            }
-            resolve(stdout);
-        });
-    }).finally(() => {
-        _eliteHookCorpusBuildPromise = null;
-    });
-    return _eliteHookCorpusBuildPromise;
-}
-
 async function loadEliteHookCorpusReady() {
-    try {
-        return await loadEliteHookCorpus();
-    } catch (error) {
-        if (![
-            'elite_hook_corpus_missing',
-            'elite_hook_corpus_stale',
-        ].includes(error.code)) throw error;
-        await rebuildEliteHookCorpus();
-        _eliteHookCorpusCache = null;
-        return loadEliteHookCorpus({ force: true });
-    }
+    return loadEliteHookCorpus();
 }
 
 function runEliteHookSemanticQuery(payload) {
