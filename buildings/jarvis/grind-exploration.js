@@ -509,7 +509,7 @@ function generationPrompt({
     const rejected = rejectedPremises
         .slice(-8)
         .map((value, index) => `${index + 1}. ${String(value).slice(0, 120)}`);
-    const assignments = outwardAssignments(selectionRound, 4);
+    const assignment = outwardAssignments(selectionRound, 1)[0];
     return [
         `IMMUTABLE VIDEO IDEA: ${seed}`,
         'Write a materially different opening hook for this exact same video idea.',
@@ -517,15 +517,10 @@ function generationPrompt({
         'Vary only the hook treatment: opening question, information order, tension, framing, reveal timing, spoken phrasing, camera perspective, and five-beat visual progression.',
         'Do not merely paraphrase an earlier hook.',
         state.acceptedCount > 0
-            ? `OUTWARD SEARCH ROUND ${Math.max(1, Number.parseInt(selectionRound, 10) || 1)}: write four candidates using these four different structural assignments, in order:`
+            ? `OUTWARD SEARCH ROUND ${Math.max(1, Number.parseInt(selectionRound, 10) || 1)} STRUCTURAL ASSIGNMENT: ${assignment}. Return exactly one normal five-beat plan; the provider independently samples the other candidates.`
             : '',
-        ...(state.acceptedCount > 0
-            ? assignments.map((assignment, index) => (
-                `${index + 1}. ${assignment}`
-            ))
-            : []),
         state.acceptedCount > 0
-            ? 'Keep only nouns required to identify the immutable subject, object, event, goal, and outcome. Change the sentence skeleton, opening speech act, information order, and visual causality. Do not end every candidate with the same question or reveal.'
+            ? 'Keep only nouns required to identify the immutable subject, object, event, goal, and outcome. Change the sentence skeleton, opening speech act, information order, and visual causality. Do not reuse the prior hook question or reveal.'
             : '',
         state.acceptedCount === 0
             ? 'This is the first hook treatment. Establish the exact supplied idea clearly before optimizing its presentation.'
