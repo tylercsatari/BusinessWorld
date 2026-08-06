@@ -182,6 +182,7 @@ async function generateImage({
     refs = [],
     aspectRatio = '9:16',
     fetchWithTimeout,
+    shouldStop,
 }) {
     const request = requestFor({
         apiKey,
@@ -193,14 +194,70 @@ async function generateImage({
     const execute = typeof fetchWithTimeout === 'function'
         ? fetchWithTimeout
         : (url, init) => fetch(url, init);
+    if (typeof shouldStop === 'function' && await shouldStop()) {
+        throw imageError(
+            'OpenAI image generation was stopped by the user.',
+            409,
+            'HOOK_GENERATION_STOPPED'
+        );
+    }
+    const stopController = typeof shouldStop === 'function'
+        && typeof AbortController === 'function'
+        ? new AbortController()
+        : null;
+    let stopTimer = null;
+    let stoppedByUser = false;
+    let stopCheckActive = false;
+    let stopChecksFinished = false;
+    const scheduleStopCheck = () => {
+        if (
+            stopChecksFinished
+            || !stopController
+            || stopController.signal.aborted
+        ) return;
+        stopTimer = setTimeout(async () => {
+            if (stopCheckActive) {
+                scheduleStopCheck();
+                return;
+            }
+            stopCheckActive = true;
+            try {
+                if (await shouldStop()) {
+                    stoppedByUser = true;
+                    stopController.abort();
+                    return;
+                }
+            } catch (error) {
+                // The owning worker still performs authoritative cancellation
+                // checks between stages; a transient marker read must not turn
+                // a provider request into a false stop.
+            } finally {
+                stopCheckActive = false;
+            }
+            scheduleStopCheck();
+        }, 500);
+    };
+    scheduleStopCheck();
     let response;
     try {
         response = await execute(
             request.url,
-            request.init,
+            {
+                ...request.init,
+                ...(stopController
+                    ? { signal: stopController.signal }
+                    : {}),
+            },
             OPENAI_IMAGE_TIMEOUT_MS
         );
     } catch (error) {
+        if (stoppedByUser) {
+            throw imageError(
+                'OpenAI image generation was stopped by the user.',
+                409,
+                'HOOK_GENERATION_STOPPED'
+            );
+        }
         if (error && error.name === 'AbortError') {
             throw imageError(
                 'OpenAI image generation timed out after three minutes.',
@@ -215,6 +272,9 @@ async function generateImage({
             502,
             'openai_image_unreachable'
         );
+    } finally {
+        stopChecksFinished = true;
+        if (stopTimer) clearTimeout(stopTimer);
     }
     const payload = await response.json().catch(() => null);
     if (!response.ok) throw responseError(response, payload);

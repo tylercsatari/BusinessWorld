@@ -22094,8 +22094,33 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
 // ── Persistent "Generate hook" worker: the fine-tuned idea_r7 model (Replicate, version-direct)
 //    writes the hook plan; the selected shared image provider renders one five-panel sheet. ──
 async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing can deadlock the worker
-    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
-    try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
+    const ac = new AbortController();
+    const externalSignal = opts && opts.signal;
+    const abortFromExternal = () => ac.abort();
+    if (
+        externalSignal
+        && typeof externalSignal.addEventListener === 'function'
+    ) {
+        if (externalSignal.aborted) ac.abort();
+        else externalSignal.addEventListener(
+            'abort',
+            abortFromExternal,
+            { once: true }
+        );
+    }
+    const t = setTimeout(() => ac.abort(), ms);
+    try {
+        return await fetch(url, { ...opts, signal: ac.signal });
+    } finally {
+        clearTimeout(t);
+        if (
+            externalSignal
+            && typeof externalSignal.removeEventListener === 'function'
+        ) externalSignal.removeEventListener(
+            'abort',
+            abortFromExternal
+        );
+    }
 }
 function replicatePayloadMessage(payload) {
     const detail = payload && (
@@ -22645,26 +22670,80 @@ function storyboardEffectiveModel(modelKey, relation, referenceCount) {
     }
     return requested;
 }
-async function replicateRun(slug, input, timeoutMs = 180000) {
+function stoppedHookGenerationError(message) {
+    const error = new Error(
+        message || 'hook generation was stopped by the user'
+    );
+    error.code = 'HOOK_GENERATION_STOPPED';
+    error.statusCode = 409;
+    return error;
+}
+async function cancelReplicatePrediction(prediction, auth) {
+    const predictionId = String(
+        prediction && prediction.id || ''
+    ).trim();
+    const cancelUrl = String(
+        prediction
+        && prediction.urls
+        && prediction.urls.cancel
+        || (predictionId
+            ? `https://api.replicate.com/v1/predictions/${predictionId}/cancel`
+            : '')
+    ).trim();
+    if (!cancelUrl) return false;
+    const response = await fetchT(
+        cancelUrl,
+        { method: 'POST', headers: auth },
+        20000
+    );
+    return response.ok || response.status === 409;
+}
+async function replicateRun(
+    slug,
+    input,
+    timeoutMs = 180000,
+    shouldStop
+) {
     const tok = process.env.REPLICATE_API_TOKEN; if (!tok) throw new Error('REPLICATE_API_TOKEN missing on server');
     const auth = { Authorization: 'Bearer ' + tok };
+    if (typeof shouldStop === 'function' && await shouldStop()) {
+        throw stoppedHookGenerationError(
+            'Replicate image generation was stopped before submission.'
+        );
+    }
     const r = await fetchT(`https://api.replicate.com/v1/models/${slug}/predictions`,
-        { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'wait' }, body: JSON.stringify({ input }) }, 120000);
+        { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ input }) }, 120000);
     let j = await r.json().catch(() => null);
     if (!j) throw new Error('replicate returned no JSON (http ' + r.status + ')');
     if (!r.ok) throw replicateHttpError('create', r, j);
     const deadline = Date.now() + timeoutMs;
-    j = await providerResilience.pollPrediction({
-        prediction: j,
-        deadlineAtMs: deadline,
-        intervalMs: 1500,
-        context: `${slug} image prediction`,
-        fetchStatus: current => fetchReplicatePredictionStatus(
-            current,
-            auth,
-            60000
-        ),
-    });
+    try {
+        j = await providerResilience.pollPrediction({
+            prediction: j,
+            deadlineAtMs: deadline,
+            intervalMs: 1500,
+            context: `${slug} image prediction`,
+            shouldStop,
+            fetchStatus: current => fetchReplicatePredictionStatus(
+                current,
+                auth,
+                60000
+            ),
+        });
+    } catch (error) {
+        if (error && error.code === 'HOOK_GENERATION_STOPPED') {
+            try {
+                error.remotePredictionCancelled =
+                    await cancelReplicatePrediction(j, auth);
+            } catch (cancelError) {
+                error.remotePredictionCancelled = false;
+                error.remoteCancellationError = String(
+                    cancelError && cancelError.message || cancelError
+                ).slice(0, 220);
+            }
+        }
+        throw error;
+    }
     if (!j || j.error) throw new Error('replicate: ' + ((j && j.error) ? (typeof j.error === 'string' ? j.error : JSON.stringify(j.error)) : 'no result'));
     if (j.status && j.status !== 'succeeded') throw new Error('replicate ' + j.status + (j.logs ? ' — ' + String(j.logs).slice(-140) : ''));
     let out = j.output; if (Array.isArray(out)) out = out[0];
@@ -22699,6 +22778,7 @@ async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
             refs: refs.slice(0, M.max),
             aspectRatio: options.aspectRatio || '9:16',
             fetchWithTimeout: fetchT,
+            shouldStop: options.shouldStop,
         });
         return generated.dataUrl;
     }
@@ -22718,7 +22798,12 @@ async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
     }                                                                    // EDIT inherits the source frame's geometry
     if (M.slug.includes('flux') || M.slug.includes('nano')) input.output_format = 'jpg';
     if (refs.length) input[M.field] = M.arr ? refs.slice(0, M.max) : refs[0];
-    const out = await replicateRun(M.slug, input);
+    const out = await replicateRun(
+        M.slug,
+        input,
+        180000,
+        options.shouldStop
+    );
     if (/^data:image\//i.test(String(out))) {
         const decoded = decodeStoryboardDataImage(
             out,
@@ -22763,6 +22848,7 @@ function canonicalFivePanelStoryboardRequest({
     references = [],
     referenceDescriptions = [],
     referenceRelation,
+    shouldStop,
 }) {
     const style = storyboardStylePresets.stylePreset(
         stylePreset
@@ -22828,6 +22914,7 @@ function canonicalFivePanelStoryboardRequest({
         preferredModel: preferred,
         strictImageModel: strictImageModel !== false,
         providerCallBudget: callBudget,
+        shouldStop: typeof shouldStop === 'function' ? shouldStop : null,
     });
 }
 
@@ -22890,6 +22977,16 @@ async function generateFivePanelStoryboard(input) {
         const tries = modelIndex === 0 ? 2 : 1;
         for (let attempt = 0; attempt < tries; attempt++) {
             if (providerCalls >= request.providerCallBudget) break;
+            if (
+                request.shouldStop
+                && await request.shouldStop()
+            ) {
+                const error = new Error(
+                    'five-panel image generation was stopped by the user'
+                );
+                error.code = 'HOOK_GENERATION_STOPPED';
+                throw error;
+            }
             providerCalls += 1;
             try {
                 const image = await genStoryFrame(
@@ -22897,8 +22994,21 @@ async function generateFivePanelStoryboard(input) {
                     request.prompt,
                     request.references,
                     request.relation,
-                    { aspectRatio: 'storyboard-sheet' }
+                    {
+                        aspectRatio: 'storyboard-sheet',
+                        shouldStop: request.shouldStop,
+                    }
                 );
+                if (
+                    request.shouldStop
+                    && await request.shouldStop()
+                ) {
+                    const error = new Error(
+                        'five-panel image generation was stopped by the user'
+                    );
+                    error.code = 'HOOK_GENERATION_STOPPED';
+                    throw error;
+                }
                 const decoded = decodeStoryboardDataImage(
                     image,
                     'generated five-panel hook sheet'
@@ -23154,6 +23264,7 @@ async function generateCanonicalHookOpening({
     references = [],
     referenceDescriptions = [],
     referenceRelation,
+    shouldStop,
 } = {}) {
     const normalizedPanels = fivePanelSheet.normalizePanels(
         panels,
@@ -23183,6 +23294,7 @@ async function generateCanonicalHookOpening({
         references,
         referenceDescriptions,
         referenceRelation,
+        shouldStop,
     });
     const valid = !!(
         rendered
@@ -26285,6 +26397,11 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 }
                 break;
             }
+            if (await checkStopped()) {
+                status = 'stopped';
+                note = 'stopped by you before the next image call';
+                break;
+            }
             const spec = selectedCandidate.spec;
             const emb = selectedCandidate.embedding;
             const measurement = selectedCandidate.measurement;
@@ -26449,6 +26566,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     imageModel,
                     strictImageModel: true,
                     providerCallBudget: 1,
+                    shouldStop: checkStopped,
                 });
                 if (
                     !panel.geometry
@@ -26521,6 +26639,13 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 );
             }
             await write();
+            if (await checkStopped()) {
+                a.status = 'stopped';
+                status = 'stopped';
+                note = 'stopped by you; scoring was not started';
+                await write();
+                break;
+            }
             // 4) score the exact deterministic montage on the trained models
             a.status = 'scoring'; note = `attempt ${a.k + 1}: scoring on the trained models…`; await write();
             try {

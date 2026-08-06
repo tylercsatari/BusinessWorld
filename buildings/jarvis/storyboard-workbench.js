@@ -273,24 +273,42 @@
             if (!host) return {};
             const rail = host.querySelector('[data-sb-panel-rail]');
             const active = document.activeElement;
+            const workspace = host.closest('.experiment-lab-workspace');
             return {
                 rail: rail ? rail.scrollLeft : state.railScroll,
                 focusKey: active && active.getAttribute && active.getAttribute('data-sb-focus'),
                 start: active && typeof active.selectionStart === 'number' ? active.selectionStart : null,
                 end: active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+                workspaceLeft: workspace ? workspace.scrollLeft : null,
+                workspaceTop: workspace ? workspace.scrollTop : null,
+                pageX: window.scrollX,
+                pageY: window.scrollY,
             };
         }
 
         function restoreUi(snapshot) {
             if (!host) return;
             const rail = host.querySelector('[data-sb-panel-rail]');
+            const workspace = host.closest('.experiment-lab-workspace');
             if (rail) rail.scrollLeft = Number(snapshot && snapshot.rail) || state.railScroll || 0;
-            if (!snapshot || !snapshot.focusKey) return;
-            const input = host.querySelector(`[data-sb-focus="${snapshot.focusKey}"]`);
-            if (!input) return;
-            input.focus();
-            if (snapshot.start != null && input.setSelectionRange) {
-                input.setSelectionRange(snapshot.start, snapshot.end);
+            if (snapshot && snapshot.focusKey) {
+                const input = host.querySelector(
+                    `[data-sb-focus="${snapshot.focusKey}"]`
+                );
+                if (input) {
+                    try { input.focus({ preventScroll: true }); }
+                    catch (error) { input.focus(); }
+                    if (snapshot.start != null && input.setSelectionRange) {
+                        input.setSelectionRange(snapshot.start, snapshot.end);
+                    }
+                }
+            }
+            if (workspace && snapshot.workspaceLeft != null) {
+                workspace.scrollLeft = snapshot.workspaceLeft;
+                workspace.scrollTop = snapshot.workspaceTop;
+            }
+            if (snapshot && snapshot.pageX != null) {
+                window.scrollTo(snapshot.pageX, snapshot.pageY);
             }
         }
 
@@ -496,7 +514,7 @@
                 <div class="sb-inspector">
                     <label>
                         <span>Frame ${index + 1} prompt</span>
-                        <textarea rows="3" data-sb-panel-prompt="${index}" data-sb-focus="panel-prompt">${esc(selected.prompt || '')}</textarea>
+                        <textarea rows="3" data-sb-panel-prompt="${index}" data-sb-focus="panel-prompt-${index}">${esc(selected.prompt || '')}</textarea>
                     </label>
                     <label>
                         <span>Edit instruction</span>
@@ -2616,11 +2634,20 @@
             paint();
         }
 
-        async function importSavedHook(input) {
+        async function importOpening(input) {
             const source = input || {};
-            const sourceId = String(source.id || '');
-            const alreadyOpen = sourceId && state.candidates.find(item => (
-                String(item.sourceSavedHookId || '') === sourceId
+            const openingLabel = source.savedHook === true
+                ? 'Saved opening'
+                : 'Opening';
+            const sourceId = String(source.id || source.candidateId || '');
+            const sourceCandidateId = String(source.candidateId || '');
+            const alreadyOpen = state.candidates.find(item => (
+                sourceCandidateId && String(item.id) === sourceCandidateId
+            ) || (
+                sourceId && (
+                    String(item.sourceOpeningId || '') === sourceId
+                    || String(item.sourceSavedHookId || '') === sourceId
+                )
             ));
             if (alreadyOpen && alreadyOpen.mediaState === 'error') {
                 state.candidates = state.candidates.filter(
@@ -2651,7 +2678,7 @@
             }
             state.error = '';
             const draft = blankCandidate(
-                String(source.title || 'Saved opening').slice(0, 80)
+                String(source.title || 'Opening').slice(0, 80)
             );
             const promptRows = Array.isArray(source.frames)
                 ? source.frames
@@ -2663,6 +2690,7 @@
                 source.idea || source.title || ''
             ).slice(0, 3000);
             draft.hookText = String(source.text || '').slice(0, 2000);
+            draft.sourceOpeningId = sourceId || null;
             draft.sourceSavedHookId = source.id || null;
             draft.folderId = (
                 enableFolders
@@ -2691,8 +2719,8 @@
             state.selectedCandidateId = draft.id;
             state.drawEnabled = false;
             state.status = draft.mediaState === 'loading'
-                ? `${draft.name} is open. Loading its five saved frames...`
-                : 'Saved opening text is open. Add or generate frames, then score the revision.';
+                ? `${draft.name} is open. Loading its five frames...`
+                : `${openingLabel} text is ready. Add or generate frames, then score the revision.`;
             paint();
             if (draft.mediaState !== 'loading') {
                 autoPersistCandidate(draft);
@@ -2747,7 +2775,7 @@
                 draft.dirty = true;
                 draft.updatedAt = Date.now();
                 if (candidate() === draft) {
-                    state.status = 'Saved opening is ready in the editor as an editable revision. Change the text or frame order, then re-score it.';
+                    state.status = `${openingLabel} is ready in the editor as an editable revision. Change its text, visuals, or frame order, then re-score it.`;
                     state.error = '';
                 }
                 paint();
@@ -2760,8 +2788,8 @@
                     error && error.message || error
                 )}`.slice(0, 500);
                 if (candidate() === draft) {
-                    state.status = `${draft.name} is open, but its saved frames did not load.`;
-                    state.error = `${draft.mediaError} Retry by opening this saved hook again.`;
+                    state.status = `${draft.name} is open, but its frames did not load.`;
+                    state.error = `${draft.mediaError} Retry by opening this opening again.`;
                 }
                 reportError(draft.mediaError);
                 paint();
@@ -3353,7 +3381,8 @@
             handleInput,
             handleChange,
             handleKeyDown,
-            importSavedHook,
+            importOpening,
+            importSavedHook: importOpening,
             reorderPanels,
             getState: () => state,
         };

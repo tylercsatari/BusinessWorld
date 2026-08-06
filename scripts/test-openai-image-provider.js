@@ -121,6 +121,53 @@ async function main() {
     assert.strictEqual(result.endpoint, 'generations');
     assert(result.dataUrl.startsWith('data:image/jpeg;base64,'));
 
+    let stoppedBeforeProviderCalls = 0;
+    await assert.rejects(
+        () => generateImage({
+            apiKey: 'fixture-key',
+            prompt: 'Do not start this image.',
+            shouldStop: async () => true,
+            fetchWithTimeout: async () => {
+                stoppedBeforeProviderCalls += 1;
+                throw new Error('provider must not be called after stop');
+            },
+        }),
+        error => error && error.code === 'HOOK_GENERATION_STOPPED'
+    );
+    assert.strictEqual(stoppedBeforeProviderCalls, 0);
+
+    let activeStopChecks = 0;
+    let activeProviderCalls = 0;
+    await assert.rejects(
+        () => generateImage({
+            apiKey: 'fixture-key',
+            prompt: 'Stop this active image request.',
+            shouldStop: async () => {
+                activeStopChecks += 1;
+                return activeStopChecks >= 2;
+            },
+            fetchWithTimeout: async (url, init) => {
+                activeProviderCalls += 1;
+                return new Promise((resolve, reject) => {
+                    const abort = () => {
+                        const error = new Error('aborted');
+                        error.name = 'AbortError';
+                        reject(error);
+                    };
+                    if (init.signal.aborted) abort();
+                    else init.signal.addEventListener(
+                        'abort',
+                        abort,
+                        { once: true }
+                    );
+                });
+            },
+        }),
+        error => error && error.code === 'HOOK_GENERATION_STOPPED'
+    );
+    assert.strictEqual(activeProviderCalls, 1);
+    assert(activeStopChecks >= 2);
+
     await assert.rejects(
         () => generateImage({
             apiKey: '',
@@ -155,6 +202,7 @@ async function main() {
         generationSize: OUTPUT_SIZES['storyboard-sheet'].value,
         editSize: OUTPUT_SIZES['9:16'].value,
         referenceEditing: true,
+        activeCancellation: true,
         normalizedProviderErrors: true,
     }, null, 2));
 }

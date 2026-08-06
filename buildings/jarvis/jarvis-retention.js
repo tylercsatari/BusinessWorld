@@ -46,7 +46,7 @@ const JarvisRetention = (function () {
     const SAVED_HOOK_EDITOR_TIMEOUT_MS = 12000;
     const SAVED_HOOK_MEDIA_TIMEOUT_MS = 20000;
     const SAVED_HOOK_SCORER_WAIT_TIMEOUT_MS = 5 * 60e3;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, autoImageModel: 'gpt-image-2', grindAnimation: false, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedEditingId: null, savedEditorStage: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenAnimation: false, expGenStage: null, autoImageModel: 'gpt-image-2', grindAnimation: false, grindStoppingRid: null, grindChannelFreeThreshold: 75, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedEditingId: null, savedEditorStage: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationView: 'relationship', savedValidationCoordinateOrder: 'absolute', savedValidationShow: 60, savedLedgerFamily: 'all', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedVisualKeepProtocol: 'videoHoldout', labTeamAccount: null, labTeamView: 'generations', labTeamHookFolder: 'all', labTeamLoading: false, labTeamError: null, labTeamActivity: null, labTeamActivityLoading: false, labTeamActivityError: null, labTeamStoryboard: null, labTeamStoryboardLoading: false, labTeamStoryboardError: null };
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
@@ -3984,15 +3984,149 @@ const JarvisRetention = (function () {
             }
         });
     }
+    function experimentElementPath(scope, element) {
+        const path = [];
+        let current = element;
+        while (current && current !== scope) {
+            const parent = current.parentElement;
+            if (!parent) return null;
+            path.unshift(Array.prototype.indexOf.call(
+                parent.children,
+                current
+            ));
+            current = parent;
+        }
+        return current === scope ? path : null;
+    }
+    function experimentElementAtPath(scope, path) {
+        let current = scope;
+        for (const index of path || []) {
+            current = current && current.children[index];
+            if (!current) return null;
+        }
+        return current;
+    }
+    function experimentControlIdentity(element, scope) {
+        if (!element || !scope || !scope.contains(element)) return null;
+        const tag = String(element.tagName || '').toLowerCase();
+        if (!['input', 'textarea', 'select'].includes(tag)) return null;
+        const attributes = Array.from(element.attributes || [])
+            .filter(attribute => (
+                attribute.name === 'name'
+                || attribute.name === 'aria-label'
+                || attribute.name.startsWith('data-')
+            ))
+            .map(attribute => [attribute.name, attribute.value]);
+        return {
+            tag,
+            id: element.id || '',
+            attributes,
+            path: experimentElementPath(scope, element),
+            start: typeof element.selectionStart === 'number'
+                ? element.selectionStart
+                : null,
+            end: typeof element.selectionEnd === 'number'
+                ? element.selectionEnd
+                : null,
+        };
+    }
+    function findExperimentControl(scope, identity) {
+        if (!scope || !identity) return null;
+        if (identity.id) {
+            const byId = window.document.getElementById(identity.id);
+            if (byId && scope.contains(byId)) return byId;
+        }
+        const matches = Array.from(
+            scope.querySelectorAll(identity.tag)
+        ).filter(element => identity.attributes.every(([name, value]) => (
+            element.getAttribute(name) === value
+        )));
+        if (matches.length === 1) return matches[0];
+        const byPath = experimentElementAtPath(scope, identity.path);
+        return byPath && String(byPath.tagName || '').toLowerCase()
+            === identity.tag ? byPath : null;
+    }
+    function snapshotExperimentInteraction(scope) {
+        if (!scope) return null;
+        const active = window.document.activeElement;
+        const workspace = scope.closest('.experiment-lab-workspace');
+        const openDetails = Array.from(
+            scope.querySelectorAll('details[open]')
+        ).map(element => experimentElementPath(scope, element));
+        const nestedScroll = Array.from(scope.querySelectorAll(
+            '[data-savedledger-scroll], '
+                + '[data-sb-panel-rail], '
+                + '[style*="overflow"]'
+        ))
+            .filter(element => element.scrollLeft || element.scrollTop)
+            .map(element => ({
+                path: experimentElementPath(scope, element),
+                left: element.scrollLeft,
+                top: element.scrollTop,
+            }));
+        return {
+            focus: experimentControlIdentity(active, scope),
+            rootLeft: scope.scrollLeft,
+            rootTop: scope.scrollTop,
+            workspaceLeft: workspace ? workspace.scrollLeft : null,
+            workspaceTop: workspace ? workspace.scrollTop : null,
+            pageX: window.scrollX,
+            pageY: window.scrollY,
+            openDetails,
+            nestedScroll,
+        };
+    }
+    function restoreExperimentInteraction(scope, snapshot, restoreFocus) {
+        if (!scope || !snapshot) return;
+        const workspace = scope.closest('.experiment-lab-workspace');
+        (snapshot.openDetails || []).forEach(path => {
+            const element = experimentElementAtPath(scope, path);
+            if (element && element.tagName === 'DETAILS') element.open = true;
+        });
+        (snapshot.nestedScroll || []).forEach(saved => {
+            const element = experimentElementAtPath(scope, saved.path);
+            if (!element) return;
+            element.scrollLeft = saved.left;
+            element.scrollTop = saved.top;
+        });
+        scope.scrollLeft = snapshot.rootLeft;
+        scope.scrollTop = snapshot.rootTop;
+        if (workspace && snapshot.workspaceLeft != null) {
+            workspace.scrollLeft = snapshot.workspaceLeft;
+            workspace.scrollTop = snapshot.workspaceTop;
+        }
+        window.scrollTo(snapshot.pageX, snapshot.pageY);
+        if (!restoreFocus || !snapshot.focus) return;
+        const control = findExperimentControl(scope, snapshot.focus);
+        if (!control) return;
+        control.focus({ preventScroll: true });
+        if (
+            snapshot.focus.start != null
+            && typeof control.setSelectionRange === 'function'
+        ) control.setSelectionRange(
+            snapshot.focus.start,
+            snapshot.focus.end
+        );
+        scope.scrollLeft = snapshot.rootLeft;
+        scope.scrollTop = snapshot.rootTop;
+        if (workspace && snapshot.workspaceLeft != null) {
+            workspace.scrollLeft = snapshot.workspaceLeft;
+            workspace.scrollTop = snapshot.workspaceTop;
+        }
+        window.scrollTo(snapshot.pageX, snapshot.pageY);
+    }
     function rtgUpdateExp() {
         try {
             const el = window.document.getElementById('rtg-exppanel');
             if (el) {
+                const interaction = snapshotExperimentInteraction(root);
                 const ledgerScrollState = savedLedgerScrollState();
                 el.innerHTML = renderExperiment();
                 restoreSavedLedgerScrollState(ledgerScrollState);
+                restoreExperimentInteraction(root, interaction, true);
                 window.requestAnimationFrame(() => {
                     restoreSavedLedgerScrollState(ledgerScrollState);
+                    restoreExperimentInteraction(root, interaction, false);
                     hydrateSavedChannelVisuals();
                 });
             }
@@ -4438,11 +4572,50 @@ const JarvisRetention = (function () {
             if (response.ok || response.status === 409) return body;
             throw new Error(body.error || `run request failed (${response.status})`);
         }).then(j => {
-            if (j && j.rid) { j._at = Date.now(); GRINDRUN = j; if (j.exploration_mode) st.grindMode = j.exploration_mode; st.grindPolls = (st.grindPolls || 0) + 1; rtgUpdateExp(); }
+            if (j && j.rid) {
+                j._at = Date.now();
+                GRINDRUN = j;
+                if (j.exploration_mode) st.grindMode = j.exploration_mode;
+                if (
+                    j.status !== 'running'
+                    && st.grindStoppingRid === rid
+                ) st.grindStoppingRid = null;
+                st.grindPolls = (st.grindPolls || 0) + 1;
+                rtgUpdateExp();
+            }
             // keep polling until the run reaches a TERMINAL state — a 404 just means the worker
             // hasn't written the first snapshot yet (the old code stopped here and froze the UI)
-            if (!(j && j.rid && j.status !== 'running')) again(4000);
+            if (!(j && j.rid && j.status !== 'running')) {
+                again(st.grindStoppingRid === rid ? 800 : 4000);
+            }
         }).catch(() => again(6000));
+    }
+    async function grindStop() {
+        const rid = st.grindRid;
+        if (!rid || st.grindStoppingRid === rid) return;
+        st.grindStoppingRid = rid;
+        st.grindErr = null;
+        if (GRINDRUN && GRINDRUN.rid === rid) {
+            GRINDRUN = {
+                ...GRINDRUN,
+                note: 'Stop requested. No new attempt will begin.',
+            };
+        }
+        rtgUpdateExp();
+        try {
+            await rtFetchJson(
+                '/api/hooks/grind/stop/' + rid,
+                { method: 'POST', _timeoutMs: 20000 },
+                1
+            );
+            grindPoll(rid, 0);
+        } catch (error) {
+            if (st.grindStoppingRid === rid) {
+                st.grindStoppingRid = null;
+                st.grindErr = 'Stop failed: ' + fetchFail(error);
+                rtgUpdateExp();
+            }
+        }
     }
     // WATCHDOG: an independent heartbeat that makes a silently-dead poller impossible — if the
     // attached run's data goes stale (>20s without a successful poll) it restarts the poll chain,
@@ -4797,6 +4970,10 @@ const JarvisRetention = (function () {
         const modePill = (id, label) => `<span data-grindmode="${id}" style="cursor:pointer;border:1px solid ${st.grindMode === id ? C.accent : C.border};background:${st.grindMode === id ? C.accent + '22' : 'transparent'};color:${st.grindMode === id ? C.accent : C.dim};border-radius:7px;padding:5px 10px;font-size:10px;font-weight:800">${label}</span>`;
         const g = (GRINDRUN && GRINDRUN.rid === st.grindRid) ? GRINDRUN : null;
         const running = g && g.status === 'running';
+        const stopping = !!(
+            running
+            && st.grindStoppingRid === g.rid
+        );
         const M = [['keep', 'keep-rate %ile'], ['ret5', 'past-5s %ile'], ['gt10M', '>10M %ile'], ['channelFreeConcat', 'channel-free concat keep %']];
         const mPill = ([id, lab]) => `<span data-grindmetric="${id}" style="cursor:pointer;border:1px solid ${metric === id ? C.accent : C.border};background:${metric === id ? C.accent + '22' : 'transparent'};color:${metric === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const hPill = h => `<span data-grindhours="${h}" style="cursor:pointer;border:1px solid ${hours === h ? C.accent : C.border};background:${hours === h ? C.accent + '22' : 'transparent'};color:${hours === h ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${h}h</span>`;
@@ -4874,7 +5051,9 @@ const JarvisRetention = (function () {
             const statCol = g.status === 'won' && !verifiedWinner
                 ? C.amber
                 : ({ running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim);
-            const statLab = g.status === 'won' && !verifiedWinner
+            const statLab = stopping
+                ? 'Stopping…'
+                : g.status === 'won' && !verifiedWinner
                 ? 'historical result · score unverified'
                 : ({ running: '⏳ grinding…', won: '🎯 THRESHOLD CLEARED', stopped: '⏹ stopped', error: '✕ error', deadline: '⏱ time budget spent', maxed: 'attempt budget spent' }[g.status] || g.status);
             const card = a => {
@@ -4975,7 +5154,7 @@ const JarvisRetention = (function () {
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
                   <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered hooks for one idea · verified full ledgers ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.exploration_mode === 'elite-corpus' ? `<b style="color:${C.accent}">elite ${esc(g.elite_metric || '')} ≥ ${fmtv(g.elite_cutoff_percentile, 1)}th · ${g.elite_channel_oriented ? esc(g.elite_channel_name || 'channel-oriented') : 'global corpus'} · ${g.elite_source_pool_count || 0} source candidates</b> · ` : ''}${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Discarded hooks were off-topic, semantic duplicates, or lower-ranked siblings in the same directional batch.')}" style="cursor:help">${g.rejected_variant_count || 0} hooks screened before render</span>${g.prompt_search_strategy ? ` · <span title="Generation-only exhaustive lattice; it guides each batch but never changes the score." style="cursor:help;color:${C.accent}">prompt directions ${g.prompt_search_cursor || 0}/${g.prompt_lattice_size || '—'}</span>` : ''}${seedTarget != null ? ` · <span title="${directionalStrategy ? 'soft radial objective; a nearby candidate can still win by opening a new semantic direction' : 'legacy minimum seed distance'}" style="cursor:help;color:${C.purple}">${directionalStrategy ? 'radius target' : 'legacy seed ≥'} ${(+seedTarget).toFixed(3)}</span>` : ''}${priorTarget != null ? ` · <span title="${directionalStrategy ? 'soft pairwise-spacing objective, not a rejection threshold' : 'legacy minimum prior distance'}" style="cursor:help;color:${C.cyan}">${directionalStrategy ? 'spacing target' : 'legacy prior ≥'} ${(+priorTarget).toFixed(3)}</span>` : ''}${duplicateFloor != null ? ` · <span title="only candidates inside this near-identical cosine-distance floor are rejected as duplicates" style="cursor:help;color:${C.amber}">duplicate &lt; ${(+duplicateFloor).toFixed(3)}</span>` : ''}${g.directional_exploration_pressure != null ? ` · <span title="share of the target score still missing; larger deficits put more selector weight on underexplored angular directions" style="cursor:help;color:${C.accent}">direction pressure ${fmtv((+g.directional_exploration_pressure) * 100, 0)}%</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum similarity every hook must retain to the immutable video idea" style="cursor:help;color:${C.green}">same idea ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
-                  ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
+                  ${running ? `<button type="button" data-grindstop ${stopping ? 'disabled' : ''} style="cursor:${stopping ? 'wait' : 'pointer'};border:1px solid #ef4444;background:transparent;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800;opacity:${stopping ? '.65' : '1'}">${stopping ? 'Stopping…' : 'Stop'}</button>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
                 ${g.note ? `<div style="font-size:10px;color:${running ? C.cyan : C.mute};margin-bottom:7px">${running ? '⏳ ' : ''}${esc(g.note)}${running && st.grindT0 ? ` <span style="color:${C.mute}">· ${Math.round((Date.now() - st.grindT0) / 60000)}m elapsed</span>` : ''}</div>` : ''}
@@ -5024,6 +5203,68 @@ const JarvisRetention = (function () {
     }
     function experimentRegion(name, html) {
         return `<section data-experiment-region="${name}">${html}</section>`;
+    }
+    function scoreStoragePresentation(upload, inspectionReadOnly) {
+        if (inspectionReadOnly) {
+            return {
+                label: 'Owner inspection · exact persisted activity result',
+                color: C.amber,
+            };
+        }
+        if (upload && upload._labSaveState === 'saving') {
+            return {
+                label: 'Saving quietly to your private hook library...',
+                color: C.cyan,
+            };
+        }
+        if (upload && upload._labSaveState === 'error') {
+            return {
+                label: `Score is open; saved copy failed: ${
+                    upload._labSaveError || 'unknown error'
+                }`,
+                color: C.red,
+            };
+        }
+        if (upload && (upload.savedId || upload.source === 'saved')) {
+            return {
+                label: 'Stored in your private hook library',
+                color: C.green,
+            };
+        }
+        return { label: 'Ready to save', color: C.amber };
+    }
+    function scoreActionButtonsHtml(
+        upload,
+        uploadIndex,
+        displayReadOnly,
+        inspectionReadOnly
+    ) {
+        if (!upload) return '';
+        const actions = [];
+        if (!inspectionReadOnly && Number.isInteger(uploadIndex)) {
+            actions.push(`<button type="button" data-scoreedit="${uploadIndex}" style="cursor:pointer;border:1px solid ${C.cyan};background:${C.cyan}12;color:${C.cyan};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:900;white-space:nowrap">Edit visuals + transcript</button>`);
+        }
+        if (upload.savedId) {
+            actions.push(`<button type="button" data-scoreopensaved="${esc(upload.savedId)}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}12;color:${C.green};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:900;white-space:nowrap">View in Saved hooks</button>`);
+        }
+        if (
+            !displayReadOnly
+            && upload.source !== 'saved'
+            && !upload.savedId
+            && !upload._labAutoSaved
+        ) {
+            if (upload._labSaveState === 'saving') {
+                actions.push(`<button type="button" disabled data-save-in-flight style="border:1px solid ${C.cyan};background:${C.cyan}12;color:${C.cyan};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:800;white-space:nowrap;opacity:.7">Saving...</button>`);
+            } else {
+                const failed = upload._labSaveState === 'error';
+                actions.push(`<button type="button" data-savescored style="cursor:pointer;border:1px solid ${failed ? C.red : C.accent};background:${failed ? C.red : C.accent}18;color:${failed ? C.red : C.accent};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:900;white-space:nowrap">${failed ? 'Retry save' : 'Save this hook'}</button>`);
+            }
+        }
+        return actions.join('');
+    }
+    function scoreReadOnlyPillHtml(displayReadOnly, inspectionReadOnly) {
+        if (!displayReadOnly) return '';
+        return `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">${inspectionReadOnly ? 'Team workspace · read-only' : 'Persisted historical score'}</span>`;
     }
     function renderExperiment() {
         scoreContractEnsure();
@@ -5088,23 +5329,12 @@ const JarvisRetention = (function () {
             up._inspectionReadOnly === true;
         const displayReadOnly =
             historicalReadOnly || inspectionReadOnly;
-        const scoreStorageLabel = inspectionReadOnly
-            ? 'Owner inspection · exact persisted activity result'
-            : up._labSaveState === 'saving'
-            ? 'Saving to your private hook library...'
-            : up._labSaveState === 'error'
-                ? `Score is open; saved copy failed: ${up._labSaveError || 'unknown error'}`
-                : up.savedId || up.source === 'saved'
-                    ? 'Stored in your private hook library'
-                    : 'Ready to save';
-        const scoreStorageColor = inspectionReadOnly
-            ? C.amber
-            : up._labSaveState === 'error'
-            ? C.red
-            : up.savedId || up.source === 'saved'
-                ? C.green
-                : C.amber;
-        const scoreAnalysisIntro = cardc(`<div data-canonical-score-summary style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap"><div><div style="font-size:9px;color:${C.cyan};font-weight:950;text-transform:uppercase">Complete canonical analysis</div><div style="font-size:18px;color:${C.text};font-weight:950;margin-top:3px">${scoreLedgerEntries.length} ledger coordinates + 4 channel-free keep outputs</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:5px">${availableLedgerCoordinates}/${scoreLedgerEntries.length} ledger coordinates are available from this exact input. Every coordinate, its raw value, percentile, model provenance, input channel, and geometry is shown below. The four keep outputs are bound into the same immutable score record; unavailable text-dependent signals remain explicit.</div></div><div style="border:1px solid ${scoreStorageColor};color:${scoreStorageColor};padding:5px 8px;font-size:8px;font-weight:900;max-width:280px">${esc(scoreStorageLabel)}</div></div>`, 12);
+        const upIdx = (st.rawUploads || []).lastIndexOf(up);
+        const scoreStorage = scoreStoragePresentation(
+            up,
+            inspectionReadOnly
+        );
+        const scoreAnalysisIntro = cardc(`<div data-canonical-score-summary style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap"><div><div style="font-size:9px;color:${C.cyan};font-weight:950;text-transform:uppercase">Complete canonical analysis</div><div style="font-size:18px;color:${C.text};font-weight:950;margin-top:3px">${scoreLedgerEntries.length} ledger coordinates + 4 channel-free keep outputs</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:5px">${availableLedgerCoordinates}/${scoreLedgerEntries.length} ledger coordinates are available from this exact input. Every coordinate, its raw value, percentile, model provenance, input channel, and geometry is shown below. The four keep outputs are bound into the same immutable score record; unavailable text-dependent signals remain explicit.</div></div><div data-score-storage-status style="border:1px solid ${scoreStorage.color};color:${scoreStorage.color};padding:5px 8px;font-size:8px;font-weight:900;max-width:280px">${esc(scoreStorage.label)}</div></div>`, 12);
         const savedRescoreEligible = !!(
             up.source === 'saved'
             && up.savedId
@@ -5119,7 +5349,6 @@ const JarvisRetention = (function () {
             : '';
         // ── 1. trace: raw input → embedding ──
         const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: ${esc(rawInputLabel(up, ch))}</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span title="${esc(rawInputLabel(up, ch))}" style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg><span style="font-size:8px;color:${C.faint};white-space:nowrap">${esc(rawInputLabel(up, ch))}</span></div>`; };
-        const upIdx = (st.rawUploads || []).lastIndexOf(up);
         const titleRow = (() => {
             if (displayReadOnly) {
                 return `<span style="font-size:13px;font-weight:900;color:${C.text}">${esc(up.title || 'Historical scored hook')}</span>`;
@@ -5139,13 +5368,9 @@ const JarvisRetention = (function () {
         })();
         const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
               ${titleRow}
-              <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                ${displayReadOnly ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">${inspectionReadOnly ? 'Team workspace · read-only' : 'Persisted historical score'}</span>` : ''}
-                ${!displayReadOnly && up.source !== 'saved' && !up.savedId && !up._labAutoSaved
-                    ? up._labSaveState === 'saving'
-                        ? `<span data-save-in-flight role="status" style="border:1px solid ${C.cyan};background:${C.cyan}12;color:${C.cyan};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">Saving…</span>`
-                        : `<span data-savescored style="cursor:pointer;border:1px solid ${up._labSaveState === 'error' ? C.red : C.accent};background:${up._labSaveState === 'error' ? C.red : C.accent}18;color:${up._labSaveState === 'error' ? C.red : C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${up._labSaveState === 'error' ? 'Retry save' : 'Save this hook'}</span>`
-                    : ''}
+              <span data-score-actions style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                ${scoreReadOnlyPillHtml(displayReadOnly, inspectionReadOnly)}
+                ${scoreActionButtonsHtml(up, upIdx, displayReadOnly, inspectionReadOnly)}
               </span></div>
             ${up._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(up._uploadWarning)}</div>` : ''}
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
@@ -5476,7 +5701,7 @@ const JarvisRetention = (function () {
             + experimentRegion(
                 'score',
                 controls
-                + `<section id="exp-scoreout" data-canonical-score-analysis data-ledger-coordinate-count="${scoreLedgerEntries.length}" data-ledger-coordinate-available-count="${availableLedgerCoordinates}" data-derived-output-count="4" data-inspection-readonly="${inspectionReadOnly ? 'true' : 'false'}" tabindex="-1">`
+                + `<section id="exp-scoreout" data-canonical-score-analysis data-score-upload-index="${upIdx}" data-ledger-coordinate-count="${scoreLedgerEntries.length}" data-ledger-coordinate-available-count="${availableLedgerCoordinates}" data-derived-output-count="4" data-inspection-readonly="${inspectionReadOnly ? 'true' : 'false'}" tabindex="-1">`
                 + scoreAnalysisIntro
                 + trace
                 + savedVisualKeepCoordinateTableHtml(up)
@@ -7264,12 +7489,17 @@ const JarvisRetention = (function () {
     function render() {
         if (!root) return;
         if (mountMode === 'experiment') {
+            const interaction = snapshotExperimentInteraction(root);
             const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:0 0 8px;font-weight:600">Loading corpus context (${BGPEND} file${BGPEND > 1 ? 's' : ''} left)</div>` : '';
             const body = st.sec === 'raw'
                 ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button type="button" data-experiment-raw-back style="cursor:pointer;border:1px solid ${C.border};background:${C.card2};color:${C.text};padding:6px 10px;font:inherit;font-size:10px;font-weight:900">← Back to experiments</button><span style="font-size:9px;color:${C.dim}">Canonical Shorts Quant embedding view</span></div><div id="rtg-rawpanel">${renderRaw()}</div>`
                 : renderShortsExperimentSurface();
             root.innerHTML = `<div style="background:${C.bg};padding:14px;color:${C.text};font-family:'Nunito',sans-serif">${labWorkspaceBanner()}${bgNote}${body}</div>`;
             try { rtgAfterRender(); } catch (e) { }
+            restoreExperimentInteraction(root, interaction, true);
+            window.requestAnimationFrame(() => {
+                restoreExperimentInteraction(root, interaction, false);
+            });
             return;
         }
         // TWO GROUPS so it's clear what the channel selector affects:
@@ -7483,15 +7713,6 @@ const JarvisRetention = (function () {
         st.rawUpShow = true;
         refreshRawUploadPanel();
         publishExperimentLabScoreReady(upload);
-        window.setTimeout(() => {
-            const element = window.document.querySelector(
-                '[data-canonical-score-analysis]'
-            );
-            if (element) element.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-            });
-        }, 80);
     }
     function scoredHookSavePayload(upload, overrides) {
         if (!rawUploadIsScored(upload)) return null;
@@ -7632,6 +7853,60 @@ const JarvisRetention = (function () {
             rtgUpdateExp();
         }
     }
+    function syncScorePersistenceUi(upload) {
+        if (!root || !root.isConnected || !upload) return;
+        const uploads = st.rawUploads || [];
+        const uploadIndex = uploads.indexOf(upload);
+        const analysis = root.querySelector(
+            '[data-canonical-score-analysis]'
+        );
+        if (
+            uploadIndex < 0
+            || !analysis
+            || Number(analysis.dataset.scoreUploadIndex) !== uploadIndex
+        ) return;
+        const inspectionReadOnly = upload._inspectionReadOnly === true;
+        const displayReadOnly = inspectionReadOnly
+            || upload._historicalDisplayOnly === true;
+        const storage = scoreStoragePresentation(
+            upload,
+            inspectionReadOnly
+        );
+        const storageElement = analysis.querySelector(
+            '[data-score-storage-status]'
+        );
+        if (storageElement) {
+            storageElement.textContent = storage.label;
+            storageElement.style.borderColor = storage.color;
+            storageElement.style.color = storage.color;
+        }
+        const actions = analysis.querySelector('[data-score-actions]');
+        if (actions) {
+            actions.innerHTML = scoreReadOnlyPillHtml(
+                displayReadOnly,
+                inspectionReadOnly
+            ) + scoreActionButtonsHtml(
+                upload,
+                uploadIndex,
+                displayReadOnly,
+                inspectionReadOnly
+            );
+        }
+        const queueRow = Array.from(
+            root.querySelectorAll('[data-score-queue-id]')
+        ).find(row => row.dataset.scoreQueueId === (
+            upload._scoreQueueId || `result:${uploadIndex}`
+        ));
+        if (queueRow) {
+            queueRow.dataset.savedId = upload.savedId || '';
+            const state = queueRow.querySelector(
+                '.score-analysis-queue-state'
+            );
+            if (state) state.innerHTML = `<i></i>${esc(
+                scoreQueueStateLabel(upload)
+            )}`;
+        }
+    }
     function acceptSavedHookIndex(index) {
         const next = index && typeof index === 'object'
             ? { ...index, loading: 0 }
@@ -7691,6 +7966,7 @@ const JarvisRetention = (function () {
             upload._labSaveState = 'saving';
             upload._labSaveError = null;
             upload._savedMutationId = token;
+            syncScorePersistenceUi(upload);
         }
         notifySavedHookStore(render);
         return token;
@@ -7704,6 +7980,7 @@ const JarvisRetention = (function () {
                 error && error.message || error
             ).slice(0, 500);
             upload._savedMutationId = null;
+            syncScorePersistenceUi(upload);
         }
         if (pending) notifySavedHookStore(render);
     }
@@ -7737,11 +8014,13 @@ const JarvisRetention = (function () {
             upload._labSaveState = 'saved';
             upload._labSavedAt = Date.now();
             upload._savedMutationId = null;
+            syncScorePersistenceUi(upload);
         }
         if (pending) notifySavedHookStore(options.render);
         if (pending && isExperimentLabSurface()) {
             refreshExperimentLabContext({ render: false });
         }
+        if (upload) publishExperimentLabScoreReady(upload);
         return id;
     }
     async function persistSavedHookPayload(payload, options) {
@@ -8458,6 +8737,7 @@ const JarvisRetention = (function () {
         const labHook =
             e.target.closest('[data-labteamhook]');
         if (labHook) {
+            publishExperimentLabViewRequest('score');
             openSaved(
                 labHook.getAttribute('data-labteamhook'),
                 {
@@ -8719,14 +8999,14 @@ const JarvisRetention = (function () {
         const grindMode = e.target.closest('[data-grindmode]'); if (grindMode) { if (!(GRINDRUN && GRINDRUN.status === 'running')) { st.grindMode = grindMode.getAttribute('data-grindmode') === 'elite-corpus' ? 'elite-corpus' : 'same-idea'; if (st.grindMode === 'elite-corpus') eliteCorpusEnsure(false); rtgUpdateExp(); } return; }
         if (e.target.closest('[data-elitecorpusretry]')) { ELITECORPUS = null; eliteCorpusEnsure(true); rtgUpdateExp(); return; }
         if (e.target.closest('[data-grindstart]')) { st.grindErr = null; grindStart(); return; }
-        if (e.target.closest('[data-grindstop]')) { if (st.grindRid) rtFetch('/api/hooks/grind/stop/' + st.grindRid, { method: 'POST' }).catch(() => {}); return; }
+        if (e.target.closest('[data-grindstop]')) { grindStop(); return; }
         const gmet = e.target.closest('[data-grindmetric]'); if (gmet) { st.grindMetric = gmet.getAttribute('data-grindmetric'); rtgUpdateExp(); return; }
         const ghr = e.target.closest('[data-grindhours]'); if (ghr) { st.grindHours = +ghr.getAttribute('data-grindhours'); rtgUpdateExp(); return; }
-        const gop = e.target.closest('[data-grindopen]'); if (gop) { grindOpen(+gop.getAttribute('data-grindopen')); return; }
+        const gop = e.target.closest('[data-grindopen]'); if (gop) { publishExperimentLabViewRequest('score'); grindOpen(+gop.getAttribute('data-grindopen')); return; }
         if (e.target.closest('[data-grindhide]')) { st.grindHide = st.grindHide || {}; if (st.grindRid) st.grindHide[st.grindRid] = 1; st.grindRid = null; GRINDRUN = null; rtgUpdateExp(); return; }
         const gvw = e.target.closest('[data-grindview]'); if (gvw) { const rid = gvw.getAttribute('data-grindview'); st.grindRid = rid; delete (st.grindHide || {})[rid]; grindPoll(rid); rtgUpdateExp(); return; }
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
-        const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.transcript || a.caption || a.premise || ''); } return; }
+        const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) { publishExperimentLabViewRequest('score'); scoreGenerated(k, a.frame_imgs || [], a.transcript || a.caption || a.premise || ''); } } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) {
             const k = +gsv.getAttribute('data-gensave');
             const g = EXPDEMO[st.expGenRid];
@@ -8782,9 +9062,26 @@ const JarvisRetention = (function () {
         }
         const savedRescore = e.target.closest('[data-savedrescore]');
         if (savedRescore) {
+            publishExperimentLabViewRequest('score');
             rescoreSavedHook(
                 savedRescore.getAttribute('data-savedrescore')
             );
+            return;
+        }
+        const scoreEdit = e.target.closest('[data-scoreedit]');
+        if (scoreEdit) {
+            editScoredOpening(
+                Number(scoreEdit.getAttribute('data-scoreedit'))
+            );
+            return;
+        }
+        const scoreOpenSaved = e.target.closest('[data-scoreopensaved]');
+        if (scoreOpenSaved) {
+            st.savedBank = 'hooks';
+            st.savedFolder = 'all';
+            if (SAVED === null) loadSavedHooks();
+            rtgUpdateExp();
+            publishExperimentLabViewRequest('hooks');
             return;
         }
         if (e.target.closest('[data-savescored]')) {
@@ -8793,7 +9090,7 @@ const JarvisRetention = (function () {
             if (payload && isExperimentLabSurface()) {
                 persistExperimentLabScore(up, {
                     manual: true,
-                    render: true,
+                    render: false,
                 }).catch(error => {
                     st.rawUpErr = fetchFail(error);
                     rtgUpdateExp();
@@ -8826,6 +9123,7 @@ const JarvisRetention = (function () {
         }
         const savedScore = e.target.closest('[data-savedscore]');
         if (savedScore) {
+            publishExperimentLabViewRequest('score');
             openSaved(savedScore.getAttribute('data-savedscore'));
             return;
         }
@@ -8890,7 +9188,10 @@ const JarvisRetention = (function () {
         const upmk = e.target.closest('[data-rawupmark]');
         if (upmk) {
             const i = +upmk.getAttribute('data-rawupmark');
-            st.rawUpSel = Number(st.rawUpSel) === i ? null : i;
+            const wasSelected = st.rawUpSel !== null
+                && st.rawUpSel !== false
+                && Number(st.rawUpSel) === i;
+            st.rawUpSel = wasSelected ? null : i;
             const selected = selectedRawScoreQueueItem();
             st.savedSel = selected && selected.savedId || null;
             st.savedDetailErr = selected
@@ -9580,6 +9881,119 @@ const JarvisRetention = (function () {
             { detail: { savedId: id, stage } }
         ));
     }
+    function publishExperimentLabViewRequest(view) {
+        if (
+            !isExperimentLabSurface()
+            || !root
+            || typeof window.CustomEvent !== 'function'
+        ) return;
+        root.dispatchEvent(new window.CustomEvent(
+            'experiment-lab-view-request',
+            { detail: { view } }
+        ));
+    }
+    function revealStoryboardEditorFromUserAction() {
+        window.requestAnimationFrame(() => {
+            const workbench = root && root.querySelector(
+                '#shorts-storyboard-workbench'
+            );
+            if (workbench) workbench.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            });
+        });
+    }
+    function storyboardOpeningImporter(ui) {
+        if (!ui) return null;
+        return typeof ui.importOpening === 'function'
+            ? ui.importOpening.bind(ui)
+            : typeof ui.importSavedHook === 'function'
+                ? ui.importSavedHook.bind(ui)
+                : null;
+    }
+    async function editScoredOpening(index) {
+        const upload = (st.rawUploads || [])[Number(index)];
+        if (!upload || upload._inspectionReadOnly === true) return null;
+        const requestGeneration = mountGeneration;
+        const sourceId = String(
+            upload.storyboardCandidateId
+            || upload._scoreQueueId
+            || upload.input_manifest && (
+                upload.input_manifest.score_input_fingerprint
+                || upload.input_manifest.input_fingerprint
+            )
+            || upload.savedId && `saved-score:${upload.savedId}`
+            || `score:${index}`
+        );
+        st.savedEditingId = sourceId;
+        st.savedEditorStage = 'loading';
+        st.rawBuildMode = true;
+        st.rawUpErr = null;
+        publishExperimentLabEditorOpen(sourceId, 'loading');
+        rtgUpdateExp();
+        revealStoryboardEditorFromUserAction();
+        try {
+            const ui = storyboardUI();
+            const importOpening = storyboardOpeningImporter(ui);
+            if (!importOpening) {
+                throw new Error(
+                    'The Storyboard editor did not load. Reload Experiment Lab and try again.'
+                );
+            }
+            const montage = upload.montageDataUrl
+                || (upload.montage
+                    ? `data:image/jpeg;base64,${upload.montage}`
+                    : null);
+            const frameImages = Array.isArray(upload.storyboardFrames)
+                ? upload.storyboardFrames.filter(frame => (
+                    typeof frame === 'string' && frame
+                )).slice(0, 5)
+                : [];
+            const savedRow = upload.savedId
+                ? savedHookCanonicalRows().find(row => (
+                    String(row.id) === String(upload.savedId)
+                ))
+                : null;
+            st.savedEditorStage = montage || frameImages.length
+                ? 'hydrating'
+                : 'open';
+            publishExperimentLabEditorOpen(
+                sourceId,
+                st.savedEditorStage
+            );
+            const imported = await importOpening({
+                id: sourceId,
+                candidateId: upload.storyboardCandidateId || null,
+                title: upload.title || 'Scored opening',
+                idea: upload.idea
+                    || upload.videoIdea
+                    || upload.premise
+                    || upload.title
+                    || '',
+                text: upload.transcript || upload.text || '',
+                frames: upload.genFrames || [],
+                montage,
+                frameImages,
+                folderId: savedHookFolder(savedRow),
+            });
+            if (requestGeneration !== mountGeneration) return null;
+            if (imported && imported.mediaReady) await imported.mediaReady;
+            if (requestGeneration !== mountGeneration) return null;
+            st.savedEditorStage = 'ready';
+            publishExperimentLabEditorOpen(sourceId, 'ready');
+            return imported && imported.candidateId || imported;
+        } catch (error) {
+            st.rawUpErr = `Open score in editor: ${fetchFail(error)}`;
+            st.savedEditorStage = 'error';
+            publishExperimentLabEditorOpen(sourceId, 'error');
+            return null;
+        } finally {
+            if (requestGeneration === mountGeneration) {
+                st.savedEditingId = null;
+                rtgUpdateExp();
+            }
+        }
+    }
     function loadSavedHookEditorDetail(id) {
         const cacheKey = savedScoreQueueKey(id, null);
         const fullRecord = SAVEDDETAIL[cacheKey]
@@ -9632,9 +10046,11 @@ const JarvisRetention = (function () {
         st.rawUpErr = null;
         publishExperimentLabEditorOpen(key, 'loading');
         rtgUpdateExp();
+        revealStoryboardEditorFromUserAction();
         try {
             const ui = storyboardUI();
-            if (!ui || typeof ui.importSavedHook !== 'function') {
+            const importOpening = storyboardOpeningImporter(ui);
+            if (!importOpening) {
                 throw new Error(
                     'The Storyboard editor did not load. Reload Experiment Lab and try again.'
                 );
@@ -9669,8 +10085,9 @@ const JarvisRetention = (function () {
                 : [];
             st.savedEditorStage = 'hydrating';
             rtgUpdateExp();
-            const imported = await ui.importSavedHook({
+            const imported = await importOpening({
                 id: key,
+                savedHook: true,
                 title: rec.title || indexRow && indexRow.title || 'Saved opening',
                 idea: rec.idea || '',
                 text: rec.transcript || rec.text || '',
@@ -9704,17 +10121,6 @@ const JarvisRetention = (function () {
             if (openSequence === SAVED_EDITOR_OPEN_SEQUENCE) {
                 st.savedEditingId = null;
                 rtgUpdateExp();
-                window.requestAnimationFrame(() => {
-                    window.requestAnimationFrame(() => {
-                        const workbench = window.document.getElementById(
-                            'shorts-storyboard-workbench'
-                        );
-                        if (workbench) workbench.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'start',
-                        });
-                    });
-                });
             }
         }
     }
@@ -10512,17 +10918,6 @@ const JarvisRetention = (function () {
             key,
             requestGeneration
         );
-        if (result && Number(st.rawUpSel) === (
-            st.rawUploads || []
-        ).indexOf(result)) {
-            window.setTimeout(() => {
-                const element = window.document.getElementById('exp-scoreout');
-                if (element) element.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
-                });
-            }, 120);
-        }
         return result;
     }
     function savedDetail() {
@@ -15675,6 +16070,7 @@ const JarvisRetention = (function () {
         st.expGenStage = null;
         st.grindRid = null;
         st.grindBusy = false;
+        st.grindStoppingRid = null;
         SAVED_OPEN_DRAIN = null;
         st.savedEditingId = null;
         st.savedEditorStage = null;

@@ -232,8 +232,13 @@ async function main() {
     const imageEnd = server.indexOf('// relation:', imageStart);
     assert(
         server.slice(imageStart, imageEnd)
-            .includes('providerResilience.pollPrediction'),
+            .includes('providerResilience.pollPrediction')
+            && server.slice(imageStart, imageEnd)
+                .includes('cancelReplicatePrediction(j, auth)')
+            && !server.slice(imageStart, imageEnd)
+                .includes("Prefer: 'wait'"),
         'Replicate image renders must survive interrupted status polls too'
+            + ' and cancel the paid remote prediction when Stop is pressed'
     );
 
     console.log(JSON.stringify({

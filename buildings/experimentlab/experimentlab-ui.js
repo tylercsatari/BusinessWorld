@@ -24,6 +24,7 @@ const ExperimentLabUI = (() => {
         '[data-savedopen]',
         '[data-savededit]',
         '[data-savedscore]',
+        '[data-scoreedit]',
         '[data-labteamhook]',
     ].join(',');
     const PRIMARY_VIEW_KEYS = Object.freeze(
@@ -36,6 +37,7 @@ const ExperimentLabUI = (() => {
     let contextHandler = null;
     let scoreReadyHandler = null;
     let editorOpenHandler = null;
+    let viewRequestHandler = null;
     let mutationObserver = null;
     let activeView = 'create';
     let currentContext = null;
@@ -108,6 +110,7 @@ const ExperimentLabUI = (() => {
         contextHandler = event => renderContext(event.detail);
         scoreReadyHandler = event => revealScore(event.detail);
         editorOpenHandler = event => revealEditor(event.detail);
+        viewRequestHandler = event => requestView(event.detail);
         workspace.addEventListener('experiment-lab-context', contextHandler);
         workspace.addEventListener(
             'experiment-lab-score-ready',
@@ -116,6 +119,10 @@ const ExperimentLabUI = (() => {
         workspace.addEventListener(
             'experiment-lab-editor-open',
             editorOpenHandler
+        );
+        workspace.addEventListener(
+            'experiment-lab-view-request',
+            viewRequestHandler
         );
         mutationObserver = new MutationObserver(updateActivity);
         mutationObserver.observe(workspace, { childList: true, subtree: true });
@@ -165,6 +172,12 @@ const ExperimentLabUI = (() => {
                     editorOpenHandler
                 );
             }
+            if (viewRequestHandler) {
+                workspace.removeEventListener(
+                    'experiment-lab-view-request',
+                    viewRequestHandler
+                );
+            }
         }
         const modal = document.getElementById('modal');
         if (modal) modal.classList.remove('experiment-lab-modal');
@@ -175,6 +188,7 @@ const ExperimentLabUI = (() => {
         contextHandler = null;
         scoreReadyHandler = null;
         editorOpenHandler = null;
+        viewRequestHandler = null;
         currentContext = null;
     }
 
@@ -302,7 +316,6 @@ const ExperimentLabUI = (() => {
 
     function revealScore(detail) {
         if (!panel || !workspace) return;
-        setView('score', false);
         const title = detail && detail.title || 'Opening';
         const count = Number(detail && detail.coordinateCount) || 0;
         const saved = detail && detail.savedId;
@@ -312,24 +325,13 @@ const ExperimentLabUI = (() => {
                 ? `${count} coordinates saved`
                 : `${count} coordinates scored`;
         }
-        window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-                if (!workspace) return;
-                const analysis = workspace.querySelector(
-                    '[data-canonical-score-analysis]'
-                );
-                if (!analysis) return;
-                analysis.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
-                });
-                analysis.focus({ preventScroll: true });
-                analysis.setAttribute(
-                    'aria-label',
-                    `${title} complete score analysis`
-                );
-            });
-        });
+        const analysis = workspace.querySelector(
+            '[data-canonical-score-analysis]'
+        );
+        if (analysis) analysis.setAttribute(
+            'aria-label',
+            `${title} complete score analysis`
+        );
     }
 
     function revealEditor(detail) {
@@ -346,19 +348,12 @@ const ExperimentLabUI = (() => {
                         ? 'Editor open · loading frames'
                         : 'Opening saved hook';
         }
-        window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-                if (!workspace) return;
-                const editor = workspace.querySelector(
-                    '#shorts-storyboard-workbench'
-                );
-                if (!editor) return;
-                editor.scrollIntoView({
-                    behavior: stage === 'ready' ? 'smooth' : 'auto',
-                    block: 'start',
-                });
-            });
-        });
+    }
+
+    function requestView(detail) {
+        const view = detail && detail.view;
+        if (!VIEWS[view]) return;
+        setView(view, false);
     }
 
     function setView(nextView, restoreScroll) {
@@ -421,7 +416,10 @@ const ExperimentLabUI = (() => {
         ].includes(item._scoreQueueStatus || (
             item.score_ledger ? 'ready' : 'processing'
         ))).length;
-        if (workspace.querySelector('[data-grindstop]') || state.grindStarting) {
+        if (state.grindStoppingRid) {
+            label = 'Stopping grind';
+            busy = true;
+        } else if (workspace.querySelector('[data-grindstop]') || state.grindStarting) {
             label = 'Grinding';
             busy = true;
         } else if (state.rawUploading || state.rawYtBusy) {
