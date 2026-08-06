@@ -18,6 +18,12 @@ async function main() {
             && source.includes('video_idea: premise'),
         'Grind must pass the immutable video idea through the single-sheet render contract'
     );
+    assert.strictEqual(
+        (source.match(/generateFivePanelStoryboard\(/g) || []).length,
+        4,
+        'manual Storyboard, Auto, and Grind must call the one canonical renderer'
+    );
+    assert(!source.includes('renderHookPanelRobust'));
     const start = source.indexOf('function hookPanelModelKey');
     const end = source.indexOf(
         'async function hookModelGenerateRetry',
@@ -28,6 +34,8 @@ async function main() {
     let providerCalls = 0;
     let splitCalls = 0;
     let failProvider = false;
+    let promptInput = null;
+    let providerInput = null;
     const context = vm.createContext({
         Buffer,
         process: { env: {} },
@@ -55,7 +63,8 @@ async function main() {
                 return { id, promptContract: 'style' };
             },
         },
-        storyboardSheetPrompt() {
+        storyboardSheetPrompt(input) {
+            promptInput = input;
             return 'single sheet prompt';
         },
         storyboardSheetGeometry() {
@@ -83,8 +92,9 @@ async function main() {
                 };
             },
         },
-        async genStoryFrame() {
+        async genStoryFrame(model, prompt, refs, relation, options) {
             providerCalls += 1;
+            providerInput = { model, prompt, refs, relation, options };
             if (failProvider) throw new Error('provider failed');
             return 'data:image/jpeg;base64,eA==';
         },
@@ -93,7 +103,7 @@ async function main() {
         },
     });
     vm.runInContext(
-        `${source.slice(start, end)}\nthis.render = renderHookPanelRobust;`,
+        `${source.slice(start, end)}\nthis.render = generateFivePanelStoryboard;`,
         context
     );
 
@@ -101,16 +111,26 @@ async function main() {
         brief: 'test',
         hookText: 'test',
         panels: ['1', '2', '3', '4', '5'],
-        animation: false,
+        stylePreset: 'animation',
         imageModel: 'gpt-image-2',
         strictImageModel: true,
         providerCallBudget: 1,
+        references: ['data:image/jpeg;base64,eA=='],
+        referenceDescriptions: ['Reference 1 applies globally'],
     });
     assert.strictEqual(providerCalls, 1);
     assert.strictEqual(splitCalls, 1);
     assert.strictEqual(result.frames.length, 5);
     assert.strictEqual(result.geometry.provider_call_count, 1);
     assert.strictEqual(result.geometry.render_call_count, 1);
+    assert.strictEqual(result.stylePreset, 'animation');
+    assert.deepStrictEqual(
+        promptInput.referenceDescriptions,
+        ['Reference 1 applies globally']
+    );
+    assert.strictEqual(providerInput.refs.length, 1);
+    assert.strictEqual(providerInput.relation, 'compose');
+    assert.strictEqual(providerInput.options.aspectRatio, 'storyboard-sheet');
 
     providerCalls = 0;
     splitCalls = 0;
@@ -120,7 +140,7 @@ async function main() {
             brief: 'test',
             hookText: 'test',
             panels: ['1', '2', '3', '4', '5'],
-            animation: false,
+            stylePreset: 'default',
             imageModel: 'gpt-image-2',
             strictImageModel: true,
             providerCallBudget: 1,

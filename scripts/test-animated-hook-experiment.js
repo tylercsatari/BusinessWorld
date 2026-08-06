@@ -31,6 +31,15 @@ assert(contract.validateExperiment(experiment).valid);
 assert.strictEqual(experiment.image_model, 'gpt-image-2');
 assert.strictEqual(experiment.animation, true);
 assert.strictEqual(experiment.strict_image_model, true);
+assert.strictEqual(experiment.render_mode, 'coherent-sheet');
+assert.strictEqual(
+    contract.bindExperiment({
+        id: 'animated-legacy-render-mode',
+        render_mode: 'single-panel',
+    }).render_mode,
+    'single-panel',
+    'historical experiment artifacts retain their recorded render mode'
+);
 assert.strictEqual(new Set(
     experiment.requests.map(request => request.rid)
 ).size, 13);

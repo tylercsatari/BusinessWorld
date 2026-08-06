@@ -1284,11 +1284,16 @@
                 },
             });
             if (!result || !result.image) throw new Error('The image model returned no storyboard sheet.');
+            const canonicalPanels = Array.isArray(result.panels)
+                ? result.panels.filter(Boolean).slice(0, PANEL_COUNT)
+                : [];
             const sheet = await normalizeStoryboardSheet(
                 result.image,
                 true
             );
-            const frames = await splitStrip(sheet);
+            const frames = canonicalPanels.length === PANEL_COUNT
+                ? canonicalPanels
+                : await splitStrip(sheet);
             frames.forEach((image, index) => setPanelImage(current, index, image, {
                 source: 'coherent-sheet',
                 relation: 'composite',

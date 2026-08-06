@@ -211,7 +211,7 @@ const ideaIndex = grindSource.indexOf('hookModelGenerateRetry(');
 const candidateEmbeddingIndex = grindSource.indexOf(
     'grindExploration.measureCandidate'
 );
-const renderIndex = grindSource.indexOf('renderHookPanelRobust({');
+const renderIndex = grindSource.indexOf('generateFivePanelStoryboard({');
 const scoreIndex = grindSource.indexOf('scoreMontage(');
 const expansionIndex = grindSource.indexOf(
     'grindExploration.recordScore'
@@ -225,7 +225,7 @@ assert(
 );
 
 const renderStart = serverSource.indexOf(
-    'async function renderHookPanelRobust'
+    'async function generateFivePanelStoryboard'
 );
 const renderEnd = serverSource.indexOf(
     'async function hookModelGenerateRetry',

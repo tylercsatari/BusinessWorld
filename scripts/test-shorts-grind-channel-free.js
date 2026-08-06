@@ -222,6 +222,6 @@ assert.strictEqual(
 
 assert(source.includes("schema: 'shorts-grind-request-v3'"));
 assert(source.includes("schema: 'shorts-grind-run-v3'"));
-assert(source.includes("render_mode: 'single-panel'"));
+assert(source.includes("render_mode: 'coherent-sheet'"));
 assert(!source.includes('renderFrameRobust('));
 console.log('shorts grind channel-free target contract: ok');

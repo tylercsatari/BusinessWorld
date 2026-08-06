@@ -174,7 +174,7 @@ const authSource = fs.readFileSync(path.join(root, 'auth.js'), 'utf8');
     'prepareEliteHookRetrieval',
     'elite_sources',
     'elite_index_content_sha256',
-    'renderHookPanelRobust',
+    'generateFivePanelStoryboard',
     'scoreMontage',
 ].forEach(fragment => assert(
     serverSource.includes(fragment),

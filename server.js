@@ -14658,7 +14658,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 hours,
                 max_attempts: maxAttempts,
                 animation: body.animation === true,
-                render_mode: 'single-panel',
+                render_mode: 'coherent-sheet',
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
                 exploration_strategy: grindExploration.STRATEGY,
@@ -14697,7 +14697,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         ? thresholdValue
                         : null,
                 animation: body.animation === true,
-                render_mode: 'single-panel',
+                render_mode: 'coherent-sheet',
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
                 exploration_strategy: grindExploration.STRATEGY,
@@ -14987,7 +14987,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 count,
                 invent,
                 animation,
-                render_mode: 'single-panel',
+                render_mode: 'coherent-sheet',
                 image_model: imageModel || null,
                 strict_image_model: strictImageModel,
                 creator_profile:
@@ -15014,7 +15014,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         stylePreset: animation
                             ? storyboardStylePresets.ANIMATION_STYLE_ID
                             : storyboardStylePresets.DEFAULT_STYLE_ID,
-                        renderMode: 'single-panel',
+                        renderMode: 'coherent-sheet',
                         imageModel: imageModel || null,
                         creatorProfile:
                             safeCreatorProfile(body.creatorProfile) || null,
@@ -15028,7 +15028,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 premise,
                 count,
                 animation,
-                render_mode: 'single-panel',
+                render_mode: 'coherent-sheet',
                 image_model: imageModel,
                 strict_image_model: strictImageModel,
             }));   // poll status + group/demo/<rid> for the result
@@ -15565,7 +15565,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const model = STORY_MODELS[body.model]
                 ? body.model
                 : STORYBOARD_DEFAULT_MODEL;
-            const provider = STORY_MODELS[model].provider || 'replicate';
             const brief = String(body.brief || '').trim().slice(0, 8000);
             const hookText =
                 String(body.hookText || '').trim().slice(0, 2000);
@@ -15585,63 +15584,96 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const refs = await storyboardGenerationReferences(
                 Array.isArray(body.refs) ? body.refs : []
             );
-            const style = storyboardStylePresets.stylePreset(
-                body.stylePreset
-            );
-            const prompt = storyboardSheetPrompt({
+            const renderRequest = canonicalFivePanelStoryboardRequest({
                 brief,
                 hookText,
                 panels,
-                styleContract: style.promptContract,
+                stylePreset: body.stylePreset,
+                imageModel: model,
+                strictImageModel: true,
+                providerCallBudget: 1,
+                references: refs.materialized,
                 referenceDescriptions: refs.descriptions,
+                referenceRelation: refs.materialized.length
+                    ? 'compose'
+                    : 'new',
             });
+            const provider = STORY_MODELS[
+                renderRequest.preferredModel
+            ].provider || 'replicate';
             const requestFingerprint = quantRequestFingerprint(
                 'raw-storyboard-generate',
                 'shorts',
                 {
-                    model,
-                    prompt,
+                    model: renderRequest.preferredModel,
+                    prompt: renderRequest.prompt,
                     reference_identities: refs.identities,
-                    geometry: storyboardSheetGeometry(model),
+                    geometry: storyboardSheetGeometry(
+                        renderRequest.preferredModel
+                    ),
                 },
                 storyboardGenerationIdentity(
-                    model,
+                    renderRequest.preferredModel,
                     'coherent-sheet',
-                    style.id
+                    renderRequest.stylePreset
                 )
             );
             const jobId = quantJobSubmit(
                 'raw-storyboard-generate',
                 async () => {
-                    const image = await genStoryFrame(
-                        model,
-                        prompt,
-                        refs.materialized,
-                        refs.materialized.length ? 'compose' : 'new',
-                        { aspectRatio: 'storyboard-sheet' }
+                    const rendered = await generateFivePanelStoryboard(
+                        renderRequest
                     );
-                    const decoded = decodeStoryboardDataImage(
-                        image,
-                        'generated storyboard sheet'
+                    const sourceMedia = storyboardMediaReference(
+                        rendered.source,
+                        rendered.sourceType
                     );
                     const media = storyboardMediaReference(
-                        decoded.bytes,
-                        decoded
+                        rendered.montage,
+                        storyboardImageType(rendered.montage)
                     );
-                    await writeImmutableStoryboardMedia(
-                        media,
-                        decoded.bytes
-                    );
+                    const panelMedia = rendered.frames.map(frame => (
+                        storyboardMediaReference(
+                            frame,
+                            storyboardImageType(frame)
+                        )
+                    ));
+                    await Promise.all([
+                        writeImmutableStoryboardMedia(
+                            sourceMedia,
+                            rendered.source
+                        ),
+                        writeImmutableStoryboardMedia(
+                            media,
+                            rendered.montage
+                        ),
+                        ...panelMedia.map((reference, index) => (
+                            writeImmutableStoryboardMedia(
+                                reference,
+                                rendered.frames[index]
+                            )
+                        )),
+                    ]);
                     return {
                         image: media.url,
                         media,
-                        model,
-                        modelSlug: STORY_MODELS[model].slug,
-                        provider,
+                        sourceImage: sourceMedia.url,
+                        sourceMedia,
+                        panels: panelMedia.map(reference => reference.url),
+                        panelMedia,
+                        model: rendered.model,
+                        modelSlug: rendered.modelSlug,
+                        provider: rendered.provider,
                         mode: 'coherent-sheet',
-                        stylePreset: style.id,
+                        stylePreset: rendered.stylePreset,
                         panelCount: storyboardContract.PANEL_COUNT,
-                        geometry: storyboardSheetGeometry(model),
+                        geometry: rendered.geometry,
+                        providerCallCount:
+                            rendered.geometry.provider_call_count,
+                        renderCallCount:
+                            rendered.geometry.render_call_count,
+                        renderContract:
+                            'canonical-five-panel-storyboard-request-v1',
                         requestFingerprint,
                     };
                 },
@@ -15666,9 +15698,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         brief: brief || null,
                         hookText: hookText || null,
                         panelPrompts: panels,
-                        model,
+                        model: renderRequest.preferredModel,
                         provider,
-                        stylePreset: style.id,
+                        stylePreset: renderRequest.stylePreset,
                         referenceCount:
                             refs.identities.length,
                     },
@@ -22527,29 +22559,39 @@ function hookPanelModelKey(value) {
     return match ? match[0] : STORYBOARD_DEFAULT_MODEL;
 }
 
-// Auto, Grind, and the manual Storyboard workbench now share one visual
-// primitive: one 45:16 generation, followed by deterministic equal-width
-// crops. A retry can make another provider call after a failed request, but a
-// successful attempt never renders the five frames independently.
-async function renderHookPanelRobust({
+function canonicalFivePanelStoryboardRequest({
     brief,
     hookText,
     panels,
-    animation,
+    stylePreset,
     imageModel,
-    strictImageModel = false,
-    providerCallBudget = Number.POSITIVE_INFINITY,
+    strictImageModel = true,
+    providerCallBudget = 1,
+    references = [],
+    referenceDescriptions = [],
+    referenceRelation,
 }) {
     const style = storyboardStylePresets.stylePreset(
-        animation
-            ? storyboardStylePresets.ANIMATION_STYLE_ID
-            : storyboardStylePresets.DEFAULT_STYLE_ID
+        stylePreset
     );
+    const normalizedBrief = String(brief || '').trim().slice(0, 8000);
+    const normalizedHookText = String(hookText || '').trim().slice(0, 2000);
+    const normalizedPanels = fivePanelSheet.normalizePanels(
+        panels,
+        normalizedBrief || normalizedHookText
+    ).map(panel => String(panel || '').trim().slice(0, 1800));
+    const normalizedReferences = (Array.isArray(references)
+        ? references
+        : []
+    ).filter(Boolean).slice(0, 8);
     const prompt = storyboardSheetPrompt({
-        brief,
-        hookText,
-        panels: fivePanelSheet.normalizePanels(panels, brief || hookText),
+        brief: normalizedBrief,
+        hookText: normalizedHookText,
+        panels: normalizedPanels,
         styleContract: style.promptContract,
+        referenceDescriptions: Array.isArray(referenceDescriptions)
+            ? referenceDescriptions.slice(0, 8)
+            : [],
     });
     const explicitlyRequested = String(imageModel || '').trim();
     if (
@@ -22569,10 +22611,45 @@ async function renderHookPanelRobust({
         || process.env.HOOK_FRAME_MODEL
         || STORYBOARD_DEFAULT_MODEL
     );
-    const ladder = (strictImageModel
-        ? [preferred]
+    const finiteBudget = Number(providerCallBudget);
+    const callBudget = Number.isFinite(finiteBudget)
+        ? Math.max(1, Math.floor(finiteBudget))
+        : 1;
+    const relation = normalizedReferences.length
+        ? (
+            ['edit', 'compose'].includes(referenceRelation)
+                ? referenceRelation
+                : 'compose'
+        )
+        : 'new';
+    return Object.freeze({
+        schema: 'canonical-five-panel-storyboard-request-v1',
+        brief: normalizedBrief,
+        hookText: normalizedHookText,
+        panels: normalizedPanels,
+        stylePreset: style.id,
+        styleContract: style.promptContract,
+        prompt,
+        references: normalizedReferences,
+        relation,
+        preferredModel: preferred,
+        strictImageModel: strictImageModel !== false,
+        providerCallBudget: callBudget,
+    });
+}
+
+// Every whole-storyboard path ends here. Fine-tuned models may plan the hook
+// and five beats upstream, but they cannot choose a separate image prompt,
+// animation contract, renderer, or splitting implementation.
+async function generateFivePanelStoryboard(input) {
+    const request = input
+        && input.schema === 'canonical-five-panel-storyboard-request-v1'
+        ? input
+        : canonicalFivePanelStoryboardRequest(input || {});
+    const ladder = (request.strictImageModel
+        ? [request.preferredModel]
         : [
-            preferred,
+            request.preferredModel,
             'flux-2-pro',
             'seedream-4',
             'gpt-image-2',
@@ -22588,14 +22665,14 @@ async function renderHookPanelRobust({
         const model = ladder[modelIndex];
         const tries = modelIndex === 0 ? 2 : 1;
         for (let attempt = 0; attempt < tries; attempt++) {
-            if (providerCalls >= providerCallBudget) break;
+            if (providerCalls >= request.providerCallBudget) break;
             providerCalls += 1;
             try {
                 const image = await genStoryFrame(
                     model,
-                    prompt,
-                    [],
-                    'new',
+                    request.prompt,
+                    request.references,
+                    request.relation,
                     { aspectRatio: 'storyboard-sheet' }
                 );
                 const decoded = decodeStoryboardDataImage(
@@ -22613,8 +22690,15 @@ async function renderHookPanelRobust({
                     model,
                     modelSlug: STORY_MODELS[model].slug,
                     provider: STORY_MODELS[model].provider || 'replicate',
-                    stylePreset: style.id,
-                    prompt,
+                    stylePreset: request.stylePreset,
+                    prompt: request.prompt,
+                    panels: request.panels,
+                    relation: request.relation,
+                    referenceCount: request.references.length,
+                    sourceType: {
+                        extension: decoded.extension,
+                        mediaType: decoded.mediaType,
+                    },
                     geometry: {
                         ...storyboardSheetGeometry(model),
                         ...split.geometry,
@@ -22622,8 +22706,8 @@ async function renderHookPanelRobust({
                     },
                     fallback: modelIndex > 0,
                     flagged,
-                    requestedModel: preferred,
-                    strictModel: strictImageModel === true,
+                    requestedModel: request.preferredModel,
+                    strictModel: request.strictImageModel,
                 };
             } catch (error) {
                 lastError = error;
@@ -22642,7 +22726,7 @@ async function renderHookPanelRobust({
                 }
                 if (
                     attempt + 1 < tries
-                    && providerCalls < providerCallBudget
+                    && providerCalls < request.providerCallBudget
                 ) {
                     await new Promise(resolve => setTimeout(
                         resolve,
@@ -22651,7 +22735,7 @@ async function renderHookPanelRobust({
                 }
             }
         }
-        if (providerCalls >= providerCallBudget) break;
+        if (providerCalls >= request.providerCallBudget) break;
     }
     const failure = new Error(
         `five-panel image generation failed${
@@ -22900,7 +22984,7 @@ async function hookProcessRequest(
                 style_preset: animation
                     ? storyboardStylePresets.ANIMATION_STYLE_ID
                     : storyboardStylePresets.DEFAULT_STYLE_ID,
-                render_mode: 'single-panel',
+                render_mode: 'coherent-sheet',
                 requested_image_model: requestedImageModel,
                 strict_image_model: strictImageModel,
                 autosave_folder_id:
@@ -22930,7 +23014,7 @@ async function hookProcessRequest(
             'application/json'
         )
     );
-    const renders = [];   // per-hook frame-render pipelines, running while the NEXT idea generates
+    const renders = [];   // per-hook whole-sheet pipelines, running while the next idea is planned
     let activeRenders = 0;
     const renderWaiters = [];
     const withRenderSlot = async operation => {
@@ -23219,10 +23303,10 @@ async function hookProcessRequest(
                     ? 'gemini-embedding-2'
                     : null,
                 animation: !!animation,
-                render_mode: 'single-panel' };
+                render_mode: 'coherent-sheet' };
             attempts.push(a);
             if (q) { accVecs.push(q); mem[mem.length - 1].s = 1; }
-            await writeGroup(false);                          // ← the card appears NOW, frames fill in live
+            await writeGroup(false);                          // The card appears now; all five crops arrive together after the sheet call.
             await stat({ stage: attempts.length < count ? 'reasoning' : 'rendering', done: attempts.length, n: count,
                 note: attempts.length < count
                     ? reuseFineTunedSeedPlan
@@ -23247,11 +23331,13 @@ async function hookProcessRequest(
                         ].join('\n')
                         : spec.premise;
                     const panel = await withRenderSlot(
-                        () => renderHookPanelRobust({
+                        () => generateFivePanelStoryboard({
                             brief: renderBrief,
                             hookText: spec.premise,
                             panels: a.frames,
-                            animation,
+                            stylePreset: animation
+                                ? storyboardStylePresets.ANIMATION_STYLE_ID
+                                : storyboardStylePresets.DEFAULT_STYLE_ID,
                             imageModel: requestedImageModel,
                             strictImageModel,
                             providerCallBudget: 1,
@@ -23286,6 +23372,10 @@ async function hookProcessRequest(
                     a.panel_provider = panel.provider;
                     a.style_preset = panel.stylePreset;
                     a.panel_geometry = panel.geometry;
+                    a.image_provider_call_count =
+                        panel.geometry.provider_call_count;
+                    a.render_call_count =
+                        panel.geometry.render_call_count;
                     a.requested_image_model = panel.requestedModel;
                     a.strict_image_model = panel.strictModel;
                     a.errs = a.errs || [];
@@ -23404,9 +23494,9 @@ async function hookProcessRequest(
                                     saved: true,
                                     input: {
                                         kind: 'automatic-invention',
-                                        animation: true,
+                                        animation: !!animation,
                                         imageModel: panel.model,
-                                        renderMode: 'single-panel',
+                                        renderMode: 'coherent-sheet',
                                     },
                                     output: {
                                         kind: 'saved-hook',
@@ -23574,7 +23664,7 @@ async function hookSweepOrphans() {
                             style_preset:
                                 g && g.style_preset
                                 || storyboardStylePresets.DEFAULT_STYLE_ID,
-                            render_mode: 'single-panel',
+                            render_mode: 'coherent-sheet',
                             hosted: true,
                             queue_lease_fence:
                                 queueLeaseFence,
@@ -23970,7 +24060,7 @@ function animatedHookGenerationRequest(experiment, request) {
         count: request.count,
         invent: !refinement,
         animation: true,
-        render_mode: 'single-panel',
+        render_mode: 'coherent-sheet',
         image_model: experiment.image_model,
         strict_image_model: true,
         creator_profile: null,
@@ -24972,7 +25062,7 @@ async function grindProcess(rid, req0, ownership) {
                 style_preset: animation
                     ? storyboardStylePresets.ANIMATION_STYLE_ID
                     : storyboardStylePresets.DEFAULT_STYLE_ID,
-                render_mode: 'single-panel',
+                render_mode: 'coherent-sheet',
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
                 deadline_at_ms: deadline,
@@ -25394,7 +25484,7 @@ async function grindProcess(rid, req0, ownership) {
                 errs: [],
                 ts: Date.now(),
                 animation,
-                render_mode: 'single-panel',
+                render_mode: 'coherent-sheet',
                 score_verified: false,
             };
             attempts.push(a);
@@ -25403,11 +25493,13 @@ async function grindProcess(rid, req0, ownership) {
             // 3) one 45:16 provider image, then deterministic 9:16 crops.
             let panel = null;
             try {
-                panel = await renderHookPanelRobust({
+                panel = await generateFivePanelStoryboard({
                     brief: immutableRenderBrief,
                     hookText: spec.premise,
                     panels: a.frames,
-                    animation,
+                    stylePreset: animation
+                        ? storyboardStylePresets.ANIMATION_STYLE_ID
+                        : storyboardStylePresets.DEFAULT_STYLE_ID,
                     imageModel,
                     strictImageModel: true,
                     providerCallBudget: 1,

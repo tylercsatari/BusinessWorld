@@ -4135,11 +4135,15 @@ const JarvisRetention = (function () {
                         return fe ? `<div title="${esc('frame ' + (i + 1) + ' failed: ' + fe)}" style="flex:1;aspect-ratio:9/16;background:${C.bg};border:1px solid #ef444455;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#ef4444;font-size:13px;font-weight:800;cursor:help">✕</div>`
                                   : `<div style="flex:1;aspect-ratio:9/16;background:${C.bg};border-radius:4px"></div>`;
                     };
-                    const frameStrip = (a.frame_imgs && a.frame_imgs.length)
+                    const hasRenderedSheet = !!(
+                        a.frame_imgs
+                        && a.frame_imgs.some(Boolean)
+                    );
+                    const frameStrip = hasRenderedSheet
                         ? `<div style="display:flex;gap:3px">${a.frame_imgs.map(frameTile).join('')}</div>`
-                        : `<img src="${esc(authenticatedMediaUrl(`/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}`))}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
+                        : `<div style="width:100%;aspect-ratio:45/16;border:1px solid ${C.cyan}55;border-radius:6px;background:${C.bg};display:flex;align-items:center;justify-content:center;color:${C.cyan};font-size:10px;font-weight:800">Generating one complete five-panel sheet…</div>`;
                     const _hardErrs = (a.errs || []).filter(x => x.indexOf('FAILED') >= 0).length;
-                    const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:${_hardErrs ? '#ef4444' : C.amber};margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame note${a.errs.length > 1 ? 's' : ''} (${_hardErrs ? _hardErrs + ' missing, ' : ''}rest = fallback renders) — hover for details</div>` : '';
+                    const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:${_hardErrs ? '#ef4444' : C.amber};margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} generation or scoring note${a.errs.length > 1 ? 's' : ''} — hover for details</div>` : '';
                     const keepBadge = a.keep_percentile_0_100 != null ? `<span>together keep <b style="color:${heatCol(a.keep_percentile_0_100 / 100)}">${fmtv(a.keep_percentile_0_100, 1)}th</b></span>` : '';
                     const channelFreeBadge = a.channel_free_concat_keep_percent != null ? `<span>channel-free concat <b style="color:${heatCol(a.channel_free_concat_keep_percent / 100)}">${fmtv(a.channel_free_concat_keep_percent, 1)}%</b></span>` : '';
                     const noveltyMeaning = a.topical_similarity != null
@@ -4158,7 +4162,7 @@ const JarvisRetention = (function () {
                     const cardStat = a.status === 'done'
                         ? (nMiss ? `<span style="color:${C.amber};font-size:9px;font-weight:800;white-space:nowrap">✓ ${nOk}/5 (${nMiss} missing)</span>`
                                 : `<span style="color:${nNote ? C.amber : C.green};font-size:9px;font-weight:800;white-space:nowrap" ${nNote ? `title="${esc((a.errs || []).join('\n'))}"` : ''}>✓ one sheet → 5 crops${nNote ? ' *' : ''}</span>`)
-                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ ${a.status === 'scoring' ? 'embedding + scoring' : 'generating one panel'}</span>`;
+                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ ${a.status === 'scoring' ? 'embedding + scoring' : 'one sheet image call'}</span>`;
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
                         <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
@@ -4520,7 +4524,7 @@ const JarvisRetention = (function () {
                         attempt_count: 0,
                         rejected_variant_count: 0,
                         animation: st.grindAnimation === true,
-                        render_mode: 'single-panel',
+                        render_mode: 'coherent-sheet',
                         exploration_strategy:
                             'same-idea-hook-proportional-outward-v2',
                         exploration_mode:
@@ -4870,7 +4874,7 @@ const JarvisRetention = (function () {
                 );
                 const pctBadge = verifiedScore
                     ? `<b style="color:${heatCol(objectiveValue / 100)};font-size:14px">${fmtv(objectiveValue, 1)}</b><span style="font-size:9px;color:${C.mute}">${verifiedScore.score_target_unit === 'predicted_keep_percent' ? '% predicted keep' : '%ile'} · verified</span>`
-                    : (scoreClaimed ? `<span style="font-size:9px;color:${C.amber}">historical · unverified</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring' : `⏳ ${a.frames_done || 0}/5`}</span>`);
+                    : (scoreClaimed ? `<span style="font-size:9px;color:${C.amber}">historical · unverified</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring complete sheet' : '⏳ one five-panel sheet call'}</span>`);
                 const win = !!(verifiedWinner && verifiedWinner.attempt.k === a.k);
                 const img = verifiedScore
                     ? authenticatedMediaUrl(
@@ -4952,14 +4956,14 @@ const JarvisRetention = (function () {
     function pipelineProgress() {
         let phase = -1, sub = '', cold = false;
         if (st.expGenBusy) {
-            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing ideas — they stream in one at a time…', rendering: 'generating one panel and splitting its five frames…', done: 'done' };
+            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing ideas — they stream in one at a time…', rendering: 'generating one complete five-panel sheet, then applying five deterministic crops…', done: 'done' };
             phase = 0; sub = (st.expGenStat && st.expGenStat.note) || M[st.expGenStage] || 'working…'; cold = (st.expGenStage === 'queued' || (st.expGenStage === 'reasoning' && !(st.expGenStat && st.expGenStat.done)));
         } else if (st.rawUploading) {
             const s = Math.min(st.rawUpStage || 0, 4), vid = !!(st.rawUpQueue && st.rawUpQueue.total);
             if (vid) { phase = s <= 2 ? 0 : (s === 3 ? 1 : 2); sub = ['uploading the video…', 'extracting the 5 hook frames…', 'transcribing the audio…', 'embedding (visual · text · together)…', 'placing among similar hooks…'][s]; }
             else { phase = s <= 1 ? 1 : (s === 2 ? 1 : 2); sub = ['', 'embedding the 5 frames (visual · text · together)…', 'embedding…', 'scoring every validated indicator…', 'placing it in the embedded map…'][s] || 'embedding…'; }
         } else return '';
-        const STEPS = ['Create the 5 frames', 'Embed', 'Score & place'];
+        const STEPS = ['Generate one 5-panel sheet', 'Embed', 'Score & place'];
         const dots = STEPS.map((s, i) => {
             const done = i < phase, act = i === phase, col = done ? C.green : act ? C.cyan : C.mute, icon = done ? '✓' : act ? '⏳' : (i + 1);
             return `<div style="display:flex;align-items:center;gap:6px"><span style="width:20px;height:20px;border-radius:50%;border:2px solid ${col};color:${col};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">${icon}</span><span style="font-size:11px;font-weight:${act ? 800 : 600};color:${col}">${s}</span></div>${i < STEPS.length - 1 ? `<span style="flex:1;height:2px;background:${i < phase ? C.green : C.border};min-width:16px;border-radius:2px"></span>` : ''}`;

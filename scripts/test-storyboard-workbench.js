@@ -421,7 +421,17 @@ async function main() {
             if (url === '/api/storyboards/generate') {
                 calls.generate.push(clone(body));
                 if (generationGate) await generationGate;
-                return { image: stripDataUrl(calls.generate.length - 1) };
+                return {
+                    image: stripDataUrl(calls.generate.length - 1),
+                    panels: [0, 1, 2, 3, 4].map(index => frameDataUrl(
+                        ['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#8b5cf6'][index],
+                        `SHEET ${index + 1}`
+                    )),
+                    renderContract:
+                        'canonical-five-panel-storyboard-request-v1',
+                    providerCallCount: 1,
+                    renderCallCount: 1,
+                };
             }
             if (url === '/api/storyboards/panel') {
                 calls.panel.push(clone(body));

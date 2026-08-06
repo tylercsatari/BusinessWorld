@@ -84,7 +84,9 @@ function normalizedExperiment(input) {
         image_model: DEFAULT_IMAGE_MODEL,
         strict_image_model: true,
         animation: true,
-        render_mode: 'single-panel',
+        render_mode: source.render_mode === 'single-panel'
+            ? 'single-panel'
+            : 'coherent-sheet',
         folder_name: String(
             source.folder_name || 'Animated Hook Grind'
         ).trim().replace(/\s+/g, ' ').slice(0, 120),
