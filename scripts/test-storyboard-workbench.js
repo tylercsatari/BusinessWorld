@@ -48,6 +48,10 @@ async function main() {
         path.join(ROOT, 'server.js'),
         'utf8'
     );
+    const workbenchSource = fs.readFileSync(
+        path.join(ROOT, 'buildings/jarvis/storyboard-workbench.js'),
+        'utf8'
+    );
     const fivePanelSource = fs.readFileSync(
         path.join(
             ROOT,
@@ -96,10 +100,10 @@ async function main() {
         );
     }
     assert(
-        indexSource.includes('storyboard-workbench.js?v=15')
+        indexSource.includes('storyboard-workbench.js?v=16')
             && indexSource.indexOf('storyboard-style-presets.js?v=2')
-            < indexSource.indexOf('storyboard-workbench.js?v=15')
-            && indexSource.indexOf('storyboard-workbench.js?v=15')
+            < indexSource.indexOf('storyboard-workbench.js?v=16')
+            && indexSource.indexOf('storyboard-workbench.js?v=16')
             < indexSource.indexOf('jarvis-retention.js?v='),
         'the shared style contract and storyboard module must load before '
             + 'the Shorts integration'
@@ -152,12 +156,16 @@ async function main() {
         'the model prompt must lock all five equal panel boundaries'
     );
     assert(
-        serverSource.includes('function storyboardPanelPrompt')
-            && serverSource.includes('Continuity is automatic and mandatory')
-            && serverSource.includes('Resolve words such as this, that, it')
-            && serverSource.includes('CHRONOLOGICAL FIVE-FRAME PLAN:'),
-        'single-frame generation must resolve references from the automatic '
-            + 'five-frame continuity contract'
+        !serverSource.includes('function storyboardPanelPrompt')
+            && !workbenchSource.includes("'/api/storyboards/panel'")
+            && workbenchSource.includes(
+                'REQUIRED REVISION FOR PANEL'
+            )
+            && workbenchSource.includes(
+                'Preserve the established identities, objects, chronology'
+            ),
+        'selected-frame refinement must remain inside the automatic '
+            + 'complete-sheet continuity contract'
     );
     assert(
         serverSource.includes("'target-frame'")
@@ -452,12 +460,9 @@ async function main() {
             }
             if (url === '/api/storyboards/panel') {
                 calls.panel.push(clone(body));
-                return {
-                    image: frameDataUrl(
-                        '#ec4899',
-                        `EDIT ${calls.panel.length}`
-                    ),
-                };
+                throw new Error(
+                    'single-frame storyboard generation must stay retired'
+                );
             }
             throw new Error(`unexpected job: ${url}`);
         }
@@ -661,10 +666,8 @@ async function main() {
             ['gpt-image-2', 'GPT Image 2 (OpenAI)'],
             ['flux-2-pro', 'FLUX.2 Pro'],
             ['seedream-4', 'Seedream 4'],
-            ['nano-banana', 'Nano Banana'],
-            ['nano-banana-pro', 'Nano Banana Pro'],
         ],
-        'the model picker must expose GPT Image 2 without removing existing providers'
+        'the model picker must expose only providers that return one complete 45:16 sheet'
     );
     assert.strictEqual(
         await page.locator('[data-sb-reference-picker]').count(),
@@ -969,36 +972,49 @@ async function main() {
     await page.click('[data-sb-generate-panel]');
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
-        && window.__calls.panel.length === 1
+        && window.__calls.generate.length === 2
     ));
     const edit = await page.evaluate(() => {
         const current = window.__workbench.getState().candidates[0];
+        const request = window.__calls.generate[1];
         return {
             relation: current.panels[0].relation,
             source: current.panels[0].source,
+            otherSources: current.panels.slice(1).map(
+                panel => panel.source
+            ),
             revisions: current.panels[0].revisions.length,
-            refs: window.__calls.panel[0].refs.length,
-            intent: window.__calls.panel[0].intent,
-            referenceRoles: window.__calls.panel[0].refs.map(
+            refs: request.refs.length,
+            intent: request.intent,
+            referenceRoles: request.refs.map(
                 reference => reference.role
             ),
-            referenceScopes: window.__calls.panel[0].refs.map(
+            referenceScopes: request.refs.map(
                 reference => ({
                     global: reference.global,
                     panels: reference.panels,
                 })
             ),
-            targetPanel: window.__calls.panel[0].targetPanel,
-            stylePreset: window.__calls.panel[0].stylePreset,
-            brief: window.__calls.panel[0].brief,
-            panels: window.__calls.panel[0].panels,
-            context: window.__calls.panel[0].context,
+            targetPanel: request.revisionTargetPanel,
+            stylePreset: request.stylePreset,
+            brief: request.brief,
+            panels: request.panels,
+            providerCallBudget: request.providerCallBudget,
+            panelCallCount: window.__calls.panel.length,
             sourcePanels: current.panels[0].sourcePanels,
         };
     });
-    assert.strictEqual(edit.relation, 'edit');
-    assert.strictEqual(edit.intent, 'manual-panel-edit');
-    assert.strictEqual(edit.source, 'panel-edit');
+    assert.strictEqual(edit.relation, 'composite');
+    assert.strictEqual(edit.intent, 'score-raw-user-input-v1');
+    assert.strictEqual(edit.source, 'coherent-sheet-edit');
+    assert.deepStrictEqual(edit.otherSources, [
+        'coherent-sheet-continuity',
+        'coherent-sheet-continuity',
+        'coherent-sheet-continuity',
+        'coherent-sheet-continuity',
+    ]);
+    assert.strictEqual(edit.panelCallCount, 0);
+    assert.strictEqual(edit.providerCallBudget, 1);
     assert(edit.revisions >= 2);
     assert.strictEqual(
         edit.refs,
@@ -1036,13 +1052,13 @@ async function main() {
     assert.strictEqual(
         edit.panels.length,
         5,
-        'every panel request must carry the full chronological frame plan'
+        'every revision must carry the full chronological frame plan'
     );
-    assert.deepStrictEqual(edit.context, {
-        policy: 'automatic-continuity-v2',
-        sourcePanels: [0, 1, 2, 3, 4],
-        includesSequence: true,
-    });
+    assert(
+        edit.panels[0].includes('REQUIRED REVISION FOR PANEL 1')
+            && edit.panels[0].includes('Make the liquid bright blue'),
+        'the selected edit must be part of the target panel in the one-sheet prompt'
+    );
     assert.deepStrictEqual(
         edit.sourcePanels,
         [0, 1, 2, 3, 4],
@@ -1079,7 +1095,7 @@ async function main() {
     await page.waitForFunction(() => (
         !window.__workbench.getState().busy
         && window.__workbench.getState().candidates[0]
-            .panels[0].source === 'panel-edit'
+            .panels[0].source === 'coherent-sheet-edit'
     ));
     await page.click('[data-sb-restore-panel="previous"]');
     await page.waitForFunction(() => (

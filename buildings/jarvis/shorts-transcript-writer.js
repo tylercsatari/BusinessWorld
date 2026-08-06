@@ -3,8 +3,10 @@
 const retentionTable = require('./retention-study/retention_table.json');
 const measuredOpeningExamples = require('./measured-opening-examples.json');
 
-const CONTRACT_SCHEMA = 'shorts-opening-transcript-writer-v1';
+const CONTRACT_SCHEMA = 'shorts-opening-transcript-writer-v2';
 const DEFAULT_EXAMPLE_COUNT = 12;
+const MEASURED_WINDOW_SECONDS = 5;
+const WORD_BUDGET_MARGIN = 1.5;
 
 function cleanText(value, maximum = 4000) {
     return String(value == null ? '' : value)
@@ -84,16 +86,68 @@ function observedWordRange(examples) {
     };
 }
 
+function cadenceProfile(population = sourcePopulation()) {
+    const measured = (Array.isArray(population) ? population : []).map(
+        record => ({
+            wordCount: words(record && record.transcript).length,
+            seconds: finite(record && record.measuredWindowSeconds),
+        })
+    ).filter(record => (
+        record.wordCount > 0
+        && record.seconds > 0
+    ));
+    const sourceCount = measured.length;
+    const totalWords = measured.reduce(
+        (sum, record) => sum + record.wordCount,
+        0
+    );
+    const totalSeconds = measured.reduce(
+        (sum, record) => sum + record.seconds,
+        0
+    );
+    const averageWordsPerSecond = totalSeconds > 0
+        ? totalWords / totalSeconds
+        : 0;
+    const averageWordsPerWindow =
+        averageWordsPerSecond * MEASURED_WINDOW_SECONDS;
+    const hardWordCap = Math.max(
+        1,
+        Math.ceil(averageWordsPerWindow * WORD_BUDGET_MARGIN)
+    );
+    return Object.freeze({
+        sourceCount,
+        measuredWindowSeconds: MEASURED_WINDOW_SECONDS,
+        averageWordsPerSecond,
+        averageWordsPerWindow,
+        marginMultiplier: WORD_BUDGET_MARGIN,
+        hardWordCap,
+    });
+}
+
+function capTranscriptWords(value, maximum) {
+    const tokens = words(value);
+    const hardCap = Math.max(1, Math.floor(Number(maximum) || 1));
+    const kept = tokens.slice(0, hardCap);
+    return Object.freeze({
+        transcript: kept.join(' '),
+        originalWordCount: tokens.length,
+        wordCount: kept.length,
+        wasTruncated: tokens.length > hardCap,
+    });
+}
+
 function buildMessages({
     videoIdea,
     hookTreatment,
     panels,
     examples,
+    population,
 } = {}) {
     const evidence = (examples || []).map((example, index) => (
         `EXAMPLE ${index + 1}: ${cleanText(example.transcript, 500)}`
     )).join('\n');
     const range = observedWordRange(examples);
+    const cadence = cadenceProfile(population || sourcePopulation());
     const panelLines = Array.from({ length: 5 }, (_, index) => (
         `BEAT ${index + 1}: ${cleanText(
             panels && panels[index] || '',
@@ -109,6 +163,7 @@ function buildMessages({
                 'The supplied real openings are structural evidence only. Learn their information density, cadence, sentence shape, and speed of establishing a concrete unresolved outcome. Do not copy their wording, subjects, objects, facts, or claims.',
                 'Write natural spoken language, not a title, shot list, caption, screenplay direction, analytics explanation, or description of the images.',
                 'The transcript must make sense from its first word, track the five beats in order, and preserve the exact video premise.',
+                `The spoken opening must contain no more than ${cadence.hardWordCap} words. This is a hard limit derived from ${cadence.sourceCount} measured channel openings, not a suggestion.`,
                 'Return only JSON with this shape: {"transcript":"...","beat_alignment":["...","...","...","...","..."]}. The beat_alignment entries briefly identify which transcript words align to each beat; they are metadata and must not add facts.',
             ].join(' '),
         },
@@ -121,7 +176,8 @@ function buildMessages({
                 panelLines,
                 range.median == null
                     ? ''
-                    : `The measured examples contain ${range.minimum}-${range.maximum} spoken words in their first five seconds (median ${range.median}). Use that observed range as a cadence reference, not a hard quota.`,
+                    : `The selected examples contain ${range.minimum}-${range.maximum} spoken words in their first five seconds (median ${range.median}).`,
+                `CHANNEL CADENCE: ${cadence.sourceCount} measured openings average ${cadence.averageWordsPerWindow.toFixed(2)} words in five seconds (${cadence.averageWordsPerSecond.toFixed(2)} words/second). HARD MAXIMUM: ${cadence.hardWordCap} spoken words, including the ${Math.round((cadence.marginMultiplier - 1) * 100)}% margin. Shorter is allowed. Never exceed it.`,
                 'REAL HIGH-KEEP TYLER OPENINGS, FIRST FIVE MEASURED SECONDS:',
                 evidence,
             ].filter(Boolean).join('\n\n'),
@@ -129,25 +185,42 @@ function buildMessages({
     ];
 }
 
-function parseResult(value) {
+function parseResult(value, options = {}) {
     const result = value && typeof value === 'object' ? value : {};
-    const transcript = cleanText(result.transcript, 2000);
-    if (!transcript) {
+    const cadence = options.cadence
+        || cadenceProfile(options.population || sourcePopulation());
+    const capped = capTranscriptWords(
+        cleanText(result.transcript, 2000),
+        cadence.hardWordCap
+    );
+    if (!capped.transcript) {
         const error = new Error('transcript writer returned no spoken opening');
         error.code = 'SHORTS_TRANSCRIPT_OUTPUT_INVALID';
         throw error;
     }
-    const alignment = Array.isArray(result.beat_alignment)
+    const alignment = !capped.wasTruncated
+        && Array.isArray(result.beat_alignment)
         ? result.beat_alignment.map(item => cleanText(item, 300)).slice(0, 5)
         : [];
     while (alignment.length < 5) alignment.push('');
-    return { transcript, beatAlignment: alignment };
+    return {
+        transcript: capped.transcript,
+        beatAlignment: alignment,
+        wordCount: capped.wordCount,
+        originalWordCount: capped.originalWordCount,
+        wasTruncated: capped.wasTruncated,
+        wordBudget: cadence,
+    };
 }
 
 module.exports = Object.freeze({
     CONTRACT_SCHEMA,
     DEFAULT_EXAMPLE_COUNT,
+    MEASURED_WINDOW_SECONDS,
+    WORD_BUDGET_MARGIN,
     buildMessages,
+    cadenceProfile,
+    capTranscriptWords,
     cleanText,
     measuredEvidenceSchema:
         measuredOpeningExamples.schema,

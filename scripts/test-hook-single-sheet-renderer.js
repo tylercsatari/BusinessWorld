@@ -40,6 +40,45 @@ async function main() {
     assert(!scoreRoute.includes('generateCanonicalHookOpening({'));
     assert(!scoreRoute.includes('generateShortsOpeningTranscript('));
     assert(!source.includes('renderHookPanelRobust'));
+    const retiredPanelRouteStart = source.indexOf(
+        "pathname === '/api/storyboards/panel'"
+    );
+    const retiredPanelRouteEnd = source.indexOf(
+        '// PLAN cross-frame continuity',
+        retiredPanelRouteStart
+    );
+    const retiredPanelRoute = source.slice(
+        retiredPanelRouteStart,
+        retiredPanelRouteEnd
+    );
+    assert(
+        retiredPanelRoute.includes(
+            'single_frame_storyboard_generation_retired'
+        )
+    );
+    assert(
+        !retiredPanelRoute.includes('genStoryFrame('),
+        'the selected-frame endpoint must never call an image provider'
+    );
+    assert.strictEqual(
+        (source.match(/genStoryFrame\(/g) || []).length,
+        2,
+        'only the sheet renderer may call the hook image-provider boundary'
+    );
+    const frameProviderStart = source.indexOf(
+        'async function genStoryFrame'
+    );
+    const frameProviderEnd = source.indexOf(
+        'function hookPanelModelKey',
+        frameProviderStart
+    );
+    const frameProvider = source.slice(
+        frameProviderStart,
+        frameProviderEnd
+    );
+    assert(frameProvider.includes("options.aspectRatio !== 'storyboard-sheet'"));
+    assert(frameProvider.includes("error.code = 'STORYBOARD_SHEET_REQUIRED'"));
+    assert(!frameProvider.includes("input.aspect_ratio = '9:16'"));
     const autoStart = source.indexOf('async function hookProcessRequest');
     const autoEnd = source.indexOf(
         'async function hookSweepOrphans',

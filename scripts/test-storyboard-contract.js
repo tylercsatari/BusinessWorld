@@ -137,7 +137,7 @@ const transcriptDocument = bindDocument({
     id: 'sbtranscript01',
     transcriptBeatAlignment: ['one', 'two', 'three', 'four', 'five'],
     transcriptProvenance: {
-        schema: 'shorts-opening-transcript-writer-v1',
+        schema: 'shorts-opening-transcript-writer-v2',
         provider: 'openai',
         model: 'fixture-writer',
         provider_call_count: 1,
@@ -145,6 +145,15 @@ const transcriptDocument = bindDocument({
         example_count: 1,
         source_join: 'aligned timestamps to measured outcomes',
         source_window: 'exact first five seconds',
+        measured_average_words_per_second: 3.9326923076923075,
+        measured_average_five_second_words: 19.663461538461537,
+        measured_window_seconds: 5,
+        word_budget_margin_multiplier: 1.5,
+        generated_transcript_hard_word_cap: 30,
+        generated_transcript_word_count: 18,
+        original_generated_transcript_word_count: 18,
+        generated_transcript_was_truncated: false,
+        estimated_spoken_seconds_at_channel_average: 4.577,
         examples: [{
             video_id: 'example1234',
             actual_keep_rate_percent: 87.3,
@@ -167,6 +176,16 @@ assert.strictEqual(
 assert.strictEqual(
     transcriptDocument.transcriptProvenance.examples[0].transcript_source,
     'youtube-auto-captions'
+);
+assert.strictEqual(
+    transcriptDocument.transcriptProvenance
+        .generated_transcript_hard_word_cap,
+    30
+);
+assert.strictEqual(
+    transcriptDocument.transcriptProvenance
+        .measured_average_words_per_second,
+    3.9326923076923075
 );
 assert(
     validateDocument(transcriptDocument).valid,

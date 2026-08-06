@@ -4546,11 +4546,14 @@ function storyboardGenerationIdentity(modelKey, mode, stylePresetId) {
     const resolvedKey = STORY_MODELS[modelKey]
         ? modelKey
         : STORYBOARD_DEFAULT_MODEL;
+    if (mode !== 'coherent-sheet') {
+        throw new Error(
+            'storyboard generation identity requires the complete '
+                + 'five-panel sheet mode'
+        );
+    }
     const model = STORY_MODELS[resolvedKey];
     const style = storyboardStylePresets.stylePreset(stylePresetId);
-    const panelSize = model.provider === 'openai'
-        ? openAIImageProvider.outputSize('9:16')
-        : null;
     const payload = {
         schema: 'shorts-storyboard-generation-contract-v1',
         provider: model.provider || 'replicate',
@@ -4562,19 +4565,8 @@ function storyboardGenerationIdentity(modelKey, mode, stylePresetId) {
             style.promptContract,
             'utf8'
         )),
-        prompt_template: mode === 'coherent-sheet'
-            ? 'five-panel-coherent-sheet-v2'
-            : 'single-panel-automatic-continuity-v2',
-        geometry: mode === 'coherent-sheet'
-            ? storyboardSheetGeometry(resolvedKey)
-            : panelSize
-                ? {
-                    aspect_ratio: '9:16',
-                    size: panelSize.value,
-                    width: panelSize.width,
-                    height: panelSize.height,
-                }
-                : { aspect_ratio: '9:16' },
+        prompt_template: 'five-panel-coherent-sheet-v2',
+        geometry: storyboardSheetGeometry(resolvedKey),
     };
     return {
         ...payload,
@@ -4596,41 +4588,6 @@ function storyboardSheetPrompt({
         styleContract,
         referenceDescriptions,
     });
-}
-
-function storyboardPanelPrompt({
-    instruction,
-    relation,
-    targetPanel,
-    brief,
-    panels,
-    styleContract = '',
-    referenceDescriptions = [],
-}) {
-    const panelNumber = targetPanel + 1;
-    const sequenceLines = panels.map((panelPrompt, index) => (
-        `FRAME ${index + 1}${index === targetPanel ? ' (OUTPUT TARGET)' : ''}: ${
-            String(panelPrompt || '').trim() || 'No separate text instruction.'
-        }`
-    ));
-    return [
-        `Create exactly ONE vertical 9:16 image for storyboard frame ${panelNumber}.`,
-        relation === 'edit'
-            ? 'This is an edit. REFERENCE IMAGE 1 is the current target frame. Preserve its composition and every unmentioned detail; make only the requested change.'
-            : 'This is a new frame within an established five-frame sequence.',
-        'Continuity is automatic and mandatory. Treat the canonical sequence and established frame references as visual facts, not optional inspiration.',
-        'Keep recurring people exactly recognizable: same face, body, hair, wardrobe, and accessories. Keep recurring objects identical in shape, construction, material, color, scale, markings, and damage state. Preserve the established location, time, lighting logic, lens language, and photographic style unless the instruction explicitly changes one of them.',
-        'Resolve words such as this, that, it, they, the same, the machine, the object, or the person from the established visual sequence and the chronological frame plan. Never replace a referenced entity with a newly invented substitute.',
-        'Use preceding frames as the viewer context for this moment and following frames as continuity constraints. Preserve chronology and cause-and-effect.',
-        'Reference images are evidence only. Do not create a collage, contact sheet, split screen, border, caption, label, text, watermark, or multiple panels. Return one clean frame.',
-        styleContract,
-        brief ? `OVERALL SCENE: ${brief}` : '',
-        'CHRONOLOGICAL FIVE-FRAME PLAN:',
-        ...sequenceLines,
-        'AUTOMATIC IMAGE CONTEXT:',
-        ...referenceDescriptions,
-        `REQUEST FOR FRAME ${panelNumber}: ${instruction}`,
-    ].filter(Boolean).join('\n');
 }
 
 const longHookLibraryIndexCas = createR2JsonCasMutator({
@@ -15792,179 +15749,17 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         pathname === '/api/storyboards/panel'
         && req.method === 'POST'
     ) {
-        try {
-            const labScope = await experimentLabAccountScope(
-                req,
-                url,
-                { write: true }
-            );
-            const body = await readBody(req, 32 * 1024 * 1024);
-            if (body.intent !== 'manual-panel-edit') {
-                throw new HttpRequestError(
-                    422,
-                    'Single-frame generation is available only from an '
-                        + 'explicit Storyboard frame edit.',
-                    'storyboard_panel_manual_intent_required'
-                );
-            }
-            const instruction =
-                String(body.prompt || '').trim().slice(0, 1800);
-            if (!instruction) {
-                throw new HttpRequestError(
-                    400,
-                    'A panel prompt or edit instruction is required.',
-                    'storyboard_panel_prompt_required'
-                );
-            }
-            const model = STORY_MODELS[body.model]
-                ? body.model
-                : STORYBOARD_DEFAULT_MODEL;
-            const relation = ['new', 'edit', 'compose'].includes(
-                body.relation
-            )
-                ? body.relation
-                : 'new';
-            const refs = await storyboardGenerationReferences(
-                Array.isArray(body.refs) ? body.refs : []
-            );
-            const style = storyboardStylePresets.stylePreset(
-                body.stylePreset
-            );
-            const requestedTargetPanel = Number(body.targetPanel);
-            const targetPanel = Number.isInteger(requestedTargetPanel)
-                && requestedTargetPanel >= 0
-                && requestedTargetPanel < storyboardContract.PANEL_COUNT
-                ? requestedTargetPanel
-                : 0;
-            const brief = String(body.brief || '').trim().slice(0, 8000);
-            const panels = Array.from(
-                { length: storyboardContract.PANEL_COUNT },
-                (_, index) => String(
-                    body.panels && body.panels[index] || ''
-                ).trim().slice(0, 1800)
-            );
-            const prompt = storyboardPanelPrompt({
-                instruction,
-                relation,
-                targetPanel,
-                brief,
-                panels,
-                styleContract: style.promptContract,
-                referenceDescriptions: refs.descriptions,
-            });
-            const effectiveModel = storyboardEffectiveModel(
-                model,
-                relation,
-                refs.materialized.length
-            );
-            const provider = STORY_MODELS[effectiveModel].provider
-                || 'replicate';
-            if (relation === 'edit' && !refs.materialized.length) {
-                throw new HttpRequestError(
-                    422,
-                    'A panel edit requires the current frame as a reference.',
-                    'storyboard_panel_edit_reference'
-                );
-            }
-            const requestFingerprint = quantRequestFingerprint(
-                'raw-storyboard-panel',
-                'shorts',
-                {
-                    requested_model: model,
-                    effective_model: effectiveModel,
-                    prompt,
-                    relation,
-                    reference_identities: refs.identities,
-                    aspect_ratio: '9:16',
-                },
-                storyboardGenerationIdentity(
-                    effectiveModel,
-                    'panel',
-                    style.id
-                )
-            );
-            const jobId = quantJobSubmit(
-                'raw-storyboard-panel',
-                async () => {
-                    const image = await genStoryFrame(
-                        model,
-                        prompt,
-                        refs.materialized,
-                        relation,
-                        { aspectRatio: '9:16' }
-                    );
-                    const decoded = decodeStoryboardDataImage(
-                        image,
-                        'generated storyboard panel'
-                    );
-                    const media = storyboardMediaReference(
-                        decoded.bytes,
-                        decoded
-                    );
-                    await writeImmutableStoryboardMedia(
-                        media,
-                        decoded.bytes
-                    );
-                    return {
-                        image: media.url,
-                        media,
-                        model: effectiveModel,
-                        modelSlug: STORY_MODELS[effectiveModel].slug,
-                        provider,
-                        requestedModel: model,
-                        relation,
-                        stylePreset: style.id,
-                        continuityPolicy: 'automatic-continuity-v2',
-                        targetPanel,
-                        referenceRoles: refs.identities.map(
-                            reference => reference.role
-                        ),
-                        requestFingerprint,
-                    };
-                },
-                'shorts',
-                quantRequestId(req),
-                requestFingerprint
-            );
-            await quantJobReady(jobId, 'shorts');
-            if (labScope) {
-                await recordExperimentLabActivity(labScope, {
-                    type: 'storyboard-panel-generated',
-                    status: 'started',
-                    title: instruction,
-                    requestId: jobId,
-                    detail:
-                        `${provider} · ${effectiveModel} · ${relation}`,
-                    input: {
-                        kind: 'storyboard-panel',
-                        prompt: instruction,
-                        requestedModel: model,
-                        effectiveModel,
-                        provider,
-                        relation,
-                        stylePreset: style.id,
-                        targetPanel,
-                        continuityPolicy: 'automatic-continuity-v2',
-                        referenceCount:
-                            refs.identities.length,
-                    },
-                    saved: false,
-                });
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                ok: true,
-                jobId,
-                requestFingerprint,
-            }));
-        } catch (error) {
-            const status = error.statusCode || 500;
-            res.writeHead(status, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                error: error.message,
-                code: error.code || 'storyboard_panel_failed',
-            }));
-        }
+        res.writeHead(410, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+        });
+        res.end(JSON.stringify({
+            error:
+                'Single-frame generation is retired. Regenerate one '
+                + 'complete 45:16 storyboard sheet and crop its five '
+                + 'panels locally.',
+            code: 'single_frame_storyboard_generation_retired',
+        }));
         return;
     }
 
@@ -16016,9 +15811,8 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    // Retired: this unscoped endpoint could mint a vertical image without an
-    // explicit Storyboard edit. Complete hooks use the canonical 45:16 sheet;
-    // selected-frame edits use /api/storyboards/panel with a manual intent.
+    // Retired: all hook imagery, including a selected-frame revision, uses
+    // one complete 45:16 sheet and five deterministic local crops.
     if (pathname === '/api/frames/gen' && req.method === 'POST') {
         res.writeHead(410, {
             'Content-Type': 'application/json',
@@ -16026,8 +15820,8 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
         });
         res.end(JSON.stringify({
             error:
-                'This legacy frame generator is retired. Use an explicit '
-                + 'Storyboard frame edit.',
+                'This legacy frame generator is retired. Regenerate one '
+                + 'complete 45:16 storyboard sheet.',
             code: 'legacy_frame_generator_retired',
         }));
         return;
@@ -22652,20 +22446,6 @@ const STORY_SHEET_MODEL_KEYS = new Set([
     'flux-2-pro',
     'seedream-4',
 ]);
-const STORY_EDITOR = 'flux-kontext-pro';   // EDIT beats always use the edit specialist — it transforms the ACTUAL prior frame
-function storyboardEffectiveModel(modelKey, relation, referenceCount) {
-    const requested = STORY_MODELS[modelKey]
-        ? modelKey
-        : STORYBOARD_DEFAULT_MODEL;
-    if (
-        STORY_MODELS[requested].provider === 'replicate'
-        && relation === 'edit'
-        && referenceCount <= 1
-    ) {
-        return STORY_EDITOR;
-    }
-    return requested;
-}
 function stoppedHookGenerationError(message) {
     const error = new Error(
         message || 'hook generation was stopped by the user'
@@ -22746,15 +22526,20 @@ async function replicateRun(
     if (!out) throw new Error('no image output');
     return out;   // a URL or data-uri
 }
-// relation: 'new' (text-to-image) · 'edit' (TRANSFORM one prior frame's actual pixels via Kontext) ·
-// 'compose' (carry entities from ≥2 prior frames into a new scene via a multi-reference model).
+// The sole hook image-provider boundary accepts only a complete 45:16 sheet.
+// References may condition continuity, but output geometry never changes.
 async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
+    if (options.aspectRatio !== 'storyboard-sheet') {
+        const error = new Error(
+            'hook image generation requires one complete 45:16 '
+                + 'five-panel storyboard sheet'
+        );
+        error.code = 'STORYBOARD_SHEET_REQUIRED';
+        error.statusCode = 422;
+        throw error;
+    }
     refs = (refs || []).filter(Boolean);
-    const key = storyboardEffectiveModel(
-        modelKey,
-        relation,
-        refs.length
-    );
+    const key = canonicalHookSheetModelKey(modelKey);
     const M = STORY_MODELS[key];
     const effectivePrompt = (
         relation === 'edit'
@@ -22772,26 +22557,19 @@ async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
             model: M.slug,
             prompt: effectivePrompt,
             refs: refs.slice(0, M.max),
-            aspectRatio: options.aspectRatio || '9:16',
+            aspectRatio: 'storyboard-sheet',
             fetchWithTimeout: fetchT,
             shouldStop: options.shouldStop,
         });
         return generated.dataUrl;
     }
     const input = { prompt: effectivePrompt };
-    const isKontext = M.slug.includes('kontext');
-    if (!isKontext) {
-        if (options.aspectRatio === 'storyboard-sheet') {
-            const geometry = storyboardSheetGeometry(key);
-            Object.assign(input, geometry);
-            delete input.sheet_aspect_ratio;
-            delete input.panel_count;
-            delete input.panel_aspect_ratio;
-            delete input.postprocess;
-        } else {
-            input.aspect_ratio = '9:16';
-        }
-    }                                                                    // EDIT inherits the source frame's geometry
+    const geometry = storyboardSheetGeometry(key);
+    Object.assign(input, geometry);
+    delete input.sheet_aspect_ratio;
+    delete input.panel_count;
+    delete input.panel_aspect_ratio;
+    delete input.postprocess;
     if (M.slug.includes('flux') || M.slug.includes('nano')) input.output_format = 'jpg';
     if (refs.length) input[M.field] = M.arr ? refs.slice(0, M.max) : refs[0];
     const out = await replicateRun(
@@ -23124,6 +22902,9 @@ async function generateShortsOpeningTranscript({
     }
     const examples = shortsTranscriptWriter.sourceExamples();
     const sourcePopulation = shortsTranscriptWriter.sourcePopulation();
+    const cadence = shortsTranscriptWriter.cadenceProfile(
+        sourcePopulation
+    );
     if (examples.length < 3) {
         const error = new Error(
             'fewer than three measured Tyler opening examples are available'
@@ -23137,6 +22918,7 @@ async function generateShortsOpeningTranscript({
         hookTreatment,
         panels,
         examples,
+        population: sourcePopulation,
     });
     const model = String(
         process.env.SHORTS_TRANSCRIPT_MODEL
@@ -23158,7 +22940,7 @@ async function generateShortsOpeningTranscript({
                         model,
                         messages,
                         temperature: 0.35,
-                        max_tokens: 1200,
+                        max_tokens: 220,
                         response_format: { type: 'json_object' },
                     }),
                 },
@@ -23177,7 +22959,8 @@ async function generateShortsOpeningTranscript({
                 && payload.choices[0].message
                 && payload.choices[0].message.content;
             return shortsTranscriptWriter.parseResult(
-                _extractJsonObject(content)
+                _extractJsonObject(content),
+                { cadence }
             );
         },
         { maxAttempts: 4 }
@@ -23204,6 +22987,26 @@ async function generateShortsOpeningTranscript({
                 'retention-study retention_table video id to aligned Promise Lab word timestamps',
             source_window:
                 'exact words whose aligned start timestamps occur before 5.000 seconds',
+            measured_average_words_per_second:
+                cadence.averageWordsPerSecond,
+            measured_average_five_second_words:
+                cadence.averageWordsPerWindow,
+            measured_window_seconds:
+                cadence.measuredWindowSeconds,
+            word_budget_margin_multiplier:
+                cadence.marginMultiplier,
+            generated_transcript_hard_word_cap:
+                cadence.hardWordCap,
+            generated_transcript_word_count:
+                parsed.wordCount,
+            original_generated_transcript_word_count:
+                parsed.originalWordCount,
+            generated_transcript_was_truncated:
+                parsed.wasTruncated,
+            estimated_spoken_seconds_at_channel_average:
+                cadence.averageWordsPerSecond > 0
+                    ? parsed.wordCount / cadence.averageWordsPerSecond
+                    : null,
             examples: exampleEvidence,
             examples_sha256: sha256Bytes(canonicalJsonBytes(
                 exampleEvidence

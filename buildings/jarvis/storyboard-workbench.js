@@ -18,21 +18,15 @@
         'gpt-image-2': 8,
         'flux-2-pro': 8,
         'seedream-4': 8,
-        'nano-banana': 6,
-        'nano-banana-pro': 8,
     };
     const MODEL_OPTIONS = [
         ['gpt-image-2', 'GPT Image 2 (OpenAI)'],
         ['flux-2-pro', 'FLUX.2 Pro'],
         ['seedream-4', 'Seedream 4'],
-        ['nano-banana', 'Nano Banana'],
-        ['nano-banana-pro', 'Nano Banana Pro'],
     ];
-    const SHEET_MODEL_VALUES = new Set([
-        'gpt-image-2',
-        'flux-2-pro',
-        'seedream-4',
-    ]);
+    const SHEET_MODEL_VALUES = new Set(
+        MODEL_OPTIONS.map(([value]) => value)
+    );
     const PUBLIC_IMAGE_MODELS = Object.freeze(
         MODEL_OPTIONS.map(([value, label]) => Object.freeze({
             value,
@@ -502,9 +496,9 @@
                 </div>
                 <div class="sb-context-summary" data-sb-auto-continuity>
                     ${plan.entries.length
-                        ? `Frame ${panelIndex + 1} automatically sees the current frame, the complete five-frame sequence, and every established subject and object.`
+                        ? `The complete-sheet revision automatically sees frame ${panelIndex + 1}, the current five-frame sequence, and every established subject and object.`
                         : 'As frames are created, the full sequence is carried forward automatically.'}
-                    No reference selection is required.
+                    One new 45:16 sheet is generated and split into five frames. No reference selection is required.
                 </div>
             </div>`;
         }
@@ -538,7 +532,7 @@
                     </label>
                     ${renderAutomaticContext(current, index)}
                     <div class="sb-inspector-actions">
-                        <button type="button" class="is-primary" data-sb-generate-panel ${state.busy ? 'disabled' : ''}>${selected.image ? 'Edit selected' : 'Generate selected'}</button>
+                        <button type="button" class="is-primary" data-sb-generate-panel ${state.busy ? 'disabled' : ''}>${selected.image ? 'Apply to full sheet' : 'Generate full sheet'}</button>
                         <button type="button" data-sb-restore-panel="previous" ${selected.revisions.length ? '' : 'disabled'}>Previous</button>
                         <button type="button" data-sb-restore-panel="next" ${selected.futureRevisions && selected.futureRevisions.length ? '' : 'disabled'}>Next</button>
                     </div>
@@ -560,7 +554,10 @@
             );
             const refined = current.panels.some(entry => (
                 entry.revisions.length
-                || ['panel-edit', 'annotated-frame'].includes(entry.source)
+                || [
+                    'coherent-sheet-edit',
+                    'annotated-frame',
+                ].includes(entry.source)
             ));
             const steps = [
                 ['Scene', hasBrief ? 'Ready' : 'Describe it', hasBrief],
@@ -594,10 +591,18 @@
                 && provenance.provider
                 && provenance.provider !== 'user'
             );
+            const transcriptHardCap = Number(
+                provenance
+                && provenance.generated_transcript_hard_word_cap
+            );
+            const cadenceEvidence = transcriptHardCap > 0
+                ? `<p>Measured channel cadence: ${Number(provenance.measured_average_words_per_second || 0).toFixed(2)} words/second, ${Number(provenance.measured_average_five_second_words || 0).toFixed(2)} words per five seconds. Generated openings have a hard ${transcriptHardCap}-word ceiling, including the ${Math.round((Number(provenance.word_budget_margin_multiplier || 1) - 1) * 100)}% margin.${provenance.generated_transcript_was_truncated ? ' The provider exceeded it, so the stored transcript was deterministically capped.' : ''}</p>`
+                : '<p>This historical generated opening predates the measured five-second word-budget contract. Generate it again to attach cadence evidence.</p>';
             const evidence = generated
                 ? `<details class="sb-transcript-evidence">
                     <summary>Transcript evidence</summary>
                     <p>Written separately by ${esc(provenance.model || provenance.provider)} from ${Number(provenance.example_count) || 0} measured high-keep openings selected from ${Number(provenance.source_population_count) || 0} joined Tyler videos. These examples supply structure only; this transcript is the exact text sent to scoring.</p>
+                    ${cadenceEvidence}
                     <p>${esc(provenance.source_window || '')}</p>
                 </details>`
                 : '';
@@ -1328,16 +1333,28 @@
             };
         }
 
-        async function generateComposite(current) {
+        async function generateComposite(current, options) {
+            options = options || {};
             if (!SHEET_MODEL_VALUES.has(current.model)) {
                 throw new Error(
                     'Complete hooks require a model that returns one exact '
                         + '45:16 sheet. Choose GPT Image 2, FLUX.2 Pro, or '
-                        + 'Seedream 4. Nano Banana remains available for '
-                        + 'explicit single-frame edits.'
+                        + 'Seedream 4.'
                 );
             }
-            state.status = 'Generating one coherent five-panel sheet...';
+            const panelPrompts = Array.isArray(options.panels)
+                ? options.panels.slice(0, PANEL_COUNT)
+                : current.panels.map(entry => entry.prompt);
+            while (panelPrompts.length < PANEL_COUNT) panelPrompts.push('');
+            const references = Array.isArray(options.refs)
+                ? options.refs
+                : compositeReferences(current);
+            const revisionTarget = Number.isInteger(options.targetPanel)
+                ? options.targetPanel
+                : null;
+            state.status = revisionTarget == null
+                ? 'Generating one coherent five-panel sheet...'
+                : `Regenerating one complete five-panel sheet with the frame ${revisionTarget + 1} revision...`;
             paint();
             const result = await runJob('/api/storyboards/generate', {
                 async: true,
@@ -1347,8 +1364,10 @@
                 brief: current.brief,
                 hookText: current.hookText,
                 writeTranscript: false,
-                panels: current.panels.map(entry => entry.prompt),
-                refs: compositeReferences(current),
+                providerCallBudget: 1,
+                panels: panelPrompts,
+                refs: references,
+                revisionTargetPanel: revisionTarget,
                 layout: {
                     panelCount: PANEL_COUNT,
                     panelAspectRatio: '9:16',
@@ -1368,8 +1387,13 @@
                 ? canonicalPanels
                 : await splitStrip(sheet);
             frames.forEach((image, index) => setPanelImage(current, index, image, {
-                source: 'coherent-sheet',
+                source: revisionTarget == null
+                    ? 'coherent-sheet'
+                    : index === revisionTarget
+                        ? 'coherent-sheet-edit'
+                        : 'coherent-sheet-continuity',
                 relation: 'composite',
+                sourcePanels: options.sourcePanels || [],
                 prompt: current.panels[index].prompt,
             }));
             current.composite = sheet;
@@ -1481,9 +1505,7 @@
             state.busy = true;
             state.busyCandidateId = current.id;
             state.error = '';
-            state.status = selected.image
-                ? `Editing frame ${index + 1}...`
-                : `Generating frame ${index + 1}...`;
+            state.status = `Preparing one complete five-panel revision for frame ${index + 1}...`;
             paint();
             try {
                 const sequenceImage = completeFrames(current)
@@ -1504,43 +1526,27 @@
                     baseImage,
                     sequenceImage,
                 });
-                const relation = selected.image
-                    ? 'edit'
-                    : context.refs.length
-                        ? 'compose'
-                        : 'new';
-                const result = await runJob('/api/storyboards/panel', {
-                    async: true,
-                    intent: 'manual-panel-edit',
-                    model: current.model,
-                    stylePreset: current.stylePreset,
-                    prompt: selected.image && selected.strokes.length
-                        ? `${prompt}. Follow the drawn markup as an edit guide, then remove all markup from the finished image.`
-                        : prompt,
+                const revisionInstruction = (
+                    selected.image && selected.strokes.length
+                )
+                    ? `${prompt}. Follow the drawn markup on the frame ${index + 1} reference as an edit guide, then remove all markup from the finished image.`
+                    : prompt;
+                const panelPrompts = current.panels.map(
+                    entry => entry.prompt
+                );
+                panelPrompts[index] = [
+                    panelPrompts[index],
+                    `REQUIRED REVISION FOR PANEL ${index + 1}: ${revisionInstruction}`,
+                    'Preserve the established identities, objects, chronology, and visual continuity from the reference sheet. The other four panels must remain coherent with this revision.',
+                ].filter(Boolean).join('\n');
+                await generateComposite(current, {
+                    panels: panelPrompts,
                     refs: context.refs,
-                    relation,
                     targetPanel: index,
-                    brief: current.brief,
-                    panels: current.panels.map(entry => entry.prompt),
-                    context: {
-                        policy: 'automatic-continuity-v2',
-                        sourcePanels: context.sourcePanels,
-                        includesSequence: context.entries.some(
-                            entry => entry.role === 'sequence-sheet'
-                        ),
-                    },
-                });
-                if (!result || !result.image) throw new Error('The image model returned no frame.');
-                const normalized = await normalizeImage(result.image, FRAME_WIDTH, FRAME_HEIGHT, 'cover');
-                setPanelImage(current, index, normalized, {
-                    source: selected.image ? 'panel-edit' : 'panel-generation',
-                    relation,
                     sourcePanels: context.sourcePanels,
-                    prompt: selected.prompt,
                 });
-                await rebuildComposite(current);
                 current.editPrompt = '';
-                state.status = `Frame ${index + 1} is ready.`;
+                state.status = `The complete five-frame sheet was regenerated with the frame ${index + 1} revision.`;
             } catch (error) {
                 fail(error);
                 return;

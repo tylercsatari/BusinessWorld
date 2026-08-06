@@ -180,6 +180,55 @@ function cleanTranscriptProvenance(value) {
             cleanText(value.example_selection, 300) || null,
         source_join: cleanText(value.source_join, 300) || null,
         source_window: cleanText(value.source_window, 300) || null,
+        measured_average_words_per_second: Math.max(
+            0,
+            finiteNumber(value.measured_average_words_per_second, 0)
+        ),
+        measured_average_five_second_words: Math.max(
+            0,
+            finiteNumber(
+                value.measured_average_five_second_words,
+                0
+            )
+        ),
+        measured_window_seconds: Math.max(
+            0,
+            finiteNumber(value.measured_window_seconds, 0)
+        ),
+        word_budget_margin_multiplier: Math.max(
+            0,
+            finiteNumber(value.word_budget_margin_multiplier, 0)
+        ),
+        generated_transcript_hard_word_cap: Math.max(
+            0,
+            Math.floor(finiteNumber(
+                value.generated_transcript_hard_word_cap,
+                0
+            ))
+        ),
+        generated_transcript_word_count: Math.max(
+            0,
+            Math.floor(finiteNumber(
+                value.generated_transcript_word_count,
+                0
+            ))
+        ),
+        original_generated_transcript_word_count: Math.max(
+            0,
+            Math.floor(finiteNumber(
+                value.original_generated_transcript_word_count,
+                0
+            ))
+        ),
+        generated_transcript_was_truncated:
+            value.generated_transcript_was_truncated === true,
+        estimated_spoken_seconds_at_channel_average: Math.max(
+            0,
+            finiteNumber(
+                value.estimated_spoken_seconds_at_channel_average,
+                0
+            )
+        ),
         examples: (Array.isArray(value.examples) ? value.examples : [])
             .slice(0, 24)
             .map(example => ({
