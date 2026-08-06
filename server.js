@@ -25060,22 +25060,112 @@ async function composeMontageFiles(framePaths, dir) {
     return fs.readFileSync(out);
 }
 
-async function scoreMontage(buf, text, title, creatorProfile) {
+async function scoreMontage(
+    buf,
+    text,
+    title,
+    creatorProfile,
+    shouldStop
+) {
+    if (typeof shouldStop === 'function' && await shouldStop()) {
+        throw stoppedHookGenerationError(
+            'Shorts scoring was stopped before it entered the scorer queue.'
+        );
+    }
     const os = require('os');
     const tmp = path.join(os.tmpdir(), `grindmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
     fs.writeFileSync(tmp, buf);
     try {
-        return await runHeavyScore(() => new Promise((ok, no) => {
-            const args = [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)];
-            const profile = safeCreatorProfile(creatorProfile);
-            if (profile) args.push('--creator-profile', profile);
-            const py = spawnRawPython(args);
-            let out = '', err2 = '';
-            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err2 += d);
-            const t = setTimeout(() => { killRawPythonTree(py); }, 150000);
-            py.on('close', () => { clearTimeout(t); const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop(); if (!line) return no(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140))); try { ok(validateRawScoreResult(JSON.parse(line))); } catch (e) { no(e); } });
-            py.on('error', no);
-        }));
+        return await runHeavyScore(async () => {
+            if (typeof shouldStop === 'function' && await shouldStop()) {
+                throw stoppedHookGenerationError(
+                    'Shorts scoring was stopped while waiting for the scorer.'
+                );
+            }
+            return new Promise((ok, no) => {
+                const args = [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)];
+                const profile = safeCreatorProfile(creatorProfile);
+                if (profile) args.push('--creator-profile', profile);
+                const py = spawnRawPython(args);
+                let out = '', err2 = '';
+                let settled = false;
+                let stopCheckActive = false;
+                let stopRequested = false;
+                let stopFailure = null;
+                py.stdout.on('data', d => out += d);
+                py.stderr.on('data', d => err2 += d);
+                const t = setTimeout(() => {
+                    killRawPythonTree(py);
+                }, 150000);
+                let stopPoll = null;
+                const clearLifecycle = () => {
+                    clearTimeout(t);
+                    if (stopPoll) clearInterval(stopPoll);
+                };
+                const resolveOnce = value => {
+                    if (settled) return;
+                    settled = true;
+                    clearLifecycle();
+                    ok(value);
+                };
+                const rejectOnce = error => {
+                    if (settled) return;
+                    settled = true;
+                    clearLifecycle();
+                    no(error);
+                };
+                const stoppedError = () => stoppedHookGenerationError(
+                    'Shorts scoring was stopped by the user.'
+                );
+                const pollStop = async () => {
+                    if (
+                        settled
+                        || stopRequested
+                        || stopCheckActive
+                        || typeof shouldStop !== 'function'
+                    ) return;
+                    stopCheckActive = true;
+                    try {
+                        const requested = await shouldStop();
+                        if (settled) return;
+                        if (requested) {
+                            stopRequested = true;
+                            killRawPythonTree(py);
+                        }
+                    } catch (error) {
+                        if (
+                            !settled
+                            && isQueueLeaseOwnershipError(error)
+                        ) {
+                            stopFailure = error;
+                            killRawPythonTree(py);
+                        }
+                    } finally {
+                        stopCheckActive = false;
+                    }
+                };
+                if (typeof shouldStop === 'function') {
+                    stopPoll = setInterval(pollStop, 500);
+                    void pollStop();
+                }
+                py.on('close', () => {
+                    if (stopFailure) return rejectOnce(stopFailure);
+                    if (stopRequested) return rejectOnce(stoppedError());
+                    const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                    if (!line) return rejectOnce(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140)));
+                    try {
+                        resolveOnce(validateRawScoreResult(JSON.parse(line)));
+                    } catch (error) {
+                        rejectOnce(error);
+                    }
+                });
+                py.on('error', error => {
+                    if (stopFailure) return rejectOnce(stopFailure);
+                    if (stopRequested) return rejectOnce(stoppedError());
+                    rejectOnce(error);
+                });
+            });
+        });
     } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
 }
 async function loadPersistedShortsScoreEvidence(scoreKey, montageKey) {
@@ -26658,7 +26748,8 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                         panel.montage,
                         panel.transcript,
                         premise,
-                        creatorProfile
+                        creatorProfile,
+                        checkStopped
                     )
                 );
                 delete score.montage;   // the strip is already in R2 — don't double-store 200KB of b64
@@ -26720,6 +26811,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 }
             } catch (e) {
                 if (isQueueLeaseOwnershipError(e)) throw e;
+                if (e && e.code === 'HOOK_GENERATION_STOPPED') throw e;
                 a.errs.push('score: ' + String(e.message || e).slice(0, 140));
             }
             a.status = 'done';

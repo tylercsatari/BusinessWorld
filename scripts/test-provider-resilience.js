@@ -186,6 +186,31 @@ async function main() {
     ));
     assert(grindSource.includes('max_attempts: maxAttempts'));
     assert(!grindSource.includes('(3 tries)'));
+    assert(
+        /scoreMontage\([\s\S]{0,260}creatorProfile,\s*checkStopped\s*\)/
+            .test(grindSource),
+        'grind scoring must receive the same cancellation signal as rendering'
+    );
+    assert(grindSource.includes(
+        "if (e && e.code === 'HOOK_GENERATION_STOPPED') throw e;"
+    ));
+    const scoreMontageStart = server.indexOf(
+        'async function scoreMontage('
+    );
+    const scoreMontageEnd = server.indexOf(
+        'async function loadPersistedShortsScoreEvidence',
+        scoreMontageStart
+    );
+    const scoreMontageSource = server.slice(
+        scoreMontageStart,
+        scoreMontageEnd
+    );
+    assert(scoreMontageSource.includes('shouldStop'));
+    assert(scoreMontageSource.includes('setInterval(pollStop, 500)'));
+    assert(scoreMontageSource.includes('killRawPythonTree(py)'));
+    assert(scoreMontageSource.includes(
+        'Shorts scoring was stopped by the user.'
+    ));
     const queueStart = server.indexOf('async function grindQueue()');
     const queueEnd = server.indexOf(
         '// ── Long Quant GRIND',
