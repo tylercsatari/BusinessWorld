@@ -12,7 +12,8 @@ SYS = ("Invent a brand-new viral YouTube Short — first the IDEA, then its open
        "Each frame: concrete, photorealistic, vertical 9:16, no on-screen text.")
 HOOK_SYS = ("Design the opening 5 seconds of this short video as 5 still frames (one per second). "
             "Think about the strongest opening for THIS specific video, then return ONLY JSON: "
-            '{"cohesion_mode":"same_scene|progression|multi_shot|reveal|contrast","frames":["photographic prompt", x5]}. '
+            '{"hook_treatment":"one concise description of this distinct opening treatment",'
+            '"cohesion_mode":"same_scene|progression|multi_shot|reveal|contrast","frames":["photographic prompt", x5]}. '
             "Each frame: concrete, photorealistic, vertical 9:16, no on-screen text.")
 
 
@@ -55,10 +56,15 @@ class Predictor(BasePredictor):
                 continue
             fr = spec.get("frames")
             if isinstance(fr, list) and len(fr) == 5:
-                specs.append({"premise": (spec.get("premise") or premise or "").strip(),
+                generated_treatment = (
+                    spec.get("hook_treatment")
+                    or spec.get("premise")
+                    or " ".join(
+                        f"Beat {index + 1}: {str(frame)}"
+                        for index, frame in enumerate(fr)
+                    )
+                )
+                specs.append({"premise": str(generated_treatment).strip(),
                               "frames": [str(x) for x in fr], "cohesion_mode": spec.get("cohesion_mode", "?"),
                               "reasoning": reasoning[:2000]})
-        if not inv:
-            for s in specs:
-                s["premise"] = premise
         return json.dumps({"model": "idea_r7", "attempts": specs})

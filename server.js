@@ -22270,13 +22270,23 @@ async function hookModelGenerate(
         }
         throw error;
     }
-    return hookPlanOutput.parseHookPlans(p.output, {
+    const plans = hookPlanOutput.parseHookPlans(p.output, {
         fallbackPremise:
             options.fallbackPremise == null
                 ? premise
                 : options.fallbackPremise,
         limit: count,
     });
+    if (invent || !premise) return plans;
+    return plans.map(plan => ({
+        ...plan,
+        // The deployed seeded worker historically copied its complete input
+        // prompt into `premise`. Geometry, prompting, and the UI must describe
+        // the model's actual five generated beats instead of embedding that
+        // repeated instruction block.
+        premise: hookPlanOutput.treatmentText(plan),
+        treatment_source: 'five_generated_beats',
+    }));
 }
 // ── Generation diversity memory: EVERY idea the model has ever generated is text-embedded and
 // remembered (R2 hooks/gen-memory/memory.json, int8-quantized ≈1KB each). Each new batch is
@@ -25956,6 +25966,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     state: explorationState,
                     priorPremises: acceptedPremises,
                     rejectedPremises,
+                    selectionRound,
                 });
                 const eliteRoundSources = explorationMode === 'elite-corpus'
                     ? (

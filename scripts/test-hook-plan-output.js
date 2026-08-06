@@ -4,6 +4,7 @@ const assert = require('assert');
 const {
     parseHookPlans,
     outputShape,
+    treatmentText,
 } = require('../buildings/jarvis/hook-plan-output');
 
 const frames = Array.from(
@@ -90,5 +91,10 @@ assert.throws(
     )
 );
 assert.strictEqual(outputShape(['fragment']), 'array(1)>string(8)');
+const treatment = treatmentText(expected);
+assert(treatment.startsWith('Five-beat continuous opening.'));
+assert(treatment.includes('Beat 1: Frame 1: visual beat 1'));
+assert(treatment.includes('Beat 5: Frame 5: visual beat 5'));
+assert(!treatment.includes(expected.premise));
 
 console.log('hook plan output parser tests passed');

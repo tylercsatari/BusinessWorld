@@ -172,6 +172,20 @@ function normalizedPlan(value, fallbackPremise) {
     };
 }
 
+function treatmentText(plan) {
+    const frames = planFrames(plan);
+    if (frames.length !== 5) return '';
+    const cohesion = nonEmptyText(
+        plan && (plan.cohesion_mode || plan.cohesionMode)
+    );
+    return [
+        cohesion ? `Five-beat ${cohesion} opening.` : 'Five-beat opening.',
+        ...frames.map((frame, index) => (
+            `Beat ${index + 1}: ${frame.slice(0, 320)}`
+        )),
+    ].join(' ').slice(0, 2000);
+}
+
 function outputShape(value, depth = 0) {
     if (depth > 2) return '...';
     if (value == null) return String(value);
@@ -266,4 +280,5 @@ function parseHookPlans(rawOutput, options = {}) {
 module.exports = Object.freeze({
     parseHookPlans,
     outputShape,
+    treatmentText,
 });

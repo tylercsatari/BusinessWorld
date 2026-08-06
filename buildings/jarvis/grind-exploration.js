@@ -17,6 +17,42 @@ const DEFAULTS = Object.freeze({
     seedStepFromDeficit: 0.025,
 });
 
+// The embedding gate remains the authority. These assignments only make the
+// fine-tuned planner search different information orders instead of repeatedly
+// paraphrasing the seed while waiting for the gate to reject it.
+const OUTWARD_ASSIGNMENTS = Object.freeze([
+    'result first: open on the visible consequence or proof, then withhold how it happened',
+    'failure first: begin at the near-failure or flaw, then reveal the goal and attempted solution',
+    'measurement first: lead with a concrete escalating test, number, limit, or comparison',
+    'skeptic first: frame the opening through a doubtful observer, challenge, or public reaction',
+    'contradiction first: show two facts that appear unable to coexist, then create the unresolved question',
+    'constraint first: lead with the rule, deadline, handicap, or point of no return',
+    'reversal first: state the expected result, then immediately overturn it with evidence',
+    'demonstration first: use a direct declarative proof with no opening question and delay the explanation',
+    'stakes first: begin with what is physically, socially, or financially at risk before naming the method',
+    'control first: contrast the normal baseline with the unusual test before revealing the result',
+    'process mystery first: show one unexplained step or object in action before identifying its purpose',
+    'aftermath first: open after the decisive event, then rewind to the experiment that caused it',
+]);
+
+function outwardAssignments(selectionRound, count = 4) {
+    const round = Math.max(
+        1,
+        Number.parseInt(selectionRound, 10) || 1
+    );
+    const amount = Math.max(1, Math.min(
+        OUTWARD_ASSIGNMENTS.length,
+        Number.parseInt(count, 10) || 4
+    ));
+    const offset = ((round - 1) * amount)
+        % OUTWARD_ASSIGNMENTS.length;
+    return Array.from({ length: amount }, (_, index) => (
+        OUTWARD_ASSIGNMENTS[
+            (offset + index) % OUTWARD_ASSIGNMENTS.length
+        ]
+    ));
+}
+
 function finiteNumber(value, fallback) {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
@@ -463,6 +499,7 @@ function generationPrompt({
     state,
     priorPremises = [],
     rejectedPremises = [],
+    selectionRound = 1,
 } = {}) {
     const seed = String(seedPremise || '').trim();
     if (!state) return seed;
@@ -470,14 +507,26 @@ function generationPrompt({
         .slice(-6)
         .map((value, index) => `${index + 1}. ${String(value).slice(0, 180)}`);
     const rejected = rejectedPremises
-        .slice(-4)
-        .map((value, index) => `${index + 1}. ${String(value).slice(0, 180)}`);
+        .slice(-8)
+        .map((value, index) => `${index + 1}. ${String(value).slice(0, 120)}`);
+    const assignments = outwardAssignments(selectionRound, 4);
     return [
         `IMMUTABLE VIDEO IDEA: ${seed}`,
         'Write a materially different opening hook for this exact same video idea.',
         'The subject, objects, event, experiment, goal, and factual outcome implied by the original idea are invariants. Do not invent a different video concept, challenge, product, or outcome.',
         'Vary only the hook treatment: opening question, information order, tension, framing, reveal timing, spoken phrasing, camera perspective, and five-beat visual progression.',
         'Do not merely paraphrase an earlier hook.',
+        state.acceptedCount > 0
+            ? `OUTWARD SEARCH ROUND ${Math.max(1, Number.parseInt(selectionRound, 10) || 1)}: write four candidates using these four different structural assignments, in order:`
+            : '',
+        ...(state.acceptedCount > 0
+            ? assignments.map((assignment, index) => (
+                `${index + 1}. ${assignment}`
+            ))
+            : []),
+        state.acceptedCount > 0
+            ? 'Keep only nouns required to identify the immutable subject, object, event, goal, and outcome. Change the sentence skeleton, opening speech act, information order, and visual causality. Do not end every candidate with the same question or reveal.'
+            : '',
         state.acceptedCount === 0
             ? 'This is the first hook treatment. Establish the exact supplied idea clearly before optimizing its presentation.'
             : `This is outward hook-exploration round ${state.acceptedCount + 1}. Move into a different presentation region while preserving every invariant of the video idea.`,
@@ -506,5 +555,6 @@ module.exports = Object.freeze({
     recordRejections,
     recordScore,
     publicState,
+    outwardAssignments,
     generationPrompt,
 });

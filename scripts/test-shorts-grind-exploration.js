@@ -188,12 +188,26 @@ const prompt = exploration.generationPrompt({
     state: afterImprovement,
     priorPremises: ['Can a robot arm lift a car?'],
     rejectedPremises: ['Can a robot arm lift something heavy?'],
+    selectionRound: 2,
 });
 assert(prompt.includes('IMMUTABLE VIDEO IDEA: Build a robot arm'));
 assert(prompt.includes('Do not invent a different video concept'));
 assert(prompt.includes('Vary only the hook treatment'));
+assert(prompt.includes('OUTWARD SEARCH ROUND 2'));
+assert(prompt.includes('four different structural assignments'));
+assert(prompt.includes('sentence skeleton'));
 assert(prompt.includes('DO NOT REPEAT THESE RENDERED HOOK TREATMENTS'));
 assert(prompt.includes('TOO CLOSE OR OFF-TOPIC'));
+assert.deepStrictEqual(
+    exploration.outwardAssignments(1),
+    exploration.outwardAssignments(4),
+    'the assignment lattice rotates deterministically and repeats only after every assignment has been used'
+);
+assert.notDeepStrictEqual(
+    exploration.outwardAssignments(1),
+    exploration.outwardAssignments(2),
+    'consecutive screening rounds must receive different structural searches'
+);
 const firstPrompt = exploration.generationPrompt({
     seedPremise: 'Build a robot arm',
     state: exploration.createState({ threshold: 90 }),
@@ -219,7 +233,9 @@ const grindSource = serverSource.slice(grindStart, grindEnd);
 assert(grindSource.includes('grindExploration.createState'));
 assert(grindSource.includes('grindExploration.measureCandidate'));
 assert(grindSource.includes('grindExploration.selectCandidate'));
+assert(grindSource.includes('selectionRound,'));
 assert(grindSource.includes('grindExploration.recordScore'));
+assert(serverSource.includes('premise: hookPlanOutput.treatmentText(plan)'));
 assert(grindSource.includes('providerCallBudget: 1'));
 assert(grindSource.includes("context: 'the immutable Grind video idea'"));
 assert(grindSource.includes("context: 'a Grind candidate hook'"));
