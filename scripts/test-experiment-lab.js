@@ -2017,7 +2017,11 @@ async function main() {
                 }],
             },
             [`/api/hooks/grind/run/${grindFixtureRid}`]:
-                grindRunFixture,
+                {
+                    ...grindRunFixture,
+                    status: 'running',
+                    note: 'fixture run active',
+                },
             [`/api/hooks/grind/score/${grindFixtureRid}_0`]:
                 grindScoreFixture,
             '/api/hooks/warmup': { ok: true, fired: false },
@@ -2316,6 +2320,7 @@ const queuedSavedHookId=${JSON.stringify(queuedSavedHookId)};
 const failedSavedHookId=${JSON.stringify(failedSavedHookId)};
 const autoSavedHookId=${JSON.stringify(autoSavedHookId)};
 const channelFreeHighId=${JSON.stringify(channelFreeHighId)};
+const grindFixtureRid=${JSON.stringify(grindFixtureRid)};
 const autoSavedHookRow=${JSON.stringify(autoSavedHookRow)};
 const autoSavedHookRecord=${JSON.stringify(autoSavedHookRecord)};
 const historicalUpgradeScore=${JSON.stringify(historicalUpgradeScore)};
@@ -2329,6 +2334,7 @@ window.__labAutoSavedScore=null;
 window.__autoSavedHookId=null;
 window.__labFolderRequests=[];
 window.__labStoryboardSaves=[];
+window.__grindStopRequests=0;
 window.fetch=function(url,options){
     const requestUrl=new URL(url,location.href);
     const p=requestUrl.pathname;
@@ -2380,7 +2386,9 @@ window.fetch=function(url,options){
             JSON.stringify({
                 ...historicalUpgradeScore,
                 title:'Automatically opened YouTube score',
-                source:'youtube'
+                source:'youtube',
+                montageDataUrl:
+                    'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
             }),
             {
                 status:200,
@@ -2518,6 +2526,27 @@ window.fetch=function(url,options){
             status:200,
             headers:{'Content-Type':'application/json'}
         }));
+    }
+    if(
+        p==='/api/hooks/grind/stop/'+grindFixtureRid
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        window.__grindStopRequests+=1;
+        return new Promise(resolve=>setTimeout(()=>{
+            replies['/api/hooks/grind/run/'+grindFixtureRid]={
+                ...replies['/api/hooks/grind/run/'+grindFixtureRid],
+                status:'stopped',
+                note:'stopped by browser regression fixture'
+            };
+            resolve(new Response(JSON.stringify({
+                ok:true,
+                rid:grindFixtureRid,
+                status:'stopping'
+            }),{
+                status:200,
+                headers:{'Content-Type':'application/json'}
+            }));
+        },650));
     }
     if(
         requestHeaders.get('X-Experiment-Lab-Account')===teamAccountId
@@ -2659,6 +2688,79 @@ window.fetch=function(url,options){
             console.error('INITIAL ROOT:', (await page.locator('#root').innerText()).slice(0, 1500));
             throw error;
         }
+        const grindIdeaInput = page.getByPlaceholder(
+            'type a video idea — or leave blank and the model invents one…'
+        );
+        await grindIdeaInput.fill(
+            'Focus and selection must survive a background refresh.'
+        );
+        const focusSnapshot = await grindIdeaInput.evaluate(element => {
+            element.setSelectionRange(10, 19);
+            const workspace = element.closest('.experiment-lab-workspace');
+            workspace.scrollTop = Math.min(
+                50,
+                Math.max(0, workspace.scrollHeight - workspace.clientHeight)
+            );
+            return {
+                top: workspace.scrollTop,
+                start: element.selectionStart,
+                end: element.selectionEnd,
+            };
+        });
+        await page.evaluate(() => {
+            window.JarvisRetention.setExperimentLabLibraryView('hooks');
+        });
+        assert.deepStrictEqual(
+            await page.evaluate(() => {
+                const active = document.activeElement;
+                const workspace = active
+                    && active.closest('.experiment-lab-workspace');
+                return {
+                    placeholder: active
+                        && active.getAttribute('placeholder'),
+                    value: active && active.value,
+                    start: active && active.selectionStart,
+                    end: active && active.selectionEnd,
+                    top: workspace && workspace.scrollTop,
+                };
+            }),
+            {
+                placeholder:
+                    'type a video idea — or leave blank and the model invents one…',
+                value:
+                    'Focus and selection must survive a background refresh.',
+                start: focusSnapshot.start,
+                end: focusSnapshot.end,
+                top: focusSnapshot.top,
+            },
+            'a background Experiment refresh must preserve the active field, its '
+                + 'selection, and the Experiment Lab scroll position'
+        );
+        const stopGrindButton = page.locator('[data-grindstop]');
+        await stopGrindButton.waitFor();
+        await stopGrindButton.click();
+        assert.deepStrictEqual(
+            await page.locator('[data-grindstop]').evaluate(button => ({
+                disabled: button.disabled,
+                text: button.textContent.trim(),
+            })),
+            { disabled: true, text: 'Stopping…' },
+            'Stop must acknowledge the click synchronously instead of '
+                + 'waiting for the server response'
+        );
+        await page.locator('[data-grindstop]').evaluate(button => {
+            button.click();
+        });
+        assert.strictEqual(
+            await page.evaluate(() => window.__grindStopRequests),
+            1,
+            'a disabled stopping control must not send duplicate stop requests'
+        );
+        await page.waitForFunction(() => (
+            document.querySelector('[data-grindstop]') === null
+            && document.querySelector('#rtg-exppanel')
+                ?.textContent.includes('stopped by browser regression fixture')
+        ));
         await page.locator('[data-grindopen="0"]').waitFor();
         await page.locator('[data-grindopen="0"]').click();
         await page.locator(
@@ -2686,6 +2788,24 @@ window.fetch=function(url,options){
             ).count(),
             1,
             'the opened Grind hook must remain a reusable analysis-queue item'
+        );
+        const grindQueueRow = page.locator(
+            `[data-score-queue-id="grind:${grindFixtureRid}:0"]`
+        );
+        await grindQueueRow.locator('[data-rawupmark]').click();
+        assert.strictEqual(
+            await page.locator('[data-canonical-score-analysis]').count(),
+            0,
+            'the first queue item must collapse cleanly'
+        );
+        await grindQueueRow.locator('[data-rawupmark]').click();
+        await page.locator('[data-canonical-score-analysis]').waitFor();
+        assert(
+            (await page.locator(
+                '[data-canonical-score-analysis]'
+            ).innerText()).includes(grindAttemptFixture.title),
+            'the first queue item must reopen its complete score after being '
+                + 'collapsed'
         );
         await page.locator('.experiment-lab-tab[data-lab-view="team"]').click();
         await page.locator(
@@ -3061,6 +3181,32 @@ window.fetch=function(url,options){
             ),
             'the full result must label the complete analysis explicitly'
         );
+        await automaticScoreAnalysis.locator('[data-scoreedit]').click();
+        const liveScoreEditor = page.locator(
+            '#shorts-storyboard-workbench'
+        );
+        await liveScoreEditor.locator('.sb-panel-tile img').first().waitFor();
+        assert.strictEqual(
+            await liveScoreEditor.locator('.sb-panel-tile img').count(),
+            5,
+            'every live score must open its exact visual input in the one '
+                + 'shared five-frame editor'
+        );
+        assert.strictEqual(
+            await liveScoreEditor.locator(
+                '[data-sb-hook-text]'
+            ).inputValue(),
+            String(
+                historicalUpgradeScore.transcript
+                || historicalUpgradeScore.text
+                || ''
+            ),
+            'the score-to-editor handoff must preserve the transcript that '
+                + 'was embedded'
+        );
+        await liveScoreEditor.locator('[data-sb-new]').click();
+        await page.locator('[data-rawbuildmode="0"]').first().click();
+        await automaticScoreAnalysis.waitFor();
         const scoreTranscript = automaticScoreAnalysis.locator(
             '.score-input-transcript'
         );
@@ -3179,6 +3325,20 @@ window.fetch=function(url,options){
                 upload && upload.savedId === id
             ))
         ), autoSavedHookId);
+        assert.strictEqual(
+            await automaticScoreAnalysis.locator(
+                '[data-score-storage-status]'
+            ).innerText(),
+            'Stored in your private hook library',
+            'background persistence must update the open score in place'
+        );
+        assert.strictEqual(
+            await automaticScoreAnalysis.locator(
+                `[data-scoreopensaved="${autoSavedHookId}"]`
+            ).count(),
+            1,
+            'a persisted score must expose a direct path into Saved hooks'
+        );
         await page.locator(
             '.experiment-lab-tab[data-lab-view="hooks"]'
         ).click();
@@ -4489,7 +4649,7 @@ window.fetch=function(url,options){
             beforeCoordinateChange,
             'changing the selected coordinate must preserve the value-table scroll position on mobile and desktop',
         );
-        await page.locator('[data-savedledgercolumn="shorts.creator-excluded.visual.views"] button').click();
+        await page.locator('[data-savedledgercolumn="shorts.creator-excluded.visual.views"] button').evaluate(button => button.click());
         const lineagePanel = page.locator('[data-savedledger-provenance-drilldown]');
         await lineagePanel.waitFor();
         assert.strictEqual(await lineagePanel.getAttribute('data-coordinate-id'), 'shorts.creator-excluded.visual.views');
@@ -4503,7 +4663,7 @@ window.fetch=function(url,options){
         assert(/axis identity [a-f0-9]{64}/.test(selectedLineageText), 'the selected coordinate must expose its immutable axis fingerprint');
         assert(/coordinate identity [a-f0-9]{64}/.test(selectedLineageText), 'the selected coordinate must expose its immutable coordinate fingerprint');
         assert(!selectedLineageText.includes('Fit target\\nNot registered'), 'the target field must resolve in the drilldown');
-        await page.locator('[data-savedledger-provenance-matrix="long"] [data-savedledger-coordinate-select="long.output.visual.realviews"]').click();
+        await page.locator('[data-savedledger-provenance-matrix="long"] [data-savedledger-coordinate-select="long.output.visual.realviews"]').evaluate(button => button.click());
         await page.waitForFunction(() => document.querySelector('[data-savedledger-provenance-drilldown]')?.getAttribute('data-coordinate-id') === 'long.output.visual.realviews');
         const longRealviewsLineageText = await page.locator('[data-savedledger-provenance-drilldown]').innerText();
         assert(longRealviewsLineageText.includes('Reference-row duration used while materializing the realviews map'), 'Long realistic views must distinguish reference duration from query inputs');
@@ -4536,7 +4696,7 @@ window.fetch=function(url,options){
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT), { recursive: true });
             await page.locator('[data-savedledger]').screenshot({ path: process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT });
         }
-        await page.locator('[data-savedledgercolumn="shorts.stored.text.ret5"] button').click();
+        await page.locator('[data-savedledgercolumn="shorts.stored.text.ret5"] button').evaluate(button => button.click());
         assert.strictEqual(
             await page.locator('[data-savedledger]').getAttribute('data-selected-coordinate-id'),
             'shorts.stored.text.ret5',

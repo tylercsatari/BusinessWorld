@@ -138,8 +138,12 @@ async function main() {
         'Seedream coherent sheets must use an exact 45:16 canvas'
     );
     assert(
-        serverSource.includes("{ aspectRatio: 'storyboard-sheet' }"),
-        'coherent generation must request the five-panel geometry contract'
+        serverSource.includes("aspectRatio: 'storyboard-sheet'")
+            && serverSource.includes(
+                'shouldStop: request.shouldStop'
+            ),
+        'coherent generation must request the five-panel geometry contract '
+            + 'and inherit the shared cancellation signal'
     );
     assert(
         fivePanelSource.includes('panel 1 occupies 0-20%')
