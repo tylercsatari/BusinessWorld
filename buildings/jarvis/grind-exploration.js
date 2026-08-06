@@ -2,6 +2,7 @@
 
 const SCHEMA = 'shorts-grind-exploration-v3';
 const STRATEGY = 'same-idea-hook-directional-frontier-v3';
+const PROMPT_SCHEMA = 'same-idea-hook-direction-lattice-v1';
 const LEGACY_SCHEMA = 'shorts-grind-exploration-v2';
 const LEGACY_STRATEGY = 'same-idea-hook-proportional-outward-v2';
 
@@ -23,40 +24,146 @@ const DEFAULTS = Object.freeze({
     seedStepFromDeficit: 0.025,
 });
 
-// The embedding gate remains the authority. These assignments only make the
-// fine-tuned planner search different information orders instead of repeatedly
-// paraphrasing the seed while waiting for the gate to reject it.
-const OUTWARD_ASSIGNMENTS = Object.freeze([
-    'result first: open on the visible consequence or proof, then withhold how it happened',
-    'failure first: begin at the near-failure or flaw, then reveal the goal and attempted solution',
-    'measurement first: lead with a concrete escalating test, number, limit, or comparison',
-    'skeptic first: frame the opening through a doubtful observer, challenge, or public reaction',
-    'contradiction first: show two facts that appear unable to coexist, then create the unresolved question',
-    'constraint first: lead with the rule, deadline, handicap, or point of no return',
-    'reversal first: state the expected result, then immediately overturn it with evidence',
-    'demonstration first: use a direct declarative proof with no opening question and delay the explanation',
-    'stakes first: begin with what is physically, socially, or financially at risk before naming the method',
-    'control first: contrast the normal baseline with the unusual test before revealing the result',
-    'process mystery first: show one unexplained step or object in action before identifying its purpose',
-    'aftermath first: open after the decisive event, then rewind to the experiment that caused it',
+// Prompt controls are generation-only search coordinates. They are not
+// learned clusters, quality labels, or ledger coordinates. The exhaustive
+// mixed-radix lattice guides the planner into a new presentation structure;
+// measured embedding geometry still decides whether it actually got there.
+const PROMPT_AXES = Object.freeze([
+    Object.freeze({
+        id: 'entry',
+        label: 'entry point',
+        values: Object.freeze([
+            ['consequence', 'open on an observable consequence before explaining its cause'],
+            ['action', 'open on an unresolved physical action already in progress'],
+            ['claim', 'open with one concrete falsifiable claim and immediate visual evidence'],
+            ['anomaly', 'open on the one visible detail that violates the normal pattern'],
+            ['constraint', 'open with the rule, deadline, handicap, or point of no return'],
+            ['reaction', 'open on a real observer reaction before revealing its trigger'],
+            ['scale', 'open by making the physical scale, force, quantity, or limit legible'],
+            ['demonstration', 'open with direct proof rather than an introductory explanation'],
+            ['aftermath', 'open after the decisive event and work backward toward its cause'],
+            ['baseline', 'open with a normal control and immediately expose the changed condition'],
+            ['failure', 'open on a concrete failure mode or flaw that threatens the exact goal'],
+            ['behavior', 'open on the central object doing something unexplained but relevant'],
+        ]),
+    }),
+    Object.freeze({
+        id: 'order',
+        label: 'information order',
+        values: Object.freeze([
+            ['proof-cause', 'order the beats as proof, cause, test'],
+            ['obstacle-goal', 'order the beats as obstacle, goal, attempted solution'],
+            ['test-claim', 'order the beats as test, claim, unresolved verdict'],
+            ['result-method', 'order the beats as partial result, method, harder test'],
+            ['baseline-anomaly', 'order the beats as baseline, anomaly, investigation'],
+            ['reaction-trigger', 'order the beats as reaction, hidden trigger, consequence'],
+            ['limit-escalation', 'order the beats as current limit, escalation, next limit'],
+            ['rule-attempt', 'order the beats as governing rule, attempt, apparent violation'],
+            ['detail-whole', 'order the beats as diagnostic detail, wider system, unresolved effect'],
+            ['consequence-choice', 'order the beats as consequence, irreversible choice, test'],
+        ]),
+    }),
+    Object.freeze({
+        id: 'tension',
+        label: 'tension mechanism',
+        values: Object.freeze([
+            ['falsification', 'make the viewer wait for a clean pass-or-fail falsification'],
+            ['escalation', 'increase the test severity visibly from beat to beat'],
+            ['reversal', 'establish one expectation and overturn it with visible evidence'],
+            ['countdown', 'create a concrete shrinking time or attempt window'],
+            ['physical-risk', 'make the relevant physical failure consequence legible without inventing danger'],
+            ['hidden-flaw', 'surface a specific hidden flaw that could invalidate the attempt'],
+            ['public-verdict', 'let an observer, judge, or comparison supply the unresolved verdict'],
+            ['resource-limit', 'make a finite material, energy, money, or attempt budget visible'],
+            ['competing-outcomes', 'keep two plausible, mutually exclusive outcomes alive'],
+            ['commitment', 'show an irreversible commitment to completing the exact test'],
+        ]),
+    }),
+    Object.freeze({
+        id: 'camera',
+        label: 'visual evidence',
+        values: Object.freeze([
+            ['macro', 'use close diagnostic evidence that can be understood without narration'],
+            ['wide', 'use a wide physical test with subject, object, and consequence in one frame'],
+            ['pov', 'use participant point of view to make the interaction immediate'],
+            ['split', 'use a direct control-versus-test comparison'],
+            ['reaction', 'use an observer reaction only when its visible trigger remains in context'],
+            ['instrument', 'use a real counter, gauge, scale, timer, or measurement as evidence'],
+            ['continuous', 'make all five beats read as one continuous causal action'],
+            ['cause-effect', 'alternate clear cause and effect without decorative cutaways'],
+            ['scale-reference', 'keep a familiar reference object visible to communicate scale'],
+            ['state-change', 'make the before state and changed state unmistakably comparable'],
+        ]),
+    }),
+    Object.freeze({
+        id: 'speech',
+        label: 'opening speech act',
+        values: Object.freeze([
+            ['declaration', 'use a precise declarative opening with no generic hype'],
+            ['question', 'ask one concrete question whose answer is visibly testable'],
+            ['challenge', 'frame a specific skeptical challenge to the central claim'],
+            ['warning', 'state one relevant warning tied to a visible failure mode'],
+            ['prediction', 'make a concrete prediction that the five beats can test'],
+            ['confession', 'admit one consequential mistake or uncertainty after identifying its subject'],
+            ['wager', 'state a clear success condition and what is being risked'],
+            ['command', 'begin with a short procedural command that launches the test immediately'],
+        ]),
+    }),
+    Object.freeze({
+        id: 'reveal',
+        label: 'reveal policy',
+        values: Object.freeze([
+            ['method-late', 'withhold the method while showing enough evidence to understand the goal'],
+            ['limit-late', 'withhold the final limit while making the measurement scale clear'],
+            ['result-late', 'withhold the verdict while showing genuine partial progress'],
+            ['partial-proof', 'show one piece of proof and reserve the decisive proof'],
+            ['cause-late', 'show the consequence first and reveal its relevant cause later'],
+            ['rule-late', 'show an apparent impossibility before revealing the governing rule'],
+            ['failure-late', 'foreshadow a real failure mode without revealing whether it occurs'],
+            ['scale-late', 'establish the test before revealing its full scale or force'],
+        ]),
+    }),
 ]);
 
-function outwardAssignments(selectionRound, count = 4) {
-    const round = Math.max(
-        1,
-        Number.parseInt(selectionRound, 10) || 1
-    );
-    const amount = Math.max(1, Math.min(
-        OUTWARD_ASSIGNMENTS.length,
-        Number.parseInt(count, 10) || 4
-    ));
-    const offset = ((round - 1) * amount)
-        % OUTWARD_ASSIGNMENTS.length;
-    return Array.from({ length: amount }, (_, index) => (
-        OUTWARD_ASSIGNMENTS[
-            (offset + index) % OUTWARD_ASSIGNMENTS.length
-        ]
-    ));
+const PROMPT_LATTICE_SIZE = PROMPT_AXES.reduce(
+    (product, axis) => product * axis.values.length,
+    1
+);
+// A golden-ratio-sized stride, coprime with the lattice size, prevents early
+// searches from walking adjacent low-order controls while still visiting each
+// complete recipe exactly once before the lattice repeats.
+const PROMPT_LATTICE_STRIDE = 474701;
+const PROMPT_LATTICE_OFFSET = 104729;
+
+function promptDirection(index = 0) {
+    const ordinal = Math.max(0, Math.floor(Number(index) || 0));
+    let position = (
+        ordinal * PROMPT_LATTICE_STRIDE
+        + PROMPT_LATTICE_OFFSET
+    ) % PROMPT_LATTICE_SIZE;
+    const latticePosition = position;
+    const choices = {};
+    PROMPT_AXES.forEach(axis => {
+        const choice = axis.values[position % axis.values.length];
+        choices[axis.id] = Object.freeze({
+            id: choice[0],
+            label: axis.label,
+            instruction: choice[1],
+        });
+        position = Math.floor(position / axis.values.length);
+    });
+    const id = `D-${String(ordinal + 1).padStart(6, '0')}`;
+    return Object.freeze({
+        schema: PROMPT_SCHEMA,
+        id,
+        ordinal,
+        lattice_position: latticePosition,
+        lattice_size: PROMPT_LATTICE_SIZE,
+        choices: Object.freeze(choices),
+        summary: PROMPT_AXES.map(axis => (
+            choices[axis.id].id
+        )).join(' / '),
+    });
 }
 
 function finiteNumber(value, fallback) {
@@ -224,6 +331,7 @@ function createState({ threshold, config } = {}) {
         threshold: target,
         acceptedCount: 0,
         rejectedCount: 0,
+        promptSearchCursor: 0,
         rejectionReasons: Object.freeze({}),
         bestScore: null,
         scoreDeficit: target,
@@ -275,6 +383,10 @@ function restoreState(snapshot, { threshold, config } = {}) {
         ...base,
         acceptedCount,
         rejectedCount,
+        promptSearchCursor: Math.max(
+            acceptedCount,
+            Math.floor(Number(snapshot.prompt_search_cursor) || 0)
+        ),
         rejectionReasons: Object.freeze(reasons),
         bestScore,
         scoreDeficit: round(Math.max(
@@ -333,6 +445,18 @@ function restoreState(snapshot, { threshold, config } = {}) {
             0,
             finiteNumber(snapshot.seed_expansion_step, 0)
         )),
+    });
+}
+
+function advancePromptSearch(state, amount = 1) {
+    if (!state) return state;
+    return Object.freeze({
+        ...state,
+        promptSearchCursor: Math.max(
+            0,
+            state.promptSearchCursor
+                + Math.max(1, Math.floor(Number(amount) || 1))
+        ),
     });
 }
 
@@ -673,6 +797,9 @@ function publicState(state) {
         strategy: state.strategy,
         accepted_count: state.acceptedCount,
         rejected_count: state.rejectedCount,
+        prompt_search_cursor: state.promptSearchCursor,
+        prompt_search_schema: PROMPT_SCHEMA,
+        prompt_lattice_size: PROMPT_LATTICE_SIZE,
         rejection_reasons: { ...state.rejectionReasons },
         best_score: state.bestScore,
         score_deficit: state.scoreDeficit,
@@ -698,37 +825,65 @@ function generationPrompt({
     priorPremises = [],
     rejectedPremises = [],
     selectionRound = 1,
+    promptRecipe = null,
 } = {}) {
     const seed = String(seedPremise || '').trim();
     if (!state) return seed;
     const prior = priorPremises
-        .slice(-6)
-        .map((value, index) => `${index + 1}. ${String(value).slice(0, 180)}`);
+        .slice(-4)
+        .map((value, index) => `${index + 1}. ${String(value).slice(0, 150)}`);
     const rejected = rejectedPremises
-        .slice(-8)
-        .map((value, index) => `${index + 1}. ${String(value).slice(0, 120)}`);
-    const globalSearchRound = Math.max(
+        .slice(-4)
+        .map((value, index) => `${index + 1}. ${String(value).slice(0, 100)}`);
+    const localSearchRound = Math.max(
         1,
-        state.acceptedCount
-            + Math.max(1, Number.parseInt(selectionRound, 10) || 1)
-            - 1
+        Number.parseInt(selectionRound, 10) || 1
     );
-    const assignment = outwardAssignments(globalSearchRound, 1)[0];
+    const direction = promptRecipe || (
+        state.acceptedCount > 0
+            ? promptDirection(state.promptSearchCursor)
+            : null
+    );
+    const seedTreatment = state.acceptedCount === 0 && !direction;
+    const pressurePercent = Math.round(
+        clamp(finiteNumber(state.explorationPressure, 0), 0, 1) * 100
+    );
+    const directionInstructions = !direction
+        ? []
+        : PROMPT_AXES.map(axis => {
+            const choice = direction.choices[axis.id];
+            return `- ${axis.label.toUpperCase()} [${choice.id}]: ${choice.instruction}.`;
+        });
     return [
         `IMMUTABLE VIDEO IDEA: ${seed}`,
         'Write a materially different opening hook for this exact same video idea.',
         'The subject, objects, event, experiment, goal, and factual outcome implied by the original idea are invariants. Do not invent a different video concept, challenge, product, or outcome.',
         'Vary only the hook treatment: opening question, information order, tension, framing, reveal timing, spoken phrasing, camera perspective, and five-beat visual progression.',
         'Do not merely paraphrase an earlier hook.',
-        state.acceptedCount > 0
-            ? `OUTWARD SEARCH ROUND ${globalSearchRound} STRUCTURAL ASSIGNMENT: ${assignment}. Return exactly one normal five-beat plan; the provider independently samples the other candidates.`
+        direction
+            ? `DIRECTED SEARCH ${direction.id} · screening round ${localSearchRound} · novelty pressure ${pressurePercent}%. This is a generation instruction, not a learned cluster or score.`
             : '',
-        state.acceptedCount > 0
-            ? 'Keep only nouns required to identify the immutable subject, object, event, goal, and outcome. Change the sentence skeleton, opening speech act, information order, and visual causality. Do not reuse the prior hook question or reveal.'
+        direction
+            ? 'Treat novelty pressure continuously: near 100% requires a radical change to presentation structure across every assigned axis; near 0% permits a subtler treatment change. Never satisfy novelty by changing the topic or inventing unrelated stakes.'
             : '',
-        state.acceptedCount === 0
+        direction
+            ? 'Obey every independent control below. Do not blend it back into the previous treatment:'
+            : '',
+        ...directionInstructions,
+        direction
+            ? 'The provider samples several drafts from this direction. Each draft must find a genuinely different concrete execution within these controls rather than reuse the same first beat, sentence skeleton, unresolved question, reveal target, or camera progression.'
+            : '',
+        direction
+            ? 'Every beat must add new visible information or causal progress. Avoid generic hype, decorative cutaways, and mystery that cannot be understood from the exact idea.'
+            : '',
+        direction
+            ? 'Before returning JSON, silently compare the draft with the rendered and rejected treatments below. If its first visual event or information sequence matches one, redesign it while preserving the immutable facts.'
+            : '',
+        seedTreatment
             ? 'This is the first hook treatment. Establish the exact supplied idea clearly before optimizing its presentation.'
-            : `This is outward hook-exploration round ${state.acceptedCount + 1}. Move into a different presentation region while preserving every invariant of the video idea.`,
+            : state.acceptedCount === 0
+                ? 'No hook has rendered yet. This directed recovery must establish the exact supplied idea while avoiding the failed seed draft.'
+                : `This is rendered hook attempt ${state.acceptedCount + 1}. Move into a different presentation region while preserving every invariant of the video idea.`,
         state.acceptedCount === 0
             ? `The selection system will retain only a hook with at least ${state.topicalSimilarityFloor.toFixed(3)} similarity to the immutable video idea.`
             : `Selection will favor an underexplored semantic direction and use ${state.targetSeedDistance.toFixed(3)} seed distance plus ${state.targetPriorDistance.toFixed(3)} prior spacing as soft targets. Missing either target does not discard a topical new direction. Only drafts below ${state.topicalSimilarityFloor.toFixed(3)} topical similarity or within ${state.duplicateDistanceFloor.toFixed(3)} duplicate distance of a rendered hook are rejected.`,
@@ -737,12 +892,14 @@ function generationPrompt({
         rejected.length ? 'RECENT DRAFTS NOT SELECTED FOR RENDER:' : '',
         ...rejected,
         'Return the normal fine-tuned five-beat hook plan. Do not discuss these instructions.',
-    ].filter(Boolean).join('\n').slice(0, 3500);
+    ].filter(Boolean).join('\n').slice(0, 4000);
 }
 
 module.exports = Object.freeze({
     SCHEMA,
     STRATEGY,
+    PROMPT_SCHEMA,
+    PROMPT_LATTICE_SIZE,
     DEFAULTS,
     cosine,
     cosineDistance,
@@ -756,6 +913,7 @@ module.exports = Object.freeze({
     recordRejections,
     recordScore,
     publicState,
-    outwardAssignments,
+    promptDirection,
+    advancePromptSearch,
     generationPrompt,
 });

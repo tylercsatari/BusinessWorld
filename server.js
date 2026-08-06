@@ -25727,6 +25727,12 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     grindExploration.publicState(explorationState),
                 exploration_strategy:
                     grindExploration.STRATEGY,
+                prompt_search_strategy:
+                    grindExploration.PROMPT_SCHEMA,
+                prompt_search_cursor:
+                    explorationState.promptSearchCursor,
+                prompt_lattice_size:
+                    grindExploration.PROMPT_LATTICE_SIZE,
                 exploration_mode: explorationMode,
                 requested_premise: requestedPremise || null,
                 elite_metric:
@@ -26043,12 +26049,29 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     note = 'stopped by you before the next image call';
                     break;
                 }
+                const candidateCount = (
+                    attempts.length === 0
+                    && selectionRound === 1
+                ) ? 1 : 4;
+                let promptRecipe = null;
+                if (
+                    explorationState.acceptedCount > 0
+                    || selectionRound > 1
+                ) {
+                    promptRecipe = grindExploration.promptDirection(
+                        explorationState.promptSearchCursor
+                    );
+                    explorationState = grindExploration.advancePromptSearch(
+                        explorationState
+                    );
+                }
                 const baseGenerationPrompt = grindExploration.generationPrompt({
                     seedPremise: premise,
                     state: explorationState,
                     priorPremises: acceptedPremises,
                     rejectedPremises,
                     selectionRound,
+                    promptRecipe,
                 });
                 const eliteRoundSources = explorationMode === 'elite-corpus'
                     ? (
@@ -26085,10 +26108,6 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     baseGenerationPrompt,
                     corpusGenerationPrompt,
                 ].filter(Boolean).join('\n\n');
-                const candidateCount = (
-                    attempts.length === 0
-                    && selectionRound === 1
-                ) ? 1 : 4;
                 const beat = (rstat, sec) => {
                     const elapsed = sec >= 60
                         ? `${Math.floor(sec / 60)}m ${sec % 60}s`
@@ -26100,12 +26119,12 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                             ? `idea-model GPU booting (${elapsed})`
                             : `writing ${candidateCount} same-idea hook${
                                 candidateCount === 1 ? '' : 's'
-                            } (${elapsed})`
+                            }${promptRecipe ? ` in ${promptRecipe.id}` : ''} (${elapsed})`
                     }`;
                     return write();
                 };
                 const onRetry = (message, retry) => {
-                    note = `attempt ${attempts.length + 1}: idea-model request did not complete — retrying (${retry}) without ending the run · ${message.slice(0, 60)}`;
+                    note = `attempt ${attempts.length + 1}: idea-model request${promptRecipe ? ` for ${promptRecipe.id}` : ''} did not complete — retrying (${retry}) without ending the run · ${message.slice(0, 60)}`;
                     return write();
                 };
                 let specs;
@@ -26224,15 +26243,11 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                         ...selection.selected,
                         candidatePoolSize: candidates.length,
                         selectionRound,
+                        promptRecipe,
                         structuralAssignment:
-                            explorationState.acceptedCount === 0
+                            !promptRecipe
                                 ? 'seed treatment: establish the supplied idea before directional exploration'
-                                : grindExploration.outwardAssignments(
-                                    explorationState.acceptedCount
-                                        + selectionRound
-                                        - 1,
-                                    1
-                                )[0],
+                                : `${promptRecipe.id}: ${promptRecipe.summary}`,
                         eliteSources: eliteRoundSources,
                         eliteHypothesis:
                             explorationMode === 'elite-corpus'
@@ -26253,9 +26268,9 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 );
                 note = `attempt ${attempts.length + 1}: screened ${
                     candidates.length
-                } hooks before image spend — ${Object.entries(
+                } hooks${promptRecipe ? ` from ${promptRecipe.id}` : ''} before image spend — ${Object.entries(
                     reasonCounts
-                ).map(([reason, count]) => `${reason} ${count}`).join(', ')}; rotating to another semantic direction…`;
+                ).map(([reason, count]) => `${reason} ${count}`).join(', ')}; advancing to a new prompted and measured semantic direction…`;
                 await write();
             }
             if (status !== 'running') break;
@@ -26360,6 +26375,14 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                     selectedCandidate.rankComponents,
                 structural_search_assignment:
                     selectedCandidate.structuralAssignment,
+                prompt_search_recipe:
+                    selectedCandidate.promptRecipe,
+                prompt_search_recipe_id:
+                    selectedCandidate.promptRecipe
+                    && selectedCandidate.promptRecipe.id
+                    || null,
+                prompt_search_strategy:
+                    grindExploration.PROMPT_SCHEMA,
                 exploration_strategy:
                     grindExploration.STRATEGY,
                 exploration_before: requirementsBefore,

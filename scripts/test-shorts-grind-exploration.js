@@ -188,6 +188,23 @@ assert.strictEqual(
 assert.strictEqual(restored.bestScore, afterImprovement.bestScore);
 assert.strictEqual(restored.scoreDeficit, afterImprovement.scoreDeficit);
 
+const advancedPromptState = exploration.advancePromptSearch(
+    exploration.advancePromptSearch(restored)
+);
+assert.strictEqual(
+    advancedPromptState.promptSearchCursor,
+    restored.promptSearchCursor + 2
+);
+const restoredPromptState = exploration.restoreState(
+    exploration.publicState(advancedPromptState),
+    { threshold: 90 }
+);
+assert.strictEqual(
+    restoredPromptState.promptSearchCursor,
+    advancedPromptState.promptSearchCursor,
+    'the directed prompt cursor must survive worker restoration exactly'
+);
+
 let bounded = exploration.createState({ threshold: 100 });
 for (let index = 0; index < 1000; index++) {
     bounded = exploration.recordScore(bounded, 0);
@@ -227,27 +244,66 @@ const prompt = exploration.generationPrompt({
     priorPremises: ['Can a robot arm lift a car?'],
     rejectedPremises: ['Can a robot arm lift something heavy?'],
     selectionRound: 2,
+    promptRecipe: exploration.promptDirection(37),
 });
 assert(prompt.includes('IMMUTABLE VIDEO IDEA: Build a robot arm'));
 assert(prompt.includes('Do not invent a different video concept'));
 assert(prompt.includes('Vary only the hook treatment'));
-assert(prompt.includes('OUTWARD SEARCH ROUND 3'));
-assert(prompt.includes('STRUCTURAL ASSIGNMENT'));
-assert(prompt.includes('Return exactly one normal five-beat plan'));
-assert(prompt.includes('sentence skeleton'));
+assert(prompt.includes('DIRECTED SEARCH D-000038'));
+assert(prompt.includes('screening round 2'));
+assert(prompt.includes('generation instruction, not a learned cluster or score'));
+assert(prompt.includes('ENTRY POINT'));
+assert(prompt.includes('INFORMATION ORDER'));
+assert(prompt.includes('TENSION MECHANISM'));
+assert(prompt.includes('VISUAL EVIDENCE'));
+assert(prompt.includes('OPENING SPEECH ACT'));
+assert(prompt.includes('REVEAL POLICY'));
+assert(prompt.includes('first beat, sentence skeleton'));
 assert(prompt.includes('DO NOT REPEAT THESE RENDERED HOOK TREATMENTS'));
 assert(prompt.includes('RECENT DRAFTS NOT SELECTED FOR RENDER'));
 assert(prompt.includes('soft targets'));
 assert(prompt.includes('underexplored semantic direction'));
 assert(prompt.includes('Missing either target does not discard'));
+assert(prompt.endsWith(
+    'Return the normal fine-tuned five-beat hook plan. Do not discuss these instructions.'
+));
+const firstThousandDirections = Array.from(
+    { length: 1000 },
+    (_, index) => exploration.promptDirection(index)
+);
+assert.strictEqual(
+    new Set(firstThousandDirections.map(value => value.lattice_position)).size,
+    firstThousandDirections.length,
+    'the prompt lattice must not repeat during early exploration'
+);
+assert.strictEqual(
+    exploration.PROMPT_LATTICE_SIZE,
+    768000,
+    'all prompt-axis combinations must remain addressable'
+);
+firstThousandDirections.forEach(direction => {
+    assert.strictEqual(Object.keys(direction.choices).length, 6);
+    assert.strictEqual(direction.schema, exploration.PROMPT_SCHEMA);
+});
+firstThousandDirections.slice(1).forEach((direction, index) => {
+    const priorDirection = firstThousandDirections[index];
+    const changedAxes = Object.keys(direction.choices).filter(axis => (
+        direction.choices[axis].id
+            !== priorDirection.choices[axis].id
+    ));
+    assert(
+        changedAxes.length >= 5,
+        'adjacent prompt coordinates must make a broad structural move'
+    );
+});
 assert.deepStrictEqual(
-    exploration.outwardAssignments(1),
-    exploration.outwardAssignments(4),
-    'the assignment lattice rotates deterministically and repeats only after every assignment has been used'
+    exploration.promptDirection(37),
+    exploration.promptDirection(37),
+    'prompt coordinates must be deterministic'
 );
 assert.notDeepStrictEqual(
-    exploration.outwardAssignments(1),
-    exploration.outwardAssignments(2),
+    exploration.promptDirection(37),
+    exploration.promptDirection(38),
     'consecutive screening rounds must receive different structural searches'
 );
 const firstPrompt = exploration.generationPrompt({
@@ -257,6 +313,16 @@ const firstPrompt = exploration.generationPrompt({
 assert(firstPrompt.includes('IMMUTABLE VIDEO IDEA: Build a robot arm'));
 assert(firstPrompt.includes('This is the first hook treatment'));
 assert(firstPrompt.includes('exact supplied idea'));
+const firstAttemptRecoveryPrompt = exploration.generationPrompt({
+    seedPremise: 'Build a robot arm',
+    state: exploration.createState({ threshold: 90 }),
+    selectionRound: 2,
+    promptRecipe: exploration.promptDirection(0),
+});
+assert(firstAttemptRecoveryPrompt.includes('DIRECTED SEARCH D-000001'));
+assert(firstAttemptRecoveryPrompt.includes(
+    'No hook has rendered yet. This directed recovery'
+));
 
 const root = path.resolve(__dirname, '..');
 const serverSource = fs.readFileSync(
@@ -276,10 +342,15 @@ assert(grindSource.includes('grindExploration.createState'));
 assert(grindSource.includes('grindExploration.measureCandidate'));
 assert(grindSource.includes('grindExploration.selectCandidate'));
 assert(grindSource.includes('selectionRound,'));
+assert(grindSource.includes('grindExploration.promptDirection('));
+assert(grindSource.includes('grindExploration.advancePromptSearch('));
+assert(grindSource.includes('|| selectionRound > 1'));
 assert(grindSource.includes('grindExploration.recordScore'));
 assert(grindSource.includes('direction_signature:'));
 assert(grindSource.includes('nearest_prior_directional_angle_degrees:'));
 assert(grindSource.includes('directional_frontier_score:'));
+assert(grindSource.includes('prompt_search_recipe:'));
+assert(grindSource.includes('prompt_search_strategy:'));
 assert(grindSource.includes('target_seed_embedding_distance:'));
 assert(grindSource.includes('duplicate_embedding_distance_floor:'));
 assert(grindSource.includes('hook_text_embedding_artifact:'));
