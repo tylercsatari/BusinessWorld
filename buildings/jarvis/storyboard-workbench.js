@@ -109,6 +109,9 @@
                 hookText: '',
                 transcriptBeatAlignment: [],
                 transcriptProvenance: null,
+                openingContract: null,
+                generationIntent: null,
+                planningProviderCallCount: null,
                 editPrompt: '',
                 model: DEFAULT_MODEL,
                 stylePreset: DEFAULT_STYLE_ID,
@@ -604,7 +607,7 @@
                     generated ? 'Generated spoken opening' : 'Add spoken text',
                     generated
                         ? 'Separate transcript call, grounded in measured openings'
-                        : 'Optional: supply exact spoken words before generation',
+                        : 'Optional: exact user-supplied words; Score never rewrites them',
                     wordCount
                         ? `${wordCount} word${wordCount === 1 ? '' : 's'}`
                         : 'Visual only'
@@ -612,7 +615,7 @@
                 <div class="sb-workflow-section-body sb-transcript-review-body">
                     <label class="sb-transcript-field">
                         <span>Spoken transcript (optional)</span>
-                        <textarea rows="4" data-sb-hook-text data-sb-focus="hook-text" placeholder="Type exact spoken words, or leave blank and Generate will write the opening separately.">${esc(current.hookText || '')}</textarea>
+                        <textarea rows="4" data-sb-hook-text data-sb-focus="hook-text" placeholder="Type exact spoken words, or leave blank for visual-only scoring.">${esc(current.hookText || '')}</textarea>
                     </label>
                     ${evidence}
                 </div>
@@ -771,7 +774,7 @@
                     </section>
                     <div class="sb-route-or" aria-hidden="true">or</div>
                     <section class="sb-workflow-section sb-ai-route" data-sb-section="build">
-                        ${renderWorkflowHeader('B', 'Generate a whole panel', 'One 45:16 image, split into five 9:16 frames', current.brief.trim() ? 'Scene ready' : 'Ready for a scene')}
+                        ${renderWorkflowHeader('B', 'Generate a whole panel', 'Your exact scene goes directly to the image model', current.brief.trim() ? 'Scene ready' : 'Ready for a scene')}
                         <div class="sb-workflow-section-body sb-ai-route-body">
                             ${renderBuildProgress(current)}
                             <div class="sb-brief-grid is-single">
@@ -1338,11 +1341,12 @@
             paint();
             const result = await runJob('/api/storyboards/generate', {
                 async: true,
+                intent: 'score-raw-user-input-v1',
                 model: current.model,
                 stylePreset: current.stylePreset,
                 brief: current.brief,
                 hookText: current.hookText,
-                writeTranscript: !current.hookText.trim(),
+                writeTranscript: false,
                 panels: current.panels.map(entry => entry.prompt),
                 refs: compositeReferences(current),
                 layout: {
@@ -1377,6 +1381,15 @@
             ) ? result.transcriptBeatAlignment.slice(0, PANEL_COUNT) : [];
             current.transcriptProvenance =
                 result.transcriptProvenance || null;
+            current.openingContract = String(
+                result.renderContract || 'canonical-score-raw-opening-v1'
+            );
+            current.generationIntent = String(
+                result.generationIntent || 'score-raw-user-input-v1'
+            );
+            current.planningProviderCallCount = Number.isFinite(Number(
+                result.planningProviderCallCount
+            )) ? Number(result.planningProviderCallCount) : 0;
         }
 
         async function generateAll() {
@@ -1804,6 +1817,12 @@
                     current.transcriptBeatAlignment,
                 transcriptProvenance:
                     current.transcriptProvenance,
+                openingContract:
+                    current.openingContract,
+                generationIntent:
+                    current.generationIntent,
+                planningProviderCallCount:
+                    current.planningProviderCallCount,
                 model: current.model,
                 stylePreset: current.stylePreset,
                 generationMode: current.generationMode,
@@ -1908,7 +1927,12 @@
                 transcript_provenance:
                     current.transcriptProvenance,
                 opening_contract:
-                    'canonical-complete-hook-opening-v1',
+                    current.openingContract
+                    || 'user-assembled-opening-v1',
+                generation_intent:
+                    current.generationIntent || null,
+                planning_provider_call_count:
+                    current.planningProviderCallCount,
                 style_preset: current.stylePreset,
             });
             const savedHookId = saved && saved.id || null;
@@ -1995,6 +2019,11 @@
             ) ? record.transcriptBeatAlignment.slice(0, PANEL_COUNT) : [];
             target.transcriptProvenance =
                 record.transcriptProvenance || null;
+            target.openingContract = record.openingContract || null;
+            target.generationIntent = record.generationIntent || null;
+            target.planningProviderCallCount = Number.isFinite(Number(
+                record.planningProviderCallCount
+            )) ? Number(record.planningProviderCallCount) : null;
             target.model = MODEL_OPTIONS.some(
                 ([value]) => value === record.model
             ) ? record.model : DEFAULT_MODEL;
@@ -2712,6 +2741,19 @@
                 source.idea || source.title || ''
             ).slice(0, 3000);
             draft.hookText = String(source.text || '').slice(0, 2000);
+            draft.openingContract = source.openingContract
+                || source.opening_contract
+                || null;
+            draft.generationIntent = source.generationIntent
+                || source.generation_intent
+                || null;
+            const planningProviderCallCount = Number(
+                source.planningProviderCallCount
+                ?? source.planning_provider_call_count
+            );
+            draft.planningProviderCallCount = Number.isFinite(
+                planningProviderCallCount
+            ) ? planningProviderCallCount : null;
             draft.sourceOpeningId = sourceId || null;
             draft.sourceSavedHookId = source.id || null;
             draft.folderId = (

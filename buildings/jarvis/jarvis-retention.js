@@ -9972,6 +9972,18 @@ const JarvisRetention = (function () {
                     || upload.title
                     || '',
                 text: upload.transcript || upload.text || '',
+                openingContract:
+                    upload.opening_contract
+                    || upload.openingContract
+                    || null,
+                generationIntent:
+                    upload.generation_intent
+                    || upload.generationIntent
+                    || null,
+                planningProviderCallCount:
+                    upload.planning_provider_call_count
+                    ?? upload.planningProviderCallCount
+                    ?? null,
                 frames: upload.genFrames || [],
                 montage,
                 frameImages,

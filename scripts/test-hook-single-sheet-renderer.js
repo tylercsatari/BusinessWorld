@@ -20,14 +20,25 @@ async function main() {
     );
     assert.strictEqual(
         (source.match(/generateFivePanelStoryboard\(/g) || []).length,
-        2,
-        'only the canonical opening boundary may call the low-level renderer'
+        3,
+        'only the raw Score and planned Auto/Grind boundaries may call the low-level renderer'
     );
     assert.strictEqual(
         (source.match(/generateCanonicalHookOpening\(/g) || []).length,
-        4,
-        'manual Storyboard, Auto, and Grind must call one complete-opening method'
+        3,
+        'Auto and Grind must share one planned complete-opening method'
     );
+    const scoreRouteStart = source.indexOf(
+        "pathname === '/api/storyboards/generate'"
+    );
+    const scoreRouteEnd = source.indexOf(
+        "pathname === '/api/storyboards/panel'",
+        scoreRouteStart
+    );
+    const scoreRoute = source.slice(scoreRouteStart, scoreRouteEnd);
+    assert(scoreRoute.includes('generateRawScoreStoryboardOpening({'));
+    assert(!scoreRoute.includes('generateCanonicalHookOpening({'));
+    assert(!scoreRoute.includes('generateShortsOpeningTranscript('));
     assert(!source.includes('renderHookPanelRobust'));
     const autoStart = source.indexOf('async function hookProcessRequest');
     const autoEnd = source.indexOf(
@@ -70,6 +81,7 @@ async function main() {
     let failProvider = false;
     let promptInput = null;
     let providerInput = null;
+    let transcriptLlmCalls = 0;
     let sourceWidth = 2880;
     let sourceHeight = 1024;
     const context = vm.createContext({
@@ -165,9 +177,13 @@ async function main() {
         shortsTranscriptWriter: {
             CONTRACT_SCHEMA: 'shorts-opening-transcript-writer-v1',
         },
+        async generateShortsOpeningTranscript() {
+            transcriptLlmCalls += 1;
+            throw new Error('raw Score must never call the transcript LLM');
+        },
     });
     vm.runInContext(
-        `${source.slice(start, end)}\nthis.render = generateFivePanelStoryboard; this.opening = generateCanonicalHookOpening;`,
+        `${source.slice(start, end)}\nthis.render = generateFivePanelStoryboard; this.rawScore = generateRawScoreStoryboardOpening; this.opening = generateCanonicalHookOpening;`,
         context
     );
 
@@ -220,6 +236,39 @@ async function main() {
         'This machine should never spill, so I pushed it.'
     );
     assert.strictEqual(opening.stylePreset, 'animation');
+
+    providerCalls = 0;
+    splitCalls = 0;
+    promptInput = null;
+    const rawScore = await context.rawScore({
+        brief: 'Keep every word of this exact scene.',
+        transcript: 'Keep this exact spoken line.',
+        panels: ['Exact panel 1', '2', '3', '4', '5'],
+        stylePreset: 'default',
+        imageModel: 'gpt-image-2',
+        strictImageModel: true,
+        providerCallBudget: 1,
+    });
+    assert.strictEqual(providerCalls, 1);
+    assert.strictEqual(splitCalls, 1);
+    assert.strictEqual(transcriptLlmCalls, 0);
+    assert.strictEqual(
+        promptInput.brief,
+        'Keep every word of this exact scene.'
+    );
+    assert.strictEqual(
+        promptInput.hookText,
+        'Keep this exact spoken line.'
+    );
+    assert.strictEqual(promptInput.panels[0], 'Exact panel 1');
+    assert.strictEqual(rawScore.transcript, 'Keep this exact spoken line.');
+    assert.strictEqual(rawScore.transcriptProvenance.provider, 'user');
+    assert.strictEqual(rawScore.transcriptProvenance.provider_call_count, 0);
+    assert.strictEqual(rawScore.planningProviderCallCount, 0);
+    assert.strictEqual(
+        rawScore.generationIntent,
+        'score-raw-user-input-v1'
+    );
 
     providerCalls = 0;
     splitCalls = 0;

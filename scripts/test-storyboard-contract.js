@@ -172,6 +172,26 @@ assert(
     validateDocument(transcriptDocument).valid,
     'the generated transcript and measured-example lineage must survive canonical persistence'
 );
+const rawScoreDocument = bindDocument({
+    ...document,
+    id: 'sbrawscore001',
+    openingContract: 'canonical-score-raw-opening-v1',
+    generationIntent: 'score-raw-user-input-v1',
+    planningProviderCallCount: 0,
+});
+assert.strictEqual(
+    rawScoreDocument.openingContract,
+    'canonical-score-raw-opening-v1'
+);
+assert.strictEqual(
+    rawScoreDocument.generationIntent,
+    'score-raw-user-input-v1'
+);
+assert.strictEqual(rawScoreDocument.planningProviderCallCount, 0);
+assert(
+    validateDocument(rawScoreDocument).valid,
+    'the zero-LLM Score contract must survive canonical persistence'
+);
 assert.strictEqual(
     Object.prototype.hasOwnProperty.call(
         document.panels[0],

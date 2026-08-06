@@ -432,28 +432,20 @@ async function main() {
                         `SHEET ${index + 1}`
                     )),
                     renderContract:
-                        'canonical-complete-hook-opening-v1',
+                        'canonical-score-raw-opening-v1',
                     providerCallCount: 1,
                     renderCallCount: 1,
-                    transcript:
-                        'This machine cannot spill, so I pushed it until it failed.',
-                    transcriptBeatAlignment: [
-                        'This machine',
-                        'cannot spill',
-                        'I pushed it',
-                        'until it',
-                        'failed',
-                    ],
+                    generationIntent: 'score-raw-user-input-v1',
+                    planningProviderCallCount: 0,
+                    transcript: String(body.hookText || ''),
+                    transcriptBeatAlignment: ['', '', '', '', ''],
                     transcriptProvenance: {
                         schema: 'shorts-opening-transcript-writer-v1',
-                        provider: 'openai',
-                        model: 'fixture-transcript-model',
-                        provider_call_count: 1,
-                        source_population_count: 208,
-                        example_count: 12,
-                        source_window: 'first five measured seconds',
-                        examples: [],
-                        structural_examples_only: true,
+                        provider: 'user',
+                        model: null,
+                        provider_call_count: 0,
+                        example_count: 0,
+                        structural_examples_only: false,
                         scoring_text_input: true,
                     },
                 };
@@ -601,6 +593,10 @@ async function main() {
                 calls.saveScore.push({
                     ledgerSha256: score.score_ledger.ledger_sha256,
                     hasMontage: !!overrides.montage,
+                    openingContract: overrides.opening_contract,
+                    generationIntent: overrides.generation_intent,
+                    planningProviderCallCount:
+                        overrides.planning_provider_call_count,
                 });
                 return { id: `saved-hook-${calls.saveScore.length}` };
             },
@@ -798,8 +794,13 @@ async function main() {
     assert.strictEqual(coherent.payload.panels.length, 5);
     assert.strictEqual(
         coherent.payload.writeTranscript,
-        true,
-        'blank spoken text must trigger the separate transcript writer'
+        false,
+        'Score must never ask the server to write spoken text'
+    );
+    assert.strictEqual(
+        coherent.payload.intent,
+        'score-raw-user-input-v1',
+        'Score must declare the raw-user-input generation contract'
     );
     assert.strictEqual(
         coherent.payload.brief,
@@ -808,21 +809,40 @@ async function main() {
     assert.strictEqual(
         coherent.payload.hookText,
         '',
-        'spoken text must not silently steer whole-panel generation'
+        'blank user text must remain blank'
     );
     assert.strictEqual(
         coherent.transcript,
-        'This machine cannot spill, so I pushed it until it failed.',
-        'the separately written spoken opening must populate the editor'
+        '',
+        'Score must not invent a transcript after rendering'
     );
     assert.strictEqual(
-        coherent.transcriptProvenance.example_count,
-        12,
-        'the workbench must retain transcript evidence for persistence and review'
+        coherent.transcriptProvenance.provider_call_count,
+        0,
+        'Score transcript provenance must prove zero LLM calls'
     );
     assert.match(
         await page.locator('[data-sb-transcript-review]').textContent(),
-        /12 measured high-keep openings/
+        /Score never rewrites them/
+    );
+    assert.deepStrictEqual(
+        await page.evaluate(() => {
+            const record = window.__calls.saveStoryboard.find(item => (
+                item.generationIntent === 'score-raw-user-input-v1'
+            ));
+            return record && {
+                openingContract: record.openingContract,
+                generationIntent: record.generationIntent,
+                planningProviderCallCount:
+                    record.planningProviderCallCount,
+            };
+        }),
+        {
+            openingContract: 'canonical-score-raw-opening-v1',
+            generationIntent: 'score-raw-user-input-v1',
+            planningProviderCallCount: 0,
+        },
+        'background persistence must retain the zero-LLM Score contract'
     );
     assert.deepStrictEqual(
         coherent.payload.layout,
@@ -1118,6 +1138,24 @@ async function main() {
         && window.__workbench.getState().candidates[0]
             .savedHookId === 'saved-hook-1'
     ));
+    assert.deepStrictEqual(
+        await page.evaluate(() => ({
+            hasMontage: window.__calls.saveScore[0].hasMontage,
+            openingContract:
+                window.__calls.saveScore[0].openingContract,
+            generationIntent:
+                window.__calls.saveScore[0].generationIntent,
+            planningProviderCallCount:
+                window.__calls.saveScore[0].planningProviderCallCount,
+        })),
+        {
+            hasMontage: true,
+            openingContract: 'canonical-score-raw-opening-v1',
+            generationIntent: 'score-raw-user-input-v1',
+            planningProviderCallCount: 0,
+        },
+        'Saved Hooks must retain the same raw Score provenance'
+    );
     assert.deepStrictEqual(
         await page.evaluate(before => ({
             savedHooks: window.__calls.saveScore.length,

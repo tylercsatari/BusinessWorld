@@ -15421,6 +15421,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     body.transcriptBeatAlignment,
                 transcriptProvenance:
                     body.transcriptProvenance,
+                openingContract:
+                    body.openingContract,
+                generationIntent:
+                    body.generationIntent,
+                planningProviderCallCount:
+                    body.planningProviderCallCount,
                 model: STORY_MODELS[body.model]
                     ? body.model
                     : STORYBOARD_DEFAULT_MODEL,
@@ -15624,15 +15630,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 body.stylePreset
             );
             const provider = STORY_MODELS[model].provider || 'replicate';
-            const transcriptEvidenceIdentity = hookText
-                ? null
-                : shortsTranscriptWriter.sourceExamples().map(example => ({
-                    video_id: example.id,
-                    actual_keep_rate_percent: example.keepRate,
-                    measured_window_seconds:
-                        example.measuredWindowSeconds,
-                    transcript: example.transcript,
-                }));
             const requestFingerprint = quantRequestFingerprint(
                 'raw-storyboard-generate',
                 'shorts',
@@ -15640,23 +15637,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     model,
                     brief,
                     panels,
+                    generation_intent:
+                        'score-raw-user-input-v1',
                     transcript_mode: hookText
                         ? 'supplied'
-                        : shortsTranscriptWriter.CONTRACT_SCHEMA,
+                        : 'visual-only',
                     supplied_transcript: hookText || null,
-                    transcript_model: hookText
-                        ? null
-                        : String(
-                            process.env.SHORTS_TRANSCRIPT_MODEL
-                            || process.env.OPENAI_CHAT_MODEL
-                            || 'gpt-4o'
-                        ).trim(),
-                    transcript_evidence_sha256:
-                        transcriptEvidenceIdentity
-                            ? sha256Bytes(canonicalJsonBytes(
-                                transcriptEvidenceIdentity
-                            ))
-                            : null,
+                    planning_provider_call_count: 0,
                     style_preset: style.id,
                     reference_identities: refs.identities,
                     geometry: storyboardSheetGeometry(
@@ -15672,12 +15659,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const jobId = quantJobSubmit(
                 'raw-storyboard-generate',
                 async () => {
-                    const rendered = await generateCanonicalHookOpening({
+                    const rendered = await generateRawScoreStoryboardOpening({
                         brief,
-                        videoIdea: brief,
-                        hookTreatment: brief,
                         transcript: hookText,
-                        writeTranscript: !hookText,
                         panels,
                         stylePreset: style.id,
                         imageModel: model,
@@ -15739,6 +15723,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             rendered.geometry.render_call_count,
                         renderContract:
                             rendered.openingContract,
+                        generationIntent:
+                            rendered.generationIntent,
+                        planningProviderCallCount:
+                            rendered.planningProviderCallCount,
                         transcript: rendered.transcript,
                         transcriptBeatAlignment:
                             rendered.transcriptBeatAlignment,
@@ -15775,7 +15763,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             refs.identities.length,
                         transcriptMode: hookText
                             ? 'supplied'
-                            : shortsTranscriptWriter.CONTRACT_SCHEMA,
+                            : 'visual-only',
+                        generationIntent:
+                            'score-raw-user-input-v1',
+                        planningProviderCallCount: 0,
                     },
                     saved: false,
                 });
@@ -23242,9 +23233,95 @@ function suppliedOpeningTranscript(transcript) {
     };
 }
 
-// This is the only initial-opening boundary used by Storyboard, Auto, Grind,
-// and Elite exploration. Upstream models may alter the context, but not the
-// image renderer, style contract, sheet geometry, split, or transcript writer.
+function assertCanonicalCompleteOpeningRender(rendered, requestedStyle) {
+    const valid = !!(
+        rendered
+        && rendered.frames
+        && rendered.frames.length === fivePanelSheet.PANEL_COUNT
+        && rendered.geometry
+        && rendered.geometry.provider_call_count === 1
+        && rendered.geometry.render_call_count === 1
+        && rendered.sourceType
+        && rendered.sourceType.verifiedWideSheet === true
+        && rendered.stylePreset === requestedStyle.id
+        && (
+            requestedStyle.id !== storyboardStylePresets.ANIMATION_STYLE_ID
+            || rendered.prompt.includes('FIVE-FRAME CONTINUITY LOCK')
+        )
+    );
+    if (!valid) {
+        const error = new Error(
+            'canonical complete-opening render contract was not satisfied'
+        );
+        error.code = 'CANONICAL_HOOK_OPENING_INVALID';
+        error.statusCode = 500;
+        throw error;
+    }
+}
+
+// Score is deliberately raw. It preserves the user's scene, optional panel
+// prompts, references, and optional spoken text without calling an idea or
+// transcript LLM. Only the selected image model receives the deterministic
+// five-panel prompt wrapper required to produce one valid 45:16 sheet.
+async function generateRawScoreStoryboardOpening({
+    brief,
+    transcript,
+    panels,
+    stylePreset,
+    imageModel,
+    strictImageModel = true,
+    providerCallBudget = 1,
+    references = [],
+    referenceDescriptions = [],
+    referenceRelation,
+    shouldStop,
+} = {}) {
+    const canonicalImageModel = canonicalHookSheetModelKey(
+        imageModel
+        || process.env.HOOK_PANEL_MODEL
+        || process.env.HOOK_FRAME_MODEL
+        || STORYBOARD_DEFAULT_MODEL
+    );
+    const normalizedBrief = String(brief || '').trim().slice(0, 8000);
+    const normalizedTranscript = String(transcript || '')
+        .trim()
+        .slice(0, 2000);
+    const normalizedPanels = fivePanelSheet.normalizePanels(
+        panels,
+        normalizedBrief || normalizedTranscript
+    );
+    const requestedStyle = storyboardStylePresets.stylePreset(stylePreset);
+    const rendered = await generateFivePanelStoryboard({
+        brief: normalizedBrief,
+        hookText: normalizedTranscript,
+        panels: normalizedPanels,
+        stylePreset: requestedStyle.id,
+        imageModel: canonicalImageModel,
+        strictImageModel,
+        providerCallBudget,
+        references,
+        referenceDescriptions,
+        referenceRelation,
+        shouldStop,
+    });
+    assertCanonicalCompleteOpeningRender(rendered, requestedStyle);
+    const transcriptResult = suppliedOpeningTranscript(
+        normalizedTranscript
+    );
+    return {
+        ...rendered,
+        transcript: transcriptResult.transcript,
+        transcriptBeatAlignment: transcriptResult.beatAlignment,
+        transcriptProvenance: transcriptResult.provenance,
+        openingContract: 'canonical-score-raw-opening-v1',
+        generationIntent: 'score-raw-user-input-v1',
+        planningProviderCallCount: 0,
+    };
+}
+
+// Auto and Grind use this planned-opening boundary. Their trained idea model
+// supplies the hook treatment upstream, then the transcript model writes the
+// spoken opening before the same one-call image renderer is used.
 async function generateCanonicalHookOpening({
     brief,
     videoIdea,
@@ -23297,29 +23374,7 @@ async function generateCanonicalHookOpening({
         referenceRelation,
         shouldStop,
     });
-    const valid = !!(
-        rendered
-        && rendered.frames
-        && rendered.frames.length === fivePanelSheet.PANEL_COUNT
-        && rendered.geometry
-        && rendered.geometry.provider_call_count === 1
-        && rendered.geometry.render_call_count === 1
-        && rendered.sourceType
-        && rendered.sourceType.verifiedWideSheet === true
-        && rendered.stylePreset === requestedStyle.id
-        && (
-            requestedStyle.id !== storyboardStylePresets.ANIMATION_STYLE_ID
-            || rendered.prompt.includes('FIVE-FRAME CONTINUITY LOCK')
-        )
-    );
-    if (!valid) {
-        const error = new Error(
-            'canonical complete-opening render contract was not satisfied'
-        );
-        error.code = 'CANONICAL_HOOK_OPENING_INVALID';
-        error.statusCode = 500;
-        throw error;
-    }
+    assertCanonicalCompleteOpeningRender(rendered, requestedStyle);
     return {
         ...rendered,
         transcript: transcriptResult.transcript,

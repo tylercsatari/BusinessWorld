@@ -519,6 +519,27 @@ function bindDocument(value) {
     if (transcriptProvenance) {
         document.transcriptProvenance = transcriptProvenance;
     }
+    const openingContract = cleanText(value.openingContract, 96);
+    if (openingContract) document.openingContract = openingContract;
+    const generationIntent = cleanText(value.generationIntent, 96);
+    if (generationIntent) document.generationIntent = generationIntent;
+    const hasPlanningProviderCallCount = (
+        value.planningProviderCallCount !== null
+        && value.planningProviderCallCount !== undefined
+        && value.planningProviderCallCount !== ''
+    );
+    const planningProviderCallCount = Number(
+        value.planningProviderCallCount
+    );
+    if (
+        hasPlanningProviderCallCount
+        && Number.isFinite(planningProviderCallCount)
+        && planningProviderCallCount >= 0
+    ) {
+        document.planningProviderCallCount = Math.floor(
+            planningProviderCallCount
+        );
+    }
     if (!ID_PATTERN.test(document.id)) {
         throw new Error('storyboard id is invalid');
     }
