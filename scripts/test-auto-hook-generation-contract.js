@@ -18,11 +18,15 @@ const storyboard = fs.readFileSync(
 
 assert(
     storyboard.includes('IMAGE_MODELS: PUBLIC_IMAGE_MODELS')
+        && storyboard.includes(
+            'SHEET_IMAGE_MODELS: PUBLIC_SHEET_IMAGE_MODELS'
+        )
         && storyboard.includes('DEFAULT_IMAGE_MODEL: DEFAULT_MODEL'),
     'Storyboard must export the one shared image-model registry'
 );
 assert(
     ui.includes('function automaticImageModelSelect')
+        && ui.includes('contract.SHEET_IMAGE_MODELS')
         && ui.includes('data-auto-image-model')
         && ui.includes('imageModel: automaticImageModel()')
         && ui.includes('strictImageModel: true'),
@@ -62,7 +66,10 @@ const autoRouteEnd = server.indexOf(
 const autoRoute = server.slice(autoRouteStart, autoRouteEnd);
 assert(
     autoRoute.includes('const strictImageModel = (')
-        && autoRoute.includes('strict_image_model: strictImageModel'),
+        && autoRoute.includes('strict_image_model: strictImageModel')
+        && autoRoute.includes(
+            'image_provider_call_budget_per_hook:'
+        ),
     'Auto must resolve and persist strict image-model selection inside its own route scope'
 );
 assert(

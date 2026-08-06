@@ -4141,8 +4141,9 @@ const JarvisRetention = (function () {
     function automaticImageModelContract() {
         const contract = typeof window !== 'undefined'
             && window.JarvisStoryboardWorkbench;
-        const models = contract && Array.isArray(contract.IMAGE_MODELS)
-            ? contract.IMAGE_MODELS.filter(model => (
+        const models = contract
+            && Array.isArray(contract.SHEET_IMAGE_MODELS)
+            ? contract.SHEET_IMAGE_MODELS.filter(model => (
                 model
                 && typeof model.value === 'string'
                 && typeof model.label === 'string'

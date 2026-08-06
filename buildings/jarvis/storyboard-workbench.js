@@ -28,8 +28,21 @@
         ['nano-banana', 'Nano Banana'],
         ['nano-banana-pro', 'Nano Banana Pro'],
     ];
+    const SHEET_MODEL_VALUES = new Set([
+        'gpt-image-2',
+        'flux-2-pro',
+        'seedream-4',
+    ]);
     const PUBLIC_IMAGE_MODELS = Object.freeze(
         MODEL_OPTIONS.map(([value, label]) => Object.freeze({
+            value,
+            label,
+        }))
+    );
+    const PUBLIC_SHEET_IMAGE_MODELS = Object.freeze(
+        MODEL_OPTIONS.filter(([value]) => (
+            SHEET_MODEL_VALUES.has(value)
+        )).map(([value, label]) => Object.freeze({
             value,
             label,
         }))
@@ -1313,6 +1326,14 @@
         }
 
         async function generateComposite(current) {
+            if (!SHEET_MODEL_VALUES.has(current.model)) {
+                throw new Error(
+                    'Complete hooks require a model that returns one exact '
+                        + '45:16 sheet. Choose GPT Image 2, FLUX.2 Pro, or '
+                        + 'Seedream 4. Nano Banana remains available for '
+                        + 'explicit single-frame edits.'
+                );
+            }
             state.status = 'Generating one coherent five-panel sheet...';
             paint();
             const result = await runJob('/api/storyboards/generate', {
@@ -1477,6 +1498,7 @@
                         : 'new';
                 const result = await runJob('/api/storyboards/panel', {
                     async: true,
+                    intent: 'manual-panel-edit',
                     model: current.model,
                     stylePreset: current.stylePreset,
                     prompt: selected.image && selected.strokes.length
@@ -3392,5 +3414,6 @@
         create,
         DEFAULT_IMAGE_MODEL: DEFAULT_MODEL,
         IMAGE_MODELS: PUBLIC_IMAGE_MODELS,
+        SHEET_IMAGE_MODELS: PUBLIC_SHEET_IMAGE_MODELS,
     });
 }());

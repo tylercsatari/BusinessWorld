@@ -14628,7 +14628,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     'grind_image_model_invalid'
                 );
             }
-            const imageModel = hookPanelModelKey(
+            const imageModel = canonicalHookSheetModelKey(
                 requestedImageModel
                 || process.env.HOOK_PANEL_MODEL
                 || process.env.HOOK_FRAME_MODEL
@@ -14994,7 +14994,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     'hook_image_model_invalid'
                 );
             }
-            const imageModel = hookPanelModelKey(
+            const imageModel = canonicalHookSheetModelKey(
                 requestedImageModel
                 || process.env.HOOK_PANEL_MODEL
                 || process.env.HOOK_FRAME_MODEL
@@ -15017,6 +15017,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 animation,
                 render_mode: 'coherent-sheet',
                 image_model: imageModel || null,
+                image_provider_call_budget_per_hook:
+                    CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET,
                 strict_image_model: strictImageModel,
                 creator_profile:
                     safeCreatorProfile(body.creatorProfile) || null,
@@ -15058,6 +15060,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 animation,
                 render_mode: 'coherent-sheet',
                 image_model: imageModel,
+                image_provider_call_budget_per_hook:
+                    CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET,
                 strict_image_model: strictImageModel,
             }));   // poll status + group/demo/<rid> for the result
         } catch (e) { res.writeHead(e.statusCode || 500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message, code: e.code || 'hook_generation_start_failed' })); }
@@ -15594,9 +15598,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 { write: true }
             );
             const body = await readBody(req, 32 * 1024 * 1024);
-            const model = STORY_MODELS[body.model]
-                ? body.model
-                : STORYBOARD_DEFAULT_MODEL;
+            const model = canonicalHookSheetModelKey(
+                body.model || STORYBOARD_DEFAULT_MODEL
+            );
             const brief = String(body.brief || '').trim().slice(0, 8000);
             const hookText =
                 String(body.hookText || '').trim().slice(0, 2000);
@@ -15804,6 +15808,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 { write: true }
             );
             const body = await readBody(req, 32 * 1024 * 1024);
+            if (body.intent !== 'manual-panel-edit') {
+                throw new HttpRequestError(
+                    422,
+                    'Single-frame generation is available only from an '
+                        + 'explicit Storyboard frame edit.',
+                    'storyboard_panel_manual_intent_required'
+                );
+            }
             const instruction =
                 String(body.prompt || '').trim().slice(0, 1800);
             if (!instruction) {
@@ -16013,35 +16025,20 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    // Render ONE frame. relation routes the model: edit → Kontext (transforms refs[0]'s actual pixels);
-    // compose → multi-reference model; new → text-to-image. refs are data-uris of the source frame(s).
+    // Retired: this unscoped endpoint could mint a vertical image without an
+    // explicit Storyboard edit. Complete hooks use the canonical 45:16 sheet;
+    // selected-frame edits use /api/storyboards/panel with a manual intent.
     if (pathname === '/api/frames/gen' && req.method === 'POST') {
-        try {
-            const body = (await readBody(req)) || {};
-            const prompt = String(body.prompt || '').trim().slice(0, 1800);
-            if (!prompt) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'prompt required' })); return; }
-            const model = STORY_MODELS[body.model]
-                ? body.model
-                : STORYBOARD_DEFAULT_MODEL;
-            const refs = Array.isArray(body.refs) ? body.refs.filter(x => typeof x === 'string' && x.startsWith('data:image')).slice(0, 8) : [];
-            const relation = ['new', 'edit', 'compose'].includes(body.relation) ? body.relation : (refs.length ? 'compose' : 'new');
-            const effectiveModel = storyboardEffectiveModel(
-                model,
-                relation,
-                refs.length
-            );
-            const image = await genStoryFrame(model, prompt, refs, relation);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                image,
-                model: effectiveModel,
-                modelSlug: STORY_MODELS[effectiveModel].slug,
-                provider: STORY_MODELS[effectiveModel].provider
-                    || 'replicate',
-                requestedModel: model,
-                relation,
-            }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        res.writeHead(410, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+        });
+        res.end(JSON.stringify({
+            error:
+                'This legacy frame generator is retired. Use an explicit '
+                + 'Storyboard frame edit.',
+            code: 'legacy_frame_generator_retired',
+        }));
         return;
     }
     const demoStat = pathname.match(/^\/api\/hooks\/demo\/status\/([\w-]{1,40})$/);
@@ -22648,6 +22645,9 @@ const NOV_MIN_INVENT = 0.18, NOV_MIN_PREMISE = 0.12;
 // One shared provider boundary powers Jarvis and Experiment Lab. Prior frames are passed as
 // reference images so a character, object, and scene can remain consistent across all five frames.
 const STORYBOARD_DEFAULT_MODEL = openAIImageProvider.OPENAI_IMAGE_MODEL;
+const CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET = 1;
+const CANONICAL_HOOK_SHEET_ASPECT_RATIO = 45 / 16;
+const CANONICAL_HOOK_SHEET_RATIO_TOLERANCE = 0.02;
 const STORY_MODELS = {
     'gpt-image-2':      { provider: 'openai',    slug: 'gpt-image-2',                           max: 8 },
     'flux-2-pro':       { provider: 'replicate', slug: 'black-forest-labs/flux-2-pro',       field: 'input_images', arr: true,  max: 8 },
@@ -22656,6 +22656,11 @@ const STORY_MODELS = {
     'nano-banana-pro':  { provider: 'replicate', slug: 'google/nano-banana-pro',             field: 'image_input',  arr: true,  max: 14 },
     'flux-kontext-pro': { provider: 'replicate', slug: 'black-forest-labs/flux-kontext-pro', field: 'input_image',  arr: false, max: 1 },
 };
+const STORY_SHEET_MODEL_KEYS = new Set([
+    'gpt-image-2',
+    'flux-2-pro',
+    'seedream-4',
+]);
 const STORY_EDITOR = 'flux-kontext-pro';   // EDIT beats always use the edit specialist — it transforms the ACTUAL prior frame
 function storyboardEffectiveModel(modelKey, relation, referenceCount) {
     const requested = STORY_MODELS[modelKey]
@@ -22837,6 +22842,20 @@ function hookPanelModelKey(value) {
     return match ? match[0] : STORYBOARD_DEFAULT_MODEL;
 }
 
+function canonicalHookSheetModelKey(value) {
+    const key = hookPanelModelKey(value);
+    if (!STORY_SHEET_MODEL_KEYS.has(key)) {
+        const error = new Error(
+            `${key} cannot return an exact 45:16 five-panel sheet; choose `
+                + 'GPT Image 2, FLUX.2 Pro, or Seedream 4'
+        );
+        error.code = 'CANONICAL_HOOK_SHEET_MODEL_UNSUPPORTED';
+        error.statusCode = 422;
+        throw error;
+    }
+    return key;
+}
+
 function canonicalFivePanelStoryboardRequest({
     brief,
     hookText,
@@ -22884,16 +22903,26 @@ function canonicalFivePanelStoryboardRequest({
             `unknown five-panel image model: ${explicitlyRequested}`
         );
     }
-    const preferred = hookPanelModelKey(
+    const preferred = canonicalHookSheetModelKey(
         explicitlyRequested
         || process.env.HOOK_PANEL_MODEL
         || process.env.HOOK_FRAME_MODEL
         || STORYBOARD_DEFAULT_MODEL
     );
-    const finiteBudget = Number(providerCallBudget);
-    const callBudget = Number.isFinite(finiteBudget)
-        ? Math.max(1, Math.floor(finiteBudget))
-        : 1;
+    const requestedCallBudget = Number(providerCallBudget);
+    if (
+        !Number.isFinite(requestedCallBudget)
+        || requestedCallBudget
+            !== CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET
+    ) {
+        const error = new Error(
+            'complete hook generation requires exactly one image-provider '
+                + 'call for one five-panel sheet'
+        );
+        error.code = 'CANONICAL_HOOK_SHEET_CALL_BUDGET_INVALID';
+        error.statusCode = 422;
+        throw error;
+    }
     const relation = normalizedReferences.length
         ? (
             ['edit', 'compose'].includes(referenceRelation)
@@ -22913,7 +22942,8 @@ function canonicalFivePanelStoryboardRequest({
         relation,
         preferredModel: preferred,
         strictImageModel: strictImageModel !== false,
-        providerCallBudget: callBudget,
+        providerCallBudget:
+            CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET,
         shouldStop: typeof shouldStop === 'function' ? shouldStop : null,
     });
 }
@@ -22922,18 +22952,21 @@ function verifiedStoryboardSheetSource(decoded) {
     const width = Number(decoded && decoded.width);
     const height = Number(decoded && decoded.height);
     const ratio = width / height;
-    const minimumSupportedSheetRatio = (21 / 9) * 0.98;
+    const relativeRatioError = Math.abs(
+        ratio - CANONICAL_HOOK_SHEET_ASPECT_RATIO
+    ) / CANONICAL_HOOK_SHEET_ASPECT_RATIO;
     if (
         !Number.isFinite(width)
         || !Number.isFinite(height)
         || width < 1
         || height < 1
         || !Number.isFinite(ratio)
-        || ratio < minimumSupportedSheetRatio
+        || relativeRatioError
+            > CANONICAL_HOOK_SHEET_RATIO_TOLERANCE
     ) {
         const error = new Error(
             'the image provider returned a single-frame image instead of '
-                + 'the required wide five-panel sheet'
+                + 'the required 45:16 five-panel sheet'
         );
         error.code = 'STORYBOARD_SHEET_SOURCE_GEOMETRY_INVALID';
         error.statusCode = 422;
@@ -22943,8 +22976,13 @@ function verifiedStoryboardSheetSource(decoded) {
         width,
         height,
         aspectRatio: Math.round(ratio * 10000) / 10000,
-        requiredMinimumAspectRatio:
-            Math.round(minimumSupportedSheetRatio * 10000) / 10000,
+        requiredAspectRatio: '45:16',
+        requiredAspectRatioValue:
+            CANONICAL_HOOK_SHEET_ASPECT_RATIO,
+        relativeRatioError:
+            Math.round(relativeRatioError * 1000000) / 1000000,
+        ratioTolerance:
+            CANONICAL_HOOK_SHEET_RATIO_TOLERANCE,
         verifiedWideSheet: true,
     };
 }
@@ -22957,147 +22995,104 @@ async function generateFivePanelStoryboard(input) {
         && input.schema === 'canonical-five-panel-storyboard-request-v1'
         ? input
         : canonicalFivePanelStoryboardRequest(input || {});
-    const ladder = (request.strictImageModel
-        ? [request.preferredModel]
-        : [
-            request.preferredModel,
-            'flux-2-pro',
-            'seedream-4',
-            'gpt-image-2',
-        ]
-    ).filter((value, index, values) => (
-        values.indexOf(value) === index
-    ));
-    let lastError = null;
-    let flagged = false;
-    let providerCalls = 0;
-    const failures = [];
-    for (let modelIndex = 0; modelIndex < ladder.length; modelIndex++) {
-        const model = ladder[modelIndex];
-        const tries = modelIndex === 0 ? 2 : 1;
-        for (let attempt = 0; attempt < tries; attempt++) {
-            if (providerCalls >= request.providerCallBudget) break;
-            if (
-                request.shouldStop
-                && await request.shouldStop()
-            ) {
-                const error = new Error(
-                    'five-panel image generation was stopped by the user'
-                );
-                error.code = 'HOOK_GENERATION_STOPPED';
-                throw error;
+    if (
+        request.providerCallBudget
+            !== CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET
+    ) {
+        throw new Error(
+            'canonical hook sheet request exceeded its one-call budget'
+        );
+    }
+    if (request.shouldStop && await request.shouldStop()) {
+        throw stoppedHookGenerationError(
+            'five-panel image generation was stopped by the user'
+        );
+    }
+    const model = request.preferredModel;
+    let image;
+    try {
+        // This is the sole provider-image call in complete-hook generation.
+        // It returns one 45:16 bitmap; every 9:16 panel is cropped locally.
+        image = await genStoryFrame(
+            model,
+            request.prompt,
+            request.references,
+            request.relation,
+            {
+                aspectRatio: 'storyboard-sheet',
+                shouldStop: request.shouldStop,
             }
-            providerCalls += 1;
-            try {
-                const image = await genStoryFrame(
-                    model,
-                    request.prompt,
-                    request.references,
-                    request.relation,
-                    {
-                        aspectRatio: 'storyboard-sheet',
-                        shouldStop: request.shouldStop,
-                    }
-                );
-                if (
-                    request.shouldStop
-                    && await request.shouldStop()
-                ) {
-                    const error = new Error(
-                        'five-panel image generation was stopped by the user'
-                    );
-                    error.code = 'HOOK_GENERATION_STOPPED';
-                    throw error;
-                }
-                const decoded = decodeStoryboardDataImage(
-                    image,
-                    'generated five-panel hook sheet'
-                );
-                const sourceGeometry = verifiedStoryboardSheetSource(decoded);
-                const split = await fivePanelSheet.splitImage(
-                    decoded.bytes,
-                    { env: RAW_PY_ENV }
-                );
-                if (
-                    !Array.isArray(split.frames)
-                    || split.frames.length !== fivePanelSheet.PANEL_COUNT
-                    || !split.geometry
-                    || split.geometry.render_call_count !== 1
-                ) {
-                    const error = new Error(
-                        'the canonical sheet splitter did not return exactly '
-                            + 'five deterministic frames'
-                    );
-                    error.code = 'STORYBOARD_SHEET_SPLIT_INVALID';
-                    error.statusCode = 500;
-                    throw error;
-                }
-                return {
-                    source: decoded.bytes,
-                    frames: split.frames,
-                    montage: split.montage,
-                    model,
-                    modelSlug: STORY_MODELS[model].slug,
-                    provider: STORY_MODELS[model].provider || 'replicate',
-                    stylePreset: request.stylePreset,
-                    prompt: request.prompt,
-                    panels: request.panels,
-                    relation: request.relation,
-                    referenceCount: request.references.length,
-                    sourceType: {
-                        extension: decoded.extension,
-                        mediaType: decoded.mediaType,
-                        ...sourceGeometry,
-                    },
-                    geometry: {
-                        ...storyboardSheetGeometry(model),
-                        ...split.geometry,
-                        source_geometry: sourceGeometry,
-                        provider_call_count: providerCalls,
-                    },
-                    fallback: modelIndex > 0,
-                    flagged,
-                    requestedModel: request.preferredModel,
-                    strictModel: request.strictImageModel,
-                };
-            } catch (error) {
-                lastError = error;
-                failures.push(
-                    `${model}: ${String(
-                        error && error.message || error
-                    ).slice(0, 220)}`
-                );
-                if (
-                    /sensitive|E005|flagged|nsfw/i.test(
-                        String(error && error.message || error)
-                    )
-                ) {
-                    flagged = true;
-                    break;
-                }
-                if (
-                    attempt + 1 < tries
-                    && providerCalls < request.providerCallBudget
-                ) {
-                    await new Promise(resolve => setTimeout(
-                        resolve,
-                        1200 * (attempt + 1)
-                    ));
-                }
-            }
+        );
+    } catch (error) {
+        if (error && error.code === 'HOOK_GENERATION_STOPPED') throw error;
+        const failure = new Error(
+            `five-panel image generation failed — ${model}: ${String(
+                error && error.message || error
+            ).slice(0, 220)}`
+        );
+        if (error && error.code) failure.code = error.code;
+        if (error && error.statusCode) {
+            failure.statusCode = error.statusCode;
         }
-        if (providerCalls >= request.providerCallBudget) break;
+        throw failure;
     }
-    const failure = new Error(
-        `five-panel image generation failed${
-            failures.length ? ` — ${failures.join(' | ')}` : ''
-        }`
+    if (request.shouldStop && await request.shouldStop()) {
+        throw stoppedHookGenerationError(
+            'five-panel image generation was stopped by the user'
+        );
+    }
+    const decoded = decodeStoryboardDataImage(
+        image,
+        'generated five-panel hook sheet'
     );
-    if (lastError && lastError.code) failure.code = lastError.code;
-    if (lastError && lastError.statusCode) {
-        failure.statusCode = lastError.statusCode;
+    const sourceGeometry = verifiedStoryboardSheetSource(decoded);
+    const split = await fivePanelSheet.splitImage(
+        decoded.bytes,
+        { env: RAW_PY_ENV }
+    );
+    if (
+        !Array.isArray(split.frames)
+        || split.frames.length !== fivePanelSheet.PANEL_COUNT
+        || !split.geometry
+        || split.geometry.render_call_count !== 1
+    ) {
+        const error = new Error(
+            'the canonical sheet splitter did not return exactly '
+                + 'five deterministic frames'
+        );
+        error.code = 'STORYBOARD_SHEET_SPLIT_INVALID';
+        error.statusCode = 500;
+        throw error;
     }
-    throw failure;
+    return {
+        source: decoded.bytes,
+        frames: split.frames,
+        montage: split.montage,
+        model,
+        modelSlug: STORY_MODELS[model].slug,
+        provider: STORY_MODELS[model].provider || 'replicate',
+        stylePreset: request.stylePreset,
+        prompt: request.prompt,
+        panels: request.panels,
+        relation: request.relation,
+        referenceCount: request.references.length,
+        sourceType: {
+            extension: decoded.extension,
+            mediaType: decoded.mediaType,
+            ...sourceGeometry,
+        },
+        geometry: {
+            ...storyboardSheetGeometry(model),
+            ...split.geometry,
+            source_geometry: sourceGeometry,
+            provider_call_count:
+                CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET,
+        },
+        fallback: false,
+        flagged: false,
+        requestedModel: request.preferredModel,
+        strictModel: request.strictImageModel,
+    };
 }
 
 function shortsTranscriptProviderError(response, payload) {
@@ -23266,6 +23261,12 @@ async function generateCanonicalHookOpening({
     referenceRelation,
     shouldStop,
 } = {}) {
+    const canonicalImageModel = canonicalHookSheetModelKey(
+        imageModel
+        || process.env.HOOK_PANEL_MODEL
+        || process.env.HOOK_FRAME_MODEL
+        || STORYBOARD_DEFAULT_MODEL
+    );
     const normalizedPanels = fivePanelSheet.normalizePanels(
         panels,
         hookTreatment || brief || videoIdea
@@ -23288,7 +23289,7 @@ async function generateCanonicalHookOpening({
         hookText: '',
         panels: normalizedPanels,
         stylePreset: requestedStyle.id,
-        imageModel,
+        imageModel: canonicalImageModel,
         strictImageModel,
         providerCallBudget,
         references,
@@ -23614,6 +23615,8 @@ async function hookProcessRequest(
                     ? storyboardStylePresets.ANIMATION_STYLE_ID
                     : storyboardStylePresets.DEFAULT_STYLE_ID,
                 render_mode: 'coherent-sheet',
+                image_provider_call_budget_per_hook:
+                    CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET,
                 requested_image_model: requestedImageModel,
                 strict_image_model: strictImageModel,
                 autosave_folder_id:
@@ -25319,8 +25322,52 @@ function grindCoordinateValue(score, coordinateId) {
     };
 }
 
+function shortsGrindAttemptRenderValid(attempt) {
+    const geometry = attempt
+        && attempt.panel_geometry;
+    const sourceGeometry = geometry
+        && geometry.source_geometry;
+    const sourceRatio = Number(
+        sourceGeometry && sourceGeometry.aspectRatio
+    );
+    const relativeRatioError = Math.abs(
+        sourceRatio - CANONICAL_HOOK_SHEET_ASPECT_RATIO
+    ) / CANONICAL_HOOK_SHEET_ASPECT_RATIO;
+    return !!(
+        attempt
+        && attempt.opening_contract
+            === 'canonical-complete-hook-opening-v1'
+        && attempt.render_mode === 'coherent-sheet'
+        && Number(attempt.frames_done) === fivePanelSheet.PANEL_COUNT
+        && Array.isArray(attempt.frame_imgs)
+        && attempt.frame_imgs.length === fivePanelSheet.PANEL_COUNT
+        && attempt.frame_imgs.every(frameId => (
+            typeof frameId === 'string'
+            && frameId.length > 0
+        ))
+        && Number(attempt.image_provider_call_count)
+            === CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET
+        && Number(attempt.render_call_count) === 1
+        && geometry
+        && Number(geometry.provider_call_count)
+            === CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET
+        && Number(geometry.render_call_count) === 1
+        && Number(geometry.panel_count) === fivePanelSheet.PANEL_COUNT
+        && geometry.sheet_aspect_ratio === '45:16'
+        && sourceGeometry
+        && sourceGeometry.verifiedWideSheet === true
+        && Number.isFinite(sourceRatio)
+        && relativeRatioError
+            <= CANONICAL_HOOK_SHEET_RATIO_TOLERANCE
+    );
+}
+
 function shortsGrindAttemptProjectionValid(attempt, coordinateId) {
-    if (!attempt || attempt.score_verified !== true) return false;
+    if (
+        !attempt
+        || attempt.score_verified !== true
+        || !shortsGrindAttemptRenderValid(attempt)
+    ) return false;
     if (
         Object.prototype.hasOwnProperty.call(
             attempt,
@@ -25716,6 +25763,23 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
         QUEUE_LEASE_NAMES.SHORTS_GRIND,
         rid
     );
+    if (
+        req0.render_mode != null
+        && req0.render_mode !== 'coherent-sheet'
+    ) {
+        throw new Error(
+            'Shorts Grind only accepts the coherent five-panel sheet renderer'
+        );
+    }
+    if (
+        req0.image_provider_call_budget_per_attempt != null
+        && Number(req0.image_provider_call_budget_per_attempt)
+            !== CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET
+    ) {
+        throw new Error(
+            'Shorts Grind requires exactly one image-provider call per hook'
+        );
+    }
     const requestedPremise = String(req0.premise || '').trim().slice(0, 500);
     let premise = requestedPremise;
     const explorationMode = req0.exploration_mode === 'elite-corpus'
@@ -25781,7 +25845,7 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
         )
     );
     const animation = req0.animation === true;
-    const imageModel = hookPanelModelKey(
+    const imageModel = canonicalHookSheetModelKey(
         req0.image_model
         || process.env.HOOK_PANEL_MODEL
         || process.env.HOOK_FRAME_MODEL
@@ -26742,6 +26806,12 @@ async function grindProcess(rid, req0, ownership, resumeRun = null) {
                 if (!panel || !panel.montage) {
                     throw new Error('five-panel image was not rendered');
                 }
+                if (!shortsGrindAttemptRenderValid(a)) {
+                    throw new Error(
+                        'five-panel image provenance failed the one-call '
+                            + '45:16 sheet contract'
+                    );
+                }
                 const score = await resilientGrindStep(
                     'canonical hook scoring',
                     () => scoreMontage(
@@ -27059,7 +27129,7 @@ async function grindQueue() {
                             elite_index_content_sha256:
                                 req0.elite_index_content_sha256 || null,
                             animation: req0.animation === true,
-                            image_model: hookPanelModelKey(
+                            image_model: canonicalHookSheetModelKey(
                                 req0.image_model
                                 || process.env.HOOK_PANEL_MODEL
                                 || process.env.HOOK_FRAME_MODEL

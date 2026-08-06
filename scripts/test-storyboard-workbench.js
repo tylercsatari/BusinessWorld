@@ -958,6 +958,7 @@ async function main() {
             source: current.panels[0].source,
             revisions: current.panels[0].revisions.length,
             refs: window.__calls.panel[0].refs.length,
+            intent: window.__calls.panel[0].intent,
             referenceRoles: window.__calls.panel[0].refs.map(
                 reference => reference.role
             ),
@@ -976,6 +977,7 @@ async function main() {
         };
     });
     assert.strictEqual(edit.relation, 'edit');
+    assert.strictEqual(edit.intent, 'manual-panel-edit');
     assert.strictEqual(edit.source, 'panel-edit');
     assert(edit.revisions >= 2);
     assert.strictEqual(

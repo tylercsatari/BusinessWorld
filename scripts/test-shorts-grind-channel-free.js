@@ -23,7 +23,29 @@ const coordinateId = 'shorts.channel-free.concat.keep';
 const modelSha = sha('b');
 const recordSha = sha('c');
 const ledgerSha = sha('d');
+const renderEvidence = {
+    opening_contract: 'canonical-complete-hook-opening-v1',
+    render_mode: 'coherent-sheet',
+    frames_done: 5,
+    frame_imgs: ['frame-1', 'frame-2', 'frame-3', 'frame-4', 'frame-5'],
+    image_provider_call_count: 1,
+    render_call_count: 1,
+    panel_geometry: {
+        provider_call_count: 1,
+        render_call_count: 1,
+        panel_count: 5,
+        sheet_aspect_ratio: '45:16',
+        source_geometry: {
+            verifiedWideSheet: true,
+            aspectRatio: 45 / 16,
+        },
+    },
+};
 const context = vm.createContext({
+    CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET: 1,
+    CANONICAL_HOOK_SHEET_ASPECT_RATIO: 45 / 16,
+    CANONICAL_HOOK_SHEET_RATIO_TOLERANCE: 0.02,
+    fivePanelSheet: { PANEL_COUNT: 5 },
     channelFreeKeepForecastContract: {
         COORDINATE_IDS: { concat: coordinateId },
         validateChannelFreeKeepForecasts(value, expected) {
@@ -76,7 +98,10 @@ const score = {
     },
 };
 
-const projection = context.coordinateValue(score, coordinateId);
+const projection = {
+    ...context.coordinateValue(score, coordinateId),
+    ...renderEvidence,
+};
 assert(projection);
 assert.strictEqual(
     projection.score_projection_schema,
@@ -139,9 +164,35 @@ assert.strictEqual(
     }, coordinateId),
     false
 );
+assert.strictEqual(
+    context.attemptValid({
+        ...projection,
+        image_provider_call_count: 5,
+    }, coordinateId),
+    false,
+    'a five-call render must never become threshold-eligible'
+);
+assert.strictEqual(
+    context.attemptValid({
+        ...projection,
+        panel_geometry: {
+            ...projection.panel_geometry,
+            source_geometry: {
+                verifiedWideSheet: true,
+                aspectRatio: 9 / 16,
+            },
+        },
+    }, coordinateId),
+    false,
+    'a vertical source image must never become threshold-eligible'
+);
 
 const runEnd = source.indexOf('async function grindProcess', start);
 const runContext = vm.createContext({
+    CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET: 1,
+    CANONICAL_HOOK_SHEET_ASPECT_RATIO: 45 / 16,
+    CANONICAL_HOOK_SHEET_RATIO_TOLERANCE: 0.02,
+    fivePanelSheet: { PANEL_COUNT: 5 },
     channelFreeKeepForecastContract:
         context.channelFreeKeepForecastContract,
     exactSha256: context.exactSha256,

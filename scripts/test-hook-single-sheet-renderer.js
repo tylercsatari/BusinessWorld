@@ -29,6 +29,35 @@ async function main() {
         'manual Storyboard, Auto, and Grind must call one complete-opening method'
     );
     assert(!source.includes('renderHookPanelRobust'));
+    const autoStart = source.indexOf('async function hookProcessRequest');
+    const autoEnd = source.indexOf(
+        'async function hookSweepOrphans',
+        autoStart
+    );
+    const grindStart = source.indexOf('async function grindProcess');
+    const grindEnd = source.indexOf('let _grindBusy', grindStart);
+    const wholeHookWorkers = [
+        source.slice(autoStart, autoEnd),
+        source.slice(grindStart, grindEnd),
+    ];
+    wholeHookWorkers.forEach(workerSource => {
+        assert(workerSource.includes('generateCanonicalHookOpening({'));
+        assert(!workerSource.includes('genStoryFrame('));
+        assert(!workerSource.includes('replicateRun('));
+        assert(!workerSource.includes('openAIImageProvider.generateImage('));
+    });
+    const legacyFrameStart = source.indexOf(
+        "if (pathname === '/api/frames/gen'"
+    );
+    const legacyFrameEnd = source.indexOf(
+        'const demoStat = pathname.match',
+        legacyFrameStart
+    );
+    assert(
+        !source.slice(legacyFrameStart, legacyFrameEnd)
+            .includes('genStoryFrame('),
+        'the unscoped legacy vertical generator must stay retired'
+    );
     const start = source.indexOf('function hookPanelModelKey');
     const end = source.indexOf(
         'async function hookModelGenerateRetry',
@@ -48,6 +77,9 @@ async function main() {
         process: { env: {} },
         RAW_PY_ENV: {},
         setTimeout,
+        CANONICAL_HOOK_SHEET_PROVIDER_CALL_BUDGET: 1,
+        CANONICAL_HOOK_SHEET_ASPECT_RATIO: 45 / 16,
+        CANONICAL_HOOK_SHEET_RATIO_TOLERANCE: 0.02,
         STORYBOARD_DEFAULT_MODEL: 'gpt-image-2',
         STORY_MODELS: {
             'gpt-image-2': {
@@ -62,7 +94,16 @@ async function main() {
                 slug: 'seedream-4',
                 provider: 'replicate',
             },
+            'nano-banana': {
+                slug: 'nano-banana',
+                provider: 'replicate',
+            },
         },
+        STORY_SHEET_MODEL_KEYS: new Set([
+            'gpt-image-2',
+            'flux-2-pro',
+            'seedream-4',
+        ]),
         storyboardStylePresets: {
             ANIMATION_STYLE_ID: 'animation',
             DEFAULT_STYLE_ID: 'default',
@@ -182,6 +223,41 @@ async function main() {
 
     providerCalls = 0;
     splitCalls = 0;
+    await assert.rejects(
+        context.render({
+            brief: 'test',
+            panels: ['1', '2', '3', '4', '5'],
+            stylePreset: 'default',
+            imageModel: 'nano-banana',
+            providerCallBudget: 1,
+        }),
+        /cannot return an exact 45:16 five-panel sheet/
+    );
+    assert.strictEqual(providerCalls, 0);
+    assert.strictEqual(splitCalls, 0);
+
+    providerCalls = 0;
+    splitCalls = 0;
+    await assert.rejects(
+        context.render({
+            brief: 'test',
+            panels: ['1', '2', '3', '4', '5'],
+            stylePreset: 'default',
+            imageModel: 'gpt-image-2',
+            strictImageModel: false,
+            providerCallBudget: 5,
+        }),
+        /requires exactly one image-provider call/
+    );
+    assert.strictEqual(
+        providerCalls,
+        0,
+        'an expanded provider-call budget must fail before image spend'
+    );
+    assert.strictEqual(splitCalls, 0);
+
+    providerCalls = 0;
+    splitCalls = 0;
     sourceWidth = 1024;
     sourceHeight = 1792;
     await assert.rejects(
@@ -193,7 +269,7 @@ async function main() {
             strictImageModel: true,
             providerCallBudget: 1,
         }),
-        /single-frame image instead of the required wide five-panel sheet/
+        /single-frame image instead of the required 45:16 five-panel sheet/
     );
     assert.strictEqual(providerCalls, 1);
     assert.strictEqual(
@@ -225,6 +301,21 @@ async function main() {
         'a Grind attempt must not hide retries or fallback image calls'
     );
     assert.strictEqual(splitCalls, 0);
+
+    const rendererStart = source.indexOf(
+        'async function generateFivePanelStoryboard'
+    );
+    const rendererEnd = source.indexOf(
+        'function shortsTranscriptProviderError',
+        rendererStart
+    );
+    const rendererSource = source.slice(rendererStart, rendererEnd);
+    assert.strictEqual(
+        (rendererSource.match(/await genStoryFrame\(/g) || []).length,
+        1,
+        'the complete-hook renderer must contain one provider call site'
+    );
+    assert(!rendererSource.includes('const ladder ='));
 
     console.log('hook single-sheet renderer contract: ok');
 }
