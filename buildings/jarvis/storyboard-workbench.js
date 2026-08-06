@@ -407,17 +407,27 @@
                     <img src="${imageSource(ref.image)}" alt="${esc(ref.name || 'Reference')}">
                     <div class="sb-reference-copy">
                         <strong>${esc(ref.name || 'Reference')}</strong>
-                        <span>Introduces a new person, object, place, or style</span>
+                        <span>Used automatically for the whole panel and future edits</span>
                     </div>
-                    <button type="button" class="sb-icon-button" data-sb-ref-delete="${esc(ref.id)}" title="Remove reference" aria-label="Remove reference">&times;</button>
+                    <button type="button" class="sb-icon-button" data-sb-ref-delete="${esc(ref.id)}" title="Remove reference" aria-label="Remove reference" ${state.busy ? 'disabled' : ''}>&times;</button>
                 </div>`;
             }).join('');
-            return `<div class="sb-reference-section">
-                <div class="sb-section-head">
-                    <span>Optional source images</span>
-                    <button type="button" data-sb-add-reference title="Add a new person, object, place, or style">+ Add</button>
-                </div>
-                <div class="sb-reference-list">${rows || '<span class="sb-muted">Not needed for continuity between frames</span>'}</div>
+            return rows
+                ? `<div class="sb-reference-section" data-sb-generation-references>
+                    <div class="sb-reference-list">${rows}</div>
+                </div>`
+                : '';
+        }
+
+        function renderReferencePicker(current) {
+            const count = current.references.length;
+            const full = count >= MAX_REFERENCES;
+            return `<div class="sb-reference-picker" data-sb-reference-picker>
+                <span class="sb-reference-picker-copy">
+                    <span>Reference photos</span>
+                    <small>${count ? `${count}/${MAX_REFERENCES} attached` : 'Optional'}</small>
+                </span>
+                <button type="button" data-sb-add-reference data-sb-generation-reference-upload title="Upload a person, object, place, product, or visual-style reference" ${state.busy || full ? 'disabled' : ''}>${full ? 'Limit reached' : count ? 'Add another' : 'Upload reference'}</button>
             </div>`;
         }
 
@@ -500,7 +510,6 @@
                         <span>${esc(selected.relation || 'new')}</span>
                         <span>${selected.revisions.length} prior revision${selected.revisions.length === 1 ? '' : 's'}</span>
                     </div>
-                    ${renderReferences(current)}
                 </div>
             </div>`;
         }
@@ -729,9 +738,11 @@
                                     <span class="sb-style-toggle-track" aria-hidden="true"><span></span></span>
                                     <strong>Animation</strong>
                                 </label>
+                                ${renderReferencePicker(current)}
                                 <span class="sb-geometry-lock" title="Five contiguous equal-width columns">5 × 9:16 · 45:16</span>
                                 <button type="button" class="is-primary" data-sb-generate-all ${state.busy ? 'disabled' : ''}>Generate 5-frame panel</button>
                             </div>
+                            ${renderReferences(current)}
                         </div>
                     </section>
                 </div>
@@ -3049,6 +3060,7 @@
                 return true;
             }
             if (button.hasAttribute('data-sb-ref-delete')) {
+                if (state.busy) return true;
                 const id = button.getAttribute('data-sb-ref-delete');
                 candidate().references = candidate().references.filter(ref => ref.id !== id);
                 touchCandidate(candidate());

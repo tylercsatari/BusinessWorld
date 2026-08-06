@@ -645,6 +645,22 @@ async function main() {
         ],
         'the model picker must expose GPT Image 2 without removing existing providers'
     );
+    assert.strictEqual(
+        await page.locator('[data-sb-reference-picker]').count(),
+        1,
+        'the whole-panel generation bar must expose reference-photo upload'
+    );
+    assert.strictEqual(
+        await page.locator(
+            '[data-sb-generation-reference-upload]'
+        ).isEnabled(),
+        true
+    );
+    assert.strictEqual(
+        await page.locator('[data-sb-generation-references]').count(),
+        0,
+        'the reference tray should remain quiet until an image is attached'
+    );
 
     await page.click('[data-sb-folder-new]');
     await page.fill('[data-sb-folder-name]', 'Launch concepts');
@@ -672,11 +688,24 @@ async function main() {
         'the animation switch must select the versioned style preset'
     );
     await page.evaluate(() => window.__queueReferences(2));
-    await page.click('[data-sb-add-reference]');
+    await page.click('[data-sb-generation-reference-upload]');
     await page.waitForFunction(() => (
         window.__workbench.getState().candidates[0]
             .references.length === 2
     ));
+    assert.strictEqual(
+        await page.locator(
+            '[data-sb-generation-references] .sb-reference'
+        ).count(),
+        2,
+        'uploaded references must preview beside the whole-panel controls'
+    );
+    assert.match(
+        await page.locator(
+            '[data-sb-reference-picker]'
+        ).textContent(),
+        /2\/8 attached/
+    );
     await page.evaluate(() => window.__holdGeneration());
     await page.click('[data-sb-generate-all]');
     await page.waitForFunction(() => (
@@ -691,6 +720,19 @@ async function main() {
         await page.locator('[data-sb-upload-panel]').isDisabled(),
         true,
         'uploads must lock while generation is in flight'
+    );
+    assert.strictEqual(
+        await page.locator(
+            '[data-sb-generation-reference-upload]'
+        ).isDisabled(),
+        true,
+        'reference inputs must be immutable during the whole-sheet call'
+    );
+    assert(
+        await page.locator('[data-sb-ref-delete]').evaluateAll(buttons => (
+            buttons.every(button => button.disabled)
+        )),
+        'attached references must not be removable during generation'
     );
     await page.evaluate(() => window.__releaseGeneration());
     await page.waitForFunction(() => {
@@ -772,12 +814,24 @@ async function main() {
     );
     assert.deepStrictEqual(
         coherent.payload.refs.map(reference => ({
+            hasImage: /^data:image\//.test(reference.image),
+            name: reference.name,
             global: reference.global,
             panels: reference.panels,
         })),
         [
-            { global: true, panels: [] },
-            { global: true, panels: [] },
+            {
+                hasImage: true,
+                name: 'reference-1.png',
+                global: true,
+                panels: [],
+            },
+            {
+                hasImage: true,
+                name: 'reference-2.png',
+                global: true,
+                panels: [],
+            },
         ],
         'uploaded references must be available automatically to the whole panel'
     );
@@ -1118,6 +1172,8 @@ async function main() {
         hasMontage: window.__calls.open[2].hasMontage,
         hasComposite: !!window.__workbench.getState().candidates[0]
             .composite,
+        referenceCount: window.__workbench.getState().candidates[0]
+            .references.length,
     }));
     assert.strictEqual(reopen.scoreCalls, 1, 'saved reopen must not rescore');
     assert.strictEqual(reopen.hasMontage, true);
@@ -1125,6 +1181,11 @@ async function main() {
         reopen.hasComposite,
         true,
         'saved storyboards must restore the canonical whole-panel artifact'
+    );
+    assert.strictEqual(
+        reopen.referenceCount,
+        2,
+        'reference photos must survive background save and saved reopen'
     );
     assert.strictEqual(
         await page.locator('[data-sb-animation-style]').isChecked(),
