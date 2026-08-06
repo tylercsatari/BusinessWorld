@@ -32,6 +32,30 @@ async function main() {
                     featureContract: { groups: [], features: [] },
                 },
                 '/api/hooks/grind/runs': { runs: [] },
+                '/api/hooks/elite-corpus': {
+                    schema: 'elite-hook-corpus-index-v1',
+                    minimum_index_percentile: 80,
+                    corpus: { row_count: 66142 },
+                    metrics: [
+                        {
+                            id: 'together_keep_geometry',
+                            label: 'Together keep geometry',
+                            description: 'Retrieval geometry only.',
+                            indexed_elite_count: 13476,
+                        },
+                        {
+                            id: 'observed_views',
+                            label: 'Observed views',
+                            description: 'Retrospective retrieval only.',
+                            indexed_elite_count: 13682,
+                        },
+                    ],
+                    channels: [{
+                        id: 'tyler-channel',
+                        name: 'Tyler Csatari',
+                        corpus_match_count: 415,
+                    }],
+                },
             };
             window.__autoRequests = [];
             window.fetch = async (url, options) => {
@@ -140,6 +164,52 @@ async function main() {
         assert.strictEqual(
             requests['/api/hooks/grind'].premise,
             'A helmet that survives a flamethrower'
+        );
+
+        await page.locator('[data-grindmode="elite-corpus"]').click();
+        await page.locator('[data-grindelitemetric]').waitFor({
+            state: 'visible',
+        });
+        await page.locator('[data-grindelitemetric]').selectOption(
+            'observed_views'
+        );
+        await page.locator('[data-grindelitecutoff]').fill('97');
+        await page.locator('[data-grindchanneloriented]').check();
+        await page.locator('[data-grindelitechannel]').selectOption(
+            'tyler-channel'
+        );
+        await page.locator('[data-grindanimation]').check();
+        await page.locator('#grind-input').fill('');
+        await page.locator('[data-grindstart]').click();
+        await page.waitForFunction(() => (
+            window.__autoRequests.filter(request => (
+                request.pathname === '/api/hooks/grind'
+            )).length === 2
+        ));
+        const eliteRequest = await page.evaluate(() => (
+            window.__autoRequests.filter(request => (
+                request.pathname === '/api/hooks/grind'
+            )).at(-1).body
+        ));
+        assert.deepStrictEqual(
+            {
+                premise: eliteRequest.premise,
+                explorationMode: eliteRequest.explorationMode,
+                eliteMetric: eliteRequest.eliteMetric,
+                eliteCutoff: eliteRequest.eliteCutoff,
+                channelOriented: eliteRequest.channelOriented,
+                eliteChannelId: eliteRequest.eliteChannelId,
+                animation: eliteRequest.animation,
+            },
+            {
+                premise: '',
+                explorationMode: 'elite-corpus',
+                eliteMetric: 'observed_views',
+                eliteCutoff: 97,
+                channelOriented: true,
+                eliteChannelId: 'tyler-channel',
+                animation: true,
+            }
         );
         const dimensions = await page.evaluate(() => ({
             viewport: document.documentElement.clientWidth,

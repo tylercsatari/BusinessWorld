@@ -117,7 +117,7 @@ const SHORTS_EXPERIMENT_SHARED_ROUTES = [
     /^\/api\/storyboards\/sb[a-z0-9]{10,40}$/,
     /^\/api\/storyboards\/media\/[a-f0-9]{64}\.(?:jpg|png|webp)$/,
     /^\/api\/frames\/(?:plan|gen)$/,
-    /^\/api\/hooks\/(?:generate|warmup|grind)$/,
+    /^\/api\/hooks\/(?:generate|warmup|grind|elite-corpus)$/,
     /^\/api\/hooks\/demo\/status\/[\w-]{1,40}$/,
     /^\/api\/hooks\/grpo\/group\/demo\/[\w-]{1,32}$/,
     /^\/api\/hooks\/grpo\/montage\/demo\/[\w-]{1,40}$/,

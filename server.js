@@ -103,6 +103,9 @@ const fivePanelSheet = require(
 const grindExploration = require(
     './buildings/jarvis/grind-exploration'
 );
+const eliteHookExplorer = require(
+    './buildings/jarvis/elite-hook-explorer'
+);
 const hookPlanOutput = require(
     './buildings/jarvis/hook-plan-output'
 );
@@ -5897,6 +5900,11 @@ async function persistCanonicalSavedHook({
             && typeof input.input_manifest === 'object'
             ? input.input_manifest
             : null,
+        generation_lineage: input.generation_lineage
+            && typeof input.generation_lineage === 'object'
+            && !Array.isArray(input.generation_lineage)
+                ? input.generation_lineage
+                : null,
     }, montageBytes);
     await writeImmutableSavedHookMedia(
         rec.montage_ref,
@@ -14481,6 +14489,27 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.end(JSON.stringify({ ok: true, fired }));
         return;
     }
+    if (pathname === '/api/hooks/elite-corpus' && req.method === 'GET') {
+        try {
+            await experimentLabAccountScope(req, url, { write: false });
+            const index = await loadEliteHookCorpusReady();
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'private, max-age=60',
+            });
+            res.end(JSON.stringify(eliteHookExplorer.publicSummary(index)));
+        } catch (error) {
+            res.writeHead(error.statusCode || 503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'elite_hook_corpus_unavailable',
+            }));
+        }
+        return;
+    }
     // ── 🎯 Grind endpoints: start / stop / poll / images / full score / recent runs ──
     if (pathname === '/api/hooks/grind' && req.method === 'POST') {
         try {
@@ -14491,7 +14520,73 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             );
             const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 500);
-            if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write the hook/idea first — it grounds every variant' })); return; }
+            const explorationMode = body.explorationMode === 'elite-corpus'
+                ? 'elite-corpus'
+                : 'same-idea';
+            if (!premise && explorationMode !== 'elite-corpus') {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    error: 'write the hook/idea first — it grounds every variant',
+                }));
+                return;
+            }
+            let eliteRequest = null;
+            if (explorationMode === 'elite-corpus') {
+                const eliteIndex = await loadEliteHookCorpusReady();
+                const eliteMetric = eliteHookExplorer.metricId(
+                    body.eliteMetric
+                );
+                const eliteCutoff = Math.max(
+                    eliteHookExplorer.MIN_INDEX_PERCENTILE,
+                    Math.min(
+                        99.9,
+                        Number.isFinite(Number(body.eliteCutoff))
+                            ? Number(body.eliteCutoff)
+                            : 95
+                    )
+                );
+                const channelOriented = body.channelOriented === true;
+                const eliteChannelId = channelOriented
+                    ? String(body.eliteChannelId || '').trim().slice(0, 100)
+                    : '';
+                const channel = eliteIndex.channels.find(candidate => (
+                    candidate.id === eliteChannelId
+                ));
+                if (channelOriented && !channel) {
+                    throw new HttpRequestError(
+                        400,
+                        'Choose a saved channel for channel-oriented exploration.',
+                        'elite_channel_invalid'
+                    );
+                }
+                const eligible = eliteHookExplorer.eligibleRows(
+                    eliteIndex,
+                    {
+                        metric: eliteMetric,
+                        cutoff: eliteCutoff,
+                        channelId: eliteChannelId,
+                        channelOriented,
+                    }
+                );
+                if (!eligible.length) {
+                    throw new HttpRequestError(
+                        400,
+                        'No embedded source videos meet that elite cutoff and scope.',
+                        'elite_source_pool_empty'
+                    );
+                }
+                eliteRequest = {
+                    exploration_mode: explorationMode,
+                    elite_metric: eliteMetric,
+                    elite_cutoff_percentile: eliteCutoff,
+                    elite_channel_oriented: channelOriented,
+                    elite_channel_id: eliteChannelId || null,
+                    elite_channel_name: channel ? channel.name : null,
+                    elite_index_content_sha256:
+                        eliteIndex.content_sha256,
+                    elite_source_pool_count: eligible.length,
+                };
+            }
             const requestedImageModel = String(
                 body.imageModel || body.image_model || ''
             ).trim();
@@ -14567,6 +14662,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
                 exploration_strategy: grindExploration.STRATEGY,
+                ...(eliteRequest || {
+                    exploration_mode: explorationMode,
+                }),
                 creator_profile:
                     safeCreatorProfile(body.creatorProfile) || null,
                 created_at_ms: Date.now(),
@@ -14576,7 +14674,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 {
                     type: 'shorts-grind',
                     status: 'queued',
-                    title: premise,
+                    title: premise || 'Elite corpus invention',
                     requestId: rid,
                     detail:
                         `${coordinateId} · target ${thresholdValue}${
@@ -14603,6 +14701,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
                 exploration_strategy: grindExploration.STRATEGY,
+                exploration_mode: explorationMode,
+                ...(eliteRequest || {}),
             }));
         } catch (e) {
             res.writeHead(e.statusCode || 500, {
@@ -14824,6 +14924,17 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                             j.threshold_value_0_100,
                         animation: j.animation === true,
                         render_mode: j.render_mode || null,
+                        exploration_mode:
+                            j.exploration_mode || 'same-idea',
+                        elite_metric: j.elite_metric || null,
+                        elite_cutoff_percentile:
+                            j.elite_cutoff_percentile || null,
+                        elite_channel_oriented:
+                            j.elite_channel_oriented === true,
+                        elite_channel_id:
+                            j.elite_channel_id || null,
+                        elite_channel_name:
+                            j.elite_channel_name || null,
                         updated_at_ms: j.updated_at_ms,
                         run_validation: j.run_validation,
                     });
@@ -21967,6 +22078,14 @@ const GENMEM_DIM = 768;
 async function geminiTextEmbed(text, options = {}) {
     const required = options.required === true;
     const context = String(options.context || 'text').slice(0, 80);
+    const dimensionsExplicit = options.dimensions != null;
+    const dimensions = Math.max(
+        8,
+        Math.min(
+            1536,
+            Number.parseInt(options.dimensions, 10) || GENMEM_DIM
+        )
+    );
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
         if (required) {
@@ -21979,11 +22098,16 @@ async function geminiTextEmbed(text, options = {}) {
     try {
         const r = await fetchT('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-            body: JSON.stringify({ content: { parts: [{ text: String(text).slice(0, 6000) }] }, outputDimensionality: GENMEM_DIM })
+            body: JSON.stringify({ content: { parts: [{ text: String(text).slice(0, 6000) }] }, outputDimensionality: dimensions })
         }, 20000);
         const j = await r.json().catch(() => null);
         const v = j && j.embedding && j.embedding.values;
-        if (!r.ok || !Array.isArray(v) || v.length < 8) {
+        if (
+            !r.ok
+            || !Array.isArray(v)
+            || v.length < 8
+            || (dimensionsExplicit && v.length !== dimensions)
+        ) {
             if (required) {
                 const detail = j && j.error && (
                     j.error.message || j.error.status
@@ -22002,6 +22126,311 @@ async function geminiTextEmbed(text, options = {}) {
         if (required) throw e;
         return null;
     }
+}
+let _eliteHookCorpusCache = null;
+let _eliteHookCorpusPromise = null;
+let _eliteHookCorpusBuildPromise = null;
+async function loadEliteHookCorpus(options = {}) {
+    if (_eliteHookCorpusCache && options.force !== true) {
+        return _eliteHookCorpusCache;
+    }
+    if (_eliteHookCorpusPromise && options.force !== true) {
+        return _eliteHookCorpusPromise;
+    }
+    _eliteHookCorpusPromise = (async () => {
+        const bytes = await cloud.downloadFromR2(
+            eliteHookExplorer.INDEX_KEY
+        );
+        if (!bytes) {
+            const error = new Error(
+                'Elite hook corpus is not materialized yet.'
+            );
+            error.code = 'elite_hook_corpus_missing';
+            throw error;
+        }
+        let index;
+        try {
+            index = JSON.parse(bytes.toString('utf8'));
+        } catch (parseError) {
+            const error = new Error('Elite hook corpus JSON is invalid.');
+            error.code = 'elite_hook_corpus_invalid_json';
+            throw error;
+        }
+        const validation = eliteHookExplorer.validateIndex(index);
+        if (!validation.valid) {
+            const error = new Error(validation.errors.join('; '));
+            error.code = 'elite_hook_corpus_integrity_failed';
+            throw error;
+        }
+        const manifestBytes = await cloud.downloadFromR2(
+            eliteHookExplorer.MAP_MANIFEST_KEY
+        );
+        if (!manifestBytes) {
+            const error = new Error(
+                'The Together map manifest is unavailable.'
+            );
+            error.code = 'elite_hook_map_manifest_missing';
+            throw error;
+        }
+        const manifest = JSON.parse(manifestBytes.toString('utf8'));
+        if (
+            !manifest.publishedMap
+            || manifest.publishedMap.artifactSha256
+                !== index.corpus.map_sha256
+        ) {
+            const error = new Error(
+                'Elite hook corpus is stale relative to the published Together map.'
+            );
+            error.code = 'elite_hook_corpus_stale';
+            throw error;
+        }
+        const savedChannelIndexBytes = await cloud.downloadFromR2(
+            eliteHookExplorer.SAVED_CHANNEL_INDEX_KEY
+        );
+        if (
+            !savedChannelIndexBytes
+            || sha256Bytes(savedChannelIndexBytes)
+                !== index.saved_channels_source.index_sha256
+        ) {
+            const error = new Error(
+                'Elite hook corpus is stale relative to the saved-channel index.'
+            );
+            error.code = 'elite_hook_corpus_stale';
+            throw error;
+        }
+        _eliteHookCorpusCache = index;
+        return index;
+    })();
+    try {
+        return await _eliteHookCorpusPromise;
+    } finally {
+        _eliteHookCorpusPromise = null;
+    }
+}
+
+function rebuildEliteHookCorpus() {
+    if (_eliteHookCorpusBuildPromise) return _eliteHookCorpusBuildPromise;
+    _eliteHookCorpusBuildPromise = new Promise((resolve, reject) => {
+        const script = path.join(
+            __dirname,
+            'scripts/build-elite-hook-corpus.js'
+        );
+        const child = spawn(
+            process.execPath,
+            ['--max-old-space-size=1536', script, '--write'],
+            {
+                env: process.env,
+                stdio: ['ignore', 'pipe', 'pipe'],
+            }
+        );
+        let stdout = '';
+        let stderr = '';
+        const timeout = setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch (_) {}
+            reject(new Error('elite corpus rebuild timed out'));
+        }, 12 * 60e3);
+        child.stdout.on('data', chunk => {
+            stdout += chunk;
+            if (stdout.length > 30000) stdout = stdout.slice(-30000);
+        });
+        child.stderr.on('data', chunk => {
+            stderr += chunk;
+            if (stderr.length > 30000) stderr = stderr.slice(-30000);
+        });
+        child.once('error', error => {
+            clearTimeout(timeout);
+            reject(error);
+        });
+        child.once('close', code => {
+            clearTimeout(timeout);
+            if (code !== 0) {
+                reject(new Error(
+                    (stderr.trim().split('\n').pop()
+                        || `elite corpus rebuild exited ${code}`).slice(-500)
+                ));
+                return;
+            }
+            resolve(stdout);
+        });
+    }).finally(() => {
+        _eliteHookCorpusBuildPromise = null;
+    });
+    return _eliteHookCorpusBuildPromise;
+}
+
+async function loadEliteHookCorpusReady() {
+    try {
+        return await loadEliteHookCorpus();
+    } catch (error) {
+        if (![
+            'elite_hook_corpus_missing',
+            'elite_hook_corpus_stale',
+        ].includes(error.code)) throw error;
+        await rebuildEliteHookCorpus();
+        _eliteHookCorpusCache = null;
+        return loadEliteHookCorpus({ force: true });
+    }
+}
+
+function runEliteHookSemanticQuery(payload) {
+    return new Promise((resolve, reject) => {
+        const script = path.join(
+            __dirname,
+            'buildings/jarvis/elite-hook-semantic-query.py'
+        );
+        const child = spawnRawPython(
+            [script],
+            { stdio: ['pipe', 'pipe', 'pipe'] }
+        );
+        let stdout = '';
+        let stderr = '';
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            killRawPythonTree(child);
+            reject(new Error('elite corpus semantic retrieval timed out'));
+        }, 12 * 60e3);
+        child.stdout.on('data', chunk => {
+            stdout += chunk;
+            if (stdout.length > 8 * 1024 * 1024) {
+                stdout = stdout.slice(-8 * 1024 * 1024);
+            }
+        });
+        child.stderr.on('data', chunk => {
+            stderr += chunk;
+            if (stderr.length > 30000) stderr = stderr.slice(-30000);
+        });
+        child.once('error', error => {
+            clearTimeout(timeout);
+            if (settled) return;
+            settled = true;
+            reject(error);
+        });
+        child.once('close', code => {
+            clearTimeout(timeout);
+            if (settled) return;
+            settled = true;
+            const line = stdout.trim().split('\n')
+                .filter(value => value.trim().startsWith('{'))
+                .pop();
+            if (!line) {
+                reject(new Error(
+                    (stderr.trim().split('\n').pop()
+                        || `elite retrieval exited ${code}`).slice(-500)
+                ));
+                return;
+            }
+            try {
+                const result = JSON.parse(line);
+                if (result.error) throw new Error(result.error);
+                resolve(result);
+            } catch (error) {
+                reject(error);
+            }
+        });
+        child.stdin.end(JSON.stringify(payload));
+    });
+}
+
+async function prepareEliteHookRetrieval({
+    index,
+    premise,
+    metric,
+    cutoff,
+    channelId,
+    channelOriented,
+} = {}) {
+    const eligible = eliteHookExplorer.eligibleRows(index, {
+        metric,
+        cutoff,
+        channelId,
+        channelOriented,
+    });
+    if (!eligible.length) {
+        throw new Error('the selected elite corpus pool is empty');
+    }
+    const channel = index.channels.find(candidate => (
+        candidate.id === channelId
+    )) || null;
+    const profileRows = channelOriented
+        ? eligible.slice().sort((left, right) => (
+            Number(right.metrics[metric]) - Number(left.metrics[metric])
+            || right.views - left.views
+        )).slice(0, 12)
+        : [];
+    const profileText = profileRows.map(row => (
+        `${row.title}. ${row.opening}`
+    )).join('\n').slice(0, 4800);
+    const queryText = [
+        String(premise || '').trim(),
+        channelOriented && profileText
+            ? `HIGH-PERFORMING ${channel ? channel.name : 'CHANNEL'} OPENING FAMILY:\n${profileText}`
+            : '',
+    ].filter(Boolean).join('\n\n');
+    let queryVector = null;
+    let queryEmbeddingError = null;
+    if (queryText) {
+        try {
+            queryVector = await geminiTextEmbed(queryText, {
+                required: true,
+                context: 'elite corpus semantic retrieval',
+                dimensions:
+                    Number(index.corpus.embedding_dimensions) || 1536,
+            });
+        } catch (error) {
+            queryEmbeddingError = String(
+                error.message || error
+            ).slice(0, 300);
+        }
+    }
+    const embeddedCandidates = eligible.filter(row => (
+        row.embedding_available === true
+    ));
+    const centroidIds = channelOriented
+        ? embeddedCandidates.map(row => row.id)
+        : [];
+    let semantic = {
+        results: [],
+        candidate_count: eligible.length,
+        embedding_candidate_count: embeddedCandidates.length,
+        centroid_member_count: centroidIds.length,
+        fallback: queryText ? 'lexical' : 'elite-rank',
+        error: queryEmbeddingError,
+    };
+    if ((queryVector || centroidIds.length) && embeddedCandidates.length) {
+        try {
+            semantic = await runEliteHookSemanticQuery({
+                query_vector: queryVector,
+                candidate_ids: embeddedCandidates.map(row => row.id),
+                centroid_ids: centroidIds,
+                centroid_weight: channelOriented ? 0.35 : 0,
+                limit: Math.min(600, embeddedCandidates.length),
+            });
+            if (queryEmbeddingError) {
+                semantic.error = queryEmbeddingError;
+                semantic.fallback = channelOriented
+                    ? 'channel-centroid-without-query-vector'
+                    : 'lexical';
+            }
+        } catch (error) {
+            semantic.error = [
+                queryEmbeddingError,
+                String(error.message || error).slice(0, 300),
+            ].filter(Boolean).join('; ');
+            semantic.fallback = queryText ? 'lexical' : 'elite-rank';
+        }
+    }
+    return {
+        index,
+        eligible,
+        semantic,
+        metric,
+        cutoff,
+        channel,
+        channelOriented,
+        queryTextAvailable: !!queryText,
+    };
 }
 const genVecEnc = v => Buffer.from(Int8Array.from(v, x => Math.max(-127, Math.min(127, Math.round(x * 127)))).buffer).toString('base64');
 const genVecDec = b => { const buf = Buffer.from(b, 'base64'); return new Int8Array(buf.buffer, buf.byteOffset, buf.length); };
@@ -24441,7 +24870,28 @@ async function grindProcess(rid, req0, ownership) {
         QUEUE_LEASE_NAMES.SHORTS_GRIND,
         rid
     );
-    const premise = String(req0.premise || '').trim().slice(0, 500);
+    const requestedPremise = String(req0.premise || '').trim().slice(0, 500);
+    let premise = requestedPremise;
+    const explorationMode = req0.exploration_mode === 'elite-corpus'
+        ? 'elite-corpus'
+        : 'same-idea';
+    const eliteMetric = eliteHookExplorer.metricId(
+        req0.elite_metric
+    );
+    const eliteCutoff = Math.max(
+        eliteHookExplorer.MIN_INDEX_PERCENTILE,
+        Math.min(
+            99.9,
+            Number.isFinite(Number(req0.elite_cutoff_percentile))
+                ? Number(req0.elite_cutoff_percentile)
+                : 95
+        )
+    );
+    const eliteChannelOriented = explorationMode === 'elite-corpus'
+        && req0.elite_channel_oriented === true;
+    const eliteChannelId = eliteChannelOriented
+        ? String(req0.elite_channel_id || '').trim().slice(0, 100)
+        : '';
     const creatorProfile = safeCreatorProfile(
         req0.creator_profile || req0.creatorProfile
     );
@@ -24503,6 +24953,10 @@ async function grindProcess(rid, req0, ownership) {
     );
     const deadline = Date.now() + Math.min(8, Math.max(0.25, parseFloat(req0.hours) || 3)) * 3600e3;
     let attempts = [], status = 'running', err = '', note = '';
+    let eliteRetrieval = null;
+    let eliteBootstrapSpec = null;
+    let eliteBootstrapSources = null;
+    const eliteUsedSourceIds = [];
     let explorationState = grindExploration.createState({
         threshold,
     });
@@ -24549,6 +25003,47 @@ async function grindProcess(rid, req0, ownership) {
                     grindExploration.publicState(explorationState),
                 exploration_strategy:
                     grindExploration.STRATEGY,
+                exploration_mode: explorationMode,
+                requested_premise: requestedPremise || null,
+                elite_metric:
+                    explorationMode === 'elite-corpus'
+                        ? eliteMetric
+                        : null,
+                elite_cutoff_percentile:
+                    explorationMode === 'elite-corpus'
+                        ? eliteCutoff
+                        : null,
+                elite_channel_oriented: eliteChannelOriented,
+                elite_channel_id: eliteChannelId || null,
+                elite_channel_name:
+                    eliteRetrieval && eliteRetrieval.channel
+                        ? eliteRetrieval.channel.name
+                        : req0.elite_channel_name || null,
+                elite_index_content_sha256:
+                    eliteRetrieval
+                        ? eliteRetrieval.index.content_sha256
+                        : req0.elite_index_content_sha256 || null,
+                elite_source_pool_count:
+                    eliteRetrieval
+                        ? eliteRetrieval.eligible.length
+                        : req0.elite_source_pool_count || null,
+                elite_semantic_retrieval:
+                    eliteRetrieval ? {
+                        candidate_count:
+                            eliteRetrieval.semantic.candidate_count,
+                        embedding_candidate_count:
+                            eliteRetrieval.semantic.embedding_candidate_count,
+                        centroid_member_count:
+                            eliteRetrieval.semantic.centroid_member_count,
+                        query_available:
+                            eliteRetrieval.semantic.query_available === true,
+                        centroid_available:
+                            eliteRetrieval.semantic.centroid_available === true,
+                        fallback:
+                            eliteRetrieval.semantic.fallback || null,
+                        error:
+                            eliteRetrieval.semantic.error || null,
+                    } : null,
                 animation,
                 style_preset: animation
                     ? storyboardStylePresets.ANIMATION_STYLE_ID
@@ -24578,6 +25073,90 @@ async function grindProcess(rid, req0, ownership) {
     const visPrev = [];   // 48-d pooled VISUAL embeddings of scored attempts — quantified visual variety
     let mem = []; try { mem = await genMemLoad(); } catch (e) {}
     try {
+        if (explorationMode === 'elite-corpus') {
+            note = 'loading the frozen elite corpus and its exact source lineage…';
+            await write();
+            const eliteIndex = await loadEliteHookCorpusReady();
+            if (
+                req0.elite_index_content_sha256
+                && req0.elite_index_content_sha256
+                    !== eliteIndex.content_sha256
+            ) {
+                throw new Error(
+                    'the elite corpus changed after this request was queued; start a new run against the current frozen index'
+                );
+            }
+            const bootstrapPool = eliteHookExplorer.eligibleRows(
+                eliteIndex,
+                {
+                    metric: eliteMetric,
+                    cutoff: eliteCutoff,
+                    channelId: eliteChannelId,
+                    channelOriented: eliteChannelOriented,
+                }
+            );
+            if (!bootstrapPool.length) {
+                throw new Error(
+                    'no source videos meet the selected elite cutoff and scope'
+                );
+            }
+            if (!premise) {
+                eliteBootstrapSources = eliteHookExplorer.selectSources({
+                    rows: bootstrapPool,
+                    metric: eliteMetric,
+                    query: '',
+                    limit: 4,
+                    attemptIndex: 0,
+                });
+                note = 'inventing a new video realm from diversified elite source mechanisms…';
+                await write();
+                const bootstrapPrompt = eliteHookExplorer.generationPrompt({
+                    seedPremise: '',
+                    sources: eliteBootstrapSources,
+                    channelName: req0.elite_channel_name || '',
+                    channelOriented: eliteChannelOriented,
+                    attemptIndex: 0,
+                });
+                eliteBootstrapSpec = await hookModelGenerateRetry(
+                    bootstrapPrompt,
+                    true,
+                    (modelStatus, seconds) => {
+                        note = `elite invention: ${modelStatus} (${seconds}s)`;
+                        return write();
+                    },
+                    (message, retry) => {
+                        note = `elite invention output was malformed — retrying (${retry}/3) · ${message.slice(0, 70)}`;
+                        return write();
+                    },
+                    {
+                        fallbackPremise:
+                            eliteBootstrapSources[0]
+                            && eliteBootstrapSources[0].title
+                            || 'A surprising visual experiment',
+                    }
+                );
+                premise = String(
+                    eliteBootstrapSpec.premise || ''
+                ).trim().slice(0, 500);
+                if (!premise) {
+                    throw new Error(
+                        'the fine-tuned planner returned no elite video premise'
+                    );
+                }
+            }
+            note = eliteChannelOriented
+                ? 'building a semantic query from the video realm and this channel’s elite opening family…'
+                : 'locating semantically relevant elite examples across the full corpus…';
+            await write();
+            eliteRetrieval = await prepareEliteHookRetrieval({
+                index: eliteIndex,
+                premise,
+                metric: eliteMetric,
+                cutoff: eliteCutoff,
+                channelId: eliteChannelId,
+                channelOriented: eliteChannelOriented,
+            });
+        }
         note = 'embedding the immutable video idea before hook generation…';
         await write();
         const seedEmbedding = await geminiTextEmbed(
@@ -24610,12 +25189,47 @@ async function grindProcess(rid, req0, ownership) {
                     note = 'stopped by you before the next image call';
                     break;
                 }
-                const generationPrompt = grindExploration.generationPrompt({
+                const baseGenerationPrompt = grindExploration.generationPrompt({
                     seedPremise: premise,
                     state: explorationState,
                     priorPremises: acceptedPremises,
                     rejectedPremises,
                 });
+                const eliteRoundSources = explorationMode === 'elite-corpus'
+                    ? (
+                        eliteBootstrapSpec
+                        && attempts.length === 0
+                        && selectionRound === 1
+                            ? eliteBootstrapSources
+                            : eliteHookExplorer.selectSources({
+                                rows: eliteRetrieval.eligible,
+                                metric: eliteMetric,
+                                semanticResults:
+                                    eliteRetrieval.semantic.results,
+                                query: premise,
+                                limit: 4,
+                                attemptIndex:
+                                    attempts.length * 7
+                                    + selectionRound,
+                                usedIds: eliteUsedSourceIds,
+                            })
+                    )
+                    : [];
+                const corpusGenerationPrompt = explorationMode === 'elite-corpus'
+                    ? eliteHookExplorer.generationPrompt({
+                        seedPremise: premise,
+                        sources: eliteRoundSources,
+                        channelName:
+                            eliteRetrieval.channel
+                            && eliteRetrieval.channel.name,
+                        channelOriented: eliteChannelOriented,
+                        attemptIndex: attempts.length,
+                    })
+                    : '';
+                const generationPrompt = [
+                    baseGenerationPrompt,
+                    corpusGenerationPrompt,
+                ].filter(Boolean).join('\n\n');
                 const candidateCount = (
                     attempts.length === 0
                     && selectionRound === 1
@@ -24639,7 +25253,14 @@ async function grindProcess(rid, req0, ownership) {
                 };
                 let specs;
                 try {
-                    specs = candidateCount === 1
+                    if (
+                        eliteBootstrapSpec
+                        && attempts.length === 0
+                        && selectionRound === 1
+                    ) {
+                        specs = [eliteBootstrapSpec];
+                        eliteBootstrapSpec = null;
+                    } else specs = candidateCount === 1
                         ? [await hookModelGenerateRetry(
                             generationPrompt,
                             false,
@@ -24717,6 +25338,13 @@ async function grindProcess(rid, req0, ownership) {
                         ...selection.selected,
                         candidatePoolSize: candidates.length,
                         selectionRound,
+                        eliteSources: eliteRoundSources,
+                        eliteHypothesis:
+                            explorationMode === 'elite-corpus'
+                                ? eliteHookExplorer.mechanismHypothesis(
+                                    eliteRoundSources
+                                )
+                                : null,
                     };
                     break;
                 }
@@ -24761,6 +25389,13 @@ async function grindProcess(rid, req0, ownership) {
                 grindExploration.publicState(explorationState);
             ideaEmbeddings.push(emb);
             acceptedPremises.push(spec.premise);
+            (selectedCandidate.eliteSources || []).forEach(source => {
+                if (
+                    source
+                    && source.id
+                    && !eliteUsedSourceIds.includes(source.id)
+                ) eliteUsedSourceIds.push(source.id);
+            });
             mem.push({
                 id: `${rid}_${attempts.length}`,
                 t: Date.now(),
@@ -24802,6 +25437,36 @@ async function grindProcess(rid, req0, ownership) {
                 hook_selection_round:
                     selectedCandidate.selectionRound,
                 hook_text_embedding_model: 'gemini-embedding-2',
+                exploration_mode: explorationMode,
+                elite_sources:
+                    explorationMode === 'elite-corpus'
+                        ? selectedCandidate.eliteSources || []
+                        : [],
+                elite_mechanism_hypothesis:
+                    selectedCandidate.eliteHypothesis || null,
+                elite_metric:
+                    explorationMode === 'elite-corpus'
+                        ? eliteMetric
+                        : null,
+                elite_cutoff_percentile:
+                    explorationMode === 'elite-corpus'
+                        ? eliteCutoff
+                        : null,
+                elite_channel_oriented: eliteChannelOriented,
+                elite_channel_id: eliteChannelId || null,
+                elite_channel_name:
+                    eliteRetrieval
+                    && eliteRetrieval.channel
+                    && eliteRetrieval.channel.name
+                    || null,
+                elite_index_content_sha256:
+                    eliteRetrieval
+                    && eliteRetrieval.index.content_sha256
+                    || null,
+                elite_source_role:
+                    explorationMode === 'elite-corpus'
+                        ? 'retrieval_and_generation_inspiration_only'
+                        : null,
                 errs: [],
                 ts: Date.now(),
                 animation,
@@ -25053,19 +25718,33 @@ async function grindQueue() {
                             || ''
                         );
                         const coordinateId =
-                            /^shorts\.stored\.(visual|text|together)\.(keep|ret5|views|gt10M)$/
-                                .test(requestedCoordinate)
+                            shortsGrindCoordinateValid(requestedCoordinate)
                                 ? requestedCoordinate
                                 : `shorts.stored.together.${legacyMetric}`;
+                        const targetUnit = shortsGrindTargetUnit(
+                            coordinateId
+                        );
                         const threshold = Math.max(
-                            50,
+                            targetUnit === 'predicted_keep_percent'
+                                ? 0
+                                : 50,
                             Math.min(
-                                99,
-                                Number.parseInt(
-                                    req0.threshold_percentile_0_100
-                                    ?? req0.threshold,
-                                    10
-                                ) || 82
+                                targetUnit === 'predicted_keep_percent'
+                                    ? 100
+                                    : 99,
+                                Number.isFinite(Number(
+                                    req0.threshold_value_0_100
+                                    ?? req0.threshold_percentile_0_100
+                                    ?? req0.threshold
+                                ))
+                                    ? Number(
+                                        req0.threshold_value_0_100
+                                        ?? req0.threshold_percentile_0_100
+                                        ?? req0.threshold
+                                    )
+                                    : targetUnit === 'predicted_keep_percent'
+                                        ? 75
+                                        : 82
                             )
                         );
                         const pickedUp = bindShortsGrindRun({
@@ -25075,8 +25754,12 @@ async function grindQueue() {
                             ).slice(0, 500),
                             threshold_coordinate_id:
                                 coordinateId,
+                            threshold_unit: targetUnit,
+                            threshold_value_0_100: threshold,
                             threshold_percentile_0_100:
-                                threshold,
+                                targetUnit === 'percentile_0_100'
+                                    ? threshold
+                                    : null,
                             attempts: [],
                             status: 'running',
                             note:
@@ -25085,6 +25768,20 @@ async function grindQueue() {
                             rejected_variant_count: 0,
                             minimum_text_embedding_distance:
                                 0.12,
+                            exploration_mode:
+                                req0.exploration_mode || 'same-idea',
+                            elite_metric:
+                                req0.elite_metric || null,
+                            elite_cutoff_percentile:
+                                req0.elite_cutoff_percentile || null,
+                            elite_channel_oriented:
+                                req0.elite_channel_oriented === true,
+                            elite_channel_id:
+                                req0.elite_channel_id || null,
+                            elite_channel_name:
+                                req0.elite_channel_name || null,
+                            elite_index_content_sha256:
+                                req0.elite_index_content_sha256 || null,
                             deadline_at_ms: null,
                             updated_at_ms: Date.now(),
                             queue_lease_fence:

@@ -32,7 +32,7 @@ const JarvisRetention = (function () {
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
-    let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
+    let GRINDRUN = null, GRINDLIST = null, ELITECORPUS = null;   // grind state + frozen elite-source summary
     let SAVED_OPEN_DRAIN = null;
     let SAVED_EDITOR_DETAIL = Object.create(null);
     let SAVED_EDITOR_OPEN_SEQUENCE = 0;
@@ -50,6 +50,11 @@ const JarvisRetention = (function () {
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
+    st.grindMode = 'same-idea';
+    st.grindEliteMetric = 'together_keep_geometry';
+    st.grindEliteCutoff = 95;
+    st.grindEliteChannelOriented = false;
+    st.grindEliteChannelId = '';
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -4420,7 +4425,7 @@ const JarvisRetention = (function () {
             if (response.ok || response.status === 409) return body;
             throw new Error(body.error || `run request failed (${response.status})`);
         }).then(j => {
-            if (j && j.rid) { j._at = Date.now(); GRINDRUN = j; st.grindPolls = (st.grindPolls || 0) + 1; rtgUpdateExp(); }
+            if (j && j.rid) { j._at = Date.now(); GRINDRUN = j; if (j.exploration_mode) st.grindMode = j.exploration_mode; st.grindPolls = (st.grindPolls || 0) + 1; rtgUpdateExp(); }
             // keep polling until the run reaches a TERMINAL state — a 404 just means the worker
             // hasn't written the first snapshot yet (the old code stopped here and froze the UI)
             if (!(j && j.rid && j.status !== 'running')) again(4000);
@@ -4451,10 +4456,30 @@ const JarvisRetention = (function () {
             rtgUpdateExp();
         }).catch(() => { GRINDLIST = { runs: [] }; });
     }
+    function eliteCorpusEnsure(force) {
+        if (ELITECORPUS && !force) return;
+        ELITECORPUS = { loading: true };
+        rtFetchJson('/api/hooks/elite-corpus', {}, 3).then(summary => {
+            ELITECORPUS = summary;
+            if (
+                st.grindEliteChannelOriented
+                && !st.grindEliteChannelId
+                && (summary.channels || []).length
+            ) st.grindEliteChannelId = summary.channels[0].id;
+            rtgUpdateExp();
+        }).catch(error => {
+            ELITECORPUS = {
+                loading: false,
+                error: fetchFail(error),
+            };
+            rtgUpdateExp();
+        });
+    }
     function grindStart() {
         const inp = window.document.getElementById('grind-input');
         const prem = inp ? inp.value.trim() : '';
-        if (!prem || st.grindStarting) return;
+        const eliteMode = st.grindMode === 'elite-corpus';
+        if ((!prem && !eliteMode) || st.grindStarting) return;
         const metric = st.grindMetric || 'keep';
         const channelFree = metric === 'channelFreeConcat';
         const coordinateId = channelFree
@@ -4466,7 +4491,7 @@ const JarvisRetention = (function () {
                 : st.grindChannelFreeThreshold)
             : st.grindThr || 82;
         st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile(), animation: st.grindAnimation === true, imageModel: automaticImageModel() }) }, 1)
+        rtFetchJson('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold, metric, coordinateId, hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile(), animation: st.grindAnimation === true, imageModel: automaticImageModel(), explorationMode: eliteMode ? 'elite-corpus' : 'same-idea', eliteMetric: st.grindEliteMetric || 'together_keep_geometry', eliteCutoff: st.grindEliteCutoff == null ? 95 : st.grindEliteCutoff, channelOriented: eliteMode && st.grindEliteChannelOriented === true, eliteChannelId: eliteMode && st.grindEliteChannelOriented ? st.grindEliteChannelId : '' }) }, 1)
             .then(j => {
                 st.grindStarting = 0;
                 if (j.rid) {
@@ -4476,7 +4501,7 @@ const JarvisRetention = (function () {
                     st.grindT0 = Date.now();
                     GRINDRUN = {
                         rid: j.rid,
-                        premise: prem,
+                        premise: prem || 'Inventing from elite corpus evidence…',
                         status: 'running',
                         attempts: [],
                         threshold_unit:
@@ -4498,6 +4523,18 @@ const JarvisRetention = (function () {
                         render_mode: 'single-panel',
                         exploration_strategy:
                             'same-idea-hook-proportional-outward-v2',
+                        exploration_mode:
+                            eliteMode ? 'elite-corpus' : 'same-idea',
+                        elite_metric:
+                            eliteMode ? st.grindEliteMetric : null,
+                        elite_cutoff_percentile:
+                            eliteMode ? st.grindEliteCutoff : null,
+                        elite_channel_oriented:
+                            eliteMode && st.grindEliteChannelOriented === true,
+                        elite_channel_id:
+                            eliteMode && st.grindEliteChannelOriented
+                                ? st.grindEliteChannelId
+                                : null,
                         required_seed_embedding_distance: 0,
                         minimum_text_embedding_distance: 0,
                         note: 'queued — the worker picks it up within seconds…',
@@ -4580,6 +4617,25 @@ const JarvisRetention = (function () {
             score.genFrameImgs = (a && a.frame_imgs) || [];
             score.generatedRunId = rid;
             score.generatedAttemptIndex = k;
+            score.generation_lineage = a
+                && a.exploration_mode === 'elite-corpus' ? {
+                    schema: 'elite-hook-generation-lineage-v1',
+                    exploration_mode: a.exploration_mode,
+                    index_content_sha256:
+                        a.elite_index_content_sha256,
+                    source_metric: a.elite_metric,
+                    source_cutoff_percentile:
+                        a.elite_cutoff_percentile,
+                    channel_oriented:
+                        a.elite_channel_oriented === true,
+                    channel_id: a.elite_channel_id || null,
+                    channel_name: a.elite_channel_name || null,
+                    sources: a.elite_sources || [],
+                    mechanism_hypothesis:
+                        a.elite_mechanism_hypothesis || null,
+                    evidence_role:
+                        'retrieval_and_generation_inspiration_only',
+                } : null;
             score._scoreQueueId = queueId;
             score._scoreQueueStatus = 'ready';
             uploads[queueIndex] = score;
@@ -4631,11 +4687,63 @@ const JarvisRetention = (function () {
             const score = await rtFetchJson('/api/hooks/grind/score/' + rid + '_' + k, {}, 3);
             if (!shortsGrindReadoutMatchesVerifiedScore(score, verifiedScore)) throw new Error('score readout does not match the verified ledger binding');
             const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
-            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score.indicators, score_ledger: score.score_ledger, score_record_sha256: score.score_record_sha256, score_record_validation: score.score_record_validation, channel_free_keep_forecasts: score.channel_free_keep_forecasts, novelty_provenance: score.novelty_provenance, channels: score.channels, emb_preview: score.emb_preview, input_manifest: score.input_manifest, score_verified: verifiedScore.score_verified, score_coordinate_id: verifiedScore.score_coordinate_id, score_ledger_sha256: verifiedScore.score_ledger_sha256, score_value: verifiedScore.score_value, score_percentile_0_100: verifiedScore.score_percentile_0_100, score_target_unit: verifiedScore.score_target_unit || 'percentile_0_100', montage: monUrl });
+            await saveHook({
+                kind: 'scored',
+                source: 'grind',
+                title:
+                    (a && a.premise)
+                    || (GRINDRUN && GRINDRUN.premise)
+                    || 'Grind hook',
+                text:
+                    (a && a.premise)
+                    || (GRINDRUN && GRINDRUN.premise)
+                    || '',
+                frames: (a && a.frames) || [],
+                indicators: score.indicators,
+                score_ledger: score.score_ledger,
+                score_record_sha256: score.score_record_sha256,
+                score_record_validation: score.score_record_validation,
+                channel_free_keep_forecasts:
+                    score.channel_free_keep_forecasts,
+                novelty_provenance: score.novelty_provenance,
+                channels: score.channels,
+                emb_preview: score.emb_preview,
+                input_manifest: score.input_manifest,
+                score_verified: verifiedScore.score_verified,
+                score_coordinate_id: verifiedScore.score_coordinate_id,
+                score_ledger_sha256: verifiedScore.score_ledger_sha256,
+                score_value: verifiedScore.score_value,
+                score_percentile_0_100: verifiedScore.score_percentile_0_100,
+                score_target_unit:
+                    verifiedScore.score_target_unit
+                    || 'percentile_0_100',
+                generation_lineage: a && a.exploration_mode
+                    === 'elite-corpus' ? {
+                        schema: 'elite-hook-generation-lineage-v1',
+                        exploration_mode: a.exploration_mode,
+                        index_content_sha256:
+                            a.elite_index_content_sha256,
+                        source_metric: a.elite_metric,
+                        source_cutoff_percentile:
+                            a.elite_cutoff_percentile,
+                        channel_oriented:
+                            a.elite_channel_oriented === true,
+                        channel_id: a.elite_channel_id || null,
+                        channel_name: a.elite_channel_name || null,
+                        sources: a.elite_sources || [],
+                        mechanism_hypothesis:
+                            a.elite_mechanism_hypothesis || null,
+                        evidence_role:
+                            'retrieval_and_generation_inspiration_only',
+                    } : null,
+                montage: monUrl,
+            });
         } catch (e) { st.grindErr = 'save: ' + e.message; rtgUpdateExp(); }
     }
     function grindPanel() {
         grindEnsure();
+        const eliteMode = st.grindMode === 'elite-corpus';
+        if (eliteMode) eliteCorpusEnsure(false);
         const bg = C.bg || '#0f172a', metric = st.grindMetric || 'keep', hours = st.grindHours || 3;
         const channelFree = metric === 'channelFreeConcat';
         const thr = channelFree
@@ -4649,11 +4757,37 @@ const JarvisRetention = (function () {
         const selectedTargetUnit = channelFree
             ? 'predicted_keep_percent'
             : 'percentile_0_100';
+        const eliteMetric = st.grindEliteMetric
+            || 'together_keep_geometry';
+        const eliteCutoff = st.grindEliteCutoff == null
+            ? 95
+            : st.grindEliteCutoff;
+        const eliteMetrics = ELITECORPUS
+            && Array.isArray(ELITECORPUS.metrics)
+            ? ELITECORPUS.metrics
+            : [];
+        const eliteChannels = ELITECORPUS
+            && Array.isArray(ELITECORPUS.channels)
+            ? ELITECORPUS.channels
+            : [];
+        const eliteMetricDefinition = eliteMetrics.find(item => (
+            item.id === eliteMetric
+        ));
+        const modePill = (id, label) => `<span data-grindmode="${id}" style="cursor:pointer;border:1px solid ${st.grindMode === id ? C.accent : C.border};background:${st.grindMode === id ? C.accent + '22' : 'transparent'};color:${st.grindMode === id ? C.accent : C.dim};border-radius:7px;padding:5px 10px;font-size:10px;font-weight:800">${label}</span>`;
         const g = (GRINDRUN && GRINDRUN.rid === st.grindRid) ? GRINDRUN : null;
         const running = g && g.status === 'running';
         const M = [['keep', 'keep-rate %ile'], ['ret5', 'past-5s %ile'], ['gt10M', '>10M %ile'], ['channelFreeConcat', 'channel-free concat keep %']];
         const mPill = ([id, lab]) => `<span data-grindmetric="${id}" style="cursor:pointer;border:1px solid ${metric === id ? C.accent : C.border};background:${metric === id ? C.accent + '22' : 'transparent'};color:${metric === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const hPill = h => `<span data-grindhours="${h}" style="cursor:pointer;border:1px solid ${hours === h ? C.accent : C.border};background:${hours === h ? C.accent + '22' : 'transparent'};color:${hours === h ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${h}h</span>`;
+        const eliteControls = !eliteMode ? '' : `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px;padding:9px 0;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border}">
+          ${ELITECORPUS && ELITECORPUS.loading ? `<span style="font-size:10px;color:${C.cyan}">loading frozen corpus lineage…</span>` : ''}
+          ${ELITECORPUS && ELITECORPUS.error ? `<span style="font-size:10px;color:#ef4444">${esc(ELITECORPUS.error)} · <b data-elitecorpusretry style="cursor:pointer;text-decoration:underline">retry</b></span>` : ''}
+          ${eliteMetrics.length ? `<label style="font-size:9px;color:${C.mute};display:flex;gap:5px;align-items:center">source signal <select data-grindelitemetric style="background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:7px;padding:6px 8px;font-size:10px" ${running ? 'disabled' : ''}>${eliteMetrics.map(item => `<option value="${esc(item.id)}" ${item.id === eliteMetric ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}</select></label>` : ''}
+          <label style="font-size:9px;color:${C.mute};display:flex;gap:5px;align-items:center">elite cutoff <input type="number" min="${ELITECORPUS && ELITECORPUS.minimum_index_percentile || 80}" max="99.9" step="0.1" value="${eliteCutoff}" data-grindelitecutoff style="width:65px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:7px;padding:6px 7px;font-size:10px" ${running ? 'disabled' : ''}><b style="color:${C.accent}">th</b></label>
+          <label style="display:inline-flex;gap:6px;align-items:center;color:${st.grindEliteChannelOriented ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-grindchanneloriented ${st.grindEliteChannelOriented ? 'checked' : ''} ${running ? 'disabled' : ''} style="accent-color:${C.accent}">Channel-oriented</label>
+          ${st.grindEliteChannelOriented ? `<select data-grindelitechannel style="min-width:150px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:7px;padding:6px 8px;font-size:10px" ${running ? 'disabled' : ''}>${eliteChannels.map(channel => `<option value="${esc(channel.id)}" ${channel.id === st.grindEliteChannelId ? 'selected' : ''}>${esc(channel.name)} · ${channel.corpus_match_count || 0}</option>`).join('')}</select>` : `<span style="font-size:9px;color:${C.dim}">Global corpus scope</span>`}
+          <span style="font-size:8.5px;color:${C.faint};line-height:1.4;flex:1;min-width:220px">${eliteMetricDefinition ? esc(eliteMetricDefinition.description) : 'The corpus chooses evidence; the canonical scorer decides whether a new hook clears the final threshold.'} ${ELITECORPUS && ELITECORPUS.corpus ? `${ELITECORPUS.corpus.row_count || 0} embedded Shorts in the frozen Together release · ` : ''}${eliteMetricDefinition ? `${eliteMetricDefinition.indexed_elite_count || 0} indexed at 80th+.` : ''}</span>
+        </div>`;
         let runHtml = '';
         if (!g && GRINDLIST && (GRINDLIST.runs || []).length && !st.grindRid) {
             const last = GRINDLIST.runs[0];
@@ -4749,10 +4883,16 @@ const JarvisRetention = (function () {
                             )
                             : ''
                     );
+                const eliteSources = Array.isArray(a.elite_sources)
+                    ? a.elite_sources
+                    : [];
+                const eliteSourceCard = source => `<a href="https://www.youtube.com/shorts/${encodeURIComponent(source.id)}" target="_blank" rel="noopener" title="Open source Short" style="display:block;width:84px;flex:0 0 84px;text-decoration:none;color:${C.text}"><img src="https://i.ytimg.com/vi/${encodeURIComponent(source.id)}/mqdefault.jpg" loading="lazy" style="width:84px;height:47px;object-fit:cover;border-radius:4px;background:#000"><span style="display:block;font-size:7.5px;line-height:1.25;margin-top:2px;max-height:29px;overflow:hidden">${esc(source.title || source.opening || source.id)}</span><span style="display:block;font-size:7px;color:${C.mute}">${fmtv(source.source_percentile, 1)}th · cluster ${source.cluster_24 == null ? '—' : esc(source.cluster_24)}${source.semantic_similarity == null ? '' : ` · sim ${fmtv(source.semantic_similarity, 3)}`}${source.channel_centroid_similarity == null ? '' : ` · channel ${fmtv(source.channel_centroid_similarity, 3)}`} · ${source.embedding_available ? 'corpus vector' : 'saved-ledger fallback'}</span></a>`;
+                const eliteEvidence = !eliteSources.length ? '' : `<details style="margin-top:5px;border-top:1px solid ${C.border};padding-top:4px"><summary style="cursor:pointer;font-size:8.5px;color:${C.accent};font-weight:800">${eliteSources.length} elite source${eliteSources.length === 1 ? '' : 's'} combined · trace lineage</summary><div style="display:flex;gap:5px;overflow-x:auto;padding-top:5px">${eliteSources.map(eliteSourceCard).join('')}</div>${a.elite_mechanism_hypothesis && a.elite_mechanism_hypothesis.text ? `<div style="font-size:7.5px;color:${C.dim};line-height:1.35;margin-top:4px">Hypothesis, not a causal result: ${esc(a.elite_mechanism_hypothesis.text)}</div>` : ''}<div style="font-size:7px;color:${C.faint};margin-top:3px">Source geometry chose evidence only. This generated hook still had to earn its own canonical ledger score.</div></details>`;
                 return `<div style="border:2px solid ${win ? C.green : C.border};border-radius:9px;padding:7px;background:${C.card2};width:250px;flex-shrink:0">
                   <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:10px;font-weight:800;color:${win ? C.green : C.dim}">#${a.k + 1}${win ? ' 🎯 WINNER' : ''}</span>${pctBadge}</div>
                   ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
                   <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
+                  ${eliteEvidence}
                   ${verifiedScore ? `<div style="font-size:7px;color:${C.faint};margin-top:3px;overflow-wrap:anywhere"><code>${esc(verifiedScore.score_coordinate_id)}</code> · ${esc(verifiedDescriptor.targetUnit)} · target ${esc(verifiedDescriptor.target)} · modality ${esc(verifiedDescriptor.modality)} · input ${esc(verifiedDescriptor.input)} · ${verifiedScore.score_target_unit === 'predicted_keep_percent' ? `pooled percentile ${fmtv(verifiedScore.score_percentile_0_100, 1)}th · score record <code>${verifiedScore.score_record_sha256.slice(0, 12)}…</code> · ` : ''}ledger <code>${verifiedScore.score_ledger_sha256.slice(0, 12)}…</code></div>` : ''}
                   ${a.score_available === true ? `<div style="font-size:8px;color:${C.green};margin-top:3px">embedded · ${a.score_coordinate_available_count == null ? '' : `${a.score_coordinate_available_count}/`}${a.score_coordinate_count || 21} ledger coordinates + ${a.score_derived_output_count || 4} channel-free outputs</div>` : ''}
                   ${unverifiedMessage ? `<div style="font-size:8px;color:${C.amber};line-height:1.35;margin-top:4px">${esc(unverifiedMessage)}</div>` : ''}
@@ -4770,11 +4910,17 @@ const JarvisRetention = (function () {
                 && runValidation.valid === true
                 ? ''
                 : `<div style="font-size:9px;color:${C.amber};background:${C.amber}12;border:1px solid ${C.amber}55;padding:6px 8px;margin-bottom:7px">Historical or invalid run metadata is read-only. Its old score aliases are deliberately excluded from ranking and threshold decisions.${runValidation && (runValidation.errors || []).length ? ` ${esc(runValidation.errors.join('; '))}` : ''}</div>`;
+            const retrieval = g.elite_semantic_retrieval;
+            const eliteRetrievalNotice =
+                g.exploration_mode !== 'elite-corpus' || !retrieval
+                    ? ''
+                    : `<div style="font-size:8px;color:${retrieval.error ? C.amber : C.dim};background:${retrieval.error ? C.amber + '10' : C.card2};border:1px solid ${retrieval.error ? C.amber + '55' : C.border};padding:5px 7px;margin-bottom:7px;line-height:1.4">Retrieval path: ${retrieval.query_available ? 'semantic query vector' : 'no query vector'} · ${retrieval.centroid_available ? `${retrieval.centroid_member_count || 0}-video channel centroid` : 'no channel centroid'} · ${retrieval.embedding_candidate_count || 0}/${retrieval.candidate_count || 0} eligible sources have frozen corpus vectors.${retrieval.fallback ? ` Fallback: ${esc(retrieval.fallback)}.` : ''}${retrieval.error ? ` Semantic retrieval degraded: ${esc(retrieval.error)}.` : ''} Source selection remains non-causal and cannot alter the canonical final score.</div>`;
             runHtml = `${foreign}<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
                 ${runIntegrity}
+                ${eliteRetrievalNotice}
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered hooks for one idea · verified full ledgers ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Every discarded hook failed the outward or same-idea pre-render selection, or was an unselected sibling in the candidate pool.')}" style="cursor:help">${g.rejected_variant_count || 0} hooks screened before render</span>${g.required_seed_embedding_distance != null ? ` · <span title="minimum cosine distance the next hook treatment must move from the original wording" style="cursor:help;color:${C.purple}">seed ≥ ${(+g.required_seed_embedding_distance).toFixed(3)}</span>` : ''}${g.minimum_text_embedding_distance != null ? ` · <span title="minimum cosine distance the next hook must keep from every rendered hook" style="cursor:help;color:${C.cyan}">prior ≥ ${(+g.minimum_text_embedding_distance).toFixed(3)}</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum similarity every hook must retain to the immutable video idea" style="cursor:help;color:${C.green}">same idea ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.attempt_count == null ? atts.length : g.attempt_count} rendered hooks for one idea · verified full ledgers ${verifiedAttempts.length} · best <b style="color:${verifiedBest ? heatCol(shortsGrindObjectiveValue(verifiedBest.score) / 100) : C.mute}">${verifiedBest ? fmtv(shortsGrindObjectiveValue(verifiedBest.score), 1) + targetSuffix : '—'}</b> vs target <b style="color:${C.accent}">${threshold == null ? 'unverified' : fmtv(threshold, 1) + targetSuffix}</b> · <code style="color:${C.text}">${esc(g.threshold_coordinate_id || 'unverified legacy coordinate')}</code> · ${g.exploration_mode === 'elite-corpus' ? `<b style="color:${C.accent}">elite ${esc(g.elite_metric || '')} ≥ ${fmtv(g.elite_cutoff_percentile, 1)}th · ${g.elite_channel_oriented ? esc(g.elite_channel_name || 'channel-oriented') : 'global corpus'} · ${g.elite_source_pool_count || 0} source candidates</b> · ` : ''}${g.animation ? 'animation · ' : ''}one provider call → one 45:16 sheet → five deterministic crops · <span title="${esc(rejectionReasonSummary || 'Every discarded hook failed the outward or same-idea pre-render selection, or was an unselected sibling in the candidate pool.')}" style="cursor:help">${g.rejected_variant_count || 0} hooks screened before render</span>${g.required_seed_embedding_distance != null ? ` · <span title="minimum cosine distance the next hook treatment must move from the original wording" style="cursor:help;color:${C.purple}">seed ≥ ${(+g.required_seed_embedding_distance).toFixed(3)}</span>` : ''}${g.minimum_text_embedding_distance != null ? ` · <span title="minimum cosine distance the next hook must keep from every rendered hook" style="cursor:help;color:${C.cyan}">prior ≥ ${(+g.minimum_text_embedding_distance).toFixed(3)}</span>` : ''}${g.topical_similarity_floor != null ? ` · <span title="minimum similarity every hook must retain to the immutable video idea" style="cursor:help;color:${C.green}">same idea ≥ ${(+g.topical_similarity_floor).toFixed(3)}</span>` : ''}${g.score_deficit != null ? ` · deficit ${fmtv(g.score_deficit, 1)}` : ''}</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
@@ -4786,16 +4932,18 @@ const JarvisRetention = (function () {
             ? `<span style="font-size:10px;color:${C.mute}">target ≥</span><input type="number" min="0" max="100" step="0.1" value="${thr}" data-grindcfthr aria-label="Target predicted keep percentage" style="width:70px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 7px;font-size:11px" ${running ? 'disabled' : ''}><span style="font-size:10px;color:${C.accent};font-weight:800">% predicted keep</span>`
             : `<span style="font-size:10px;color:${C.mute}">target ≥ <b style="color:${C.accent}">${thr}</b>th</span><input type="range" min="60" max="97" value="${thr}" data-grindthr style="width:110px;accent-color:${C.accent}" ${running ? 'disabled' : ''}>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— describe one immutable video idea; the fine-tuned model tests progressively different openings for that same idea. It may change phrasing, order, tension, reveal, and visual treatment, but not the underlying subject, event, goal, or outcome. Every rendered hook receives one coherent 45:16 image call, five deterministic 9:16 crops, and the complete canonical embedding ledger.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">${eliteMode ? 'Elite corpus explorer' : 'Grind to a threshold'} <span style="font-size:10px;color:${C.mute};font-weight:600">— ${eliteMode ? 'retrieve already-embedded elite openings, combine diversified presentation mechanisms, and generate fresh branches until one clears the canonical target. Leave the idea blank for broad invention, or enter a realm to constrain every branch.' : 'describe one immutable video idea; the fine-tuned model tests progressively different openings for that same idea. It may change phrasing, order, tension, reveal, and visual treatment, but not the underlying subject, event, goal, or outcome.'} Every rendered hook receives one coherent 45:16 image call, five deterministic 9:16 crops, and the complete canonical embedding ledger.</span></div>
+          <div style="display:flex;gap:6px;margin-top:9px;align-items:center">${modePill('same-idea', 'Same-idea grind')}${modePill('elite-corpus', 'Elite corpus explorer')}</div>
+          ${eliteControls}
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
-            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="describe one video idea — Grind tests different hooks for it…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
+            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="${eliteMode ? 'optional video realm — blank invents from elite corpus evidence…' : 'describe one video idea — Grind tests different hooks for it…'}" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
             ${targetControl}
             ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
             ${automaticImageModelSelect(running || st.grindStarting)}
             <label style="display:inline-flex;gap:6px;align-items:center;color:${st.grindAnimation ? C.accent : C.dim};font-size:10px;font-weight:800;cursor:pointer"><input type="checkbox" data-grindanimation ${st.grindAnimation ? 'checked' : ''} ${running ? 'disabled' : ''} style="accent-color:${C.accent}">Animation</label>
-            ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? '⏳' : '🎯 Grind'}</span>`}
+            ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? 'working…' : (eliteMode ? 'Explore' : 'Grind')}</span>`}
           </div>
-          <div style="font-size:8px;color:${C.faint};margin-top:5px">Threshold coordinate: <code style="color:${C.dim}">${esc(selectedCoordinateId)}</code> · unit <code style="color:${C.dim}">${esc(selectedTargetUnit)}</code>. ${channelFree ? 'This compares the frozen pooled model’s actual predicted keep percentage; the separate pooled percentile is shown only as context.' : 'This compares the coordinate’s corpus percentile.'} No creator scale factor or modality fallback is substituted.</div>
+          <div style="font-size:8px;color:${C.faint};margin-top:5px">Threshold coordinate: <code style="color:${C.dim}">${esc(selectedCoordinateId)}</code> · unit <code style="color:${C.dim}">${esc(selectedTargetUnit)}</code>. ${channelFree ? 'This compares the frozen pooled model’s actual predicted keep percentage; the separate pooled percentile is shown only as context.' : 'This compares the coordinate’s corpus percentile.'} No creator scale factor or modality fallback is substituted.${eliteMode ? ' Elite source ranks are retrieval evidence only; they cannot clear this threshold.' : ''}</div>
           ${st.grindErr ? `<div style="font-size:10px;color:#ef4444;margin-top:6px">${esc(st.grindErr)}</div>` : ''}
           ${runHtml}</div>`;
     }
@@ -8510,6 +8658,8 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
         const egn = e.target.closest('[data-expgenn]'); if (egn) { st.expGenN = +egn.getAttribute('data-expgenn'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-expgen]')) { if (!st.expGenBusy) expGenSubmit(); return; }
+        const grindMode = e.target.closest('[data-grindmode]'); if (grindMode) { if (!(GRINDRUN && GRINDRUN.status === 'running')) { st.grindMode = grindMode.getAttribute('data-grindmode') === 'elite-corpus' ? 'elite-corpus' : 'same-idea'; if (st.grindMode === 'elite-corpus') eliteCorpusEnsure(false); rtgUpdateExp(); } return; }
+        if (e.target.closest('[data-elitecorpusretry]')) { ELITECORPUS = null; eliteCorpusEnsure(true); rtgUpdateExp(); return; }
         if (e.target.closest('[data-grindstart]')) { st.grindErr = null; grindStart(); return; }
         if (e.target.closest('[data-grindstop]')) { if (st.grindRid) rtFetch('/api/hooks/grind/stop/' + st.grindRid, { method: 'POST' }).catch(() => {}); return; }
         const gmet = e.target.closest('[data-grindmetric]'); if (gmet) { st.grindMetric = gmet.getAttribute('data-grindmetric'); rtgUpdateExp(); return; }
@@ -8757,6 +8907,7 @@ const JarvisRetention = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindthr')) { st.grindThr = +e.target.value; window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindcfthr')) { st.grindChannelFreeThreshold = Math.max(0, Math.min(100, +e.target.value || 0)); window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindelitecutoff')) { st.grindEliteCutoff = Math.max(80, Math.min(99.9, +e.target.value || 95)); window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.id === 'grind-input') { st.grindPrem = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
@@ -8776,6 +8927,25 @@ const JarvisRetention = (function () {
         }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindanimation')) {
             st.grindAnimation = e.target.checked === true;
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindchanneloriented')) {
+            st.grindEliteChannelOriented = e.target.checked === true;
+            if (st.grindEliteChannelOriented && !st.grindEliteChannelId) {
+                const channels = ELITECORPUS && ELITECORPUS.channels || [];
+                if (channels.length) st.grindEliteChannelId = channels[0].id;
+            }
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindelitemetric')) {
+            st.grindEliteMetric = e.target.value;
+            rtgUpdateExp();
+            return;
+        }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindelitechannel')) {
+            st.grindEliteChannelId = e.target.value;
             rtgUpdateExp();
             return;
         }
