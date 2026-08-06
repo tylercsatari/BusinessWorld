@@ -112,6 +112,9 @@ const hookPlanOutput = require(
 const shortsTranscriptWriter = require(
     './buildings/jarvis/shorts-transcript-writer'
 );
+const providerResilience = require(
+    './buildings/jarvis/provider-resilience'
+);
 const animatedHookExperiment = require(
     './buildings/jarvis/animated-hook-experiment'
 );
@@ -22094,6 +22097,74 @@ async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing 
     const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
     try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
 }
+function replicatePayloadMessage(payload) {
+    const detail = payload && (
+        payload.error
+        || payload.detail
+        || payload.title
+        || payload.message
+    );
+    return String(
+        typeof detail === 'string'
+            ? detail
+            : JSON.stringify(detail || {})
+    ).slice(0, 500);
+}
+function replicateHttpError(stage, response, payload) {
+    const error = new Error(
+        `replicate ${stage} http ${response.status}: ${
+            replicatePayloadMessage(payload)
+        }`
+    );
+    error.statusCode = response.status;
+    error.providerStatus = response.status;
+    if ([404, 408, 409, 425, 429].includes(response.status)
+        || response.status >= 500) {
+        error.retryable = true;
+    } else if (response.status >= 400) {
+        error.permanent = true;
+    }
+    return error;
+}
+async function fetchReplicatePredictionStatus(
+    prediction,
+    auth,
+    timeoutMs = 60000
+) {
+    const getUrl = (
+        prediction
+        && prediction.urls
+        && prediction.urls.get
+    ) || (
+        prediction && prediction.id
+            ? `https://api.replicate.com/v1/predictions/${prediction.id}`
+            : null
+    );
+    if (!getUrl) {
+        const error = new Error(
+            'replicate prediction did not include a status URL'
+        );
+        error.permanent = true;
+        throw error;
+    }
+    const response = await fetchT(
+        getUrl,
+        { headers: auth },
+        timeoutMs
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+        throw replicateHttpError('poll', response, payload);
+    }
+    if (!payload || typeof payload !== 'object') {
+        const error = new Error(
+            'replicate status check returned no JSON; resuming the same prediction'
+        );
+        error.retryable = true;
+        throw error;
+    }
+    return payload;
+}
 // Idea generation runs ONLY on Tyler's fine-tuned model (idea_r7), hosted on REPLICATE
 // (own account, no spend cap; scales to zero). NO Gemini, NO fallback — if the deployment
 // is unset/unreachable the request errors clearly. See cog-idea/predict.py.
@@ -22136,24 +22207,69 @@ async function hookModelGenerate(
     // Replicate: create a prediction on the model VERSION directly (no deployment needed — deployments
     // require a billing method; direct predictions just need credit). Then poll until terminal. The
     // first run cold-boots the GPU (a couple min); we run in the background queue, so that's fine.
-    const t0 = Date.now(), deadline = t0 + 12 * 60 * 1000;
+    const t0 = Date.now();
+    const requestedDeadline = Number(options.retryDeadlineAtMs);
+    const deadline = Math.min(
+        t0 + 12 * 60 * 1000,
+        options.retryDeadlineAtMs != null
+            && Number.isFinite(requestedDeadline)
+            ? requestedDeadline
+            : Number.POSITIVE_INFINITY
+    );
     const cr = await fetchT('https://api.replicate.com/v1/predictions', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ version: ver, input: { premise: premise || '', invent: !!invent || !premise, count } })
     }, 60000);
     let p = await cr.json().catch(() => null);
-    if (!p || cr.status >= 400 || !p.id) throw new Error('replicate create http ' + cr.status + ': ' + String((p && (p.detail || p.title)) || '').slice(0, 140));
-    const getUrl = (p.urls && p.urls.get) || ('https://api.replicate.com/v1/predictions/' + p.id);
-    let lastBeat = 0;
-    while (['starting', 'processing'].includes(p.status) && Date.now() < deadline) {
-        await new Promise(res => setTimeout(res, 2500));
-        const g = await fetchT(getUrl, { headers: { 'Authorization': 'Bearer ' + token } }, 30000);
-        p = await g.json().catch(() => p);
-        // heartbeat every ~10s so the UI shows REAL progress ("GPU booting 3m 10s" vs "model
-        // thinking") instead of a frozen line that could equally mean stuck.
-        if (onStatus && Date.now() - lastBeat > 10000) { lastBeat = Date.now(); try { await onStatus(p.status, Math.round((Date.now() - t0) / 1000)); } catch (e) {} }
+    if (!p || cr.status >= 400 || !p.id) {
+        if (cr.status >= 400) {
+            throw replicateHttpError('create', cr, p);
+        }
+        const error = new Error(
+            'replicate create returned no prediction document'
+        );
+        error.retryable = true;
+        throw error;
     }
-    if (p.status !== 'succeeded') throw new Error('replicate ' + p.status + (p.error ? ': ' + String(p.error).slice(0, 140) : (Date.now() >= deadline ? ' (timed out waiting for GPU)' : '')));
+    const auth = { Authorization: 'Bearer ' + token };
+    let lastBeat = 0;
+    p = await providerResilience.pollPrediction({
+        prediction: p,
+        deadlineAtMs: deadline,
+        intervalMs: 2500,
+        context: 'fine-tuned hook idea prediction',
+        shouldStop: options.shouldStop,
+        fetchStatus: current => fetchReplicatePredictionStatus(
+            current,
+            auth,
+            60000
+        ),
+        onHeartbeat: async event => {
+            if (!onStatus || Date.now() - lastBeat <= 10000) return;
+            lastBeat = Date.now();
+            try {
+                await onStatus(
+                    event.kind === 'recovering'
+                        ? 'recovering'
+                        : event.status,
+                    Math.round((Date.now() - t0) / 1000),
+                    event
+                );
+            } catch (error) {}
+        },
+    });
+    if (p.status !== 'succeeded') {
+        const error = new Error(
+            'replicate ' + p.status
+            + (p.error ? ': ' + String(p.error).slice(0, 300) : '')
+        );
+        if (providerResilience.isPermanentError(error)) {
+            error.permanent = true;
+        } else {
+            error.retryable = true;
+        }
+        throw error;
+    }
     return hookPlanOutput.parseHookPlans(p.output, {
         fallbackPremise:
             options.fallbackPremise == null
@@ -22502,42 +22618,19 @@ async function replicateRun(slug, input, timeoutMs = 180000) {
         { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'wait' }, body: JSON.stringify({ input }) }, 120000);
     let j = await r.json().catch(() => null);
     if (!j) throw new Error('replicate returned no JSON (http ' + r.status + ')');
-    if (!r.ok) {
-        const detail = j.error || j.detail || j.title || j.message || j;
-        throw new Error(
-            `replicate http ${r.status}: ${String(
-                typeof detail === 'string'
-                    ? detail
-                    : JSON.stringify(detail)
-            ).slice(0, 500)}`
-        );
-    }
+    if (!r.ok) throw replicateHttpError('create', r, j);
     const deadline = Date.now() + timeoutMs;
-    while (j && (j.status === 'starting' || j.status === 'processing') && j.urls && j.urls.get && Date.now() < deadline) {
-        await new Promise(s => setTimeout(s, 1500));
-        const poll = await fetchT(
-            j.urls.get,
-            { headers: auth },
-            20000
-        );
-        const next = await poll.json().catch(() => null);
-        if (!poll.ok) {
-            const detail = next && (
-                next.error
-                || next.detail
-                || next.title
-                || next.message
-            );
-            throw new Error(
-                `replicate poll http ${poll.status}: ${String(
-                    typeof detail === 'string'
-                        ? detail
-                        : JSON.stringify(detail || {})
-                ).slice(0, 500)}`
-            );
-        }
-        if (next) j = next;
-    }
+    j = await providerResilience.pollPrediction({
+        prediction: j,
+        deadlineAtMs: deadline,
+        intervalMs: 1500,
+        context: `${slug} image prediction`,
+        fetchStatus: current => fetchReplicatePredictionStatus(
+            current,
+            auth,
+            60000
+        ),
+    });
     if (!j || j.error) throw new Error('replicate: ' + ((j && j.error) ? (typeof j.error === 'string' ? j.error : JSON.stringify(j.error)) : 'no result'));
     if (j.status && j.status !== 'succeeded') throw new Error('replicate ' + j.status + (j.logs ? ' — ' + String(j.logs).slice(-140) : ''));
     let out = j.output; if (Array.isArray(out)) out = out[0];
@@ -22920,35 +23013,44 @@ async function generateShortsOpeningTranscript({
         || process.env.OPENAI_CHAT_MODEL
         || 'gpt-4o'
     ).trim();
-    const response = await fetchT(
-        'https://api.openai.com/v1/chat/completions',
-        {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model,
-                messages,
-                temperature: 0.35,
-                max_tokens: 1200,
-                response_format: { type: 'json_object' },
-            }),
+    const parsed = await providerResilience.retryTransient(
+        async () => {
+            const response = await fetchT(
+                'https://api.openai.com/v1/chat/completions',
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization:
+                            `Bearer ${process.env.OPENAI_API_KEY}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model,
+                        messages,
+                        temperature: 0.35,
+                        max_tokens: 1200,
+                        response_format: { type: 'json_object' },
+                    }),
+                },
+                120000
+            );
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw shortsTranscriptProviderError(
+                    response,
+                    payload
+                );
+            }
+            const content = payload
+                && payload.choices
+                && payload.choices[0]
+                && payload.choices[0].message
+                && payload.choices[0].message.content;
+            return shortsTranscriptWriter.parseResult(
+                _extractJsonObject(content)
+            );
         },
-        120000
-    );
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-        throw shortsTranscriptProviderError(response, payload);
-    }
-    const content = payload
-        && payload.choices
-        && payload.choices[0]
-        && payload.choices[0].message
-        && payload.choices[0].message.content;
-    const parsed = shortsTranscriptWriter.parseResult(
-        _extractJsonObject(content)
+        { maxAttempts: 4 }
     );
     const exampleEvidence = examples.map(example => ({
         video_id: example.id,
@@ -23079,8 +23181,44 @@ async function generateCanonicalHookOpening({
         openingContract: 'canonical-complete-hook-opening-v1',
     };
 }
-// The idea model samples at temperature — a single malformed generation (truncated JSON, ≠5
-// frames) is NORMAL, not fatal. Retry up to 3×; only infra failures (credit/config) are terminal.
+// The idea model samples at temperature, and provider status requests can be
+// interrupted independently of the prediction. Both are recoverable inside
+// the caller's time budget; only explicit permanent provider errors terminate.
+async function hookModelGenerateResilient(
+    premise,
+    invent,
+    count,
+    onStatus,
+    onRetry,
+    options = {}
+) {
+    const retryDeadlineAtMs = Number(options.retryDeadlineAtMs);
+    const hasRetryDeadline = options.retryDeadlineAtMs != null
+        && Number.isFinite(retryDeadlineAtMs);
+    return providerResilience.retryTransient(
+        () => hookModelGenerate(
+            premise,
+            invent,
+            count,
+            onStatus,
+            options
+        ),
+        {
+            maxAttempts: hasRetryDeadline ? 100000 : 4,
+            deadlineAtMs: hasRetryDeadline
+                ? retryDeadlineAtMs
+                : null,
+            shouldStop: options.shouldStop,
+            onRetry: onRetry
+                ? (error, attempt) => onRetry(
+                    providerResilience.errorMessage(error),
+                    attempt
+                )
+                : null,
+        }
+    );
+}
+
 async function hookModelGenerateRetry(
     premise,
     invent,
@@ -23088,22 +23226,15 @@ async function hookModelGenerateRetry(
     onRetry,
     options = {}
 ) {
-    let lastErr = '';
-    for (let t = 0; t < 3; t++) {
-        try { return (await hookModelGenerate(
-            premise,
-            invent,
-            1,
-            onStatus,
-            options
-        ))[0]; }
-        catch (e) {
-            lastErr = String(e.message || e);
-            if (/credit|billing|spend|402|not configured|refusing/i.test(lastErr)) break;   // real infra failure → stop
-            if (onRetry) { try { await onRetry(lastErr, t + 1); } catch (e2) {} }
-        }
-    }
-    throw new Error(lastErr);
+    const plans = await hookModelGenerateResilient(
+        premise,
+        invent,
+        1,
+        onStatus,
+        onRetry,
+        options
+    );
+    return plans[0];
 }
 
 async function hookModelGenerateBatchRetry(
@@ -23114,29 +23245,14 @@ async function hookModelGenerateBatchRetry(
     onRetry,
     options = {}
 ) {
-    let lastErr = '';
-    for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-            return await hookModelGenerate(
-                premise,
-                invent,
-                count,
-                onStatus,
-                options
-            );
-        } catch (error) {
-            lastErr = String(error.message || error);
-            if (/credit|billing|spend|402|not configured|refusing/i.test(
-                lastErr
-            )) break;
-            if (onRetry) {
-                try {
-                    await onRetry(lastErr, attempt + 1);
-                } catch (retryError) {}
-            }
-        }
-    }
-    throw new Error(lastErr);
+    return hookModelGenerateResilient(
+        premise,
+        invent,
+        count,
+        onStatus,
+        onRetry,
+        options
+    );
 }
 
 async function hookBatchOwnerSaveContext(autoSave) {
@@ -23305,6 +23421,28 @@ async function hookProcessRequest(
     const autoSaveContext = await hookBatchOwnerSaveContext(
         options.autoSave
     );
+    const ideaGenerationDeadlineAtMs = Date.now() + Math.max(
+        30,
+        count * 12
+    ) * 60 * 1000;
+    const ideaGenerationShouldStop = experimentId
+        ? () => animatedHookBatchExperimentStopped(experimentId)
+        : null;
+    const resilientAutoStep = (label, operation) => (
+        providerResilience.retryTransient(operation, {
+            maxAttempts: 1000,
+            deadlineAtMs: ideaGenerationDeadlineAtMs,
+            shouldStop: ideaGenerationShouldStop,
+            onRetry: (error, retry) => stat({
+                stage: 'recovering',
+                done: attempts.length,
+                n: count,
+                note: `${label} was interrupted; retrying without losing the hook (${retry}) · ${
+                    providerResilience.errorMessage(error).slice(0, 90)
+                }`,
+            }),
+        })
+    );
     // STREAMING: the group file is rewritten as each idea and coherent panel
     // completes. `done` flips true only after every requested panel finishes.
     const warns = new Set();   // non-fatal problems — surfaced in the UI, never swallowed
@@ -23404,10 +23542,13 @@ async function hookProcessRequest(
                 n: count,
                 note: 'embedding the immutable video idea before the fine-tuned model writes hook treatments…',
             });
-            seedEmbedding = await geminiTextEmbed(premise, {
-                required: true,
-                context: 'the Auto video idea',
-            });
+            seedEmbedding = await resilientAutoStep(
+                'video-idea embedding',
+                () => geminiTextEmbed(premise, {
+                    required: true,
+                    context: 'the Auto video idea',
+                })
+            );
         }
         const NOV_MIN = Number.isFinite(configuredNovelty)
             ? Math.max(0, Math.min(1, configuredNovelty))
@@ -23454,9 +23595,20 @@ async function hookProcessRequest(
             const beat = (rstat, sec) => {   // live heartbeat while the model call runs — stuck and working look different
                 const t = sec >= 60 ? `${Math.floor(sec / 60)}m ${sec % 60}s` : `${sec}s`;
                 return stat({ stage: 'reasoning', done: attempts.length, n: count, ts: Date.now(),
-                    note: `idea ${attempts.length + 1}/${count}: ${rstat === 'starting' ? `GPU booting (${t} — a cold start loads the 61GB model, ~2–6 min)` : `the model is thinking (${t})`}` });
+                    note: `idea ${attempts.length + 1}/${count}: ${
+                        rstat === 'recovering'
+                            ? `status check was interrupted; resuming the same model prediction (${t})`
+                            : rstat === 'starting'
+                                ? `GPU booting (${t} — a cold start loads the 61GB model, ~2–6 min)`
+                                : `the model is thinking (${t})`
+                    }` });
             };
-            const onRetry = (msg, t) => stat({ stage: 'reasoning', done: attempts.length, n: count, note: `idea ${attempts.length + 1}/${count}: malformed sample — retrying (${t}/3)` });
+            const onRetry = (msg, t) => stat({
+                stage: 'reasoning',
+                done: attempts.length,
+                n: count,
+                note: `idea ${attempts.length + 1}/${count}: model request did not complete; retrying without consuming an idea slot (${t}) · ${String(msg).slice(0, 90)}`,
+            });
             const autoPromptState = seededAutoExploration
                 ? {
                     ...grindExploration.createState({
@@ -23489,7 +23641,12 @@ async function hookProcessRequest(
                         Math.min(8, count - attempts.length),
                         beat,
                         onRetry,
-                        { fallbackPremise: premise }
+                        {
+                            fallbackPremise: premise,
+                            retryDeadlineAtMs:
+                                ideaGenerationDeadlineAtMs,
+                            shouldStop: ideaGenerationShouldStop,
+                        }
                     ));
                 }
                 spec = batchIdeaGeneration
@@ -23499,11 +23656,24 @@ async function hookProcessRequest(
                         seededAutoExploration ? false : invent,
                         beat,
                         onRetry,
-                        { fallbackPremise: premise }
+                        {
+                            fallbackPremise: premise,
+                            retryDeadlineAtMs:
+                                ideaGenerationDeadlineAtMs,
+                            shouldStop: ideaGenerationShouldStop,
+                        }
                     );
                 if (!spec) throw new Error('model produced no usable idea');
             }
-            catch (e) { err = 'idea: ' + e.message; if (attempts.length) warns.add(`stopped after ${attempts.length}/${count} ideas — ${err}`); break; }  // hard failure (credit / model down) → stop the batch
+            catch (e) {
+                err = 'idea: ' + e.message;
+                if (attempts.length) {
+                    warns.add(
+                        `stopped after ${attempts.length}/${count} ideas — ${err}`
+                    );
+                }
+                break;
+            }
             const premiseKey = animatedHookExperiment
                 .normalizedPremise(spec.premise);
             if (
@@ -23543,12 +23713,15 @@ async function hookProcessRequest(
             let autoMeasurement = null;
             let candidateHookEmbedding = null;
             if (seededAutoExploration) {
-                candidateHookEmbedding = await geminiTextEmbed(
-                    spec.premise,
-                    {
-                        required: true,
-                        context: 'an Auto hook treatment',
-                    }
+                candidateHookEmbedding = await resilientAutoStep(
+                    'hook-treatment embedding',
+                    () => geminiTextEmbed(
+                        spec.premise,
+                        {
+                            required: true,
+                            context: 'an Auto hook treatment',
+                        }
+                    )
                 );
                 autoMeasurement = grindExploration.measureCandidate({
                     candidateEmbedding: candidateHookEmbedding,
@@ -23741,11 +23914,14 @@ async function hookProcessRequest(
                     }
                     a.status = 'scoring';
                     await writeGroup(false);
-                    const score = await scoreMontage(
-                        panel.montage,
-                        panel.transcript,
-                        premise || spec.premise,
-                        creatorProfile
+                    const score = await resilientAutoStep(
+                        'canonical hook scoring',
+                        () => scoreMontage(
+                            panel.montage,
+                            panel.transcript,
+                            premise || spec.premise,
+                            creatorProfile
+                        )
                     );
                     delete score.montage;
                     score.score_record_sha256 =
@@ -24053,8 +24229,10 @@ async function hookSweepOrphans() {
     } catch (e) {}
 }
 setTimeout(() => { hookSweepOrphans().catch(() => {}); }, 8000);
-// Same for grinds: a run whose snapshot has gone stale (>4 min without a write — heartbeats land
-// every ~10s while alive) was killed mid-flight; resolve it with a clear error so the UI stops.
+// Same for grinds: a stale running snapshot means its worker disappeared.
+// New requests remain durable until a terminal snapshot exists, so the sweeper
+// marks those runs as recovering and lets the next lease owner continue them.
+// Legacy runs with no durable request still resolve with a clear terminal error.
 async function grindSweepOrphans() {
     try {
         const keys = ((await cloud.listR2Keys('hooks/grind/runs/')) || []).filter(k => k.endsWith('.json')).slice(-10);
@@ -24108,12 +24286,19 @@ async function grindSweepOrphans() {
                 ) {
                     continue;
                 }
+                const requestPending = await cloud.existsInR2(
+                    `hooks/grind/requests/${rid}.json`
+                );
                 await ownership.mutate(
                     'resolve orphaned Shorts grind',
                     queueLeaseFence => {
-                        j.status = 'error';
-                        j.error = 'interrupted by a server restart — the attempts above survived; press Grind to continue from here';
-                        j.note = '';
+                        j.status = requestPending ? 'running' : 'error';
+                        j.error = requestPending
+                            ? ''
+                            : 'interrupted by a server restart before durable queue recovery was available — the attempts above survived';
+                        j.note = requestPending
+                            ? 'recovering after a server restart — completed attempts and outward exploration are preserved'
+                            : '';
                         const updated = {
                             ...j,
                             updated_at_ms: Date.now(),
@@ -24146,8 +24331,10 @@ async function grindSweepOrphans() {
                     }
                 );
                 console.log(
-                    'grind sweeper: resolved orphaned run',
-                    rid
+                    requestPending
+                        ? 'grind sweeper: queued orphaned run for recovery'
+                        : 'grind sweeper: resolved legacy orphaned run',
+                    rid,
                 );
             } finally {
                 await ownership.release();
@@ -25092,6 +25279,52 @@ function validateShortsGrindRun(run) {
     };
 }
 
+const SHORTS_GRIND_TERMINAL_STATUSES = new Set([
+    'won',
+    'stopped',
+    'deadline',
+    'maxed',
+    'error',
+]);
+
+function shortsGrindRunTerminal(run) {
+    return !!(
+        run
+        && SHORTS_GRIND_TERMINAL_STATUSES.has(String(run.status || ''))
+    );
+}
+
+function shortsGrindResumableRun(run, {
+    rid,
+    requestedPremise,
+    coordinateId,
+    targetUnit,
+    threshold,
+    explorationMode,
+    animation,
+    imageModel,
+} = {}) {
+    const validation = validateShortsGrindRun(run);
+    if (
+        !validation.valid
+        || run.schema !== 'shorts-grind-run-v3'
+        || run.status !== 'running'
+        || String(run.rid || '') !== String(rid || '')
+        || run.threshold_coordinate_id !== coordinateId
+        || run.threshold_unit !== targetUnit
+        || Math.abs(
+            Number(run.threshold_value_0_100) - Number(threshold)
+        ) > 1e-9
+        || String(run.exploration_mode || 'same-idea')
+            !== explorationMode
+        || String(run.requested_premise || '')
+            !== String(requestedPremise || '')
+        || (run.animation === true) !== animation
+        || String(run.image_model || '') !== String(imageModel || '')
+    ) return null;
+    return run;
+}
+
 function shortsGrindRunForResponse(run) {
     const validation = validateShortsGrindRun(run);
     const coordinateId = validation.valid
@@ -25234,7 +25467,7 @@ function shortsGrindRunForResponse(run) {
     };
 }
 
-async function grindProcess(rid, req0, ownership) {
+async function grindProcess(rid, req0, ownership, resumeRun = null) {
     requireQueueLeaseOwnership(
         ownership,
         QUEUE_LEASE_NAMES.SHORTS_GRIND,
@@ -25321,15 +25554,91 @@ async function grindProcess(rid, req0, ownership) {
             ) || 80
         )
     );
-    const deadline = Date.now() + Math.min(8, Math.max(0.25, parseFloat(req0.hours) || 3)) * 3600e3;
-    let attempts = [], status = 'running', err = '', note = '';
+    const resumableRun = shortsGrindResumableRun(resumeRun, {
+        rid,
+        requestedPremise,
+        coordinateId,
+        targetUnit,
+        threshold,
+        explorationMode,
+        animation,
+        imageModel,
+    });
+    if (resumableRun && !premise) {
+        premise = String(resumableRun.premise || '').trim().slice(0, 500);
+    }
+    const requestedDeadline = Date.now()
+        + Math.min(
+            8,
+            Math.max(0.25, parseFloat(req0.hours) || 3)
+        ) * 3600e3;
+    const restoredDeadline = Number(
+        resumableRun && resumableRun.deadline_at_ms
+    );
+    const deadline = Number.isFinite(restoredDeadline)
+        && restoredDeadline > 0
+        ? restoredDeadline
+        : requestedDeadline;
+    let attempts = resumableRun
+        ? resumableRun.attempts.map(attempt => {
+            const restored = {
+                ...(attempt || {}),
+                errs: Array.isArray(attempt && attempt.errs)
+                    ? [...attempt.errs]
+                    : [],
+            };
+            if (restored.status !== 'done') {
+                restored.status = 'interrupted';
+                restored.errs.push(
+                    'worker restart: this attempt did not reach canonical scoring; the run continued with the next hook'
+                );
+            }
+            return restored;
+        })
+        : [];
+    let status = 'running';
+    let err = '';
+    let note = resumableRun
+        ? `recovering ${attempts.length} persisted attempt${
+            attempts.length === 1 ? '' : 's'
+        } and the exact outward-exploration state...`
+        : '';
     let eliteRetrieval = null;
     let eliteBootstrapSpec = null;
     let eliteBootstrapSources = null;
-    const eliteUsedSourceIds = [];
-    let explorationState = grindExploration.createState({
-        threshold,
-    });
+    const eliteUsedSourceIds = [...new Set(
+        attempts.flatMap(attempt => (
+            Array.isArray(attempt && attempt.elite_sources)
+                ? attempt.elite_sources
+                    .map(source => source && source.id)
+                    .filter(Boolean)
+                : []
+        ))
+    )];
+    let explorationState = resumableRun
+        ? grindExploration.restoreState(
+            resumableRun.exploration,
+            { threshold }
+        )
+        : grindExploration.createState({ threshold });
+    for (
+        let index = explorationState.acceptedCount;
+        index < attempts.length;
+        index += 1
+    ) {
+        const attempt = attempts[index];
+        explorationState = grindExploration.recordScore(
+            explorationState,
+            shortsGrindAttemptProjectionValid(attempt, coordinateId)
+                ? shortsGrindAttemptTargetValue(attempt, coordinateId)
+                : null,
+            {
+                observedSeedDistance: Number.isFinite(
+                    Number(attempt && attempt.seed_distance)
+                ) ? Number(attempt.seed_distance) : null,
+            }
+        );
+    }
     const rejectedPremises = [];
     const best = () => attempts.reduce((bestValue, attempt) => (
         shortsGrindAttemptProjectionValid(attempt, coordinateId)
@@ -25421,6 +25730,7 @@ async function grindProcess(rid, req0, ownership) {
                 render_mode: 'coherent-sheet',
                 image_model: imageModel,
                 image_provider_call_budget_per_attempt: 1,
+                max_attempts: maxAttempts,
                 deadline_at_ms: deadline,
                 updated_at_ms: Date.now(),
                 queue_lease_fence: queueLeaseFence,
@@ -25438,15 +25748,50 @@ async function grindProcess(rid, req0, ownership) {
         );
         return cloud.existsInR2(`hooks/grind/stop/${rid}`);
     };
+    const resilientGrindStep = (label, operation) => (
+        providerResilience.retryTransient(operation, {
+            maxAttempts: 1000,
+            deadlineAtMs: deadline,
+            shouldStop: checkStopped,
+            onRetry: async (error, retry) => {
+                note = `${label} was interrupted; retrying without ending the run (${retry}) · ${
+                    providerResilience.errorMessage(error).slice(0, 90)
+                }`;
+                await write();
+            },
+        })
+    );
     const ideaEmbeddings = [];
-    const acceptedPremises = [];
+    const acceptedPremises = attempts
+        .map(attempt => String(
+            attempt && (attempt.hook_treatment || attempt.premise) || ''
+        ).trim())
+        .filter(Boolean);
     const visPrev = [];   // 48-d pooled VISUAL embeddings of scored attempts — quantified visual variety
     let mem = []; try { mem = await genMemLoad(); } catch (e) {}
+    const recoveredBest = best();
+    if (recoveredBest != null && recoveredBest >= threshold) {
+        status = 'won';
+        note = `recovered run already cleared the bar: ${recoveredBest} ${targetUnit}`;
+    } else if (attempts.length >= maxAttempts) {
+        status = 'maxed';
+        note = 'recovered run already used its attempt budget; best attempt shown';
+    } else if (Date.now() >= deadline) {
+        status = 'deadline';
+        note = 'recovered run already reached its time budget; best attempt shown';
+    }
+    if (status !== 'running') {
+        await write();
+        return;
+    }
     try {
         if (explorationMode === 'elite-corpus') {
             note = 'loading the frozen elite corpus and its exact source lineage…';
             await write();
-            const eliteIndex = await loadEliteHookCorpusReady();
+            const eliteIndex = await resilientGrindStep(
+                'elite corpus loading',
+                () => loadEliteHookCorpusReady()
+            );
             if (
                 req0.elite_index_content_sha256
                 && req0.elite_index_content_sha256
@@ -25491,11 +25836,13 @@ async function grindProcess(rid, req0, ownership) {
                     bootstrapPrompt,
                     true,
                     (modelStatus, seconds) => {
-                        note = `elite invention: ${modelStatus} (${seconds}s)`;
+                        note = modelStatus === 'recovering'
+                            ? `elite invention: status check interrupted; resuming the same prediction (${seconds}s)`
+                            : `elite invention: ${modelStatus} (${seconds}s)`;
                         return write();
                     },
                     (message, retry) => {
-                        note = `elite invention output was malformed — retrying (${retry}/3) · ${message.slice(0, 70)}`;
+                        note = `elite invention request did not complete — retrying (${retry}) · ${message.slice(0, 70)}`;
                         return write();
                     },
                     {
@@ -25503,6 +25850,8 @@ async function grindProcess(rid, req0, ownership) {
                             eliteBootstrapSources[0]
                             && eliteBootstrapSources[0].title
                             || 'A surprising visual experiment',
+                        retryDeadlineAtMs: deadline,
+                        shouldStop: checkStopped,
                     }
                 );
                 premise = String(
@@ -25518,24 +25867,67 @@ async function grindProcess(rid, req0, ownership) {
                 ? 'building a semantic query from the video realm and this channel’s elite opening family…'
                 : 'locating semantically relevant elite examples across the full corpus…';
             await write();
-            eliteRetrieval = await prepareEliteHookRetrieval({
-                index: eliteIndex,
-                premise,
-                metric: eliteMetric,
-                cutoff: eliteCutoff,
-                channelId: eliteChannelId,
-                channelOriented: eliteChannelOriented,
-            });
+            eliteRetrieval = await resilientGrindStep(
+                'elite semantic retrieval',
+                () => prepareEliteHookRetrieval({
+                    index: eliteIndex,
+                    premise,
+                    metric: eliteMetric,
+                    cutoff: eliteCutoff,
+                    channelId: eliteChannelId,
+                    channelOriented: eliteChannelOriented,
+                })
+            );
         }
         note = 'embedding the immutable video idea before hook generation…';
         await write();
-        const seedEmbedding = await geminiTextEmbed(
-            premise,
-            {
-                required: true,
-                context: 'the immutable Grind video idea',
-            }
+        const seedEmbedding = await resilientGrindStep(
+            'seed embedding',
+            () => geminiTextEmbed(
+                premise,
+                {
+                    required: true,
+                    context: 'the immutable Grind video idea',
+                }
+            )
         );
+        if (acceptedPremises.length) {
+            note = `restoring semantic geometry for ${
+                acceptedPremises.length
+            } persisted hook${
+                acceptedPremises.length === 1 ? '' : 's'
+            } before continuing…`;
+            await write();
+            for (
+                let index = 0;
+                index < acceptedPremises.length;
+                index += 1
+            ) {
+                const priorPremise = acceptedPremises[index];
+                const priorEmbedding = await resilientGrindStep(
+                    'prior-hook embedding restoration',
+                    () => geminiTextEmbed(
+                        priorPremise,
+                        {
+                            required: true,
+                            context: 'a restored Grind hook treatment',
+                        }
+                    )
+                );
+                ideaEmbeddings.push(priorEmbedding);
+                const memoryId = `${rid}_${index}`;
+                if (!mem.some(item => item && item.id === memoryId)) {
+                    mem.push({
+                        id: memoryId,
+                        t: Number(attempts[index] && attempts[index].ts)
+                            || Date.now(),
+                        p: priorPremise.slice(0, 140),
+                        v: genVecEnc(priorEmbedding),
+                        s: 1,
+                    });
+                }
+            }
+        }
         while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
             if (await checkStopped()) {
                 status = 'stopped';
@@ -25609,7 +26001,9 @@ async function grindProcess(rid, req0, ownership) {
                         ? `${Math.floor(sec / 60)}m ${sec % 60}s`
                         : `${sec}s`;
                     note = `attempt ${attempts.length + 1}: ${
-                        rstat === 'starting'
+                        rstat === 'recovering'
+                            ? `status check was interrupted; resuming the same idea-model prediction (${elapsed})`
+                            : rstat === 'starting'
                             ? `idea-model GPU booting (${elapsed})`
                             : `writing ${candidateCount} same-idea hook${
                                 candidateCount === 1 ? '' : 's'
@@ -25618,7 +26012,7 @@ async function grindProcess(rid, req0, ownership) {
                     return write();
                 };
                 const onRetry = (message, retry) => {
-                    note = `attempt ${attempts.length + 1}: malformed idea output — retrying (${retry}/3) · ${message.slice(0, 60)}`;
+                    note = `attempt ${attempts.length + 1}: idea-model request did not complete — retrying (${retry}) without ending the run · ${message.slice(0, 60)}`;
                     return write();
                 };
                 let specs;
@@ -25636,7 +26030,11 @@ async function grindProcess(rid, req0, ownership) {
                             false,
                             beat,
                             onRetry,
-                            { fallbackPremise: premise }
+                            {
+                                fallbackPremise: premise,
+                                retryDeadlineAtMs: deadline,
+                                shouldStop: checkStopped,
+                            }
                         )]
                         : await hookModelGenerateBatchRetry(
                             generationPrompt,
@@ -25644,21 +26042,46 @@ async function grindProcess(rid, req0, ownership) {
                             candidateCount,
                             beat,
                             onRetry,
-                            { fallbackPremise: premise }
+                            {
+                                fallbackPremise: premise,
+                                retryDeadlineAtMs: deadline,
+                                shouldStop: checkStopped,
+                            }
                         );
                 } catch (error) {
-                    err = `idea: ${error.message} (3 tries)`;
-                    status = 'error';
-                    break;
+                    if (error.code === 'HOOK_GENERATION_STOPPED') {
+                        status = 'stopped';
+                        note = 'stopped by you during idea generation';
+                        break;
+                    }
+                    if (
+                        Date.now() >= deadline
+                        || error.code === 'PROVIDER_PREDICTION_DEADLINE'
+                    ) {
+                        status = 'deadline';
+                        note = 'time budget ended while the idea provider was recovering; completed attempts remain available';
+                        break;
+                    }
+                    if (providerResilience.isPermanentError(error)) {
+                        err = `idea: ${error.message}`;
+                        status = 'error';
+                        break;
+                    }
+                    note = `attempt ${attempts.length + 1}: temporary idea-provider interruption; retrying this attempt without spending an image call…`;
+                    await write();
+                    continue;
                 }
                 const candidates = await Promise.all(specs.map(
                     async spec => {
-                        const embedding = await geminiTextEmbed(
-                            spec.premise,
-                            {
-                                required: true,
-                                context: 'a Grind candidate hook',
-                            }
+                        const embedding = await resilientGrindStep(
+                            'candidate-hook embedding',
+                            () => geminiTextEmbed(
+                                spec.premise,
+                                {
+                                    required: true,
+                                    context: 'a Grind candidate hook',
+                                }
+                            )
                         );
                         return {
                             spec,
@@ -25940,11 +26363,14 @@ async function grindProcess(rid, req0, ownership) {
                 if (!panel || !panel.montage) {
                     throw new Error('five-panel image was not rendered');
                 }
-                const score = await scoreMontage(
-                    panel.montage,
-                    panel.transcript,
-                    premise,
-                    creatorProfile
+                const score = await resilientGrindStep(
+                    'canonical hook scoring',
+                    () => scoreMontage(
+                        panel.montage,
+                        panel.transcript,
+                        premise,
+                        creatorProfile
+                    )
                 );
                 delete score.montage;   // the strip is already in R2 — don't double-store 200KB of b64
                 score.score_record_sha256 =
@@ -26042,8 +26468,27 @@ async function grindProcess(rid, req0, ownership) {
         }
     } catch (e) {
         if (isQueueLeaseOwnershipError(e)) throw e;
-        err = err || String(e.message || e);
-        status = 'error';
+        if (e && e.code === 'HOOK_GENERATION_STOPPED') {
+            status = 'stopped';
+            note = 'stopped by you';
+        } else if (
+            Date.now() >= deadline
+            || e && e.code === 'PROVIDER_PREDICTION_DEADLINE'
+        ) {
+            status = 'deadline';
+            note = 'time budget ended while a provider was recovering; completed attempts remain available';
+        } else if (providerResilience.isPermanentError(e)) {
+            err = err || String(e.message || e);
+            status = 'error';
+        } else {
+            note = `temporary worker interruption; persisted ${
+                attempts.length
+            } attempt${
+                attempts.length === 1 ? '' : 's'
+            } and will resume automatically`;
+            await write();
+            throw e;
+        }
     }
     if (status === 'running') { status = Date.now() >= deadline ? 'deadline' : 'maxed'; note = status === 'deadline' ? 'time budget used up — best attempt shown' : 'attempt budget used up — best attempt shown'; }
     await ownership.mutate(
@@ -26084,8 +26529,34 @@ async function grindQueue() {
                     );
                     continue;
                 }
-                // Persist pickup before consuming the request. The monotonic
-                // generation in this snapshot identifies the exact owner.
+                const runKey = `hooks/grind/runs/${rid}.json`;
+                let existingRun = null;
+                try {
+                    const existingBytes = await cloud.downloadFromR2(runKey);
+                    existingRun = existingBytes
+                        ? JSON.parse(existingBytes.toString('utf8'))
+                        : null;
+                } catch (error) {}
+                const existingValidation = validateShortsGrindRun(
+                    existingRun
+                );
+                if (
+                    existingValidation.valid
+                    && shortsGrindRunTerminal(existingRun)
+                ) {
+                    await ownership.mutate(
+                        'consume terminal Shorts grind request',
+                        () => cloud.deleteFromR2(key)
+                    );
+                    continue;
+                }
+                const resumeRun = existingValidation.valid
+                    && existingRun.status === 'running'
+                    ? existingRun
+                    : null;
+                // Persist pickup while retaining the request as the durable
+                // restart instruction. It is deleted only after a terminal
+                // run snapshot has been written.
                 await ownership.mutate(
                     'write Shorts grind pickup',
                     queueLeaseFence => {
@@ -26133,10 +26604,16 @@ async function grindQueue() {
                             )
                         );
                         const pickedUp = bindShortsGrindRun({
+                            ...(resumeRun
+                                ? shortsGrindRunHashPayload(resumeRun)
+                                : {}),
                             rid,
-                            premise: String(
+                            premise: resumeRun
+                                ? String(resumeRun.premise || '').slice(0, 500)
+                                : String(req0.premise || '').slice(0, 500),
+                            requested_premise: String(
                                 req0.premise || ''
-                            ).slice(0, 500),
+                            ).trim().slice(0, 500) || null,
                             threshold_coordinate_id:
                                 coordinateId,
                             threshold_unit: targetUnit,
@@ -26145,14 +26622,27 @@ async function grindQueue() {
                                 targetUnit === 'percentile_0_100'
                                     ? threshold
                                     : null,
-                            attempts: [],
+                            attempts: resumeRun
+                                ? resumeRun.attempts
+                                : [],
                             status: 'running',
-                            note:
-                                'picked up — starting the model…',
+                            note: resumeRun
+                                ? `recovering after a worker interruption — ${
+                                    resumeRun.attempts.length
+                                } attempt${
+                                    resumeRun.attempts.length === 1
+                                        ? ''
+                                        : 's'
+                                } preserved`
+                                : 'picked up — starting the model…',
                             error: '',
-                            rejected_variant_count: 0,
+                            rejected_variant_count: resumeRun
+                                ? resumeRun.rejected_variant_count || 0
+                                : 0,
                             minimum_text_embedding_distance:
-                                0.12,
+                                resumeRun
+                                    ? resumeRun.minimum_text_embedding_distance
+                                    : 0.12,
                             exploration_mode:
                                 req0.exploration_mode || 'same-idea',
                             elite_metric:
@@ -26167,13 +26657,33 @@ async function grindQueue() {
                                 req0.elite_channel_name || null,
                             elite_index_content_sha256:
                                 req0.elite_index_content_sha256 || null,
-                            deadline_at_ms: null,
+                            animation: req0.animation === true,
+                            image_model: hookPanelModelKey(
+                                req0.image_model
+                                || process.env.HOOK_PANEL_MODEL
+                                || process.env.HOOK_FRAME_MODEL
+                                || STORYBOARD_DEFAULT_MODEL
+                            ),
+                            max_attempts: Math.max(
+                                1,
+                                Math.min(
+                                    150,
+                                    Number.parseInt(
+                                        req0.max_attempts
+                                        ?? req0.maxAttempts,
+                                        10
+                                    ) || 80
+                                )
+                            ),
+                            deadline_at_ms: resumeRun
+                                ? resumeRun.deadline_at_ms
+                                : null,
                             updated_at_ms: Date.now(),
                             queue_lease_fence:
                                 queueLeaseFence,
                         });
                         return cloud.uploadToR2(
-                            `hooks/grind/runs/${rid}.json`,
+                            runKey,
                             Buffer.from(
                                 JSON.stringify(pickedUp)
                             ),
@@ -26181,11 +26691,16 @@ async function grindQueue() {
                         );
                     }
                 );
+                await grindProcess(
+                    rid,
+                    req0,
+                    ownership,
+                    resumeRun
+                );
                 await ownership.mutate(
-                    'consume Shorts grind request',
+                    'consume terminal Shorts grind request',
                     () => cloud.deleteFromR2(key)
                 );
-                await grindProcess(rid, req0, ownership);
             } catch (error) {
                 console.warn(
                     'Shorts grind queue failed closed:',

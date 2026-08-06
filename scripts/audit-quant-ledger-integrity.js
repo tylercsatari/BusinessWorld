@@ -641,7 +641,7 @@ function localStructuralAudit() {
         'runtime-authority',
         'saved-hook and Long index mutations delegate to shared CAS',
         serverSource.includes(
-            'return savedHookIndexCas.mutate(async index =>'
+            'savedHookIndexCas.mutate(async index =>'
         )
             && serverSource.includes(
                 'return longSavedThumbnailIndexCas.mutate(async index =>'

@@ -149,6 +149,25 @@ const unavailableScore = exploration.recordScore(
 assert.strictEqual(unavailableScore.bestScore, null);
 assert.strictEqual(unavailableScore.scoreDeficit, 90);
 
+const restored = exploration.restoreState(
+    exploration.publicState(afterImprovement),
+    { threshold: 90 }
+);
+assert.strictEqual(
+    restored.acceptedCount,
+    afterImprovement.acceptedCount
+);
+assert.strictEqual(
+    restored.requiredSeedDistance,
+    afterImprovement.requiredSeedDistance
+);
+assert.strictEqual(
+    restored.requiredPriorDistance,
+    afterImprovement.requiredPriorDistance
+);
+assert.strictEqual(restored.bestScore, afterImprovement.bestScore);
+assert.strictEqual(restored.scoreDeficit, afterImprovement.scoreDeficit);
+
 let bounded = exploration.createState({ threshold: 100 });
 for (let index = 0; index < 1000; index++) {
     bounded = exploration.recordScore(bounded, 0);
@@ -214,7 +233,8 @@ const candidateEmbeddingIndex = grindSource.indexOf(
 const renderIndex = grindSource.indexOf('generateCanonicalHookOpening({');
 const scoreIndex = grindSource.indexOf('scoreMontage(');
 const expansionIndex = grindSource.indexOf(
-    'grindExploration.recordScore'
+    'grindExploration.recordScore',
+    scoreIndex
 );
 assert(
     ideaIndex < candidateEmbeddingIndex

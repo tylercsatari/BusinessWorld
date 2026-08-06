@@ -141,6 +141,72 @@ function createState({ threshold, config } = {}) {
     });
 }
 
+function restoreState(snapshot, { threshold, config } = {}) {
+    const base = createState({ threshold, config });
+    if (
+        !snapshot
+        || snapshot.schema !== SCHEMA
+        || snapshot.strategy !== STRATEGY
+    ) return base;
+    const reasons = {};
+    Object.entries(snapshot.rejection_reasons || {}).forEach(
+        ([reason, count]) => {
+            const value = Math.max(0, Math.floor(Number(count) || 0));
+            if (value) reasons[String(reason)] = value;
+        }
+    );
+    const acceptedCount = Math.max(
+        0,
+        Math.floor(Number(snapshot.accepted_count) || 0)
+    );
+    const rejectedCount = Math.max(
+        Object.values(reasons).reduce((sum, value) => sum + value, 0),
+        Math.max(0, Math.floor(Number(snapshot.rejected_count) || 0))
+    );
+    const numericBest = Number(snapshot.best_score);
+    const bestScore = snapshot.best_score == null
+        || !Number.isFinite(numericBest)
+        ? null
+        : clamp(numericBest, 0, 100);
+    return Object.freeze({
+        ...base,
+        acceptedCount,
+        rejectedCount,
+        rejectionReasons: Object.freeze(reasons),
+        bestScore,
+        scoreDeficit: round(Math.max(
+            0,
+            base.threshold - (bestScore == null ? 0 : bestScore)
+        )),
+        requiredPriorDistance: round(clamp(
+            finiteNumber(snapshot.required_prior_distance, 0),
+            0,
+            base.topicalGeometryPriorLimit
+        )),
+        requiredSeedDistance: round(clamp(
+            finiteNumber(snapshot.required_seed_distance, 0),
+            0,
+            base.topicalGeometrySeedLimit
+        )),
+        maxObservedSeedDistance: round(clamp(
+            finiteNumber(
+                snapshot.farthest_rendered_seed_distance,
+                0
+            ),
+            0,
+            base.topicalGeometrySeedLimit
+        )),
+        lastPriorExpansion: round(Math.max(
+            0,
+            finiteNumber(snapshot.prior_expansion_step, 0)
+        )),
+        lastSeedExpansion: round(Math.max(
+            0,
+            finiteNumber(snapshot.seed_expansion_step, 0)
+        )),
+    });
+}
+
 function measureCandidate({
     candidateEmbedding,
     seedEmbedding,
@@ -433,6 +499,7 @@ module.exports = Object.freeze({
     cosine,
     cosineDistance,
     createState,
+    restoreState,
     measureCandidate,
     candidateDecision,
     selectCandidate,
